@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>بيان المزرعة | ٢٠٢٦/٠٤/٠٤</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&amp;family=Lexend:wght@400;600;700&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+<link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+
+<!-- ============== Sidebar Overlay & Menu ============== -->
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+<aside class="sidebar-menu" id="sidebarMenu">
+  <div class="sidebar-header">
+    <div>
+      <div class="fw-bold" style="font-size:1.1rem;">إدارة المزرعة</div>
+      <small class="text-gray">القائمة الرئيسية</small>
+    </div>
+    <button class="sidebar-close" onclick="closeSidebar()" aria-label="إغلاق">
+      <i class="bi bi-x-lg"></i>
+    </button>
+  </div>
+  <nav class="sidebar-nav">
+    <a href="#" class="sidebar-item active" onclick="event.preventDefault();switchTab('dash')"><i class="bi bi-grid-1x2-fill"></i> النظرة العامة</a>
+    <a href="#" class="sidebar-item" onclick="event.preventDefault();switchTab('goats')"><i class="bi bi-tropical-storm"></i> قسم الماعز</a>
+    <a href="#" class="sidebar-item" onclick="event.preventDefault();switchTab('sheep')"><i class="bi bi-cloud-fill"></i> قسم الأغنام</a>
+    <a href="#" class="sidebar-item" onclick="event.preventDefault();switchTab('vaccine')"><i class="bi bi-bandaid-fill"></i> التحصين</a>
+    <a href="#" class="sidebar-item" onclick="event.preventDefault();switchTab('data')"><i class="bi bi-clipboard-data-fill"></i> الملاحظات والبيانات</a>
+    <div class="sidebar-divider"></div>
+    <a href="#" class="sidebar-item"><i class="bi bi-gear-fill"></i> الإعدادات</a>
+    <a href="#" class="sidebar-item"><i class="bi bi-person-circle"></i> الملف الشخصي</a>
+    <a href="#" class="sidebar-item"><i class="bi bi-question-circle-fill"></i> المساعدة</a>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="d-flex align-items-center gap-3">
+      <div class="user-avatar">م</div>
+      <div>
+        <div class="fw-bold">مدير المزرعة</div>
+        <small class="green-text"><i class="bi bi-circle-fill" style="font-size:8px;"></i> متصل الآن</small>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- ============== Navbar ============== -->
+<nav class="navbar-wonder">
+  <div class="container d-flex justify-content-between align-items-center">
+    <a href="#" class="navbar-brand">
+      <span style="font-size:1.6rem;">🐐</span> بيان المزرعة
+    </a>
+    <div class="d-flex align-items-center gap-2">
+      <span class="date-badge"><i class="bi bi-calendar3"></i> ٢٠٢٦/٠٤/٠٤</span>
+      <button class="menu-btn" onclick="openSidebar()" aria-label="القائمة">
+        <i class="bi bi-list"></i>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<!-- ============== Main ============== -->
+<main class="container py-4">
+
+  <!-- Top totals -->
+  <div class="wonder-card animate-in mb-4">
+    <div class="text-gray mb-2 fw-bold"><i class="bi bi-bar-chart-fill accent-text"></i> إجمالي عدد حيوانات المزرعة</div>
+    <div class="d-flex align-items-end gap-3 flex-wrap">
+      <div class="stat-value accent-text">٤٢٢</div>
+      <div class="d-flex gap-3 mb-2">
+        <div><span class="stat-value" style="font-size:1.4rem;color:var(--wonder-green);">٢٩٦</span> <small class="text-gray">إجمالي الماعز</small></div>
+        <div><span class="stat-value" style="font-size:1.4rem;color:#2196f3;">١٢٦</span> <small class="text-gray">إجمالي الأغنام</small></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabs nav -->
+  <ul class="nav nav-pills mb-4 flex-nowrap overflow-auto" id="mainTabs" role="tablist">
+    <li class="nav-item"><button class="nav-link active" id="dash-tab" data-bs-toggle="pill" data-bs-target="#dash" type="button">النظرة العامة</button></li>
+    <li class="nav-item"><button class="nav-link" id="goats-tab" data-bs-toggle="pill" data-bs-target="#goats" type="button">الماعز</button></li>
+    <li class="nav-item"><button class="nav-link" id="sheep-tab" data-bs-toggle="pill" data-bs-target="#sheep" type="button">الأغنام</button></li>
+    <li class="nav-item"><button class="nav-link" id="vaccine-tab" data-bs-toggle="pill" data-bs-target="#vaccine" type="button">التحصين</button></li>
+    <li class="nav-item"><button class="nav-link" id="data-tab" data-bs-toggle="pill" data-bs-target="#data" type="button">الملاحظات</button></li>
+  </ul>
+
+  <div class="tab-content">
+
+    <!-- ===== Overview ===== -->
+    <div class="tab-pane fade show active" id="dash" role="tabpanel">
+      <div class="row g-3">
+        <!-- Goats summary cards -->
+        <div class="col-md-4 col-sm-6">
+          <div class="breed-card animate-in">
+            <div class="breed-header">
+              <div class="breed-icon shami">🐐</div>
+              <div>
+                <div class="fw-bold">ماعز شامي</div>
+                <small class="text-gray">إجمالي: ١٤١</small>
+              </div>
+            </div>
+            <div class="row g-2">
+              <div class="col-6"><div class="gender-box"><span class="gender-count green-text">١</span><small class="text-gray">ذكور تربية</small></div></div>
+              <div class="col-6"><div class="gender-box"><span class="gender-count green-text">١٤٠</span><small class="text-gray">إناث تربية</small></div></div>
+            </div>
+            <div class="mt-3"><span class="type-badge badge-tarbiya">تربية ١٤١</span></div>
+          </div>
+        </div>
+        <div class="col-md-4 col-sm-6">
+          <div class="breed-card animate-in delay-1">
+            <div class="breed-header">
+              <div class="breed-icon bour">🐐</div>
+              <div>
+                <div class="fw-bold">ماعز بور</div>
+                <small class="text-gray">إجمالي: ٢٩</small>
+              </div>
+            </div>
+            <div class="row g-2">
+              <div class="col-6"><div class="gender-box"><span class="gender-count green-text">١٠</span><small class="text-gray">ذكور تربية</small></div></div>
+              <div class="col-6"><div class="gender-box"><span class="gender-count green-text">١٥</span><small class="text-gray">إناث تربية</small></div></div>
+              <div class="col-6"><div class="gender-box"><span class="gender-count accent-text">٤</span><small class="text-gray">ذكور تسمين</small></div></div>
+              <div class="col-6"><div class="gender-box"><span class="gender-count accent-text">٠</span><small class="text-gray">إناث تسمين</small></div></div>
+            </div>
+            <div class="mt-3"><span class="type-badge badge-tarbiya">تربية ٢٥</span> <span class="type-badge badge-tasmeen">تسمين ٤</span></div>
+          </div>
+        </div>
+        <div class="col-md-4 col-sm-6">
+          <div class="breed-card animate-in delay-2">
+            <div class="breed-header">
+              <div class="breed-icon baladi">🐐</div>
+              <div>
+                <div class="fw-bold">ماعز بلدي</div>
+                <small class="text-gray">إجمالي: ٣٣</small>
+              </div>
+            </div>
+            <div class="row g-2">
+              <div class="col-6"><div class="gender-box"><span class="gender-count green-text">١</span><small class="text-gray">ذكور تربية</small></div></div>
+              <div class="col-6"><div class="gender-box"><span class="gender-count green-text">٢٦</span><small class="text-gray">إناث تربية</small></div></div>
+              <div class="col-6"><div class="gender-box"><span class="gender-count accent-text">٦</span><small class="text-gray">ذكور تسمين</small></div></div>
+              <div class="col-6"><div class="gender-box"><span class="gender-count accent-text">٠</span><small class="text-gray">إناث تسمين</small></div></div>
+            </div>
+            <div class="mt-3"><span class="type-badge badge-tarbiya">تربية ٢٧</span> <span class="type-badge badge-tasmeen">تسمين ٦</span></div>
+          </div>
+        </div>
+
+        <!-- Sheep summary cards -->
+        <div class="col-md-4 col-sm-6">
+          <div class="breed-card animate-in">
+            <div class="breed-header">
+              <div class="breed-icon borqi">🐑</div>
+              <div>
+                <div class="fw-bold">أغنام برقي</div>
+                <small class="text-gray">إجمالي: ٨٤</small>
+              </div>
+            </div>
+            <div class="row g-2">
+              <div class="col-6"><div class="gender-box"><span class="gender-count green-text">٢</span><small class="text-gray">ذكور تربية</small></div></div>
+              <div class="col-6"><div class="gender-box"><span class="gender-count green-text">٦٨</span><small class="text-gray">إناث تربية</small></div></div>
+              <div class="col-6"><div class="gender-box"><span class="gender-count accent-text">١٤</span><small class="text-gray">ذكور تسمين</small></div></div>
+              <div class="col-6"><div class="gender-box"><span class="gender-count accent-text">٠</span><small class="text-gray">إناث تسمين</small></div></div>
+            </div>
+            <div class="mt-3"><span class="type-badge badge-tarbiya">تربية ٧٠</span> <span class="type-badge badge-tasmeen">تسمين ١٤</span></div>
+          </div>
+        </div>
+        <div class="col-md-4 col-sm-6">
+          <div class="breed-card animate-in delay-1">
+            <div class="breed-header">
+              <div class="breed-icon dorper">🐑</div>
+              <div>
+                <div class="fw-bold">أغنام دوربر</div>
+                <small class="text-gray">إجمالي: ٢</small>
+              </div>
+            </div>
+            <div class="row g-2">
+              <div class="col-6"><div class="gender-box"><span class="gender-count green-text">١</span><small class="text-gray">ذكور تربية</small></div></div>
+              <div class="col-6"><div class="gender-box"><span class="gender-count green-text">١</span><small class="text-gray">إناث تربية</small></div></div>
+            </div>
+            <div class="mt-3"><span class="type-badge badge-tarbiya">تربية ٢</span></div>
+          </div>
+        </div>
+        <div class="col-md-4 col-sm-6">
+          <div class="breed-card animate-in delay-2">
+            <div class="breed-header">
+              <div class="breed-icon meatmaster">🐑</div>
+              <div>
+                <div class="fw-bold">أغنام ميت ماستر</div>
+                <small class="text-gray">إجمالي: ١</small>
+              </div>
+            </div>
+            <div class="row g-2">
+              <div class="col-6"><div class="gender-box"><span class="gender-count green-text">١</span><small class="text-gray">ذكور تربية</small></div></div>
+              <div class="col-6"><div class="gender-box"><span class="gender-count green-text">٠</span><small class="text-gray">إناث تربية</small></div></div>
+            </div>
+            <div class="mt-3"><span class="type-badge badge-tarbiya">تربية ١</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Births -->
+      <div class="births-section animate-in mt-4">
+        <h5 class="fw-bold mb-3"><i class="bi bi-stars" style="color:#ffc107;"></i> الولدات <small class="text-gray fw-normal">— إجمالي: ١٢٧</small></h5>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="d-flex justify-content-between align-items-center p-3" style="background:rgba(255,255,255,.04);border-radius:14px;">
+              <div>
+                <div class="fw-bold">ولدات الماعز</div>
+                <small class="text-gray">الإجمالي: ٨٨</small>
+              </div>
+              <div class="d-flex gap-3">
+                <div class="text-center"><div class="fw-bold green-text" style="font-family:Lexend;font-size:1.4rem;">٤٤</div><small class="text-gray">ذكور</small></div>
+                <div class="text-center"><div class="fw-bold accent-text" style="font-family:Lexend;font-size:1.4rem;">٤٤</div><small class="text-gray">إناث</small></div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="d-flex justify-content-between align-items-center p-3" style="background:rgba(255,255,255,.04);border-radius:14px;">
+              <div>
+                <div class="fw-bold">ولدات الأغنام</div>
+                <small class="text-gray">الإجمالي: ٣٩</small>
+              </div>
+              <div class="d-flex gap-3">
+                <div class="text-center"><div class="fw-bold green-text" style="font-family:Lexend;font-size:1.4rem;">١٢</div><small class="text-gray">ذكور</small></div>
+                <div class="text-center"><div class="fw-bold accent-text" style="font-family:Lexend;font-size:1.4rem;">٢٧</div><small class="text-gray">إناث</small></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Goats ===== -->
+    <div class="tab-pane fade" id="goats" role="tabpanel">
+      <div class="wonder-card animate-in mb-4">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div>
+            <div class="text-gray">إجمالي الماعز</div>
+            <div class="stat-value green-text">٢٩٦</div>
+          </div>
+          <span class="type-badge badge-tarbiya">السلالة الأكبر: ماعز شامي ١٤١</span>
+        </div>
+      </div>
+      <div class="row g-3">
+        <div class="col-lg-4 col-md-6">
+          <div class="breed-card">
+            <div class="breed-header"><div class="breed-icon shami">🐐</div><div><div class="fw-bold">ماعز شامي</div><small class="text-gray">السلالة الأكبر</small></div></div>
+            <div class="stat-value green-text mb-3">١٤١</div>
+            <div class="text-gray mb-2 fw-bold">تربية</div>
+            <div class="row g-2 mb-3"><div class="col-6"><div class="gender-box"><span class="gender-count">١</span><small class="text-gray">ذكور</small></div></div><div class="col-6"><div class="gender-box"><span class="gender-count">١٤٠</span><small class="text-gray">إناث</small></div></div></div>
+            <div class="text-gray mb-2 fw-bold">تسمين</div>
+            <div class="row g-2"><div class="col-6"><div class="gender-box"><span class="gender-count">٠</span><small class="text-gray">ذكور</small></div></div><div class="col-6"><div class="gender-box"><span class="gender-count">٠</span><small class="text-gray">إناث</small></div></div></div>
+          </div>
+        </div>
+        <div class="col-lg-4 col-md-6">
+          <div class="breed-card">
+            <div class="breed-header"><div class="breed-icon bour">🐐</div><div><div class="fw-bold">ماعز بور</div><small class="text-gray">مستورد</small></div></div>
+            <div class="stat-value accent-text mb-3">٢٩</div>
+            <div class="text-gray mb-2 fw-bold">تربية</div>
+            <div class="row g-2 mb-3"><div class="col-6"><div class="gender-box"><span class="gender-count">١٠</span><small class="text-gray">ذكور</small></div></div><div class="col-6"><div class="gender-box"><span class="gender-count">١٥</span><small class="text-gray">إناث</small></div></div></div>
+            <div class="text-gray mb-2 fw-bold">تسمين</div>
+            <div class="row g-2"><div class="col-6"><div class="gender-box"><span class="gender-count">٤</span><small class="text-gray">ذكور</small></div></div><div class="col-6"><div class="gender-box"><span class="gender-count">٠</span><small class="text-gray">إناث</small></div></div></div>
+          </div>
+        </div>
+        <div class="col-lg-4 col-md-6">
+          <div class="breed-card">
+            <div class="breed-header"><div class="breed-icon baladi">🐐</div><div><div class="fw-bold">ماعز بلدي</div><small class="text-gray">محلي</small></div></div>
+            <div class="stat-value" style="color:#ffc107;">٣٣</div>
+            <div class="text-gray mb-2 fw-bold mt-3">تربية</div>
+            <div class="row g-2 mb-3"><div class="col-6"><div class="gender-box"><span class="gender-count">١</span><small class="text-gray">ذكور</small></div></div><div class="col-6"><div class="gender-box"><span class="gender-count">٢٦</span><small class="text-gray">إناث</small></div></div></div>
+            <div class="text-gray mb-2 fw-bold">تسمين</div>
+            <div class="row g-2"><div class="col-6"><div class="gender-box"><span class="gender-count">٦</span><small class="text-gray">ذكور</small></div></div><div class="col-6"><div class="gender-box"><span class="gender-count">٠</span><small class="text-gray">إناث</small></div></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="births-section mt-4">
+        <h5 class="fw-bold mb-3">ولدات الماعز <small class="text-gray fw-normal">— إجمالي ٨٨</small></h5>
+        <div class="row g-3">
+          <div class="col-6"><div class="summary-card"><div class="summary-number">٤٤</div><small class="text-gray">ذكور</small></div></div>
+          <div class="col-6"><div class="summary-card"><div class="summary-number" style="color:var(--accent-orange);">٤٤</div><small class="text-gray">إناث</small></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Sheep ===== -->
+    <div class="tab-pane fade" id="sheep" role="tabpanel">
+      <div class="wonder-card animate-in mb-4">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div>
+            <div class="text-gray">إجمالي الأغنام</div>
+            <div class="stat-value" style="color:#2196f3;">١٢٦</div>
+          </div>
+          <span class="type-badge badge-tarbiya">السلالة الأكبر: أغنام برقي ٨٤</span>
+        </div>
+      </div>
+      <div class="row g-3">
+        <div class="col-lg-4 col-md-6">
+          <div class="breed-card">
+            <div class="breed-header"><div class="breed-icon borqi">🐑</div><div><div class="fw-bold">أغنام برقي</div><small class="text-gray">السلالة الأكبر</small></div></div>
+            <div class="stat-value accent-text mb-3">٨٤</div>
+            <div class="text-gray mb-2 fw-bold">تربية</div>
+            <div class="row g-2 mb-3"><div class="col-6"><div class="gender-box"><span class="gender-count">٢</span><small class="text-gray">ذكور</small></div></div><div class="col-6"><div class="gender-box"><span class="gender-count">٦٨</span><small class="text-gray">إناث</small></div></div></div>
+            <div class="text-gray mb-2 fw-bold">تسمين</div>
+            <div class="row g-2"><div class="col-6"><div class="gender-box"><span class="gender-count">١٤</span><small class="text-gray">ذكور</small></div></div><div class="col-6"><div class="gender-box"><span class="gender-count">٠</span><small class="text-gray">إناث</small></div></div></div>
+          </div>
+        </div>
+        <div class="col-lg-4 col-md-6">
+          <div class="breed-card">
+            <div class="breed-header"><div class="breed-icon dorper">🐑</div><div><div class="fw-bold">أغنام دوربر</div><small class="text-gray">مستورد</small></div></div>
+            <div class="stat-value mb-3" style="color:#2196f3;">٢</div>
+            <div class="text-gray mb-2 fw-bold">تربية</div>
+            <div class="row g-2 mb-3"><div class="col-6"><div class="gender-box"><span class="gender-count">١</span><small class="text-gray">ذكور</small></div></div><div class="col-6"><div class="gender-box"><span class="gender-count">١</span><small class="text-gray">إناث</small></div></div></div>
+            <div class="text-gray mb-2 fw-bold">تسمين</div>
+            <div class="row g-2"><div class="col-6"><div class="gender-box"><span class="gender-count">٠</span><small class="text-gray">ذكور</small></div></div><div class="col-6"><div class="gender-box"><span class="gender-count">٠</span><small class="text-gray">إناث</small></div></div></div>
+          </div>
+        </div>
+        <div class="col-lg-4 col-md-6">
+          <div class="breed-card">
+            <div class="breed-header"><div class="breed-icon meatmaster">🐑</div><div><div class="fw-bold">أغنام ميت ماستر</div><small class="text-gray">مستورد</small></div></div>
+            <div class="stat-value mb-3" style="color:#9e9e9e;">١</div>
+            <div class="text-gray mb-2 fw-bold">تربية</div>
+            <div class="row g-2 mb-3"><div class="col-6"><div class="gender-box"><span class="gender-count">١</span><small class="text-gray">ذكور</small></div></div><div class="col-6"><div class="gender-box"><span class="gender-count">٠</span><small class="text-gray">إناث</small></div></div></div>
+            <div class="text-gray mb-2 fw-bold">تسمين</div>
+            <div class="row g-2"><div class="col-6"><div class="gender-box"><span class="gender-count">٠</span><small class="text-gray">ذكور</small></div></div><div class="col-6"><div class="gender-box"><span class="gender-count">٠</span><small class="text-gray">إناث</small></div></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="births-section mt-4">
+        <h5 class="fw-bold mb-3">ولدات الأغنام <small class="text-gray fw-normal">— إجمالي ٣٩</small></h5>
+        <div class="row g-3">
+          <div class="col-6"><div class="summary-card"><div class="summary-number">١٢</div><small class="text-gray">ذكور</small></div></div>
+          <div class="col-6"><div class="summary-card"><div class="summary-number" style="color:var(--accent-orange);">٢٧</div><small class="text-gray">إناث</small></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Vaccination ===== -->
+    <div class="tab-pane fade" id="vaccine" role="tabpanel">
+      <div class="wonder-card animate-in mb-4">
+        <h4 class="fw-bold mb-1">التحصين</h4>
+        <small class="text-gray">سجل التطعيمات والتحصينات</small>
+      </div>
+      <div class="row g-3 mb-4">
+        <div class="col-md-4"><div class="summary-card"><div class="summary-number">٣٨</div><div class="text-gray">تم التحصين</div><small class="green-text fw-bold">٩٢٪ من القطيع</small></div></div>
+        <div class="col-md-4"><div class="summary-card"><div class="summary-number" style="color:var(--accent-orange);">٢٤</div><div class="text-gray">يحتاج تحصين</div><small class="accent-text fw-bold">٦٪ من القطيع</small></div></div>
+        <div class="col-md-4"><div class="summary-card"><div class="summary-number" style="color:#f44336;">٩</div><div class="text-gray">متأخر عن الموعد</div><small class="fw-bold" style="color:#f44336;">٢٪ من القطيع</small></div></div>
+      </div>
+
+      <h5 class="fw-bold mb-3 mt-4">التحصينات القادمة</h5>
+      <div class="vaccine-card">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <div>
+            <div class="fw-bold mb-1"><span class="vaccine-status status-pending"></span>تحصين الحمى القلاعية</div>
+            <small class="text-gray">جميع الأغنام • الجرعة السنوية</small>
+          </div>
+          <div class="text-end">
+            <div class="accent-text fw-bold">خلال ٥ أيام</div>
+            <small class="text-gray">١٢٦ رأس</small>
+          </div>
+        </div>
+        <div class="progress-wonder"><div class="progress-bar-wonder" style="width:75%;"></div></div>
+      </div>
+      <div class="vaccine-card">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <div>
+            <div class="fw-bold mb-1"><span class="vaccine-status status-done"></span>تحصين الجدري</div>
+            <small class="text-gray">الماعز الشامي • الجرعة الأولى</small>
+          </div>
+          <div class="text-end">
+            <div class="green-text fw-bold">تم التنفيذ</div>
+            <small class="text-gray">١٤١ رأس • ٢٠٢٦/٠٣/٢٥</small>
+          </div>
+        </div>
+        <div class="progress-wonder"><div class="progress-bar-wonder" style="width:100%;"></div></div>
+      </div>
+      <div class="vaccine-card">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <div>
+            <div class="fw-bold mb-1"><span class="vaccine-status status-overdue"></span>تحصين التيتانوس</div>
+            <small class="text-gray">ماعز بور • جرعة معززة</small>
+          </div>
+          <div class="text-end">
+            <div class="fw-bold" style="color:#f44336;">متأخر ٣ أيام</div>
+            <small class="text-gray">٢٩ رأس</small>
+          </div>
+        </div>
+        <div class="progress-wonder"><div class="progress-bar-wonder" style="width:30%;background:linear-gradient(90deg,#f44336,#ff8a65);"></div></div>
+      </div>
+      <div class="vaccine-card">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <div>
+            <div class="fw-bold mb-1"><span class="vaccine-status status-pending"></span>مضاد الديدان</div>
+            <small class="text-gray">جميع الماعز • جرعة دورية</small>
+          </div>
+          <div class="text-end">
+            <div class="accent-text fw-bold">خلال أسبوعين</div>
+            <small class="text-gray">٢٩٦ رأس</small>
+          </div>
+        </div>
+        <div class="progress-wonder"><div class="progress-bar-wonder" style="width:50%;"></div></div>
+      </div>
+
+      <h5 class="fw-bold mb-3 mt-4">سجل التحصينات الأخيرة</h5>
+      <div class="wonder-card p-0">
+        <div class="table-responsive">
+          <table class="table table-dark table-borderless mb-0 align-middle text-center">
+            <thead><tr class="text-gray"><th>التاريخ</th><th>نوع التحصين</th><th>القسم</th><th>العدد</th><th>الحالة</th></tr></thead>
+            <tbody>
+              <tr><td>٢٠٢٦/٠٤/٠١</td><td>تحصين الجدري</td><td>ماعز شامي</td><td>١٤١</td><td><span class="type-badge badge-tarbiya">تم</span></td></tr>
+              <tr><td>٢٠٢٦/٠٣/٢٠</td><td>تحصين الحمى القلاعية</td><td>أغنام برقي</td><td>٨٤</td><td><span class="type-badge badge-tarbiya">تم</span></td></tr>
+              <tr><td>٢٠٢٦/٠٣/١٥</td><td>مضاد الديدان</td><td>ماعز بور</td><td>٢٩</td><td><span class="type-badge badge-tarbiya">تم</span></td></tr>
+              <tr><td>٢٠٢٦/٠٣/١٠</td><td>تحصين التيتانوس</td><td>أغنام دوربر</td><td>٢</td><td><span class="type-badge badge-tarbiya">تم</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Notes & Data ===== -->
+    <div class="tab-pane fade" id="data" role="tabpanel">
+      <div class="wonder-card animate-in mb-4">
+        <h4 class="fw-bold mb-1">مــلاحظــات التوريدات</h4>
+        <small class="text-gray">سجل التوريدات والاستلامات</small>
+      </div>
+
+      <h5 class="fw-bold mb-3">ملاحظات الأغنام</h5>
+      <div class="note-card d-flex gap-3"><div class="note-number">١</div><div><div>تم توريد عدد (٢) ذكور برقي وعدد (٦٨) إناث برقي</div><small class="accent-text fw-bold">توريد جديد</small></div></div>
+      <div class="note-card d-flex gap-3"><div class="note-number">٢</div><div><div>تم استلام عدد (١) أنثى وعدد (١) ذكر من نوع دوربر</div><small class="accent-text fw-bold">استلام</small></div></div>
+      <div class="note-card d-flex gap-3"><div class="note-number">٣</div><div><div>تم استلام عدد (١) ذكر ميت ماستر</div><small class="accent-text fw-bold">استلام</small></div></div>
+
+      <h5 class="fw-bold mb-3 mt-4">ملاحظات الماعز</h5>
+      <div class="note-card d-flex gap-3"><div class="note-number">١</div><div><div>تم استلام عدد (٨) ذكور + عدد (٥) إناث ماعز بور</div><small class="accent-text fw-bold">استلام</small></div></div>
+      <div class="note-card d-flex gap-3"><div class="note-number">٢</div><div><div>تم استلام عدد (١٤٠) أنثى ماعز شامي + (١) ذكر</div><small class="accent-text fw-bold">استلام</small></div></div>
+      <div class="note-card d-flex gap-3"><div class="note-number">٣</div><div><div>تم استلام عدد (١) ذكر + (٢٦) أنثى ماعز بلدي</div><small class="accent-text fw-bold">استلام</small></div></div>
+
+      <h5 class="fw-bold mb-3 mt-4">جدول ملخص البيانات</h5>
+      <div class="wonder-card p-0">
+        <div class="table-responsive">
+          <table class="table table-dark table-bordered mb-0 align-middle text-center" style="--bs-border-color:#2a2a2a;">
+            <thead><tr class="text-gray">
+              <th>القسم</th><th>السلالة</th><th>ذكور تربية</th><th>إناث تربية</th><th>ذكور تسمين</th><th>إناث تسمين</th><th>الإجمالي</th>
+            </tr></thead>
+            <tbody>
+              <tr><td rowspan="3" class="green-text fw-bold">الماعز</td><td>شامي</td><td>١</td><td>١٤٠</td><td>٠</td><td>٠</td><td class="fw-bold">١٤١</td></tr>
+              <tr><td>بور</td><td>١٠</td><td>١٥</td><td>٤</td><td>٠</td><td class="fw-bold">٢٩</td></tr>
+              <tr><td>بلدي</td><td>١</td><td>٢٦</td><td>٦</td><td>٠</td><td class="fw-bold">٣٣</td></tr>
+              <tr style="background:rgba(0,230,118,.06);"><td colspan="2" class="green-text fw-bold">إجمالي الماعز</td><td>١٢</td><td>١٨١</td><td>١٠</td><td>٠</td><td class="fw-bold green-text">٢٠٣</td></tr>
+              <tr><td rowspan="3" class="fw-bold" style="color:#2196f3;">الأغنام</td><td>برقي</td><td>٢</td><td>٦٨</td><td>١٤</td><td>٠</td><td class="fw-bold">٨٤</td></tr>
+              <tr><td>دوربر</td><td>١</td><td>١</td><td>٠</td><td>٠</td><td class="fw-bold">٢</td></tr>
+              <tr><td>ميت ماستر</td><td>١</td><td>٠</td><td>٠</td><td>٠</td><td class="fw-bold">١</td></tr>
+              <tr style="background:rgba(33,150,243,.06);"><td colspan="2" class="fw-bold" style="color:#2196f3;">إجمالي الأغنام</td><td>٤</td><td>٦٩</td><td>١٤</td><td>٠</td><td class="fw-bold" style="color:#2196f3;">٨٧</td></tr>
+              <tr style="background:rgba(255,193,7,.06);"><td colspan="2" class="fw-bold" style="color:#ffc107;">الولدات</td><td colspan="2">ذكور: ٥٦</td><td colspan="2">إناث: ٧١</td><td class="fw-bold" style="color:#ffc107;">١٢٧</td></tr>
+              <tr style="background:rgba(255,107,53,.1);"><td colspan="6" class="accent-text fw-bold">الإجمالي الكلي للمزرعة</td><td class="accent-text fw-bold">٤٢٢</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border-color);">
+    © ٢٠٢٦ بيان المزرعة - جميع الحقوق محفوظة
+  </footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="dashboard.js"></script>
+</body>
+</html>
