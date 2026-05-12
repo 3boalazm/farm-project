@@ -20,7 +20,7 @@
 <script src="firebase.js"></script>
 <script src="shared.js"></script>
 <script>
-document.addEventListener('DOMContentLoaded',()=>{
+document.addEventListener('DOMContentLoaded',async ()=>{
   if(!requireAuth())return;
   if(!can('users')){
     document.body.innerHTML='<div class="empty-state" style="padding-top:100px"><i class="bi bi-shield-x" style="font-size:3rem;display:block;margin-bottom:10px;opacity:.4"></i><p>غير مصرح بالوصول</p><a href="dashboard.html" class="action-btn">الرئيسية</a></div>';
@@ -32,11 +32,11 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('footer-farm').textContent=s.farmName;
   renderNavbar('users.html');
   renderPageHeader('<i class="bi bi-people-fill accent-text"></i> إدارة المستخدمين','','<button class="action-btn primary" onclick="openAddUser()"><i class="bi bi-person-plus-fill"></i> إضافة مستخدم</button>');
-  renderUsers();
+  await renderUsers();
 });
 
-function renderUsers(){
-  const users=Users.all();
+async function renderUsers(){
+  const users=await Users.all();
   const el=document.getElementById('content');
   el.innerHTML=`<div class="row g-3">
     ${users.map(u=>{const role=ROLES[u.role]||ROLES.worker;return`
@@ -62,8 +62,8 @@ function renderUsers(){
   </div>`;
 }
 
-function showUserDetail(id){
-  const u=Users.get(id);if(!u)return;
+async function showUserDetail(id){
+  const u=await Users.get(id);if(!u)return;
   const role=ROLES[u.role]||ROLES.worker;
   const perms={animals:'القطيع',health:'الصحة',breeding:'التكاثر',inventory:'المخزن',finance:'المالية',reports:'التقارير',users:'المستخدمون',activity:'سجل الأنشطة'};
   const allowed=u.role==='admin'?Object.keys(perms):Object.keys(perms).filter(p=>(ROLE_PERMS[u.role]||(()=>false))(p));
@@ -85,7 +85,7 @@ function showUserDetail(id){
 }
 
 function openAddUser(){showUserModal({});}
-function openEditUser(id){showUserModal(Users.get(id)||{});}
+async function openEditUser(id){showUserModal(await Users.get(id)||{});}
 function showUserModal(u){
   const isEdit=!!(u.id&&u.name);
   showModal(`<div class="farm-modal" onclick="event.stopPropagation()">
@@ -101,7 +101,7 @@ function showUserModal(u){
     </div>
   </div>`);
 }
-window.submitUser=function(existingId){
+window.submitUser=async function(existingId){
   const name=document.getElementById('u-name').value.trim();if(!name){toast('يرجى إدخال الاسم','error');return;}
   const pin=document.getElementById('u-pin').value.trim();
   const role=document.getElementById('u-role').value;
@@ -110,23 +110,25 @@ window.submitUser=function(existingId){
   if(pin&&pin.length<4){toast('PIN يجب أن يكون 4 أرقام على الأقل','error');return;}
   if(existingId){
     const patch={name,role,active};if(pin)patch.pin=pin;
-    Users.update(existingId,patch);
+    await Users.update(existingId,patch);
     logActivity('edit','users',`تعديل بيانات المستخدم: ${name}`);
     toast('تم التحديث');
   }else{
-    Users.add({id:genId(),name,role,pin,active,created:todayStr()});
+    await Users.add({id:genId(),name,role,pin,active,created:todayStr()});
     logActivity('add','users',`إضافة مستخدم جديد: ${name} — ${ROLES[role]?.label}`);
     toast('تمت الإضافة');
   }
-  closeModal();renderUsers();
+  closeModal();
+  await renderUsers();
 };
-window.delUser=function(id){
+window.delUser=async function(id){
   if(id==='admin1'){toast('لا يمكن حذف المدير الرئيسي','error');return;}
   if(!confirm('حذف هذا المستخدم؟'))return;
-  const u=Users.get(id);
-  Users.del(id);
+  const u=await Users.get(id);
+  await Users.del(id);
   logActivity('delete','users',`حذف المستخدم: ${u?.name||id}`);
-  toast('تم الحذف');renderUsers();
+  toast('تم الحذف');
+  await renderUsers();
 };
 </script>
 </body>

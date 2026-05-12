@@ -24,11 +24,12 @@
 <script src="config.js"></script>
 <script src="firebase.js"></script>
 <script>
-Users.init();
-const s=getSettings();
-document.getElementById('farm-name-title').textContent=s.farmName;
+;(async()=>{
+  await Users.init();
+  const s=getSettings();
+  document.getElementById('farm-name-title').textContent=s.farmName;
 
-let lRole='admin', lPin='';
+  let lRole='admin', lPin='';
 
 // Render role buttons
 document.getElementById('role-btns').innerHTML=Object.entries(ROLES).map(([k,v])=>`
@@ -60,7 +61,7 @@ function pinPress(k){
 }
 
 async function attemptLogin(){
-  const users=Users.all();
+  const users=await Users.all();
   let user=users.find(u=>u.role===lRole&&u.pin===lPin&&u.active);
   if(!user&&lRole==='admin'&&lPin==='1234'){
     user=users.find(u=>u.role==='admin')||{id:'admin1',name:'مدير المزرعة',role:'admin',pin:'1234',active:true,created:new Date().toISOString().slice(0,10)};
@@ -97,6 +98,7 @@ window.addEventListener('beforeunload',()=>{
     navigator.sendBeacon(`${FB_URL}/activity_log.json${FB_SECRET?'?auth='+FB_SECRET:''}`,JSON.stringify(data));
   }
 });
+})();
 </script>
 </body>
 </html>

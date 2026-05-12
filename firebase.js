@@ -224,56 +224,43 @@ async function logActivity(action, resource, description, extra={}){
 
 // ── LOCAL USERS ──────────────────────────────────────────
 const Users={
-  all(){
-    try{
-      return JSON.parse(localStorage.getItem('farm_users')||'[]');
-    }catch{
-      return [];
-    }
+  async all(){
+    return await fbGet('users');
   },
 
-  get:id=>Users.all().find(u=>u.id===id),
-
-  add(u){
-    localStorage.setItem(
-      'farm_users',
-      JSON.stringify([...Users.all(),u])
-    );
+  async get(id){
+    const direct=await fbGetOne('users', id);
+    if(direct) return direct;
+    const users=await fbGet('users');
+    return users.find(u=>u.id===id)||null;
   },
 
-  update(id,p){
-    localStorage.setItem(
-      'farm_users',
-      JSON.stringify(
-        Users.all().map(u=>u.id===id?{...u,...p}:u)
-      )
-    );
+  async add(user){
+    return await fbPut('users', user.id, {
+      ...user,
+      created: todayStr()
+    });
   },
 
-  del(id){
-    localStorage.setItem(
-      'farm_users',
-      JSON.stringify(
-        Users.all().filter(u=>u.id!==id)
-      )
-    );
+  async update(id,patch){
+    return await fbPatch('users', id, patch);
   },
 
-  init(){
-    if(!Users.all().length){
-      localStorage.setItem(
-        'farm_users',
-        JSON.stringify([
-          {
-            id:'admin1',
-            name:'مدير المزرعة',
-            role:'admin',
-            pin:'1234',
-            active:true,
-            created:todayStr()
-          }
-        ])
-      );
+  async del(id){
+    return await fbDelete('users', id);
+  },
+
+  async init(){
+    const users = await fbGet('users');
+    if(!users.length){
+      await fbPut('users','admin1',{
+        id:'admin1',
+        name:'مدير المزرعة',
+        role:'admin',
+        pin:'1234',
+        active:true,
+        created:todayStr()
+      });
     }
   }
 };
@@ -305,5 +292,8 @@ function saveSettings(s){
 }
 
 // ── INIT ─────────────────────────────────────────────────
-initFirebase();
-Users.init();
+async function initApp(){
+  initFirebase();
+  await Users.init();
+}
+initApp();
