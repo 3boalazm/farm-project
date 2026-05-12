@@ -45,10 +45,11 @@ function fbUrl(path,id=''){
 
 async function fbGet(path){
   const r=await fetch(fbUrl(path));
+  // 404 أو null = لا توجد بيانات بعد — ده طبيعي
+  if(r.status===404||r.status===204)return[];
   if(!r.ok)throw new Error(`Firebase GET ${path}: ${r.status}`);
   const data=await r.json();
-  if(!data)return[];
-  // Firebase returns object with keys as IDs — convert to array
+  if(!data||typeof data!=='object'||Array.isArray(data))return[];
   return Object.entries(data).map(([id,v])=>({...v,_id:id}));
 }
 
