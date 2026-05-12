@@ -73,8 +73,16 @@ const Milk={
   async del(id){if(await sbDel('milk',id))await loadData();else{ss('farm_milk',ls('farm_milk').filter(r=>r.id!==id));renderPage();}}
 };
 // كل البيانات تروح Supabase لو متصل، لو لأ localStorage
-async function sbSave(table,rec){if(!sb)return false;const{error}=await sb.from(table).upsert(rec);if(error){console.error(table,error);toast('خطأ في الحفظ','error');return false;}return true;}
-async function sbDel(table,id){if(!sb)return false;const{error}=await sb.from(table).delete().eq('id',id);if(error){console.error(table,error);toast('خطأ في الحذف','error');return false;}return true;}
+async function sbSave(table,rec){
+  if(!sb)return false;
+  try{await SB.upsert(table,rec);return true;}
+  catch(e){console.error('sbSave',table,e);toast('خطأ في الحفظ: '+e.message,'error');return false;}
+}
+async function sbDel(table,id){
+  if(!sb)return false;
+  try{await SB.delete(table,id);return true;}
+  catch(e){console.error('sbDel',table,e);toast('خطأ في الحذف: '+e.message,'error');return false;}
+}
 
 const Breeding={
   all:()=>sb?S.breeding:ls('farm_breeding'),
@@ -129,20 +137,39 @@ function getUser(){try{return JSON.parse(sessionStorage.getItem('farm_user')||'n
 function setUser(u){sessionStorage.setItem('farm_user',JSON.stringify(u));}
 window.logout=function(){sessionStorage.removeItem('farm_user');showLogin();};
 
-// ---- SUPABASE ----
-let sb=null;
+// ---- SUPABASE DIRECT FETCH (لا يحتاج أي library) ----
+let sb=null; // kept for compatibility checks
+let SB_URL='', SB_KEY='';
+
 function initSB(){
-  // الأولوية: config.js → الإعدادات المحفوظة
   const cfg=window.FARM_CONFIG||{};
   const s=getSettings();
-  const url=cfg.supabaseUrl||s.supabaseUrl||'';
-  const key=cfg.supabaseKey||s.supabaseKey||'';
-  if(url&&key&&window.supabase){
-    try{sb=window.supabase.createClient(url,key);return true;}
-    catch(e){console.error('Supabase init error:',e);return false;}
-  }
-  return false;
+  SB_URL=(cfg.supabaseUrl||s.supabaseUrl||'').replace(/\/$/,'');
+  SB_KEY=cfg.supabaseKey||s.supabaseKey||'';
+  if(SB_URL&&SB_KEY){sb=true;return true;}
+  sb=null;return false;
 }
+
+// طلب مباشر لـ Supabase REST API بدون أي مكتبة خارجية
+async function sbReq(table, method='GET', body=null, filter=''){
+  const url=`${SB_URL}/rest/v1/${table}${filter?'?'+filter:''}`;
+  const opts={method,headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':method==='POST'?'return=representation':''}};
+  if(body)opts.body=JSON.stringify(body);
+  const res=await fetch(url,opts);
+  if(!res.ok){const err=await res.text();throw new Error(`${table} ${method}: ${res.status} ${err}`);}
+  if(method==='DELETE'||res.status===204)return{data:null};
+  const data=await res.json();
+  return{data};
+}
+
+// دوال مساعدة مطابقة لـ Supabase JS client
+const SB={
+  select:(t,filter='')=>sbReq(t,'GET',null,filter+'&order=created_at.desc&limit=2000'),
+  insert:(t,rec)=>sbReq(t,'POST',rec),
+  upsert:(t,rec)=>sbReq(t,'POST',rec,'on_conflict=id'),
+  update:(t,id,patch)=>sbReq(t,'PATCH',patch,`id=eq.${id}`),
+  delete:(t,id)=>sbReq(t,'DELETE',null,`id=eq.${id}`),
+};
 
 // ---- APP STATE ----
 const S={route:'dash',routeHistory:[],animals:[],vaccinations:[],notes:[],breeding:[],health:[],finance:[],meds:[],feeds:[],equipment:[],weights:[],milk:[],loading:false,animalFilter:{search:'',species:'all',purpose:'all',status:'alive'}};
@@ -397,12 +424,12 @@ window.openEditAnimal=function(id){
 };
 window.submitEditAnimal=async function(id){
   const p={tag:document.getElementById('ea-tag').value.trim(),breed:document.getElementById('ea-breed').value,gender:document.getElementById('ea-gender').value,purpose:document.getElementById('ea-purpose').value,birth_date:document.getElementById('ea-bdate').value||null,status:document.getElementById('ea-status').value,notes:document.getElementById('ea-notes').value.trim()||null};
-  if(sb){await sb.from('animals').update(p).eq('id',id);}else{const arr=Animals.all().map(a=>a.id===id?{...a,...p}:a);Animals.save(arr);S.animals=arr;}
+  if(sb){try{await SB.update('animals',id,p);}catch(e){toast('فشل: '+e.message,'error');return;}}else{const arr=Animals.all().map(a=>a.id===id?{...a,...p}:a);Animals.save(arr);S.animals=arr;}
   toast('تم التحديث');closeModal();navigate('animals/'+id,false);
 };
 window.confirmDeleteAnimal=function(id){
   if(!confirm('حذف هذا الحيوان نهائياً؟'))return;
-  if(sb){sb.from('animals').delete().eq('id',id).then(()=>{S.animals=S.animals.filter(a=>a.id!==id);toast('تم الحذف');navigate('animals');});}
+  if(sb){SB.delete('animals',id).then(()=>{S.animals=S.animals.filter(a=>a.id!==id);toast('تم الحذف');navigate('animals');}).catch(e=>toast('فشل: '+e.message,'error'));}
   else{const arr=Animals.all().filter(a=>a.id!==id);Animals.save(arr);S.animals=arr;toast('تم الحذف');navigate('animals');}
 };
 window.exportAnimalsCSV=function(){const rows=[['النوع','السلالة','الجنس','الغرض','الحالة','الترقيم','تاريخ الإضافة'],...S.animals.map(a=>[a.species==='goat'?'ماعز':'أغنام',a.breed,a.gender==='male'?'ذكر':'أنثى',{tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[a.purpose]||a.purpose,a.status==='alive'?'حي':'نافق',a.tag||'',(a.created_at||'').slice(0,10)])];const csv=rows.map(r=>r.join(',')).join('\n');const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download=`animals-${todayStr()}.csv`;a.click();toast('تم تصدير CSV');};
@@ -442,8 +469,16 @@ function renderVaccinations(el){
   </div>
   ${filtered.length===0?`<div class="empty-state animate-in"><i class="bi bi-bandaid"></i><p>لا توجد تحصينات</p></div>`:filtered.map(v=>`<div class="record-card animate-in"><div class="d-flex justify-content-between align-items-start flex-wrap gap-2"><div><div class="fw-bold mb-1"><span class="status-dot ${v.status==='done'?'dot-green':v.status==='overdue'?'dot-red':'dot-orange'}"></span>${v.name}</div><small class="text-gray">${v.target_section} • ${ar(v.count)} رأس${v.scheduled_date?` • ${v.scheduled_date}`:''}</small></div><div class="d-flex gap-2 align-items-center flex-wrap"><span class="${v.status==='done'?'green-text':v.status==='overdue'?'red-text':'accent-text'} fw-bold">${v.status==='done'?'تم':v.status==='overdue'?'متأخر':'انتظار'}</span>${v.status!=='done'&&can('health')?`<button class="action-btn primary sm" onclick="markVaccDone('${v.id}')"><i class="bi bi-check-lg"></i></button>`:''}${can('health')?`<button class="action-btn sm" onclick="openEditVaccination('${v.id}')"><i class="bi bi-pencil"></i></button>`:''}${can('admin')?`<button class="action-btn danger sm" onclick="delVacc('${v.id}')"><i class="bi bi-trash"></i></button>`:''}</div></div><div class="progress-wonder"><div class="progress-bar-wonder" style="width:${v.progress}%;${v.status==='overdue'?'background:linear-gradient(90deg,var(--red),#ff8a65)':''}"></div></div><small class="text-gray">${ar(v.progress)}٪</small></div>`).join('')}`;
 }
-window.markVaccDone=async function(id){if(!sb)return;const{error}=await sb.from('vaccinations').update({status:'done',done_date:todayStr(),progress:100}).eq('id',id);if(error)toast('فشل','error');else{toast('تم');await loadData();}};
-window.delVacc=async function(id){if(!confirm('حذف؟'))return;if(!sb)return;const{error}=await sb.from('vaccinations').delete().eq('id',id);if(error)toast('فشل','error');else{toast('تم');await loadData();}};
+window.markVaccDone=async function(id){
+  if(!sb)return;
+  try{await SB.update('vaccinations',id,{status:'done',done_date:todayStr(),progress:100});toast('تم');await loadData();}
+  catch(e){toast('فشل: '+e.message,'error');}
+};
+window.delVacc=async function(id){
+  if(!confirm('حذف؟'))return;if(!sb)return;
+  try{await SB.delete('vaccinations',id);toast('تم');await loadData();}
+  catch(e){toast('فشل: '+e.message,'error');}
+};
 
 // ====================================================
 // HEALTH PAGE
@@ -805,8 +840,13 @@ window.submitAddAnimal=async function(){
   const notes=document.getElementById('m-notes').value.trim();const qty=parseInt(document.getElementById('m-qty').value)||1;
   const btn=document.getElementById('m-sub');if(btn)btn.disabled=true;
   if(sb){
-    let ok=0;for(let i=0;i<qty;i++){const p={species,breed,gender,purpose,status:'alive',birth_date:bdate};if(tag)p.tag=qty===1?tag:`${tag}-${i+1}`;if(notes)p.notes=notes;const{error}=await sb.from('animals').insert(p);if(!error)ok++;}
-    if(ok>0){toast(`تمت إضافة ${ar(ok)} حيوان`);closeModal();await loadData();}else toast('فشل','error');
+    let ok=0;
+    for(let i=0;i<qty;i++){
+      const p={species,breed,gender,purpose,status:'alive',birth_date:bdate};
+      if(tag)p.tag=qty===1?tag:`${tag}-${i+1}`;if(notes)p.notes=notes;
+      try{await SB.insert('animals',p);ok++;}catch(e){console.error(e);}
+    }
+    if(ok>0){toast(`تمت إضافة ${ar(ok)} حيوان`);closeModal();await loadData();}else toast('فشل الحفظ','error');
   }else{
     const arr=[];for(let i=0;i<qty;i++)arr.push({id:genId(),species,breed,gender,purpose,status:'alive',birth_date:bdate,tag:qty===1?(tag||null):(tag?`${tag}-${i+1}`:null),notes:notes||null,created_at:new Date().toISOString()});
     const all=[...Animals.all(),...arr];Animals.save(all);S.animals=all;
@@ -828,7 +868,10 @@ window.openMarkDeath=function(defaultSpecies){
 window.updateDeathList=function(){const breed=document.getElementById('d-breed').value;const cands=S.animals.filter(a=>a.status==='alive'&&(!breed||a.breed===breed));document.getElementById('d-cnt').textContent=ar(cands.length);document.getElementById('d-animal').innerHTML='<option value="">— اختر —</option>'+cands.slice(0,200).map(a=>`<option value="${a.id}">${a.breed} • ${a.gender==='male'?'ذكر':'أنثى'}${a.tag?` • #${a.tag}`:''}</option>`).join('');};
 window.submitDeath=async function(){
   const id=document.getElementById('d-animal').value;if(!id){toast('يرجى اختيار حيوان','error');return;}
-  if(sb){const{error}=await sb.from('animals').update({status:'dead',died_at:new Date().toISOString()}).eq('id',id);if(error)toast('فشل','error');else{toast('تم');closeModal();await loadData();}}
+  if(sb){
+    try{await SB.update('animals',id,{status:'dead',died_at:new Date().toISOString()});toast('تم تسجيل النفوق');closeModal();await loadData();}
+    catch(e){toast('فشل: '+e.message,'error');}
+  }
   else{const arr=Animals.all().map(a=>a.id===id?{...a,status:'dead',died_at:new Date().toISOString()}:a);Animals.save(arr);S.animals=arr;toast('تم');closeModal();renderPage();}
 };
 
@@ -849,8 +892,10 @@ window.submitVaccination=async function(){
   const name=document.getElementById('v-name').value.trim();const sec=document.getElementById('v-sec').value.trim();if(!name||!sec){toast('يرجى ملء الاسم والقسم','error');return;}
   const p={name,target_section:sec,count:parseInt(document.getElementById('v-cnt').value)||0,status:document.getElementById('v-stat').value,scheduled_date:document.getElementById('v-sch').value||null,done_date:document.getElementById('v-done').value||null,progress:parseInt(document.getElementById('v-prog').value)||0};
   if(!sb){toast('يتطلب Supabase','error');return;}
-  const q=editVaccId?sb.from('vaccinations').update(p).eq('id',editVaccId):sb.from('vaccinations').insert(p);
-  const{error}=await q;if(error)toast('خطأ: '+error.message,'error');else{toast(editVaccId?'تم التحديث':'تمت الإضافة');closeModal();await loadData();}
+  try{
+    if(editVaccId)await SB.update('vaccinations',editVaccId,p);else await SB.insert('vaccinations',p);
+    toast(editVaccId?'تم التحديث':'تمت الإضافة');closeModal();await loadData();
+  }catch(e){toast('خطأ: '+e.message,'error');}
 };
 
 // HEALTH MODAL
@@ -985,18 +1030,19 @@ async function loadData(){
   }
   S.loading=true;renderPage();
   try{
+    // كل الطلبات مباشرة بدون library
     const [a,v,n,br,hl,fi,md,fd,eq,wt,mk]=await Promise.all([
-      sb.from('animals').select('*').limit(2000),
-      sb.from('vaccinations').select('*').order('scheduled_date',{ascending:true}),
-      sb.from('notes').select('*').order('created_at'),
-      sb.from('breeding').select('*').order('created_at',{ascending:false}),
-      sb.from('health').select('*').order('created_at',{ascending:false}),
-      sb.from('finance').select('*').order('created_at',{ascending:false}),
-      sb.from('inventory_meds').select('*').order('created_at',{ascending:false}),
-      sb.from('inventory_feeds').select('*').order('created_at',{ascending:false}),
-      sb.from('inventory_equipment').select('*').order('created_at',{ascending:false}),
-      sb.from('weights').select('*').order('date',{ascending:false}),
-      sb.from('milk').select('*').order('date',{ascending:false}),
+      SB.select('animals'),
+      SB.select('vaccinations','order=scheduled_date.asc'),
+      SB.select('notes','order=created_at.asc'),
+      SB.select('breeding'),
+      SB.select('health'),
+      SB.select('finance'),
+      SB.select('inventory_meds'),
+      SB.select('inventory_feeds'),
+      SB.select('inventory_equipment'),
+      SB.select('weights','order=date.desc&limit=2000'),
+      SB.select('milk','order=date.desc&limit=2000'),
     ]);
     if(a.data){S.animals=a.data;Animals.save(a.data);}
     if(v.data)S.vaccinations=v.data;
@@ -1012,7 +1058,7 @@ async function loadData(){
     generateNotifications();
   }catch(e){
     console.error('loadData error:',e);
-    toast('خطأ في التحميل — تحقق من بيانات Supabase','error');
+    toast('❌ خطأ: '+e.message,'error');
     S.animals=Animals.all();
   }
   S.loading=false;renderAll();
