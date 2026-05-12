@@ -89,7 +89,7 @@ function renderAnimals(){
   el.innerHTML=`<div class="mb-2 d-flex justify-content-between"><small class="text-gray">يُعرض ${ar(list.length)} حيوان</small><button class="action-btn sm" onclick="exportCSV()"><i class="bi bi-filetype-csv"></i> CSV</button></div>`+
   list.map(a=>`<a href="animal-detail.html?id=${a._id}" style="text-decoration:none">
     <div class="animal-row">
-      <div class="animal-avatar">${a.species==='goat'?'🐐':'🐑'}</div>
+      <div class="animal-avatar">${a.species==='goat'?'🐐':''}</div>
       <div class="flex-grow-1">
         <div class="d-flex align-items-center gap-2 flex-wrap">
           <span class="fw-bold">${a.breed}</span>
@@ -227,8 +227,8 @@ window.submitBirths=async function(){
     try{await fbPost('animals',{species,breed:'مواليد',gender,purpose:'birth',status:'alive',birth_date:bdate,notes:notes||null});ok++;}catch(e){console.error(e);}
   }
   if(ok>0){
-    await logActivity('add','animals',\`أضاف \${ar(ok)} مواليد \${species==='goat'?'ماعز':'أغنام'}\`);
-    toast(\`تمت إضافة \${ar(ok)} مواليد\`);
+    await logActivity('add','animals',`أضاف ${ar(ok)} مواليد ${species==='goat'?'ماعز':'أغنام'}`);
+    toast(`تمت إضافة ${ar(ok)} مواليد`);
     animals=await fbGet('animals');renderAnimals();
   }else toast('فشل الحفظ','error');
 };

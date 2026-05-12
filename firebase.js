@@ -1,4 +1,17 @@
 'use strict';
+
+// ── Firebase Config ──────────────────────────────────────
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyB22XrjduHzusLuNdBtLLvmdIEokFsnyfQ",
+  authDomain: "farm-mz99.firebaseapp.com",
+  databaseURL: "https://farm-mz99-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "farm-mz99",
+  storageBucket: "farm-mz99.firebasestorage.app",
+  messagingSenderId: "270083358979",
+  appId: "1:270083358979:web:99fad8832b9883c6636936",
+  measurementId: "G-CR0WTLFJZD"
+};
+
 // ── Firebase REST API (بدون أي library) ──────────────────
 const AR=['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
 const ar=n=>String(n??'').replace(/\d/g,d=>AR[+d]);
@@ -6,118 +19,261 @@ const todayStr=()=>new Date().toISOString().slice(0,10);
 function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
 
 // ── AUTH ─────────────────────────────────────────────────
-function getUser(){try{return JSON.parse(localStorage.getItem('farm_user')||'null');}catch{return null;}}
-function setUser(u){localStorage.setItem('farm_user',JSON.stringify(u));}
-function logout(){localStorage.removeItem('farm_user');window.location.href='login.html';}
-function requireAuth(){if(!getUser()){window.location.href='login.html';return false;}return true;}
+function getUser(){
+  try{
+    return JSON.parse(localStorage.getItem('farm_user')||'null');
+  }catch{
+    return null;
+  }
+}
 
+function setUser(u){
+  localStorage.setItem('farm_user',JSON.stringify(u));
+}
+
+function logout(){
+  localStorage.removeItem('farm_user');
+  window.location.href='login.html';
+}
+
+function requireAuth(){
+  if(!getUser()){
+    window.location.href='login.html';
+    return false;
+  }
+  return true;
+}
+
+// ── ROLES ────────────────────────────────────────────────
 const ROLES={
-  admin:      {label:'مدير',      icon:'bi-shield-fill',      color:'var(--orange)'},
-  supervisor: {label:'مشرف',      icon:'bi-person-badge-fill', color:'var(--blue)'},
-  vet:        {label:'طبيب بيطري',icon:'bi-heart-pulse-fill',  color:'var(--green)'},
-  worker:     {label:'عامل',      icon:'bi-person-fill',       color:'var(--gray)'},
+  admin:      {label:'مدير',       icon:'bi-shield-fill',       color:'var(--orange)'},
+  supervisor: {label:'مشرف',       icon:'bi-person-badge-fill', color:'var(--blue)'},
+  vet:        {label:'طبيب بيطري', icon:'bi-heart-pulse-fill',  color:'var(--green)'},
+  worker:     {label:'عامل',       icon:'bi-person-fill',       color:'var(--gray)'},
 };
+
 const ROLE_PERMS={
   admin:      ()=>true,
   supervisor: p=>!['users','finance','activity'].includes(p),
   vet:        p=>['health','vaccine','breeding','dash','notifications'].includes(p),
   worker:     p=>['dash','animals','notifications'].includes(p),
 };
+
 function can(page){
-  const u=getUser();if(!u)return false;
-  if(u.role==='admin')return true;
+  const u=getUser();
+
+  if(!u) return false;
+
+  if(u.role==='admin') return true;
+
   return (ROLE_PERMS[u.role]||(()=>false))(page);
 }
 
-// ── FIREBASE REST ─────────────────────────────────────────
-let FB_URL='', FB_SECRET='';
+// ── FIREBASE REST ────────────────────────────────────────
+let FB_URL='';
+
 function initFirebase(){
-  const cfg=window.FARM_CONFIG||{};
-  FB_URL=(cfg.firebaseUrl||'').replace(/\/$/,'');
-  FB_SECRET=cfg.firebaseSecret||'';
+  FB_URL=(FIREBASE_CONFIG.databaseURL||'').replace(/\/$/,'');
+
+  console.log('Firebase Connected:',FB_URL);
+
   return !!FB_URL;
 }
 
 function fbUrl(path,id=''){
-  const base=`${FB_URL}/${path}${id?'/'+id:''}.json`;
-  return FB_SECRET?`${base}?auth=${FB_SECRET}`:base;
+  return `${FB_URL}/${path}${id?'/'+id:''}.json`;
 }
 
 async function fbGet(path){
-  const r=await fetch(fbUrl(path));
-  // 404 أو null = لا توجد بيانات بعد — ده طبيعي
-  if(r.status===404||r.status===204)return[];
-  if(!r.ok)throw new Error(`Firebase GET ${path}: ${r.status}`);
-  const data=await r.json();
-  if(!data||typeof data!=='object'||Array.isArray(data))return[];
-  return Object.entries(data).map(([id,v])=>({...v,_id:id}));
+  try{
+    const r=await fetch(fbUrl(path));
+
+    if(r.status===404||r.status===204){
+      return [];
+    }
+
+    if(!r.ok){
+      throw new Error(`Firebase GET ${path}: ${r.status}`);
+    }
+
+    const data=await r.json();
+
+    if(!data || typeof data!=='object'){
+      return [];
+    }
+
+    return Object.entries(data).map(([id,v])=>({
+      ...v,
+      _id:id
+    }));
+
+  }catch(e){
+    console.error('fbGet Error:',e);
+    return [];
+  }
 }
 
 async function fbGetOne(path,id){
   const r=await fetch(fbUrl(path,id));
-  if(!r.ok)throw new Error(`Firebase GET ${path}/${id}: ${r.status}`);
+
+  if(!r.ok){
+    throw new Error(`Firebase GET ${path}/${id}: ${r.status}`);
+  }
+
   const data=await r.json();
+
   return data?{...data,_id:id}:null;
 }
 
-const JSON_HEADERS={'Content-Type':'application/json'};
+const JSON_HEADERS={
+  'Content-Type':'application/json'
+};
 
 async function fbPost(path,data){
-  const body=JSON.stringify({...data,created_at:new Date().toISOString()});
-  const r=await fetch(fbUrl(path),{method:'POST',headers:JSON_HEADERS,body});
-  if(!r.ok){const t=await r.text();throw new Error(`POST ${path}: ${r.status} ${t}`);}
+  const body=JSON.stringify({
+    ...data,
+    created_at:new Date().toISOString()
+  });
+
+  const r=await fetch(fbUrl(path),{
+    method:'POST',
+    headers:JSON_HEADERS,
+    body
+  });
+
+  if(!r.ok){
+    const t=await r.text();
+    throw new Error(`POST ${path}: ${r.status} ${t}`);
+  }
+
   const res=await r.json();
+
   return res.name;
 }
 
 async function fbPut(path,id,data){
-  const body=JSON.stringify({...data,updated_at:new Date().toISOString()});
-  const r=await fetch(fbUrl(path,id),{method:'PUT',headers:JSON_HEADERS,body});
-  if(!r.ok){const t=await r.text();throw new Error(`PUT ${path}/${id}: ${r.status} ${t}`);}
+  const body=JSON.stringify({
+    ...data,
+    updated_at:new Date().toISOString()
+  });
+
+  const r=await fetch(fbUrl(path,id),{
+    method:'PUT',
+    headers:JSON_HEADERS,
+    body
+  });
+
+  if(!r.ok){
+    const t=await r.text();
+    throw new Error(`PUT ${path}/${id}: ${r.status} ${t}`);
+  }
 }
 
 async function fbPatch(path,id,patch){
-  const body=JSON.stringify({...patch,updated_at:new Date().toISOString()});
-  const r=await fetch(fbUrl(path,id),{method:'PATCH',headers:JSON_HEADERS,body});
-  if(!r.ok){const t=await r.text();throw new Error(`PATCH ${path}/${id}: ${r.status} ${t}`);}
+  const body=JSON.stringify({
+    ...patch,
+    updated_at:new Date().toISOString()
+  });
+
+  const r=await fetch(fbUrl(path,id),{
+    method:'PATCH',
+    headers:JSON_HEADERS,
+    body
+  });
+
+  if(!r.ok){
+    const t=await r.text();
+    throw new Error(`PATCH ${path}/${id}: ${r.status} ${t}`);
+  }
 }
 
 async function fbDelete(path,id){
-  const r=await fetch(fbUrl(path,id),{method:'DELETE'});
-  if(!r.ok){const t=await r.text();throw new Error(`DELETE ${path}/${id}: ${r.status} ${t}`);}
+  const r=await fetch(fbUrl(path,id),{
+    method:'DELETE'
+  });
+
+  if(!r.ok){
+    const t=await r.text();
+    throw new Error(`DELETE ${path}/${id}: ${r.status} ${t}`);
+  }
 }
 
 // ── ACTIVITY LOG ─────────────────────────────────────────
 async function logActivity(action, resource, description, extra={}){
   const u=getUser();
-  if(!u||!FB_URL)return;
+
+  if(!u || !FB_URL) return;
+
   try{
     await fbPost('activity_log',{
       userId:   u.id,
       userName: u.name,
       userRole: u.role,
-      action,        // 'add' | 'edit' | 'delete' | 'login' | 'logout' | 'view'
-      resource,      // 'animals' | 'health' | 'vaccine' | 'breeding' | 'finance' | 'inventory' | 'settings' | 'users'
-      description,   // نص عربي: 'أضاف حيوان شامي ذكر تربية'
+      action,
+      resource,
+      description,
       date: todayStr(),
       timestamp: new Date().toISOString(),
       ...extra
     });
-  }catch(e){console.warn('logActivity failed:',e);}
+
+  }catch(e){
+    console.warn('logActivity failed:',e);
+  }
 }
 
-// ── LOCAL STORES (مستخدمين فقط — البيانات في Firebase) ──
+// ── LOCAL USERS ──────────────────────────────────────────
 const Users={
-  all:()=>{try{return JSON.parse(localStorage.getItem('farm_users')||'[]');}catch{return[];}},
+  all(){
+    try{
+      return JSON.parse(localStorage.getItem('farm_users')||'[]');
+    }catch{
+      return [];
+    }
+  },
+
   get:id=>Users.all().find(u=>u.id===id),
-  add(u){localStorage.setItem('farm_users',JSON.stringify([...Users.all(),u]));},
-  update(id,p){localStorage.setItem('farm_users',JSON.stringify(Users.all().map(u=>u.id===id?{...u,...p}:u)));},
-  del(id){localStorage.setItem('farm_users',JSON.stringify(Users.all().filter(u=>u.id!==id)));},
+
+  add(u){
+    localStorage.setItem(
+      'farm_users',
+      JSON.stringify([...Users.all(),u])
+    );
+  },
+
+  update(id,p){
+    localStorage.setItem(
+      'farm_users',
+      JSON.stringify(
+        Users.all().map(u=>u.id===id?{...u,...p}:u)
+      )
+    );
+  },
+
+  del(id){
+    localStorage.setItem(
+      'farm_users',
+      JSON.stringify(
+        Users.all().filter(u=>u.id!==id)
+      )
+    );
+  },
+
   init(){
     if(!Users.all().length){
-      localStorage.setItem('farm_users',JSON.stringify([
-        {id:'admin1',name:'مدير المزرعة',role:'admin',pin:'1234',active:true,created:todayStr()}
-      ]));
+      localStorage.setItem(
+        'farm_users',
+        JSON.stringify([
+          {
+            id:'admin1',
+            name:'مدير المزرعة',
+            role:'admin',
+            pin:'1234',
+            active:true,
+            created:todayStr()
+          }
+        ])
+      );
     }
   }
 };
@@ -126,17 +282,28 @@ const Users={
 function getSettings(){
   const cfg=window.FARM_CONFIG||{};
   const saved=JSON.parse(localStorage.getItem('farm_settings')||'{}');
+
   return{
     farmName:             cfg.farmName||saved.farmName||'بيان المزرعة',
     ownerName:            cfg.ownerName||saved.ownerName||'مدير المزرعة',
     currency:             cfg.currency||saved.currency||'ج.م',
+
     goatBreeds:           cfg.goatBreeds||saved.goatBreeds||['شامي','بور','بلدي'],
     sheepBreeds:          cfg.sheepBreeds||saved.sheepBreeds||['برقي','دوربر','ميت ماستر'],
+
     pregnancyDays:        cfg.pregnancyDays||saved.pregnancyDays||150,
     vaccinationAlertDays: cfg.vaccinationAlertDays||saved.vaccinationAlertDays||7,
     weaningDays:          cfg.weaningDays||saved.weaningDays||60,
+
     logoUrl:              saved.logoUrl||'',
     farmAddress:          saved.farmAddress||'',
   };
 }
-function saveSettings(s){localStorage.setItem('farm_settings',JSON.stringify(s));}
+
+function saveSettings(s){
+  localStorage.setItem('farm_settings',JSON.stringify(s));
+}
+
+// ── INIT ─────────────────────────────────────────────────
+initFirebase();
+Users.init();

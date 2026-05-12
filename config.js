@@ -1,28 +1,32 @@
 // ╔═══════════════════════════════════════════════════╗
 // ║      إعدادات المزرعة — عدّل هنا فقط             ║
-// ║  1. أنشئ مشروع على console.firebase.google.com   ║
-// ║  2. فعّل Realtime Database وانسخ الـ URL         ║
-// ║  3. ارفع الملفات — كل الأجهزة تعمل تلقائياً     ║
+// ║  1. أنشئ مشروع Firebase                          ║
+// ║  2. فعّل Realtime Database                       ║
+// ║  3. انسخ بيانات الـ Config هنا                   ║
 // ╚═══════════════════════════════════════════════════╝
 
 const FARM_CONFIG = {
-  // Firebase Realtime Database URL
-  // مثال: 'https://my-farm-12345-default-rtdb.firebaseio.com'
-  firebaseUrl: 'https://farm-mz99-default-rtdb.firebasedatabase.app',
-
-  // Firebase Database Secret (اختياري — للأمان)
-  // console.firebase.google.com → Project Settings → Service Accounts → Database Secrets
-  firebaseSecret: '',
+  // Firebase Config
+  apiKey: "AIzaSyB22XrjduHzusLuNdBtLLvmdIEokFsnyfQ",
+  authDomain: "farm-mz99.firebaseapp.com",
+  databaseURL: "https://farm-mz99-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "farm-mz99",
+  storageBucket: "farm-mz99.firebasestorage.app",
+  messagingSenderId: "270083358979",
+  appId: "1:270083358979:web:99fad8832b9883c6636936",
+  measurementId: "G-CR0WTLFJZD",
 
   // معلومات المزرعة
-  farmName:  'بيان المزرعة',
+  farmName: 'بيان المزرعة',
   ownerName: 'مدير المزرعة',
-  currency:  'ج.م',
+  currency: 'ج.م',
 
-  // إعدادات
-  goatBreeds:           ['شامي', 'بور', 'بلدي'],
-  sheepBreeds:          ['برقي', 'دوربر', 'ميت ماستر'],
-  pregnancyDays:        150,
+  // إعدادات الحيوانات
+  goatBreeds: ['شامي', 'بور', 'بلدي'],
+  sheepBreeds: ['برقي', 'دوربر', 'ميت ماستر'],
+
+  // إعدادات النظام
+  pregnancyDays: 150,
   vaccinationAlertDays: 7,
-  weaningDays:          60,
+  weaningDays: 60,
 };
