@@ -199,7 +199,7 @@ function calcAge(birth_date){
   let y=n.getFullYear()-b.getFullYear(),m=n.getMonth()-b.getMonth();
   if(m<0){y--;m+=12;}return{years:y,months:m};
 }
-function getPregnancyLabel(s){return{pregnant:'عشار',empty:'فاضية',inseminated:'تم التلقيح',with_kid:'والدة'}[s]||s;}
+function getPregnancyLabel(s){return{pregnant:'عشار',empty:'غير عشار',inseminated:'تم التلقيح',with_kid:'والدة'}[s]||s;}
 
 function openEditAnimal(){
   const s=getSettings();
@@ -243,7 +243,7 @@ window.submitEditAnimal=async function(){
 function openUpdatePregnancy(){
   showModal(`<div class="farm-modal" onclick="event.stopPropagation()">
     <h4><i class="bi bi-heart-pulse accent-text"></i> تحديث الحالة التناسلية</h4>
-    <label>الحالة</label><select class="field" id="p-status"><option value="empty" ${animal.pregnancy_status==='empty'||!animal.pregnancy_status?'selected':''}>فاضية</option><option value="inseminated" ${animal.pregnancy_status==='inseminated'?'selected':''}>تم التلقيح</option><option value="pregnant" ${animal.pregnancy_status==='pregnant'?'selected':''}>عشار (حامل)</option><option value="with_kid" ${animal.pregnancy_status==='with_kid'?'selected':''}>والدة</option></select>
+    <label>الحالة</label><select class="field" id="p-status"><option value="empty" ${animal.pregnancy_status==='empty'||!animal.pregnancy_status?'selected':''}>غير عشار</option><option value="inseminated" ${animal.pregnancy_status==='inseminated'?'selected':''}>تم التلقيح</option><option value="pregnant" ${animal.pregnancy_status==='pregnant'?'selected':''}>عشار (حامل)</option><option value="with_kid" ${animal.pregnancy_status==='with_kid'?'selected':''}>والدة</option></select>
     <div class="d-flex gap-2 justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إلغاء</button><button class="action-btn primary" onclick="submitPregnancyUpdate()">حفظ</button></div>
   </div>`);
 }
