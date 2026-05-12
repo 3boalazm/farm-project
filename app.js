@@ -3,6 +3,14 @@
 // FARM v2 — COMPLETE MANAGEMENT SYSTEM
 // =====================================================
 
+// ╔══════════════════════════════════════════════════╗
+// ║  ⚙️  إعداد Supabase — عدّل هنا مرة واحدة بس   ║
+// ║  بعد التعديل ارفع الملف والكل يشتغل معاه       ║
+// ╚══════════════════════════════════════════════════╝
+const SUPABASE_URL  = '';   // مثال: 'https://xxxx.supabase.co'
+const SUPABASE_KEY  = '';   // anon/public key
+// ═══════════════════════════════════════════════════
+
 // ---- ARABIC ----
 const AR=['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
 const ar=n=>String(n).replace(/\d/g,d=>AR[+d]);
@@ -77,8 +85,14 @@ window.logout=function(){sessionStorage.removeItem('farm_user');showLogin();};
 // ---- SUPABASE ----
 let sb=null;
 function initSB(){
+  // الأولوية: القيم المكتوبة في الملف مباشرة، ثم ما حفظه المستخدم في الإعدادات
   const s=getSettings();
-  if(s.supabaseUrl&&s.supabaseKey&&window.supabase){try{sb=window.supabase.createClient(s.supabaseUrl,s.supabaseKey);return true;}catch(e){return false;}}
+  const url=SUPABASE_URL||s.supabaseUrl;
+  const key=SUPABASE_KEY||s.supabaseKey;
+  if(url&&key&&window.supabase){
+    try{sb=window.supabase.createClient(url,key);return true;}
+    catch(e){console.error('Supabase:',e);return false;}
+  }
   return false;
 }
 
@@ -190,7 +204,7 @@ function renderPage(){
   if(r.startsWith('animals/')){renderAnimalDetail(el,r.slice(8));return;}
   if(r.startsWith('health/')){renderHealthDetail(el,r.slice(7));return;}
   if(r.startsWith('users/')){renderUserDetail(el,r.slice(6));return;}
-  if(!sb&&!getSettings().supabaseUrl&&['dash','animals','goats','sheep','vaccine','data'].includes(r)){renderSetup(el);return;}
+  if(!sb&&!SUPABASE_URL&&!getSettings().supabaseUrl&&['dash','animals','goats','sheep','vaccine','data'].includes(r)){renderSetup(el);return;}
   ({dash:renderDashboard,animals:renderAnimals,goats:()=>renderSpecies(el,'goat'),sheep:()=>renderSpecies(el,'sheep'),vaccine:renderVaccinations,health:renderHealthPage,breeding:renderBreeding,inventory:renderInventory,finance:renderFinance,reports:renderReports,notifications:renderNotifications,data:renderDataNotes,users:renderUsers,'farm-profile':renderFarmProfile,settings:renderSettings}[r]||renderDashboard)(el);
 }
 function renderSetup(el){el.innerHTML=`<div class="wonder-card animate-in text-center" style="max-width:460px;margin:40px auto"><div style="font-size:3rem;margin-bottom:14px">🐐</div><h4 class="fw-bold mb-2">مرحباً في بيان المزرعة</h4><p class="text-gray mb-4">أدخل بيانات Supabase أو استخدم وضع التخزين المحلي</p><div class="d-flex gap-2 justify-content-center"><button class="action-btn primary" onclick="navigate('settings')"><i class="bi bi-gear-fill"></i> إعداد Supabase</button><button class="action-btn" onclick="useLocal()"><i class="bi bi-laptop"></i> وضع محلي</button></div></div>`;}
