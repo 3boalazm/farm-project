@@ -25,6 +25,7 @@ let animals=[], fSearch='', fSpecies='all', fPurpose='all', fStatus='alive';
 const params=new URLSearchParams(location.search);
 if(params.get('species'))fSpecies=params.get('species');
 if(params.get('purpose'))fPurpose=params.get('purpose');
+if(params.get('breed'))fSearch=params.get('breed');
 
 document.addEventListener('DOMContentLoaded',async()=>{
   if(!requireAuth())return;
@@ -66,8 +67,9 @@ function renderFilters(){
         <option value="dead" ${fStatus==='dead'?'selected':''}>نافق</option>
         <option value="all" ${fStatus==='all'?'selected':''}>الكل</option>
       </select></div>
-    ${can('animals')?`<div class="col-md-3 d-flex gap-2">
+    ${can('animals')?`<div class="col-md-3 d-flex gap-2 flex-wrap">
       <button class="action-btn primary flex-grow-1" onclick="openAddAnimal()"><i class="bi bi-plus-lg"></i> إضافة</button>
+      <button class="action-btn" onclick="openAddBirths()" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.35);color:var(--yellow)"><i class="bi bi-stars"></i></button>
       <button class="action-btn danger" onclick="openMarkDeath()"><i class="bi bi-x-octagon"></i></button>
     </div>`:''}
   </div>`;
@@ -189,6 +191,46 @@ window.submitDeath=async function(){
     toast('تم تسجيل النفوق');
     animals=await fbGet('animals');renderAnimals();
   }catch(e){toast('فشل: '+e.message,'error');}
+};
+
+function openAddBirths(){
+  const s=getSettings();
+  showModal(`<div class="farm-modal" onclick="event.stopPropagation()">
+    <h4><i class="bi bi-stars" style="color:var(--yellow)"></i> إضافة مواليد</h4>
+    <label>النوع</label>
+    <select class="field" id="b-species">
+      <option value="goat">ماعز</option>
+      <option value="sheep">أغنام</option>
+    </select>
+    <div class="row g-2">
+      <div class="col-6"><label>الجنس</label><select class="field" id="b-gender"><option value="female">أنثى</option><option value="male">ذكر</option></select></div>
+      <div class="col-6"><label>الكمية</label><input type="number" class="field" id="b-qty" value="1" min="1" max="100"></div>
+    </div>
+    <label>تاريخ الميلاد</label><input type="date" class="field" id="b-bdate" value="${todayStr()}">
+    <label>ملاحظات</label><textarea class="field" id="b-notes" rows="2"></textarea>
+    <div class="d-flex gap-2 justify-content-end mt-3">
+      <button class="action-btn" onclick="closeModal()">إلغاء</button>
+      <button class="action-btn primary" onclick="submitBirths()">حفظ</button>
+    </div>
+  </div>\`);
+}
+
+window.submitBirths=async function(){
+  const species=document.getElementById('b-species').value;
+  const gender=document.getElementById('b-gender').value;
+  const qty=parseInt(document.getElementById('b-qty').value)||1;
+  const bdate=document.getElementById('b-bdate').value||null;
+  const notes=document.getElementById('b-notes').value.trim();
+  closeModal();toast('جاري الحفظ...','info');
+  let ok=0;
+  for(let i=0;i<qty;i++){
+    try{await fbPost('animals',{species,breed:'مواليد',gender,purpose:'birth',status:'alive',birth_date:bdate,notes:notes||null});ok++;}catch(e){console.error(e);}
+  }
+  if(ok>0){
+    await logActivity('add','animals',\`أضاف \${ar(ok)} مواليد \${species==='goat'?'ماعز':'أغنام'}\`);
+    toast(\`تمت إضافة \${ar(ok)} مواليد\`);
+    animals=await fbGet('animals');renderAnimals();
+  }else toast('فشل الحفظ','error');
 };
 
 function exportCSV(){

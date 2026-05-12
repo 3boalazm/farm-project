@@ -32,6 +32,8 @@ function timeAr(iso){
 const NAV_PAGES=[
   {href:'dashboard.html', icon:'bi-grid-1x2-fill',   label:'الرئيسية',    perm:'dash'},
   {href:'animals.html',   icon:'bi-list-ul',          label:'القطيع',      perm:'animals'},
+  {href:'goats.html',     icon:'bi-tropical-storm',   label:'الماعز',      perm:'animals'},
+  {href:'sheep.html',     icon:'bi-cloud-fill',        label:'الأغنام',     perm:'animals'},
   {href:'vaccine.html',   icon:'bi-bandaid-fill',      label:'تحصين',       perm:'health'},
   {href:'health.html',    icon:'bi-heart-pulse-fill',  label:'صحة',         perm:'health'},
   {href:'breeding.html',  icon:'bi-diagram-2-fill',    label:'تكاثر',       perm:'breeding'},

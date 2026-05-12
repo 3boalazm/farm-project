@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>قسم الماعز — بيان المزرعة</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="page-wrap">
+  <div id="page-header"></div>
+  <div id="content"><div class="text-center py-5"><div class="spinner"></div></div></div>
+  <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
+    © <span id="footer-year"></span> <span id="footer-farm"></span>
+  </footer>
+</div>
+<script src="config.js"></script>
+<script src="firebase.js"></script>
+<script src="shared.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async ()=>{
+  if(!requireAuth())return;
+  initFirebase();
+  const s=getSettings();
+  document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
+  document.getElementById('footer-farm').textContent=s.farmName;
+  renderNavbar('goats.html');
+
+  const el=document.getElementById('content');
+  renderLoading(el);
+  let animals=[];
+  try{ animals=await fbGet('animals'); }catch(e){ toast('خطأ: '+e.message,'error'); }
+
+  const alive=animals.filter(a=>a.status==='alive');
+  const goats=alive.filter(a=>a.species==='goat'&&a.purpose!=='birth');
+  const births=alive.filter(a=>a.species==='goat'&&a.purpose==='birth');
+  const dead=animals.filter(a=>a.status==='dead'&&a.species==='goat');
+  const sorted=[...s.goatBreeds].sort((a,b)=>breedStats(animals,b).total-breedStats(animals,a).total);
+
+  renderPageHeader(
+    '🐐 قسم الماعز',
+    `${ar(goats.length)} حيوان حي • ${ar(births.length)} مواليد`,
+    can('animals')?`
+      <button class="action-btn primary" onclick="openAddAnimal('goat')"><i class="bi bi-plus-lg"></i> إضافة ماعز</button>
+      <button class="action-btn" onclick="openAddBirth('goat')"><i class="bi bi-stars"></i> إضافة مواليد</button>
+      <button class="action-btn danger" onclick="openMarkDeath('goat')"><i class="bi bi-x-octagon"></i> نفوق</button>`:''
+  );
+
+  // Breed cards
+  const breedsHtml=s.goatBreeds.map(breed=>{
+    const bs=breedStats(animals,breed);
+    const breedAnimals=alive.filter(a=>a.species==='goat'&&a.breed===breed);
+    return`<div class="col-lg-4 col-md-6">
+      <div class="breed-card">
+        <div class="breed-header">
+          <div class="breed-icon">🐐</div>
+          <div><div class="fw-bold">${breed}</div><small class="text-gray">${ar(bs.total)} حيوان</small></div>
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-6"><div class="gender-box"><span class="gender-count green-text">${ar(bs.tarbiyaMale)}</span><small class="text-gray">ذكور تربية</small></div></div>
+          <div class="col-6"><div class="gender-box"><span class="gender-count green-text">${ar(bs.tarbiyaFemale)}</span><small class="text-gray">إناث تربية</small></div></div>
+          <div class="col-6"><div class="gender-box"><span class="gender-count accent-text">${ar(bs.tasmeenMale)}</span><small class="text-gray">ذكور تسمين</small></div></div>
+          <div class="col-6"><div class="gender-box"><span class="gender-count accent-text">${ar(bs.tasmeenFemale)}</span><small class="text-gray">إناث تسمين</small></div></div>
+        </div>
+        <div class="mb-2">
+          ${bs.tarbiya>0?`<span class="type-badge badge-tarbiya">تربية ${ar(bs.tarbiya)}</span> `:''}
+          ${bs.tasmeen>0?`<span class="type-badge badge-tasmeen">تسمين ${ar(bs.tasmeen)}</span>`:''}
+        </div>
+        <a href="animals.html?species=goat&breed=${encodeURIComponent(breed)}" class="action-btn sm w-100 mt-2" style="justify-content:center">
+          <i class="bi bi-list-ul"></i> عرض القائمة
+        </a>
+      </div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML=`
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3"><div class="stat-mini"><div class="num green-text">${ar(goats.length)}</div><div class="lbl">إجمالي الماعز</div></div></div>
+    <div class="col-6 col-md-3"><div class="stat-mini"><div class="num" style="color:var(--yellow)">${ar(births.length)}</div><div class="lbl">المواليد</div></div></div>
+    <div class="col-6 col-md-3"><div class="stat-mini"><div class="num accent-text">${ar(goats.filter(a=>a.purpose==='tasmeen').length)}</div><div class="lbl">تسمين</div></div></div>
+    <div class="col-6 col-md-3"><div class="stat-mini"><div class="num red-text">${ar(dead.length)}</div><div class="lbl">النافق</div></div></div>
+  </div>
+
+  <h6 class="fw-bold mb-3"><i class="bi bi-grid-3x3-gap-fill accent-text"></i> السلالات</h6>
+  <div class="row g-3 mb-4">${breedsHtml}</div>
+
+  <div class="births-section">
+    <h6 class="fw-bold mb-3"><i class="bi bi-stars" style="color:var(--yellow)"></i> مواليد الماعز — ${ar(births.length)}</h6>
+    <div class="row g-3">
+      <div class="col-6"><div class="summary-card"><div class="summary-number">${ar(births.filter(a=>a.gender==='male').length)}</div><small class="text-gray">ذكور</small></div></div>
+      <div class="col-6"><div class="summary-card"><div class="summary-number accent-text">${ar(births.filter(a=>a.gender==='female').length)}</div><small class="text-gray">إناث</small></div></div>
+    </div>
+  </div>`;
+
+  // Store animals for modals
+  window._animals=animals;
+});
+
+function openAddAnimal(species){
+  const s=getSettings();
+  showModal(`<div class="farm-modal" onclick="event.stopPropagation()">
+    <h4><i class="bi bi-plus-circle accent-text"></i> إضافة ماعز</h4>
+    <label>السلالة</label><select class="field" id="m-breed">${s.goatBreeds.map(b=>`<option>${b}</option>`).join('')}</select>
+    <label>الغرض</label><select class="field" id="m-purpose"><option value="tarbiya">تربية</option><option value="tasmeen">تسمين</option></select>
+    <div class="row g-2">
+      <div class="col-6"><label>الجنس</label><select class="field" id="m-gender"><option value="female">أنثى</option><option value="male">ذكر</option></select></div>
+      <div class="col-6"><label>تاريخ الميلاد</label><input type="date" class="field" id="m-bdate"></div>
+    </div>
+    <div class="row g-2">
+      <div class="col-6"><label>رقم الترقيم</label><input class="field" id="m-tag" placeholder="A-123"></div>
+      <div class="col-6"><label>الكمية</label><input type="number" class="field" id="m-qty" value="1" min="1" max="500"></div>
+    </div>
+    <label>ملاحظات</label><textarea class="field" id="m-notes" rows="2"></textarea>
+    <div class="d-flex gap-2 justify-content-end mt-3">
+      <button class="action-btn" onclick="closeModal()">إلغاء</button>
+      <button class="action-btn primary" onclick="submitAdd('goat','tarbiya')">حفظ</button>
+    </div>
+  </div>`);
+}
+
+function openAddBirth(species){
+  const s=getSettings();
+  showModal(`<div class="farm-modal" onclick="event.stopPropagation()">
+    <h4><i class="bi bi-stars" style="color:var(--yellow)"></i> إضافة مواليد ماعز</h4>
+    <div class="row g-2">
+      <div class="col-6"><label>الجنس</label><select class="field" id="m-gender"><option value="female">أنثى</option><option value="male">ذكر</option></select></div>
+      <div class="col-6"><label>الكمية</label><input type="number" class="field" id="m-qty" value="1" min="1" max="100"></div>
+    </div>
+    <label>تاريخ الميلاد</label><input type="date" class="field" id="m-bdate" value="${todayStr()}">
+    <label>ملاحظات</label><textarea class="field" id="m-notes" rows="2"></textarea>
+    <div class="d-flex gap-2 justify-content-end mt-3">
+      <button class="action-btn" onclick="closeModal()">إلغاء</button>
+      <button class="action-btn primary" onclick="submitBirth('goat')">حفظ</button>
+    </div>
+  </div>`);
+}
+
+window.submitAdd=async function(species,purpose){
+  const s=getSettings();
+  const breed=document.getElementById('m-breed').value;
+  const gender=document.getElementById('m-gender').value;
+  const tag=document.getElementById('m-tag')?.value.trim();
+  const bdate=document.getElementById('m-bdate').value||null;
+  const notes=document.getElementById('m-notes').value.trim();
+  const qty=parseInt(document.getElementById('m-qty').value)||1;
+  purpose=document.getElementById('m-purpose')?.value||purpose;
+  closeModal();toast('جاري الحفظ...','info');
+  let ok=0;
+  for(let i=0;i<qty;i++){
+    try{await fbPost('animals',{species,breed,gender,purpose,status:'alive',birth_date:bdate,tag:qty===1?(tag||null):(tag?`${tag}-${i+1}`:null),notes:notes||null});ok++;}catch(e){console.error(e);}
+  }
+  if(ok>0){await logActivity('add','animals',`أضاف ${ar(ok)} ماعز — ${breed}`);toast(`تمت إضافة ${ar(ok)} ماعز`);location.reload();}
+  else toast('فشل الحفظ','error');
+};
+
+window.submitBirth=async function(species){
+  const gender=document.getElementById('m-gender').value;
+  const qty=parseInt(document.getElementById('m-qty').value)||1;
+  const bdate=document.getElementById('m-bdate').value||null;
+  const notes=document.getElementById('m-notes').value.trim();
+  closeModal();toast('جاري الحفظ...','info');
+  let ok=0;
+  for(let i=0;i<qty;i++){
+    try{await fbPost('animals',{species,breed:'مواليد',gender,purpose:'birth',status:'alive',birth_date:bdate,notes:notes||null});ok++;}catch(e){console.error(e);}
+  }
+  if(ok>0){await logActivity('add','animals',`أضاف ${ar(ok)} مواليد ماعز`);toast(`تمت إضافة ${ar(ok)} مواليد`);location.reload();}
+  else toast('فشل الحفظ','error');
+};
+
+function openMarkDeath(species){
+  const alive=(window._animals||[]).filter(a=>a.status==='alive'&&a.species===species);
+  showModal(`<div class="farm-modal" onclick="event.stopPropagation()">
+    <h4 style="color:#ff8a8a"><i class="bi bi-exclamation-triangle"></i> تسجيل نفوق</h4>
+    <label>الحيوان (<span id="d-cnt">${ar(alive.length)}</span>)</label>
+    <select class="field" id="d-animal">
+      <option value="">— اختر —</option>
+      ${alive.slice(0,200).map(a=>`<option value="${a._id}">${a.breed} • ${a.gender==='male'?'ذكر':'أنثى'}${a.tag?` • #${a.tag}`:''}</option>`).join('')}
+    </select>
+    <div class="d-flex gap-2 justify-content-end mt-3">
+      <button class="action-btn" onclick="closeModal()">إلغاء</button>
+      <button class="action-btn danger" onclick="submitDeath()">تأكيد</button>
+    </div>
+  </div>`);
+}
+window.submitDeath=async function(){
+  const id=document.getElementById('d-animal').value;if(!id){toast('يرجى اختيار حيوان','error');return;}
+  const a=(window._animals||[]).find(x=>x._id===id);
+  closeModal();
+  try{await fbPatch('animals',id,{status:'dead',died_at:new Date().toISOString()});await logActivity('edit','animals',`تسجيل نفوق — ${a?.breed||''} ${a?.tag?'#'+a.tag:''}`);toast('تم تسجيل النفوق');location.reload();}
+  catch(e){toast('فشل: '+e.message,'error');}
+};
+</script>
+</body>
+</html>
