@@ -31,73 +31,74 @@
 
   let lRole='admin', lPin='';
 
-// Render role buttons
-document.getElementById('role-btns').innerHTML=Object.entries(ROLES).map(([k,v])=>`
-<div class="col-6">
-  <button class="action-btn w-100 role-btn${k==='admin'?' primary':''}" style="justify-content:center;padding:10px" data-role="${k}" onclick="selectRole('${k}')">
-    <i class="bi ${v.icon}" style="color:${v.color}"></i> ${v.label}
-  </button>
-</div>`).join('');
+  // Render role buttons
+  document.getElementById('role-btns').innerHTML=Object.entries(ROLES).map(([k,v])=>`
+  <div class="col-6">
+    <button class="action-btn w-100 role-btn${k==='admin'?' primary':''}" style="justify-content:center;padding:10px" data-role="${k}" onclick="selectRole('${k}')">
+      <i class="bi ${v.icon}" style="color:${v.color}"></i> ${v.label}
+    </button>
+  </div>`).join('');
 
-// Render PIN pad
-document.getElementById('pin-pad').innerHTML=[1,2,3,4,5,6,7,8,9,'⌫',0,'✓'].map(k=>`
-<div class="col-4"><button class="pin-btn" onclick="pinPress('${k}')">${k}</button></div>`).join('');
+  // Render PIN pad
+  document.getElementById('pin-pad').innerHTML=[1,2,3,4,5,6,7,8,9,'⌫',0,'✓'].map(k=>`
+  <div class="col-4"><button class="pin-btn" onclick="pinPress('${k}')">${k}</button></div>`).join('');
 
-function selectRole(role){
-  lRole=role; lPin='';
-  document.querySelectorAll('.role-btn').forEach(b=>{
-    b.classList.toggle('primary', b.dataset.role===role);
-  });
-  document.getElementById('pin-display').textContent='____';
-}
-
-function pinPress(k){
-  const disp=document.getElementById('pin-display');
-  if(k==='⌫'){lPin=lPin.slice(0,-1);}
-  else if(k==='✓'){attemptLogin();return;}
-  else if(lPin.length<8){lPin+=k;}
-  disp.textContent=lPin?'•'.repeat(lPin.length)+'_'.repeat(Math.max(0,4-lPin.length)):'____';
-  if(lPin.length>=4)attemptLogin();
-}
-
-async function attemptLogin(){
-  const users=await Users.all();
-  let user=users.find(u=>u.role===lRole&&u.pin===lPin&&u.active);
-  if(!user&&lRole==='admin'&&lPin==='1234'){
-    user=users.find(u=>u.role==='admin')||{id:'admin1',name:'مدير المزرعة',role:'admin',pin:'1234',active:true,created:new Date().toISOString().slice(0,10)};
+  // ✅ جعل الدوال عالمية للوصول إليها من onclick
+  window.selectRole=function(role){
+    lRole=role; lPin='';
+    document.querySelectorAll('.role-btn').forEach(b=>{
+      b.classList.toggle('primary', b.dataset.role===role);
+    });
+    document.getElementById('pin-display').textContent='____';
   }
-  if(user){
-    setUser(user);
-    // Log login activity
-    if(initFirebase()){
-      try{
-        await fbPost('activity_log',{
-          userId:user.id, userName:user.name, userRole:user.role,
-          action:'login', resource:'system',
-          description:`تسجيل دخول — ${ROLES[user.role]?.label}`,
-          date:new Date().toISOString().slice(0,10),
-          timestamp:new Date().toISOString()
-        });
-      }catch(e){}
-    }
-    window.location.href='dashboard.html';
-  } else {
+
+  window.pinPress=function(k){
     const disp=document.getElementById('pin-display');
-    disp.textContent='خطأ!';
-    disp.style.color='var(--red)';
-    lPin='';
-    setTimeout(()=>{disp.textContent='____';disp.style.color='';},1400);
+    if(k==='⌫'){lPin=lPin.slice(0,-1);}
+    else if(k==='✓'){attemptLogin();return;}
+    else if(lPin.length<8){lPin+=k;}
+    disp.textContent=lPin?'•'.repeat(lPin.length)+'_'.repeat(Math.max(0,4-lPin.length)):'____';
+    if(lPin.length>=4)attemptLogin();
   }
-}
 
-// Register logout activity before leaving
-window.addEventListener('beforeunload',()=>{
-  const u=getUser();
-  if(u&&initFirebase()){
-    const data={userId:u.id,userName:u.name,userRole:u.role,action:'logout',resource:'system',description:'تسجيل خروج',date:new Date().toISOString().slice(0,10),timestamp:new Date().toISOString(),created_at:new Date().toISOString()};
-    navigator.sendBeacon(`${FB_URL}/activity_log.json${FB_SECRET?'?auth='+FB_SECRET:''}`,JSON.stringify(data));
+  async function attemptLogin(){
+    const users=await Users.all();
+    let user=users.find(u=>u.role===lRole&&u.pin===lPin&&u.active);
+    if(!user&&lRole==='admin'&&lPin==='1234'){
+      user=users.find(u=>u.role==='admin')||{id:'admin1',name:'مدير المزرعة',role:'admin',pin:'1234',active:true,created:new Date().toISOString().slice(0,10)};
+    }
+    if(user){
+      setUser(user);
+      // Log login activity
+      if(initFirebase()){
+        try{
+          await fbPost('activity_log',{
+            userId:user.id, userName:user.name, userRole:user.role,
+            action:'login', resource:'system',
+            description:`تسجيل دخول — ${ROLES[user.role]?.label}`,
+            date:new Date().toISOString().slice(0,10),
+            timestamp:new Date().toISOString()
+          });
+        }catch(e){}
+      }
+      window.location.href='dashboard.html';
+    } else {
+      const disp=document.getElementById('pin-display');
+      disp.textContent='خطأ!';
+      disp.style.color='var(--red)';
+      lPin='';
+      setTimeout(()=>{disp.textContent='____';disp.style.color='';},1400);
+    }
   }
-});
+
+  // Register logout activity before leaving
+  window.addEventListener('beforeunload',()=>{
+    const u=getUser();
+    if(u&&initFirebase()){
+      const data={userId:u.id,userName:u.name,userRole:u.role,action:'logout',resource:'system',description:'تسجيل خروج',date:new Date().toISOString().slice(0,10),timestamp:new Date().toISOString(),created_at:new Date().toISOString()};
+      navigator.sendBeacon(`${FB_URL}/activity_log.json${FB_SECRET?'?auth='+FB_SECRET:''}`,JSON.stringify(data));
+    }
+  });
 })();
 </script>
 </body>
