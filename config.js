@@ -9,8 +9,8 @@
 
 const FARM_CONFIG = {
   // ── Supabase ──────────────────────────────────────────
-  supabaseUrl: '',   // مثال: 'https://abcdefgh.supabase.co'
-  supabaseKey: '',   // anon/public key من Settings → API
+  supabaseUrl: 'https://haenzujcboxnittdnjye.supabase.co',
+  supabaseKey: 'sb_publishable_HoCJA3XUhzPOFj0sdTf0zw_yiSmo9TF',
 
   // ── معلومات المزرعة (اختياري) ─────────────────────────
   farmName:    'بيان المزرعة',
