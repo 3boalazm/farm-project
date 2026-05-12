@@ -238,27 +238,27 @@ window.submitBirths=async function(){
 
 function openResetModal(){
   if(!can('admin')){toast('هذه الميزة للمديرين فقط','error');return;}
-  showModal(`<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:440px">
-    <h4 style="color:var(--purple)"><i class="bi bi-arrow-counterclockwise"></i> إعادة تعيين (مدير فقط)</h4>
-    <p class="text-gray" style="font-size:.85rem">اختر ما تريد حذفه نهائياً من قاعدة البيانات</p>
-    <div class="d-flex flex-column gap-2 mb-3">
-      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;background:rgba(244,67,54,.06);border-radius:10px;border:1px solid rgba(244,67,54,.2)">
-        <input type="checkbox" id="reset-dead" style="accent-color:var(--red)">
-        <div><div class="fw-bold">حذف النافق</div><small class="text-gray">إزالة جميع الحيوانات النافقة من السجلات</small></div>
-      </label>
-      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;background:rgba(255,193,7,.06);border-radius:10px;border:1px solid rgba(255,193,7,.2)">
-        <input type="checkbox" id="reset-births" style="accent-color:var(--yellow)">
-        <div><div class="fw-bold">إعادة تصفير المواليد</div><small class="text-gray">تحويل المواليد إلى قسم التربية</small></div>
-      </label>
-    </div>
-    <div style="background:rgba(156,39,176,.06);border:1px solid rgba(156,39,176,.25);border-radius:10px;padding:10px 14px;font-size:.8rem;color:var(--purple)">
-      <i class="bi bi-exclamation-triangle-fill me-1"></i>هذا الإجراء لا يمكن التراجع عنه
-    </div>
-    <div class="d-flex gap-2 justify-content-end mt-3">
-      <button class="action-btn" onclick="closeModal()">إلغاء</button>
-      <button class="action-btn" style="background:rgba(156,39,176,.15);border-color:rgba(156,39,176,.4);color:var(--purple)" onclick="submitReset()">تنفيذ</button>
-    </div>
-  </div>\`);
+  showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:440px">'+
+    '<h4 style="color:var(--purple)"><i class="bi bi-arrow-counterclockwise"></i> إعادة تعيين (مدير فقط)</h4>'+
+    '<p class="text-gray" style="font-size:.85rem">اختر ما تريد حذفه نهائياً من قاعدة البيانات</p>'+
+    '<div class="d-flex flex-column gap-2 mb-3">'+
+      '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;background:rgba(244,67,54,.06);border-radius:10px;border:1px solid rgba(244,67,54,.2)">'+
+        '<input type="checkbox" id="reset-dead" style="accent-color:var(--red)">'+
+        '<div><div class="fw-bold">حذف النافق</div><small class="text-gray">إزالة جميع الحيوانات النافقة من السجلات</small></div>'+
+      '</label>'+
+      '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;background:rgba(255,193,7,.06);border-radius:10px;border:1px solid rgba(255,193,7,.2)">'+
+        '<input type="checkbox" id="reset-births" style="accent-color:var(--yellow)">'+
+        '<div><div class="fw-bold">إعادة تصفير المواليد</div><small class="text-gray">تحويل المواليد إلى قسم التربية</small></div>'+
+      '</label>'+
+    '</div>'+
+    '<div style="background:rgba(156,39,176,.06);border:1px solid rgba(156,39,176,.25);border-radius:10px;padding:10px 14px;font-size:.8rem;color:var(--purple)">'+
+      '<i class="bi bi-exclamation-triangle-fill me-1"></i>هذا الإجراء لا يمكن التراجع عنه'+
+    '</div>'+
+    '<div class="d-flex gap-2 justify-content-end mt-3">'+
+      '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
+      '<button class="action-btn" style="background:rgba(156,39,176,.15);border-color:rgba(156,39,176,.4);color:var(--purple)" onclick="submitReset()">تنفيذ</button>'+
+    '</div>'+
+  '</div>');
 }
 
 window.submitReset=async function(){
@@ -270,14 +270,14 @@ window.submitReset=async function(){
   if(resetDead){
     const dead=animals.filter(a=>a.status==='dead');
     for(const a of dead){try{await fbDelete('animals',a._id);done++;}catch(e){console.error(e);}}
-    await logActivity('delete','animals',\`حذف \${ar(dead.length)} حيوان نافق (إعادة تعيين)\`);
+    await logActivity('delete','animals','حذف '+ar(dead.length)+' حيوان نافق (إعادة تعيين)');
   }
   if(resetBirths){
     const births=animals.filter(a=>a.purpose==='birth'&&a.status==='alive');
     for(const a of births){try{await fbPatch('animals',a._id,{purpose:'tarbiya'});done++;}catch(e){console.error(e);}}
-    await logActivity('edit','animals',\`تحويل \${ar(births.length)} مولود إلى تربية (إعادة تعيين)\`);
+    await logActivity('edit','animals','تحويل '+ar(births.length)+' مولود إلى تربية (إعادة تعيين)');
   }
-  toast(\`تم تنفيذ العملية على \${ar(done)} سجل\`);
+  toast('تم تنفيذ العملية على '+ar(done)+' سجل');
   animals=await fbGet('animals');renderAnimals();
 };
 

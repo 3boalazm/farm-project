@@ -127,8 +127,8 @@ window.showBarnDetail=function(barnId){
 };
 
 window.checkStallCapacity=function(stall,count){
-  if(count>=MAX_STALL)return\`<div class="type-badge badge-danger" style="font-size:.7rem"><i class="bi bi-exclamation-triangle-fill me-1"></i>ممتلئ (${ar(count)}/${ar(MAX_STALL)})</div>\`;
-  if(count>=WARN_STALL)return\`<div class="type-badge badge-yellow" style="font-size:.7rem"><i class="bi bi-exclamation-circle me-1"></i>شبه ممتلئ — ينصح بالنقل عند \${ar(WARN_STALL)}</div>\`;
+  if(count>=MAX_STALL)return '<div class="type-badge badge-danger" style="font-size:.7rem"><i class="bi bi-exclamation-triangle-fill me-1"></i>ممتلئ ('+ar(count)+'/'+ar(MAX_STALL)+')</div>';
+  if(count>=WARN_STALL)return '<div class="type-badge badge-yellow" style="font-size:.7rem"><i class="bi bi-exclamation-circle me-1"></i>شبه ممتلئ — ينصح بالنقل عند '+ar(WARN_STALL)+'</div>';
   return'';
 };
 

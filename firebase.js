@@ -139,22 +139,36 @@ async function fbGetSingle(path){
   }
 }
 
-// جلب الطقس من OpenWeatherMap
+// جلب الطقس
 const WEATHER_API_KEY='2b08987a3d184056b13210204261205';
-const FARM_LAT=30.95, FARM_LON=29.797; // العامرية، الإسكندرية
+const FARM_LAT=30.95, FARM_LON=29.797;
+
 async function getWeather(){
-  try{
-    const r=await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${FARM_LAT}&lon=${FARM_LON}&appid=${WEATHER_API_KEY}&units=metric&lang=ar`);
-    if(!r.ok)return null;
-    return await r.json();
-  }catch(e){console.warn('Weather fetch failed:',e);return null;}
-}
-async function getWeatherForecast(){
-  try{
-    const r=await fetch(`https://api.openweathermap.org/data/2.5/forecast?lat=${FARM_LAT}&lon=${FARM_LON}&appid=${WEATHER_API_KEY}&units=metric&lang=ar&cnt=8`);
-    if(!r.ok)return null;
-    return await r.json();
-  }catch(e){return null;}
+  // Try WeatherAPI.com first (مفتاح المستخدم)
+  const urls=[
+    'https://api.weatherapi.com/v1/current.json?key='+WEATHER_API_KEY+'&q='+FARM_LAT+','+FARM_LON+'&lang=ar',
+    'https://api.openweathermap.org/data/2.5/weather?lat='+FARM_LAT+'&lon='+FARM_LON+'&appid='+WEATHER_API_KEY+'&units=metric&lang=ar',
+    'https://wttr.in/'+FARM_LAT+','+FARM_LON+'?format=j1'
+  ];
+  for(var i=0;i<urls.length;i++){
+    try{
+      const r=await fetch(urls[i],{signal:AbortSignal.timeout(5000)});
+      if(!r.ok)continue;
+      const data=await r.json();
+      // Normalize WeatherAPI.com response
+      if(data.current&&data.current.temp_c!==undefined){
+        return{main:{temp:data.current.temp_c,feels_like:data.current.feelslike_c,humidity:data.current.humidity},weather:[{description:data.current.condition.text,icon:data.current.condition.icon}],_source:'weatherapi'};
+      }
+      // OpenWeatherMap response
+      if(data.main)return data;
+      // wttr.in response
+      if(data.current_condition&&data.current_condition[0]){
+        const c=data.current_condition[0];
+        return{main:{temp:+c.temp_C,feels_like:+c.FeelsLikeC,humidity:+c.humidity},weather:[{description:c.weatherDesc[0].value}],_source:'wttr'};
+      }
+    }catch(e){continue;}
+  }
+  return null;
 }
 
 
