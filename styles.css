@@ -120,10 +120,6 @@ html,body{background:var(--bg)!important;background-color:#0a0a0a!important;colo
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes slideUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:768px){.page-wrap{padding:16px 12px}.summary-number{font-size:1.5rem}.breed-card,.wonder-card{padding:14px}.navbar-brand{font-size:1rem}}
-
-/* =========================================
-   إضافات خاصة بصفحة تفاصيل الحيوان
-   ========================================= */
 .info-card{background:#161616!important;border:1px solid var(--border);border-radius:12px;padding:14px;transition:.3s}
 .info-card:hover{border-color:#444}
 .data-table{width:100%;border-collapse:collapse;color:var(--light);margin-top:10px}
