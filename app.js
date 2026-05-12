@@ -74,7 +74,17 @@ const Notifs={all:()=>ls('farm_notifs'),add(n){ss('farm_notifs',[n,...ls('farm_n
 
 // ---- SETTINGS ----
 const DEFAULT_SETTINGS={farmName:'بيان المزرعة',ownerName:'مدير المزرعة',currency:'ج.م',logoUrl:'',farmAddress:'',goatBreeds:['شامي','بور','بلدي'],sheepBreeds:['برقي','دوربر','ميت ماستر'],pregnancyDays:150,vaccinationAlertDays:7,weaningDays:60,supabaseUrl:'',supabaseKey:''};
-function getSettings(){return lsObj('farm_settings',DEFAULT_SETTINGS);}
+function getSettings(){
+  const cfg=window.FARM_CONFIG||{};
+  const saved=lsObj('farm_settings',DEFAULT_SETTINGS);
+  // config.js يأخذ أولوية على أي شيء محفوظ
+  if(cfg.farmName)saved.farmName=cfg.farmName;
+  if(cfg.ownerName)saved.ownerName=cfg.ownerName;
+  if(cfg.currency)saved.currency=cfg.currency;
+  if(cfg.supabaseUrl)saved.supabaseUrl=cfg.supabaseUrl;
+  if(cfg.supabaseKey)saved.supabaseKey=cfg.supabaseKey;
+  return saved;
+}
 function saveSettings(s){ss('farm_settings',s);}
 
 // ---- AUTH ----
@@ -85,13 +95,14 @@ window.logout=function(){sessionStorage.removeItem('farm_user');showLogin();};
 // ---- SUPABASE ----
 let sb=null;
 function initSB(){
-  // الأولوية: القيم المكتوبة في الملف مباشرة، ثم ما حفظه المستخدم في الإعدادات
+  // الأولوية: config.js → الإعدادات المحفوظة
+  const cfg=window.FARM_CONFIG||{};
   const s=getSettings();
-  const url=SUPABASE_URL||s.supabaseUrl;
-  const key=SUPABASE_KEY||s.supabaseKey;
+  const url=cfg.supabaseUrl||s.supabaseUrl||'';
+  const key=cfg.supabaseKey||s.supabaseKey||'';
   if(url&&key&&window.supabase){
     try{sb=window.supabase.createClient(url,key);return true;}
-    catch(e){console.error('Supabase:',e);return false;}
+    catch(e){console.error('Supabase init error:',e);return false;}
   }
   return false;
 }
@@ -204,7 +215,7 @@ function renderPage(){
   if(r.startsWith('animals/')){renderAnimalDetail(el,r.slice(8));return;}
   if(r.startsWith('health/')){renderHealthDetail(el,r.slice(7));return;}
   if(r.startsWith('users/')){renderUserDetail(el,r.slice(6));return;}
-  if(!sb&&!SUPABASE_URL&&!getSettings().supabaseUrl&&['dash','animals','goats','sheep','vaccine','data'].includes(r)){renderSetup(el);return;}
+  if(!sb&&!(window.FARM_CONFIG?.supabaseUrl)&&!getSettings().supabaseUrl&&['dash','animals','goats','sheep','vaccine','data'].includes(r)){renderSetup(el);return;}
   ({dash:renderDashboard,animals:renderAnimals,goats:()=>renderSpecies(el,'goat'),sheep:()=>renderSpecies(el,'sheep'),vaccine:renderVaccinations,health:renderHealthPage,breeding:renderBreeding,inventory:renderInventory,finance:renderFinance,reports:renderReports,notifications:renderNotifications,data:renderDataNotes,users:renderUsers,'farm-profile':renderFarmProfile,settings:renderSettings}[r]||renderDashboard)(el);
 }
 function renderSetup(el){el.innerHTML=`<div class="wonder-card animate-in text-center" style="max-width:460px;margin:40px auto"><div style="font-size:3rem;margin-bottom:14px">🐐</div><h4 class="fw-bold mb-2">مرحباً في بيان المزرعة</h4><p class="text-gray mb-4">أدخل بيانات Supabase أو استخدم وضع التخزين المحلي</p><div class="d-flex gap-2 justify-content-center"><button class="action-btn primary" onclick="navigate('settings')"><i class="bi bi-gear-fill"></i> إعداد Supabase</button><button class="action-btn" onclick="useLocal()"><i class="bi bi-laptop"></i> وضع محلي</button></div></div>`;}
