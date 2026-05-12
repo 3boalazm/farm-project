@@ -60,15 +60,52 @@ const Users={
   init(){if(ls('farm_users').length===0){ss('farm_users',[{id:'admin1',name:'مدير المزرعة',role:'admin',pin:'1234',active:true,created:todayStr()}]);}}
 };
 const Animals={all:()=>ls('farm_animals_local'),get:(id)=>ls('farm_animals_local').find(a=>a.id===id),save:(arr)=>ss('farm_animals_local',arr)};
-const Weights={all:()=>ls('farm_weights'),forAnimal:(aid)=>ls('farm_weights').filter(w=>w.animal_id===aid).sort((a,b)=>b.date.localeCompare(a.date)),add(r){ss('farm_weights',[...ls('farm_weights'),r]);},del(id){ss('farm_weights',ls('farm_weights').filter(r=>r.id!==id));}};
-const Milk={all:()=>ls('farm_milk'),forAnimal:(aid)=>ls('farm_milk').filter(m=>m.animal_id===aid).sort((a,b)=>b.date.localeCompare(a.date)),add(r){ss('farm_milk',[...ls('farm_milk'),r]);},del(id){ss('farm_milk',ls('farm_milk').filter(r=>r.id!==id));}};
-const Breeding={all:()=>ls('farm_breeding'),add(r){ss('farm_breeding',[r,...ls('farm_breeding')]);},update(id,p){ss('farm_breeding',ls('farm_breeding').map(r=>r.id===id?{...r,...p}:r));},del(id){ss('farm_breeding',ls('farm_breeding').filter(r=>r.id!==id));}};
-const Health={all:()=>ls('farm_health'),add(r){ss('farm_health',[r,...ls('farm_health')]);},update(id,p){ss('farm_health',ls('farm_health').map(r=>r.id===id?{...r,...p}:r));},del(id){ss('farm_health',ls('farm_health').filter(r=>r.id!==id));}};
-const Finance={all:()=>ls('farm_finance'),add(r){ss('farm_finance',[r,...ls('farm_finance')]);},update(id,p){ss('farm_finance',ls('farm_finance').map(r=>r.id===id?{...r,...p}:r));},del(id){ss('farm_finance',ls('farm_finance').filter(r=>r.id!==id));}};
+const Weights={
+  all:()=>sb?S.weights:ls('farm_weights'),
+  forAnimal:(aid)=>Weights.all().filter(w=>w.animal_id===aid).sort((a,b)=>b.date.localeCompare(a.date)),
+  async add(r){if(await sbSave('weights',r))await loadData();else{ss('farm_weights',[...ls('farm_weights'),r]);renderPage();}},
+  async del(id){if(await sbDel('weights',id))await loadData();else{ss('farm_weights',ls('farm_weights').filter(r=>r.id!==id));renderPage();}}
+};
+const Milk={
+  all:()=>sb?S.milk:ls('farm_milk'),
+  forAnimal:(aid)=>Milk.all().filter(m=>m.animal_id===aid).sort((a,b)=>b.date.localeCompare(a.date)),
+  async add(r){if(await sbSave('milk',r))await loadData();else{ss('farm_milk',[...ls('farm_milk'),r]);renderPage();}},
+  async del(id){if(await sbDel('milk',id))await loadData();else{ss('farm_milk',ls('farm_milk').filter(r=>r.id!==id));renderPage();}}
+};
+// كل البيانات تروح Supabase لو متصل، لو لأ localStorage
+async function sbSave(table,rec){if(!sb)return false;const{error}=await sb.from(table).upsert(rec);if(error){console.error(table,error);toast('خطأ في الحفظ','error');return false;}return true;}
+async function sbDel(table,id){if(!sb)return false;const{error}=await sb.from(table).delete().eq('id',id);if(error){console.error(table,error);toast('خطأ في الحذف','error');return false;}return true;}
+
+const Breeding={
+  all:()=>sb?S.breeding:ls('farm_breeding'),
+  async add(r){if(await sbSave('breeding',r))await loadData();else{ss('farm_breeding',[r,...ls('farm_breeding')]);renderPage();}},
+  async update(id,p){const r={...Breeding.all().find(x=>x.id===id),...p};if(await sbSave('breeding',r))await loadData();else{ss('farm_breeding',ls('farm_breeding').map(x=>x.id===id?r:x));renderPage();}},
+  async del(id){if(await sbDel('breeding',id))await loadData();else{ss('farm_breeding',ls('farm_breeding').filter(x=>x.id!==id));renderPage();}}
+};
+const Health={
+  all:()=>sb?S.health:ls('farm_health'),
+  async add(r){if(await sbSave('health',r))await loadData();else{ss('farm_health',[r,...ls('farm_health')]);renderPage();}},
+  async update(id,p){const r={...Health.all().find(x=>x.id===id),...p};if(await sbSave('health',r))await loadData();else{ss('farm_health',ls('farm_health').map(x=>x.id===id?r:x));renderPage();}},
+  async del(id){if(await sbDel('health',id))await loadData();else{ss('farm_health',ls('farm_health').filter(x=>x.id!==id));renderPage();}}
+};
+const Finance={
+  all:()=>sb?S.finance:ls('farm_finance'),
+  async add(r){if(await sbSave('finance',r))await loadData();else{ss('farm_finance',[r,...ls('farm_finance')]);renderPage();}},
+  async del(id){if(await sbDel('finance',id))await loadData();else{ss('farm_finance',ls('farm_finance').filter(x=>x.id!==id));renderPage();}}
+};
 const Inventory={
-  meds:()=>ls('farm_meds'),addMed(r){ss('farm_meds',[r,...ls('farm_meds')]);},updateMed(id,p){ss('farm_meds',ls('farm_meds').map(r=>r.id===id?{...r,...p}:r));},delMed(id){ss('farm_meds',ls('farm_meds').filter(r=>r.id!==id));},
-  feeds:()=>ls('farm_feeds'),addFeed(r){ss('farm_feeds',[r,...ls('farm_feeds')]);},updateFeed(id,p){ss('farm_feeds',ls('farm_feeds').map(r=>r.id===id?{...r,...p}:r));},delFeed(id){ss('farm_feeds',ls('farm_feeds').filter(r=>r.id!==id));},
-  equipment:()=>ls('farm_equipment'),addEquip(r){ss('farm_equipment',[r,...ls('farm_equipment')]);},updateEquip(id,p){ss('farm_equipment',ls('farm_equipment').map(r=>r.id===id?{...r,...p}:r));},delEquip(id){ss('farm_equipment',ls('farm_equipment').filter(r=>r.id!==id));}
+  meds:()=>sb?S.meds:ls('farm_meds'),
+  async addMed(r){if(await sbSave('inventory_meds',r))await loadData();else{ss('farm_meds',[r,...ls('farm_meds')]);renderPage();}},
+  async updateMed(id,p){const r={...Inventory.meds().find(x=>x.id===id),...p};if(await sbSave('inventory_meds',r))await loadData();else{ss('farm_meds',ls('farm_meds').map(x=>x.id===id?r:x));renderPage();}},
+  async delMed(id){if(await sbDel('inventory_meds',id))await loadData();else{ss('farm_meds',ls('farm_meds').filter(x=>x.id!==id));renderPage();}},
+  feeds:()=>sb?S.feeds:ls('farm_feeds'),
+  async addFeed(r){if(await sbSave('inventory_feeds',r))await loadData();else{ss('farm_feeds',[r,...ls('farm_feeds')]);renderPage();}},
+  async updateFeed(id,p){const r={...Inventory.feeds().find(x=>x.id===id),...p};if(await sbSave('inventory_feeds',r))await loadData();else{ss('farm_feeds',ls('farm_feeds').map(x=>x.id===id?r:x));renderPage();}},
+  async delFeed(id){if(await sbDel('inventory_feeds',id))await loadData();else{ss('farm_feeds',ls('farm_feeds').filter(x=>x.id!==id));renderPage();}},
+  equipment:()=>sb?S.equipment:ls('farm_equipment'),
+  async addEquip(r){if(await sbSave('inventory_equipment',r))await loadData();else{ss('farm_equipment',[r,...ls('farm_equipment')]);renderPage();}},
+  async updateEquip(id,p){const r={...Inventory.equipment().find(x=>x.id===id),...p};if(await sbSave('inventory_equipment',r))await loadData();else{ss('farm_equipment',ls('farm_equipment').map(x=>x.id===id?r:x));renderPage();}},
+  async delEquip(id){if(await sbDel('inventory_equipment',id))await loadData();else{ss('farm_equipment',ls('farm_equipment').filter(x=>x.id!==id));renderPage();}}
 };
 const Notifs={all:()=>ls('farm_notifs'),add(n){ss('farm_notifs',[n,...ls('farm_notifs')].slice(0,120));},markRead(id){ss('farm_notifs',ls('farm_notifs').map(n=>n.id===id?{...n,read:true}:n));},markAllRead(){ss('farm_notifs',ls('farm_notifs').map(n=>({...n,read:true})));},clear(){ss('farm_notifs',[]);},hasId(id){return ls('farm_notifs').some(n=>n.id===id);}};
 
@@ -108,7 +145,7 @@ function initSB(){
 }
 
 // ---- APP STATE ----
-const S={route:'dash',routeHistory:[],animals:[],vaccinations:[],notes:[],loading:false,animalFilter:{search:'',species:'all',purpose:'all',status:'alive'}};
+const S={route:'dash',routeHistory:[],animals:[],vaccinations:[],notes:[],breeding:[],health:[],finance:[],meds:[],feeds:[],equipment:[],weights:[],milk:[],loading:false,animalFilter:{search:'',species:'all',purpose:'all',status:'alive'}};
 
 // ---- NAVIGATION ----
 function navigate(route,pushHistory=true){if(pushHistory&&S.route!==route)S.routeHistory.push(S.route);S.route=route;renderAll();}
@@ -327,12 +364,12 @@ function renderAnimalDetail(el,id){
     <div class="col-md-6"><div class="wonder-card animate-in">
       <div class="section-header mb-3"><div class="section-title"><i class="bi bi-speedometer2 accent-text"></i> سجل الأوزان</div><button class="action-btn sm primary" onclick="openAddWeight('${id}','${a.tag||a.id}')"><i class="bi bi-plus-lg"></i></button></div>
       ${weights.length===0?`<div class="text-gray text-center py-3" style="font-size:.83rem">لا توجد سجلات وزن</div>`:
-      `<table class="tbl" style="width:100%"><thead><tr><th>التاريخ</th><th>الوزن (كجم)</th><th>ملاحظات</th><th></th></tr></thead><tbody>${weights.slice(0,10).map(w=>`<tr><td class="text-gray">${w.date}</td><td class="fw-bold">${w.weight}</td><td class="text-gray">${w.notes||'—'}</td><td><button class="icon-btn del" onclick="Weights.del('${w.id}');toast('تم الحذف');renderPage()"><i class="bi bi-trash"></i></button></td></tr>`).join('')}</tbody></table>`}
+      `<table class="tbl" style="width:100%"><thead><tr><th>التاريخ</th><th>الوزن (كجم)</th><th>ملاحظات</th><th></th></tr></thead><tbody>${weights.slice(0,10).map(w=>`<tr><td class="text-gray">${w.date}</td><td class="fw-bold">${w.weight}</td><td class="text-gray">${w.notes||'—'}</td><td><button class="icon-btn del" onclick="delWeight('${w.id}')"><i class="bi bi-trash"></i></button></td></tr>`).join('')}</tbody></table>`}
     </div></div>
     <div class="col-md-6"><div class="wonder-card animate-in">
       <div class="section-header mb-3"><div class="section-title"><i class="bi bi-droplet-fill blue-text"></i> إنتاج الحليب</div><button class="action-btn sm primary" onclick="openAddMilk('${id}','${a.tag||a.id}')"><i class="bi bi-plus-lg"></i></button></div>
       ${milkRecs.length===0?`<div class="text-gray text-center py-3" style="font-size:.83rem">لا توجد سجلات حليب</div>`:
-      `<table class="tbl" style="width:100%"><thead><tr><th>التاريخ</th><th>الكمية (لتر)</th><th></th></tr></thead><tbody>${milkRecs.slice(0,10).map(m=>`<tr><td class="text-gray">${m.date}</td><td class="fw-bold">${m.liters}</td><td><button class="icon-btn del" onclick="Milk.del('${m.id}');toast('تم الحذف');renderPage()"><i class="bi bi-trash"></i></button></td></tr>`).join('')}</tbody></table>`}
+      `<table class="tbl" style="width:100%"><thead><tr><th>التاريخ</th><th>الكمية (لتر)</th><th></th></tr></thead><tbody>${milkRecs.slice(0,10).map(m=>`<tr><td class="text-gray">${m.date}</td><td class="fw-bold">${m.liters}</td><td><button class="icon-btn del" onclick="delMilk('${m.id}')"><i class="bi bi-trash"></i></button></td></tr>`).join('')}</tbody></table>`}
     </div></div>
     <div class="col-md-6"><div class="wonder-card animate-in">
       <div class="section-title mb-3"><i class="bi bi-heart-pulse-fill red-text"></i> السجلات الصحية</div>
@@ -424,7 +461,7 @@ function renderHealthPage(el){
     <div class="filter-bar">${[{f:'all',l:'الكل',cnt:recs.length},{f:'active',l:'نشط',cnt:active.length},{f:'withdrawal',l:'سحب',cnt:inW.length},{f:'completed',l:'مكتمل',cnt:recs.filter(r=>r.status==='completed').length}].map(x=>`<button class="filter-btn${healthFilter===x.f?' active':''}" onclick="healthFilter='${x.f}';renderPage()">${x.l} (${x.cnt})</button>`).join('')}</div>
     ${can('health')?`<button class="action-btn primary" onclick="openAddHealth()"><i class="bi bi-plus-lg"></i> سجل جديد</button>`:''}
   </div>
-  ${filtered.length===0?`<div class="empty-state animate-in"><i class="bi bi-heart-pulse"></i><p>لا توجد سجلات</p></div>`:filtered.map(r=>{const inW2=r.withdrawal_end&&r.withdrawal_end>=t;return`<div class="record-card animate-in" style="cursor:pointer" onclick="navigate('health/${r.id}')"><div class="d-flex justify-content-between align-items-start flex-wrap gap-2"><div><div class="fw-bold mb-1"><span class="type-badge ${r.status==='completed'?'badge-tarbiya':'badge-tasmeen'} me-2">${r.status==='active'?'نشط':'مكتمل'}</span>${r.animal_breed} ${r.animal_tag?`#${r.animal_tag}`:''}</div><div class="mb-1"><span class="text-gray">التشخيص:</span> <strong>${r.diagnosis}</strong> | <span class="text-gray">الدواء:</span> <strong>${r.medication}</strong></div>${inW2?`<small class="red-text"><i class="bi bi-exclamation-triangle-fill me-1"></i>سحب حتى ${r.withdrawal_end}</small>`:''}${r.date?`<small class="text-gray d-block">${r.date}</small>`:''}</div><div class="d-flex gap-2">${r.status==='active'&&can('health')?`<button class="action-btn primary sm" onclick="event.stopPropagation();Health.update('${r.id}',{status:'completed'});toast('تم');renderPage()"><i class="bi bi-check-lg"></i></button>`:''}${can('health')?`<button class="action-btn sm" onclick="event.stopPropagation();openEditHealth('${r.id}')"><i class="bi bi-pencil"></i></button>`:''}${can('admin')?`<button class="action-btn danger sm" onclick="event.stopPropagation();if(confirm('حذف؟'))Health.del('${r.id}'),toast('تم'),renderPage()"><i class="bi bi-trash"></i></button>`:''}</div></div></div>`;}).join('')}`;
+  ${filtered.length===0?`<div class="empty-state animate-in"><i class="bi bi-heart-pulse"></i><p>لا توجد سجلات</p></div>`:filtered.map(r=>{const inW2=r.withdrawal_end&&r.withdrawal_end>=t;return`<div class="record-card animate-in" style="cursor:pointer" onclick="navigate('health/${r.id}')"><div class="d-flex justify-content-between align-items-start flex-wrap gap-2"><div><div class="fw-bold mb-1"><span class="type-badge ${r.status==='completed'?'badge-tarbiya':'badge-tasmeen'} me-2">${r.status==='active'?'نشط':'مكتمل'}</span>${r.animal_breed} ${r.animal_tag?`#${r.animal_tag}`:''}</div><div class="mb-1"><span class="text-gray">التشخيص:</span> <strong>${r.diagnosis}</strong> | <span class="text-gray">الدواء:</span> <strong>${r.medication}</strong></div>${inW2?`<small class="red-text"><i class="bi bi-exclamation-triangle-fill me-1"></i>سحب حتى ${r.withdrawal_end}</small>`:''}${r.date?`<small class="text-gray d-block">${r.date}</small>`:''}</div><div class="d-flex gap-2">${r.status==='active'&&can('health')?`<button class="action-btn primary sm" onclick="event.stopPropagation();completeHealth('${r.id}')"><i class="bi bi-check-lg"></i></button>`:''}${can('health')?`<button class="action-btn sm" onclick="event.stopPropagation();openEditHealth('${r.id}')"><i class="bi bi-pencil"></i></button>`:''}${can('admin')?`<button class="action-btn danger sm" onclick="event.stopPropagation();delHealth('${r.id}')"><i class="bi bi-trash"></i></button>`:''}</div></div></div>`;}).join('')}`;
 }
 function renderHealthDetail(el,id){
   const r=Health.all().find(x=>x.id===id);
@@ -433,7 +470,7 @@ function renderHealthDetail(el,id){
   el.innerHTML=`
   <div class="profile-header mb-4 animate-in"><div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
     <div><div class="d-flex gap-2 mb-2"><span class="type-badge ${r.status==='active'?'badge-tasmeen':'badge-tarbiya'}">${r.status==='active'?'قيد العلاج':'مكتمل'}</span>${inW?`<span class="type-badge badge-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>فترة سحب</span>`:''}</div><h4 class="fw-bold">${r.diagnosis}</h4><p class="text-gray">${r.animal_breed} ${r.animal_tag?`#${r.animal_tag}`:''}</p></div>
-    ${can('health')?`<div class="d-flex gap-2">${r.status==='active'?`<button class="action-btn primary" onclick="Health.update('${r.id}',{status:'completed'});toast('تم');navigate('health')"><i class="bi bi-check-lg"></i> إكمال</button>`:''}<button class="action-btn" onclick="openEditHealth('${r.id}')"><i class="bi bi-pencil"></i> تعديل</button><button class="action-btn danger" onclick="if(confirm('حذف؟'))Health.del('${r.id}'),toast('تم'),navigate('health')"><i class="bi bi-trash"></i></button></div>`:''}
+    ${can('health')?`<div class="d-flex gap-2">${r.status==='active'?`<button class="action-btn primary" onclick="completeHealth('${r.id}')"><i class="bi bi-check-lg"></i> إكمال</button>`:''}<button class="action-btn" onclick="openEditHealth('${r.id}')"><i class="bi bi-pencil"></i> تعديل</button><button class="action-btn danger" onclick="delHealth('${r.id}')"><i class="bi bi-trash"></i></button></div>`:''}
   </div></div>
   <div class="row g-3">
     <div class="col-md-6"><div class="wonder-card animate-in"><div class="section-title mb-3"><i class="bi bi-info-circle-fill accent-text"></i> تفاصيل العلاج</div>
@@ -458,7 +495,7 @@ function renderBreeding(el){
     <div class="filter-bar">${['all','pending','pregnant','born','failed'].map(f=>`<button class="filter-btn${breedingFilter===f?' active':''}" onclick="breedingFilter='${f}';renderPage()">${f==='all'?'الكل':BSTATUS[f]?.l||f} (${f==='all'?recs.length:recs.filter(r=>r.status===f).length})</button>`).join('')}</div>
     <button class="action-btn primary" onclick="openAddBreeding()"><i class="bi bi-plus-lg"></i> تسجيل تقريع</button>
   </div>
-  ${filtered.length===0?`<div class="empty-state animate-in"><i class="bi bi-diagram-2"></i><p>لا توجد سجلات</p></div>`:filtered.map(r=>{const st=BSTATUS[r.status];const d=r.expected_birth?daysFromNow(r.expected_birth):null;return`<div class="record-card animate-in"><div class="d-flex justify-content-between align-items-start flex-wrap gap-2"><div><div class="fw-bold mb-1"><span class="status-dot ${st.d}"></span><span class="type-badge" style="background:${st.c}22;color:${st.c};border:1px solid ${st.c}44;margin-left:6px">${st.l}</span></div><div><span class="text-gray">الأنثى:</span> <strong>${r.female_tag||'—'} ${r.female_breed?`(${r.female_breed})`:''}</strong><span class="text-gray mx-2">|</span><span class="text-gray">الفحل:</span> <strong>${r.male_tag||'—'}</strong></div><small class="text-gray">تقريع: ${r.mating_date||'—'}${r.expected_birth?` | ولادة: ${r.expected_birth}`:''}${r.status==='pregnant'&&d!==null?`<span style="color:${d<7?'var(--red)':'var(--orange)'};margin-right:6px">${d>0?`متبقي ${ar(d)} يوم`:'اليوم!'}</span>`:''}${r.status==='born'&&r.offspring_count?`<span class="green-text" style="margin-right:6px">| ${ar(r.offspring_count)} مواليد</span>`:''}</small></div><div class="d-flex gap-2"><button class="action-btn sm" onclick="openEditBreeding('${r.id}')"><i class="bi bi-pencil"></i></button><button class="action-btn danger sm" onclick="if(confirm('حذف؟'))Breeding.del('${r.id}'),toast('تم'),renderPage()"><i class="bi bi-trash"></i></button></div></div></div>`;}).join('')}`;
+  ${filtered.length===0?`<div class="empty-state animate-in"><i class="bi bi-diagram-2"></i><p>لا توجد سجلات</p></div>`:filtered.map(r=>{const st=BSTATUS[r.status];const d=r.expected_birth?daysFromNow(r.expected_birth):null;return`<div class="record-card animate-in"><div class="d-flex justify-content-between align-items-start flex-wrap gap-2"><div><div class="fw-bold mb-1"><span class="status-dot ${st.d}"></span><span class="type-badge" style="background:${st.c}22;color:${st.c};border:1px solid ${st.c}44;margin-left:6px">${st.l}</span></div><div><span class="text-gray">الأنثى:</span> <strong>${r.female_tag||'—'} ${r.female_breed?`(${r.female_breed})`:''}</strong><span class="text-gray mx-2">|</span><span class="text-gray">الفحل:</span> <strong>${r.male_tag||'—'}</strong></div><small class="text-gray">تقريع: ${r.mating_date||'—'}${r.expected_birth?` | ولادة: ${r.expected_birth}`:''}${r.status==='pregnant'&&d!==null?`<span style="color:${d<7?'var(--red)':'var(--orange)'};margin-right:6px">${d>0?`متبقي ${ar(d)} يوم`:'اليوم!'}</span>`:''}${r.status==='born'&&r.offspring_count?`<span class="green-text" style="margin-right:6px">| ${ar(r.offspring_count)} مواليد</span>`:''}</small></div><div class="d-flex gap-2"><button class="action-btn sm" onclick="openEditBreeding('${r.id}')"><i class="bi bi-pencil"></i></button><button class="action-btn danger sm" onclick="delBreeding('${r.id}')"><i class="bi bi-trash"></i></button></div></div></div>`;}).join('')}`;
 }
 
 // ====================================================
@@ -479,15 +516,15 @@ function renderInventory(el){
 }
 function renderMedsTable(meds){
   if(!meds.length)return`<div class="empty-state animate-in"><i class="bi bi-capsule"></i><p>لا توجد أدوية</p><button class="action-btn primary" onclick="openAddInventoryItem()"><i class="bi bi-plus-lg"></i> إضافة دواء</button></div>`;
-  return`<div class="wonder-card p-0 animate-in"><div class="table-responsive"><table class="tbl" style="width:100%"><thead><tr><th>الدواء</th><th>الكمية</th><th>الوحدة</th><th>الانتهاء</th><th>الغرض</th><th></th></tr></thead><tbody>${meds.map(m=>{const d=m.expiry?daysFromNow(m.expiry):null;return`<tr><td class="fw-bold">${m.name}</td><td>${m.quantity}</td><td class="text-gray">${m.unit||'—'}</td><td class="${d===null?'text-gray':d<=7?'red-text':'green-text'}">${m.expiry||'—'}${d!==null&&d<=30?` (${ar(d)} يوم)`:''}</td><td class="text-gray">${m.purpose||'—'}</td><td><div class="d-flex gap-1"><button class="icon-btn edit" onclick="openEditMed('${m.id}')"><i class="bi bi-pencil"></i></button><button class="icon-btn del" onclick="if(confirm('حذف؟'))Inventory.delMed('${m.id}'),toast('تم'),renderPage()"><i class="bi bi-trash"></i></button></div></td></tr>`;}).join('')}</tbody></table></div></div>`;
+  return`<div class="wonder-card p-0 animate-in"><div class="table-responsive"><table class="tbl" style="width:100%"><thead><tr><th>الدواء</th><th>الكمية</th><th>الوحدة</th><th>الانتهاء</th><th>الغرض</th><th></th></tr></thead><tbody>${meds.map(m=>{const d=m.expiry?daysFromNow(m.expiry):null;return`<tr><td class="fw-bold">${m.name}</td><td>${m.quantity}</td><td class="text-gray">${m.unit||'—'}</td><td class="${d===null?'text-gray':d<=7?'red-text':'green-text'}">${m.expiry||'—'}${d!==null&&d<=30?` (${ar(d)} يوم)`:''}</td><td class="text-gray">${m.purpose||'—'}</td><td><div class="d-flex gap-1"><button class="icon-btn edit" onclick="openEditMed('${m.id}')"><i class="bi bi-pencil"></i></button><button class="icon-btn del" onclick="delMed('${m.id}')"><i class="bi bi-trash"></i></button></div></td></tr>`;}).join('')}</tbody></table></div></div>`;
 }
 function renderFeedsTable(feeds){
   if(!feeds.length)return`<div class="empty-state animate-in"><i class="bi bi-bag-fill"></i><p>لا توجد أعلاف</p><button class="action-btn primary" onclick="openAddInventoryItem()"><i class="bi bi-plus-lg"></i> إضافة علف</button></div>`;
-  return`<div class="wonder-card p-0 animate-in"><div class="table-responsive"><table class="tbl" style="width:100%"><thead><tr><th>العلف</th><th>الكمية</th><th>الوحدة</th><th>الحد الأدنى</th><th>التكلفة/${getSettings().currency}</th><th></th></tr></thead><tbody>${feeds.map(f=>{const low=f.quantity<=f.min_quantity&&f.min_quantity>0;return`<tr><td class="fw-bold">${f.name}</td><td class="${low?'red-text':'fw-bold'}">${f.quantity}${low?' ⚠️':''}</td><td class="text-gray">${f.unit||'—'}</td><td class="text-gray">${f.min_quantity||0}</td><td class="text-gray">${f.cost_per_unit||'—'}</td><td><div class="d-flex gap-1"><button class="icon-btn edit" onclick="openEditFeed('${f.id}')"><i class="bi bi-pencil"></i></button><button class="icon-btn del" onclick="if(confirm('حذف؟'))Inventory.delFeed('${f.id}'),toast('تم'),renderPage()"><i class="bi bi-trash"></i></button></div></td></tr>`;}).join('')}</tbody></table></div></div>`;
+  return`<div class="wonder-card p-0 animate-in"><div class="table-responsive"><table class="tbl" style="width:100%"><thead><tr><th>العلف</th><th>الكمية</th><th>الوحدة</th><th>الحد الأدنى</th><th>التكلفة/${getSettings().currency}</th><th></th></tr></thead><tbody>${feeds.map(f=>{const low=f.quantity<=f.min_quantity&&f.min_quantity>0;return`<tr><td class="fw-bold">${f.name}</td><td class="${low?'red-text':'fw-bold'}">${f.quantity}${low?' ⚠️':''}</td><td class="text-gray">${f.unit||'—'}</td><td class="text-gray">${f.min_quantity||0}</td><td class="text-gray">${f.cost_per_unit||'—'}</td><td><div class="d-flex gap-1"><button class="icon-btn edit" onclick="openEditFeed('${f.id}')"><i class="bi bi-pencil"></i></button><button class="icon-btn del" onclick="delFeed('${f.id}')"><i class="bi bi-trash"></i></button></div></td></tr>`;}).join('')}</tbody></table></div></div>`;
 }
 function renderEquipTable(equip){
   if(!equip.length)return`<div class="empty-state animate-in"><i class="bi bi-tools"></i><p>لا توجد معدات</p><button class="action-btn primary" onclick="openAddInventoryItem()"><i class="bi bi-plus-lg"></i> إضافة معدة</button></div>`;
-  return`<div class="wonder-card p-0 animate-in"><div class="table-responsive"><table class="tbl" style="width:100%"><thead><tr><th>المعدة</th><th>النوع</th><th>الحالة</th><th>صيانة قادمة</th><th>ملاحظات</th><th></th></tr></thead><tbody>${equip.map(e=>{const d=e.next_maintenance?daysFromNow(e.next_maintenance):null;return`<tr><td class="fw-bold">${e.name}</td><td class="text-gray">${e.type||'—'}</td><td><span class="type-badge ${e.status==='working'?'badge-tarbiya':e.status==='broken'?'badge-danger':'badge-yellow'}">${{working:'يعمل',broken:'معطل',maintenance:'صيانة'}[e.status]||e.status}</span></td><td class="${d!==null&&d<=30?'red-text':'text-gray'}">${e.next_maintenance||'—'}${d!==null&&d<=30?` (${ar(d)} يوم)`:''}</td><td class="text-gray">${e.notes||'—'}</td><td><div class="d-flex gap-1"><button class="icon-btn edit" onclick="openEditEquip('${e.id}')"><i class="bi bi-pencil"></i></button><button class="icon-btn del" onclick="if(confirm('حذف؟'))Inventory.delEquip('${e.id}'),toast('تم'),renderPage()"><i class="bi bi-trash"></i></button></div></td></tr>`;}).join('')}</tbody></table></div></div>`;
+  return`<div class="wonder-card p-0 animate-in"><div class="table-responsive"><table class="tbl" style="width:100%"><thead><tr><th>المعدة</th><th>النوع</th><th>الحالة</th><th>صيانة قادمة</th><th>ملاحظات</th><th></th></tr></thead><tbody>${equip.map(e=>{const d=e.next_maintenance?daysFromNow(e.next_maintenance):null;return`<tr><td class="fw-bold">${e.name}</td><td class="text-gray">${e.type||'—'}</td><td><span class="type-badge ${e.status==='working'?'badge-tarbiya':e.status==='broken'?'badge-danger':'badge-yellow'}">${{working:'يعمل',broken:'معطل',maintenance:'صيانة'}[e.status]||e.status}</span></td><td class="${d!==null&&d<=30?'red-text':'text-gray'}">${e.next_maintenance||'—'}${d!==null&&d<=30?` (${ar(d)} يوم)`:''}</td><td class="text-gray">${e.notes||'—'}</td><td><div class="d-flex gap-1"><button class="icon-btn edit" onclick="openEditEquip('${e.id}')"><i class="bi bi-pencil"></i></button><button class="icon-btn del" onclick="delEquip('${e.id}')"><i class="bi bi-trash"></i></button></div></td></tr>`;}).join('')}</tbody></table></div></div>`;
 }
 window.openAddInventoryItem=function(){if(inventoryTab==='meds')openAddMed('');else if(inventoryTab==='feeds')openAddFeed('');else openAddEquip('');};
 
@@ -511,7 +548,7 @@ function renderFinance(el){
     <div class="d-flex gap-2 flex-wrap align-items-center">${['all','income','expense'].map(f=>`<button class="filter-btn${financeFilter===f?' active':''}" onclick="financeFilter='${f}';renderPage()">${f==='all'?'الكل':f==='income'?'إيرادات':'مصروفات'}</button>`).join('')}<input type="month" class="field" value="${financeMonth}" onchange="financeMonth=this.value;renderPage()" style="padding:5px 10px;font-size:.78rem;max-width:160px"></div>
     <button class="action-btn primary" onclick="openAddFinance()"><i class="bi bi-plus-lg"></i> إضافة</button>
   </div>
-  ${recs.length===0?`<div class="empty-state animate-in"><i class="bi bi-wallet2"></i><p>لا توجد معاملات</p></div>`:`<div class="wonder-card p-0 animate-in"><div class="table-responsive"><table class="tbl" style="width:100%"><thead><tr><th>التاريخ</th><th>النوع</th><th>الفئة</th><th>الوصف</th><th>المبلغ</th><th></th></tr></thead><tbody>${recs.map(r=>`<tr><td class="text-gray">${r.date}</td><td><span class="type-badge ${r.type==='income'?'badge-tarbiya':'badge-tasmeen'}">${r.type==='income'?'إيراد':'مصروف'}</span></td><td>${r.category}</td><td>${r.description||'—'}</td><td class="fw-bold ${r.type==='income'?'green-text':'accent-text'}">${r.type==='income'?'+':'-'}${r.amount.toLocaleString('ar-EG')} ${curr}</td><td><button class="icon-btn del" onclick="if(confirm('حذف؟'))Finance.del('${r.id}'),toast('تم'),renderPage()"><i class="bi bi-trash"></i></button></td></tr>`).join('')}</tbody></table></div></div>`}`;
+  ${recs.length===0?`<div class="empty-state animate-in"><i class="bi bi-wallet2"></i><p>لا توجد معاملات</p></div>`:`<div class="wonder-card p-0 animate-in"><div class="table-responsive"><table class="tbl" style="width:100%"><thead><tr><th>التاريخ</th><th>النوع</th><th>الفئة</th><th>الوصف</th><th>المبلغ</th><th></th></tr></thead><tbody>${recs.map(r=>`<tr><td class="text-gray">${r.date}</td><td><span class="type-badge ${r.type==='income'?'badge-tarbiya':'badge-tasmeen'}">${r.type==='income'?'إيراد':'مصروف'}</span></td><td>${r.category}</td><td>${r.description||'—'}</td><td class="fw-bold ${r.type==='income'?'green-text':'accent-text'}">${r.type==='income'?'+':'-'}${r.amount.toLocaleString('ar-EG')} ${curr}</td><td><button class="icon-btn del" onclick="delFinance('${r.id}')"><i class="bi bi-trash"></i></button></td></tr>`).join('')}</tbody></table></div></div>`}`;
 }
 
 // ====================================================
@@ -836,12 +873,13 @@ function _showHealthModal(r){
 }
 window.updateHBreeds=function(){const s=getSettings();const sp=document.getElementById('h-sp').value;document.getElementById('h-breed').innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(b=>`<option value="${b}">${b}</option>`).join('');};
 window.calcW=function(){const tend=document.getElementById('h-tend').value;const w=parseInt(document.getElementById('h-wdays').value)||0;if(tend&&w>0){const dt=new Date(tend);dt.setDate(dt.getDate()+w);document.getElementById('h-wd').textContent=dt.toISOString().slice(0,10);document.getElementById('h-ws').style.display='block';}else document.getElementById('h-ws').style.display='none';};
-window.submitHealth=function(){
+window.submitHealth=async function(){
   const diag=document.getElementById('h-diag').value.trim();const med=document.getElementById('h-med').value.trim();if(!diag||!med){toast('يرجى إدخال التشخيص والدواء','error');return;}
   const tend=document.getElementById('h-tend').value;const wdays=parseInt(document.getElementById('h-wdays').value)||0;let we='';if(tend&&wdays>0){const dt=new Date(tend);dt.setDate(dt.getDate()+wdays);we=dt.toISOString().slice(0,10);}
   const rec={id:editHealthId||genId(),animal_tag:document.getElementById('h-tag').value.trim(),animal_breed:document.getElementById('h-breed').value,animal_species:document.getElementById('h-sp').value,date:document.getElementById('h-date').value,diagnosis:diag,medication:med,dosage:document.getElementById('h-dose').value.trim(),withdrawal_days:wdays,treatment_end:tend,withdrawal_end:we,status:document.getElementById('h-stat').value,notes:document.getElementById('h-notes').value.trim()||null,created_at:editHealthId?Health.all().find(r=>r.id===editHealthId)?.created_at:new Date().toISOString()};
-  if(editHealthId)Health.update(editHealthId,rec);else Health.add(rec);
-  toast(editHealthId?'تم التحديث':'تمت الإضافة');closeModal();renderPage();
+  closeModal();toast(editHealthId?'جاري التحديث...':'جاري الحفظ...','info');
+  if(editHealthId)await Health.update(editHealthId,rec);else await Health.add(rec);
+  toast(editHealthId?'تم التحديث':'تمت الإضافة');
 };
 
 // BREEDING MODAL
@@ -864,39 +902,40 @@ function _showBreedingModal(r){
 window.updateBBreeds=function(){const s=getSettings();const sp=document.getElementById('b-sp').value;document.getElementById('b-fb').innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(b=>`<option value="${b}">${b}</option>`).join('');};
 window.calcEB=function(){const d=document.getElementById('b-md').value;if(d){const dt=new Date(d);dt.setDate(dt.getDate()+getSettings().pregnancyDays);document.getElementById('b-ed').value=dt.toISOString().slice(0,10);}};
 window.toggleBBorn=function(){document.getElementById('b-born').style.display=document.getElementById('b-st').value==='born'?'block':'none';};
-window.submitBreeding=function(){
+window.submitBreeding=async function(){
   const ft=document.getElementById('b-ft').value.trim();if(!ft){toast('يرجى إدخال ترقيم الأنثى','error');return;}
   const status=document.getElementById('b-st').value;
   const rec={id:editBreedingId||genId(),female_tag:ft,female_breed:document.getElementById('b-fb').value,female_species:document.getElementById('b-sp').value,male_tag:document.getElementById('b-mt').value.trim(),male_breed:document.getElementById('b-mb').value,mating_date:document.getElementById('b-md').value,expected_birth:document.getElementById('b-ed').value,actual_birth:status==='born'?document.getElementById('b-ad').value:null,offspring_count:status==='born'?parseInt(document.getElementById('b-tot').value)||null:null,male_offspring:status==='born'?parseInt(document.getElementById('b-mal').value)||null:null,female_offspring:status==='born'?parseInt(document.getElementById('b-fem').value)||null:null,status,notes:document.getElementById('b-notes').value.trim()||null,created_at:editBreedingId?Breeding.all().find(r=>r.id===editBreedingId)?.created_at:new Date().toISOString()};
-  if(editBreedingId)Breeding.update(editBreedingId,rec);else Breeding.add(rec);
-  toast(editBreedingId?'تم التحديث':'تمت الإضافة');closeModal();renderPage();
+  closeModal();toast(editBreedingId?'جاري التحديث...':'جاري الحفظ...','info');
+  if(editBreedingId)await Breeding.update(editBreedingId,rec);else await Breeding.add(rec);
+  toast(editBreedingId?'تم التحديث':'تمت الإضافة');
 };
 
 // WEIGHT MODAL
 window.openAddWeight=function(aid,tag){showModal(`<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:380px"><h4><i class="bi bi-speedometer2 accent-text"></i> إضافة وزن</h4><label>التاريخ</label><input type="date" class="field" id="w-date" value="${todayStr()}"><label>الوزن (كجم) *</label><input type="number" class="field" id="w-kg" step="0.1" min="0" placeholder="مثال: 45.5"><label>ملاحظات</label><input class="field" id="w-notes"><div class="d-flex gap-2 justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إلغاء</button><button class="action-btn primary" onclick="submitWeight('${aid}','${tag}')">حفظ</button></div></div>`);};
-window.submitWeight=function(aid,tag){const kg=parseFloat(document.getElementById('w-kg').value);if(!kg){toast('يرجى إدخال الوزن','error');return;}Weights.add({id:genId(),animal_id:aid,animal_tag:tag,date:document.getElementById('w-date').value,weight:kg,notes:document.getElementById('w-notes').value.trim()||null});toast('تمت إضافة الوزن');closeModal();renderPage();};
+window.submitWeight=async function(aid,tag){const kg=parseFloat(document.getElementById('w-kg').value);if(!kg){toast('يرجى إدخال الوزن','error');return;}closeModal();await Weights.add({id:genId(),animal_id:aid,animal_tag:tag,date:document.getElementById('w-date').value,weight:kg,notes:document.getElementById('w-notes').value.trim()||null});toast('تمت إضافة الوزن');};
 
 // MILK MODAL
 window.openAddMilk=function(aid,tag){showModal(`<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:380px"><h4><i class="bi bi-droplet-fill blue-text"></i> إضافة إنتاج حليب</h4><label>التاريخ</label><input type="date" class="field" id="ml-date" value="${todayStr()}"><label>الكمية (لتر) *</label><input type="number" class="field" id="ml-liters" step="0.1" min="0" placeholder="مثال: 2.5"><label>ملاحظات</label><input class="field" id="ml-notes"><div class="d-flex gap-2 justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إلغاء</button><button class="action-btn primary" onclick="submitMilk('${aid}','${tag}')">حفظ</button></div></div>`);};
-window.submitMilk=function(aid,tag){const liters=parseFloat(document.getElementById('ml-liters').value);if(!liters){toast('يرجى إدخال الكمية','error');return;}Milk.add({id:genId(),animal_id:aid,animal_tag:tag,date:document.getElementById('ml-date').value,liters,notes:document.getElementById('ml-notes').value.trim()||null});toast('تمت الإضافة');closeModal();renderPage();};
+window.submitMilk=async function(aid,tag){const liters=parseFloat(document.getElementById('ml-liters').value);if(!liters){toast('يرجى إدخال الكمية','error');return;}closeModal();await Milk.add({id:genId(),animal_id:aid,animal_tag:tag,date:document.getElementById('ml-date').value,liters,notes:document.getElementById('ml-notes').value.trim()||null});toast('تمت الإضافة');};
 
 // INVENTORY MODALS
 window.openAddMed=function(id){const m=id?Inventory.meds().find(x=>x.id===id):{};showModal(`<div class="farm-modal" onclick="event.stopPropagation()"><h4><i class="bi bi-capsule accent-text"></i> ${id?'تعديل':'إضافة'} دواء</h4><label>الاسم *</label><input class="field" id="md-name" value="${m.name||''}"><div class="row g-2"><div class="col-6"><label>الكمية</label><input type="number" class="field" id="md-qty" value="${m.quantity||0}"></div><div class="col-6"><label>الوحدة</label><input class="field" id="md-unit" value="${m.unit||''}" placeholder="قرص، مل..."></div></div><div class="row g-2"><div class="col-6"><label>تاريخ الانتهاء</label><input type="date" class="field" id="md-exp" value="${m.expiry||''}"></div><div class="col-6"><label>الغرض</label><input class="field" id="md-purp" value="${m.purpose||''}"></div></div><label>ملاحظات</label><textarea class="field" id="md-notes" rows="2">${m.notes||''}</textarea><div class="d-flex gap-2 justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إلغاء</button><button class="action-btn primary" onclick="submitMed('${id||''}')">حفظ</button></div></div>`);};
 window.openEditMed=function(id){openAddMed(id);};
-window.submitMed=function(id){const name=document.getElementById('md-name').value.trim();if(!name){toast('أدخل اسم الدواء','error');return;}const rec={id:id||genId(),name,quantity:parseFloat(document.getElementById('md-qty').value)||0,unit:document.getElementById('md-unit').value.trim(),expiry:document.getElementById('md-exp').value||null,purpose:document.getElementById('md-purp').value.trim(),notes:document.getElementById('md-notes').value.trim()||null};if(id)Inventory.updateMed(id,rec);else Inventory.addMed(rec);toast(id?'تم التحديث':'تمت الإضافة');closeModal();renderPage();};
+window.submitMed=async function(id){const name=document.getElementById('md-name').value.trim();if(!name){toast('أدخل اسم الدواء','error');return;}const rec={id:id||genId(),name,quantity:parseFloat(document.getElementById('md-qty').value)||0,unit:document.getElementById('md-unit').value.trim(),expiry:document.getElementById('md-exp').value||null,purpose:document.getElementById('md-purp').value.trim(),notes:document.getElementById('md-notes').value.trim()||null};closeModal();if(id)await Inventory.updateMed(id,rec);else await Inventory.addMed(rec);toast(id?'تم التحديث':'تمت الإضافة');};
 
 window.openAddFeed=function(id){const f=id?Inventory.feeds().find(x=>x.id===id):{};showModal(`<div class="farm-modal" onclick="event.stopPropagation()"><h4><i class="bi bi-bag-fill accent-text"></i> ${id?'تعديل':'إضافة'} علف</h4><label>الاسم *</label><input class="field" id="fd-name" value="${f.name||''}"><div class="row g-2"><div class="col-4"><label>الكمية</label><input type="number" class="field" id="fd-qty" value="${f.quantity||0}"></div><div class="col-4"><label>الوحدة</label><input class="field" id="fd-unit" value="${f.unit||''}" placeholder="كجم، طن..."></div><div class="col-4"><label>الحد الأدنى</label><input type="number" class="field" id="fd-min" value="${f.min_quantity||0}"></div></div><label>التكلفة للوحدة (${getSettings().currency})</label><input type="number" class="field" id="fd-cost" value="${f.cost_per_unit||''}" step="0.01"><div class="d-flex gap-2 justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إلغاء</button><button class="action-btn primary" onclick="submitFeed('${id||''}')">حفظ</button></div></div>`);};
 window.openEditFeed=function(id){openAddFeed(id);};
-window.submitFeed=function(id){const name=document.getElementById('fd-name').value.trim();if(!name){toast('أدخل اسم العلف','error');return;}const rec={id:id||genId(),name,quantity:parseFloat(document.getElementById('fd-qty').value)||0,unit:document.getElementById('fd-unit').value.trim(),min_quantity:parseFloat(document.getElementById('fd-min').value)||0,cost_per_unit:parseFloat(document.getElementById('fd-cost').value)||null};if(id)Inventory.updateFeed(id,rec);else Inventory.addFeed(rec);toast(id?'تم التحديث':'تمت الإضافة');closeModal();renderPage();};
+window.submitFeed=async function(id){const name=document.getElementById('fd-name').value.trim();if(!name){toast('أدخل اسم العلف','error');return;}const rec={id:id||genId(),name,quantity:parseFloat(document.getElementById('fd-qty').value)||0,unit:document.getElementById('fd-unit').value.trim(),min_quantity:parseFloat(document.getElementById('fd-min').value)||0,cost_per_unit:parseFloat(document.getElementById('fd-cost').value)||null};closeModal();if(id)await Inventory.updateFeed(id,rec);else await Inventory.addFeed(rec);toast(id?'تم التحديث':'تمت الإضافة');};
 
 window.openAddEquip=function(id){const e=id?Inventory.equipment().find(x=>x.id===id):{};showModal(`<div class="farm-modal" onclick="event.stopPropagation()"><h4><i class="bi bi-tools accent-text"></i> ${id?'تعديل':'إضافة'} معدة</h4><label>الاسم *</label><input class="field" id="eq-name" value="${e.name||''}"><div class="row g-2"><div class="col-6"><label>النوع</label><input class="field" id="eq-type" value="${e.type||''}" placeholder="آلة، مركبة..."></div><div class="col-6"><label>الحالة</label><select class="field" id="eq-status"><option value="working" ${e.status==='working'?'selected':''}>يعمل</option><option value="broken" ${e.status==='broken'?'selected':''}>معطل</option><option value="maintenance" ${e.status==='maintenance'?'selected':''}>صيانة</option></select></div></div><label>موعد الصيانة القادمة</label><input type="date" class="field" id="eq-maint" value="${e.next_maintenance||''}"><label>ملاحظات</label><textarea class="field" id="eq-notes" rows="2">${e.notes||''}</textarea><div class="d-flex gap-2 justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إلغاء</button><button class="action-btn primary" onclick="submitEquip('${id||''}')">حفظ</button></div></div>`);};
 window.openEditEquip=function(id){openAddEquip(id);};
-window.submitEquip=function(id){const name=document.getElementById('eq-name').value.trim();if(!name){toast('أدخل اسم المعدة','error');return;}const rec={id:id||genId(),name,type:document.getElementById('eq-type').value.trim(),status:document.getElementById('eq-status').value,next_maintenance:document.getElementById('eq-maint').value||null,notes:document.getElementById('eq-notes').value.trim()||null};if(id)Inventory.updateEquip(id,rec);else Inventory.addEquip(rec);toast(id?'تم التحديث':'تمت الإضافة');closeModal();renderPage();};
+window.submitEquip=async function(id){const name=document.getElementById('eq-name').value.trim();if(!name){toast('أدخل اسم المعدة','error');return;}const rec={id:id||genId(),name,type:document.getElementById('eq-type').value.trim(),status:document.getElementById('eq-status').value,next_maintenance:document.getElementById('eq-maint').value||null,notes:document.getElementById('eq-notes').value.trim()||null};closeModal();if(id)await Inventory.updateEquip(id,rec);else await Inventory.addEquip(rec);toast(id?'تم التحديث':'تمت الإضافة');};
 
 // FINANCE MODAL
 window.openAddFinance=function(){const s=getSettings();showModal(`<div class="farm-modal" onclick="event.stopPropagation()"><h4><i class="bi bi-wallet2 accent-text"></i> إضافة معاملة مالية</h4><div class="row g-2"><div class="col-6"><label>التاريخ</label><input type="date" class="field" id="f-date" value="${todayStr()}"></div><div class="col-6"><label>النوع</label><select class="field" id="f-type" onchange="updateFCats()"><option value="income">إيراد</option><option value="expense">مصروف</option></select></div></div><label>الفئة *</label><select class="field" id="f-cat">${INCOME_CATS.map(c=>`<option value="${c}">${c}</option>`).join('')}</select><div class="row g-2"><div class="col-6"><label>المبلغ (${s.currency}) *</label><input type="number" class="field" id="f-amount" min="0" step="0.01"></div><div class="col-6"><label>الوصف</label><input class="field" id="f-desc"></div></div><div class="d-flex gap-2 justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إلغاء</button><button class="action-btn primary" onclick="submitFinance()">حفظ</button></div></div>`);};
 window.updateFCats=function(){const t=document.getElementById('f-type').value;document.getElementById('f-cat').innerHTML=(t==='income'?INCOME_CATS:EXPENSE_CATS).map(c=>`<option value="${c}">${c}</option>`).join('');};
-window.submitFinance=function(){const amount=parseFloat(document.getElementById('f-amount').value);const cat=document.getElementById('f-cat').value;if(!amount||!cat){toast('يرجى إدخال المبلغ والفئة','error');return;}Finance.add({id:genId(),date:document.getElementById('f-date').value,type:document.getElementById('f-type').value,category:cat,amount,description:document.getElementById('f-desc').value.trim(),created_at:new Date().toISOString()});toast('تمت الإضافة');closeModal();renderPage();};
+window.submitFinance=async function(){const amount=parseFloat(document.getElementById('f-amount').value);const cat=document.getElementById('f-cat').value;if(!amount||!cat){toast('يرجى إدخال المبلغ والفئة','error');return;}closeModal();toast('جاري الحفظ...','info');await Finance.add({id:genId(),date:document.getElementById('f-date').value,type:document.getElementById('f-type').value,category:cat,amount,description:document.getElementById('f-desc').value.trim(),created_at:new Date().toISOString()});toast('تمت الإضافة');};
 
 // USER MODALS
 window.openAddUser=function(){_showUserModal({});};
@@ -920,18 +959,62 @@ window.exportExcel=function(){
   XLSX.writeFile(wb,`farm-${todayStr()}.xlsx`);toast('تم تصدير التقرير');
 };
 
+
+// ---- ASYNC HELPERS (كل الحذف والتعديل يمر من هنا) ----
+window.delBreeding=async function(id){if(!confirm('حذف هذا السجل؟'))return;await Breeding.del(id);toast('تم الحذف');};
+window.delHealth=async function(id){if(!confirm('حذف هذا السجل؟'))return;await Health.del(id);toast('تم الحذف');if(S.route.startsWith('health/'))navigate('health');};
+window.completeHealth=async function(id){await Health.update(id,{status:'completed'});toast('تم إكمال العلاج');};
+window.delFinance=async function(id){if(!confirm('حذف هذه المعاملة؟'))return;await Finance.del(id);toast('تم الحذف');};
+window.delMed=async function(id){if(!confirm('حذف هذا الدواء؟'))return;await Inventory.delMed(id);toast('تم الحذف');};
+window.delFeed=async function(id){if(!confirm('حذف هذا العلف؟'))return;await Inventory.delFeed(id);toast('تم الحذف');};
+window.delEquip=async function(id){if(!confirm('حذف هذه المعدة؟'))return;await Inventory.delEquip(id);toast('تم الحذف');};
+window.delWeight=async function(id){await Weights.del(id);toast('تم الحذف');};
+window.delMilk=async function(id){await Milk.del(id);toast('تم الحذف');};
+
 // ====================================================
 // LOAD DATA
 // ====================================================
 async function loadData(){
-  if(!initSB()){S.animals=Animals.all();generateNotifications();renderAll();return;}
+  if(!initSB()){
+    S.animals=Animals.all();
+    S.breeding=ls('farm_breeding');S.health=ls('farm_health');
+    S.finance=ls('farm_finance');S.meds=ls('farm_meds');
+    S.feeds=ls('farm_feeds');S.equipment=ls('farm_equipment');
+    S.weights=ls('farm_weights');S.milk=ls('farm_milk');
+    generateNotifications();renderAll();return;
+  }
   S.loading=true;renderPage();
   try{
-    const[a,v,n]=await Promise.all([sb.from('animals').select('*').limit(2000),sb.from('vaccinations').select('*').order('scheduled_date',{ascending:true}),sb.from('notes').select('*').order('created_at')]);
+    const [a,v,n,br,hl,fi,md,fd,eq,wt,mk]=await Promise.all([
+      sb.from('animals').select('*').limit(2000),
+      sb.from('vaccinations').select('*').order('scheduled_date',{ascending:true}),
+      sb.from('notes').select('*').order('created_at'),
+      sb.from('breeding').select('*').order('created_at',{ascending:false}),
+      sb.from('health').select('*').order('created_at',{ascending:false}),
+      sb.from('finance').select('*').order('created_at',{ascending:false}),
+      sb.from('inventory_meds').select('*').order('created_at',{ascending:false}),
+      sb.from('inventory_feeds').select('*').order('created_at',{ascending:false}),
+      sb.from('inventory_equipment').select('*').order('created_at',{ascending:false}),
+      sb.from('weights').select('*').order('date',{ascending:false}),
+      sb.from('milk').select('*').order('date',{ascending:false}),
+    ]);
     if(a.data){S.animals=a.data;Animals.save(a.data);}
-    if(v.data)S.vaccinations=v.data;if(n.data)S.notes=n.data;
+    if(v.data)S.vaccinations=v.data;
+    if(n.data)S.notes=n.data;
+    if(br.data)S.breeding=br.data;
+    if(hl.data)S.health=hl.data;
+    if(fi.data)S.finance=fi.data;
+    if(md.data)S.meds=md.data;
+    if(fd.data)S.feeds=fd.data;
+    if(eq.data)S.equipment=eq.data;
+    if(wt.data)S.weights=wt.data;
+    if(mk.data)S.milk=mk.data;
     generateNotifications();
-  }catch(e){console.error(e);toast('خطأ في التحميل','error');S.animals=Animals.all();}
+  }catch(e){
+    console.error('loadData error:',e);
+    toast('خطأ في التحميل — تحقق من بيانات Supabase','error');
+    S.animals=Animals.all();
+  }
   S.loading=false;renderAll();
 }
 
