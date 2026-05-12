@@ -50,13 +50,15 @@ html,body{background:var(--bg)!important;background-color:#0a0a0a!important;colo
 .icon-btn{background:none;border:none;cursor:pointer;padding:5px 8px;border-radius:8px;transition:.2s;font-size:1rem}
 .icon-btn:hover{background:rgba(255,255,255,.08)}
 .icon-btn.edit{color:var(--blue)}.icon-btn.del{color:var(--red)}.icon-btn.view{color:var(--green)}
-.type-badge{display:inline-block;padding:3px 10px;border-radius:16px;font-size:.75rem;font-weight:600}
+.type-badge{display:inline-block;padding:3px 10px;border-radius:16px;font-size:.75rem;font-weight:600;line-height:1;vertical-align:middle}
 .badge-tarbiya{background:rgba(0,230,118,.12);color:var(--green);border:1px solid rgba(0,230,118,.25)}
 .badge-tasmeen{background:rgba(255,107,53,.12);color:var(--orange);border:1px solid rgba(255,107,53,.25)}
 .badge-danger{background:rgba(244,67,54,.12);color:var(--red);border:1px solid rgba(244,67,54,.25)}
 .badge-blue{background:rgba(33,150,243,.12);color:var(--blue);border:1px solid rgba(33,150,243,.25)}
 .badge-yellow{background:rgba(255,193,7,.12);color:var(--yellow);border:1px solid rgba(255,193,7,.25)}
 .badge-gray{background:rgba(176,176,176,.12);color:var(--gray);border:1px solid rgba(176,176,176,.2)}
+.badge-success{background:rgba(0,230,118,.15);color:var(--green);border:1px solid rgba(0,230,118,.3)}
+.badge-warning{background:rgba(255,193,7,.15);color:var(--yellow);border:1px solid rgba(255,193,7,.3)}
 .farm-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.82);backdrop-filter:blur(8px);z-index:3000;display:flex;align-items:center;justify-content:center;padding:14px;animation:fadeIn .18s ease}
 .farm-modal{background:linear-gradient(135deg,#171717,#1d1d1d);border:1px solid #303030;border-radius:22px;padding:26px;width:100%;max-width:480px;max-height:92vh;overflow-y:auto;animation:slideUp .22s ease}
 .farm-modal h4{margin-bottom:18px;font-size:1.05rem;font-weight:800}
@@ -132,9 +134,16 @@ html,body{background:var(--bg)!important;background-color:#0a0a0a!important;colo
 .data-table tr:hover td{background:rgba(255,255,255,.02)}
 .btn-link{color:var(--blue);text-decoration:none;font-size:.85rem;font-weight:600}
 .btn-link:hover{text-decoration:underline;color:#64b5f6}
-.badge-success{background:rgba(0,230,118,.12);color:var(--green);border:1px solid rgba(0,230,118,.25)}
-.badge-warning{background:rgba(255,193,7,.12);color:var(--yellow);border:1px solid rgba(255,193,7,.25)}
 .dropdown-menu{background:#1d1d1d!important;border:1px solid #333!important;color:var(--light)!important}
 .dropdown-item{color:var(--light);padding:8px 16px}
 .dropdown-item:hover{background:rgba(255,255,255,.05);color:var(--green)}
 .dropdown-divider{border-color:#333!important}
+
+/* 🐐 Badges خاصة بالحيوان - صفحة التفاصيل */
+.animal-header-badges{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.animal-header-badges .type-badge{padding:4px 12px;font-size:.72rem}
+.badge-pregnant{background:rgba(33,150,243,.15);color:var(--blue);border:1px solid rgba(33,150,243,.3)}
+.badge-inseminated{background:rgba(255,193,7,.15);color:var(--yellow);border:1px solid rgba(255,193,7,.3)}
+.badge-with-kid{background:rgba(0,230,118,.15);color:var(--green);border:1px solid rgba(0,230,118,.3)}
+.badge-empty{background:rgba(176,176,176,.12);color:var(--gray);border:1px solid rgba(176,176,176,.2)}
+.badge-offspring{background:rgba(156,39,176,.12);color:var(--purple);border:1px solid rgba(156,39,176,.25)}
