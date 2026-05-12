@@ -24,9 +24,6 @@
 <script src="config.js"></script>
 <script src="firebase.js"></script>
 <script>
-const AR=['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
-const ar=n=>String(n??'').replace(/\d/g,d=>AR[+d]);
-
 Users.init();
 const s=getSettings();
 document.getElementById('farm-name-title').textContent=s.farmName;
