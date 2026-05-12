@@ -8,7 +8,7 @@
 const FARM_CONFIG = {
   // Firebase Realtime Database URL
   // مثال: 'https://my-farm-12345-default-rtdb.firebaseio.com'
-  firebaseUrl: 'https://console.firebase.google.com/u/0/project/farm-mz99/database/farm-mz99-default-rtdb/data/~2F',
+  firebaseUrl: 'https://farm-mz99-default-rtdb.firebasedatabase.app',
 
   // Firebase Database Secret (اختياري — للأمان)
   // console.firebase.google.com → Project Settings → Service Accounts → Database Secrets
