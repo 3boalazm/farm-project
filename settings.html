@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>الإعدادات — بيان المزرعة</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="page-wrap">
+  <div id="page-header"></div>
+  <div id="content"></div>
+  <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
+    © <span id="footer-year"></span> <span id="footer-farm"></span>
+  </footer>
+</div>
+<script src="config.js"></script>
+<script src="firebase.js"></script>
+<script src="shared.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded',()=>{
+  if(!requireAuth())return;
+  initFirebase();
+  const s=getSettings();
+  document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
+  document.getElementById('footer-farm').textContent=s.farmName;
+  renderNavbar('settings.html');
+  renderPageHeader('<i class="bi bi-gear-fill accent-text"></i> الإعدادات','كل شيء قابل للتعديل',
+    `<button class="action-btn primary" onclick="saveAll()"><i class="bi bi-floppy-fill"></i> حفظ الكل</button>`);
+  renderSettings();
+});
+
+function renderSettings(){
+  const s=getSettings();
+  document.getElementById('content').innerHTML=`
+  <!-- Firebase Status -->
+  <div class="wonder-card mb-4" style="border-color:${FB_URL?'rgba(0,230,118,.3)':'rgba(244,67,54,.3)'}">
+    <div class="d-flex align-items-center gap-3">
+      <i class="bi bi-${FB_URL?'cloud-check-fill':'cloud-slash-fill'}" style="font-size:1.5rem;color:${FB_URL?'var(--green)':'var(--red)'}"></i>
+      <div>
+        <div class="fw-bold">${FB_URL?'Firebase متصل ✓':'Firebase غير مضبوط'}</div>
+        <small class="text-gray">${FB_URL||'أضف firebaseUrl في ملف config.js'}</small>
+      </div>
+    </div>
+  </div>
+
+  <!-- Farm Info -->
+  <div class="settings-section">
+    <h6 class="fw-bold mb-3"><i class="bi bi-building accent-text"></i> معلومات المزرعة</h6>
+    <div class="row g-3">
+      <div class="col-md-6"><label class="text-gray" style="font-size:.72rem;font-weight:600">اسم المزرعة</label><input class="field" id="set-farmName" value="${s.farmName}"></div>
+      <div class="col-md-6"><label class="text-gray" style="font-size:.72rem;font-weight:600">اسم المدير</label><input class="field" id="set-ownerName" value="${s.ownerName}"></div>
+      <div class="col-md-6"><label class="text-gray" style="font-size:.72rem;font-weight:600">عنوان المزرعة</label><input class="field" id="set-farmAddress" value="${s.farmAddress||''}"></div>
+      <div class="col-md-3"><label class="text-gray" style="font-size:.72rem;font-weight:600">العملة</label>
+        <select class="field" id="set-currency">${['ج.م','ر.س','د.إ','د.ك','د.ا','ل.ل','د.م'].map(c=>`<option ${s.currency===c?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="col-md-3"><label class="text-gray" style="font-size:.72rem;font-weight:600">رابط الشعار</label><input class="field" id="set-logoUrl" value="${s.logoUrl||''}" placeholder="https://..." dir="ltr"></div>
+    </div>
+  </div>
+
+  <!-- Goat Breeds -->
+  <div class="settings-section">
+    <h6 class="fw-bold mb-3"><i class="bi bi-tropical-storm accent-text"></i> سلالات الماعز</h6>
+    <div id="goat-chips" class="mb-3">${s.goatBreeds.map(b=>`<span class="tag-chip">🐐 ${b}<button class="rm" onclick="removeBreed('goat','${b}')"><i class="bi bi-x-lg"></i></button></span>`).join('')}</div>
+    <div class="d-flex gap-2"><input class="field" id="new-goat" placeholder="أضف سلالة..." style="flex:1"><button class="action-btn primary" onclick="addBreed('goat')"><i class="bi bi-plus-lg"></i></button></div>
+  </div>
+
+  <!-- Sheep Breeds -->
+  <div class="settings-section">
+    <h6 class="fw-bold mb-3"><i class="bi bi-cloud-fill accent-text"></i> سلالات الأغنام</h6>
+    <div id="sheep-chips" class="mb-3">${s.sheepBreeds.map(b=>`<span class="tag-chip" style="background:rgba(255,107,53,.09);border-color:rgba(255,107,53,.22);color:var(--orange)">🐑 ${b}<button class="rm" onclick="removeBreed('sheep','${b}')"><i class="bi bi-x-lg"></i></button></span>`).join('')}</div>
+    <div class="d-flex gap-2"><input class="field" id="new-sheep" placeholder="أضف سلالة..." style="flex:1"><button class="action-btn primary" onclick="addBreed('sheep')"><i class="bi bi-plus-lg"></i></button></div>
+  </div>
+
+  <!-- Variables -->
+  <div class="settings-section">
+    <h6 class="fw-bold mb-3"><i class="bi bi-sliders accent-text"></i> المتغيرات</h6>
+    <div class="row g-3">
+      <div class="col-md-4"><label class="text-gray" style="font-size:.72rem;font-weight:600">أيام الحمل</label><input type="number" class="field" id="set-pregnancyDays" value="${s.pregnancyDays}" min="100" max="200"></div>
+      <div class="col-md-4"><label class="text-gray" style="font-size:.72rem;font-weight:600">تنبيه التحصين قبل (أيام)</label><input type="number" class="field" id="set-vaccinationAlertDays" value="${s.vaccinationAlertDays}" min="1" max="30"></div>
+      <div class="col-md-4"><label class="text-gray" style="font-size:.72rem;font-weight:600">أيام الفطام</label><input type="number" class="field" id="set-weaningDays" value="${s.weaningDays}" min="30" max="180"></div>
+    </div>
+  </div>
+
+  <div class="d-flex justify-content-end mt-3">
+    <button class="action-btn primary" onclick="saveAll()" style="padding:10px 26px"><i class="bi bi-floppy-fill"></i> حفظ جميع الإعدادات</button>
+  </div>`;
+}
+
+function saveAll(){
+  const s=getSettings();
+  s.farmName=document.getElementById('set-farmName').value.trim()||s.farmName;
+  s.ownerName=document.getElementById('set-ownerName').value.trim()||s.ownerName;
+  s.farmAddress=document.getElementById('set-farmAddress').value.trim();
+  s.currency=document.getElementById('set-currency').value;
+  s.logoUrl=document.getElementById('set-logoUrl').value.trim();
+  s.pregnancyDays=parseInt(document.getElementById('set-pregnancyDays').value)||150;
+  s.vaccinationAlertDays=parseInt(document.getElementById('set-vaccinationAlertDays').value)||7;
+  s.weaningDays=parseInt(document.getElementById('set-weaningDays').value)||60;
+  saveSettings(s);
+  logActivity('edit','settings','تعديل إعدادات المزرعة');
+  toast('تم حفظ الإعدادات');
+  renderSettings();
+}
+window.addBreed=function(type){
+  const inp=document.getElementById(`new-${type}`);const val=inp.value.trim();if(!val)return;
+  const s=getSettings();const arr=type==='goat'?s.goatBreeds:s.sheepBreeds;
+  if(arr.includes(val)){toast('موجودة بالفعل','error');return;}
+  arr.push(val);saveSettings(s);inp.value='';renderSettings();toast('تمت الإضافة');
+};
+window.removeBreed=function(type,name){
+  const s=getSettings();const arr=type==='goat'?s.goatBreeds:s.sheepBreeds;
+  if(arr.length<=1){toast('يجب الإبقاء على سلالة واحدة','error');return;}
+  arr.splice(arr.indexOf(name),1);saveSettings(s);renderSettings();toast('تم الحذف');
+};
+</script>
+</body>
+</html>

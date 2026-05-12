@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>إدارة القطيع — بيان المزرعة</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="page-wrap">
+  <div id="page-header"></div>
+  <div id="filters-bar" class="wonder-card mb-4"></div>
+  <div id="content"><div class="text-center py-5"><div class="spinner"></div></div></div>
+  <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
+    © <span id="footer-year"></span> <span id="footer-farm"></span>
+  </footer>
+</div>
+<script src="config.js"></script>
+<script src="firebase.js"></script>
+<script src="shared.js"></script>
+<script>
+let animals=[], fSearch='', fSpecies='all', fPurpose='all', fStatus='alive';
+const params=new URLSearchParams(location.search);
+if(params.get('species'))fSpecies=params.get('species');
+if(params.get('purpose'))fPurpose=params.get('purpose');
+
+document.addEventListener('DOMContentLoaded',async()=>{
+  if(!requireAuth())return;
+  initFirebase();
+  const s=getSettings();
+  document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
+  document.getElementById('footer-farm').textContent=s.farmName;
+  renderNavbar('animals.html');
+  renderPageHeader('إدارة القطيع','','');
+
+  renderLoading(document.getElementById('content'));
+  try{animals=await fbGet('animals');}catch(e){toast('خطأ: '+e.message,'error');}
+  renderFilters();
+  renderAnimals();
+});
+
+function renderFilters(){
+  const s=getSettings();
+  document.getElementById('filters-bar').innerHTML=`
+  <div class="row g-2 align-items-end">
+    <div class="col-md-3"><label class="text-gray" style="font-size:.72rem;font-weight:600">البحث</label>
+      <input class="field" placeholder="ترقيم أو سلالة..." value="${fSearch}" oninput="fSearch=this.value;renderAnimals()"></div>
+    <div class="col-md-2"><label class="text-gray" style="font-size:.72rem;font-weight:600">النوع</label>
+      <select class="field" onchange="fSpecies=this.value;renderAnimals()">
+        <option value="all" ${fSpecies==='all'?'selected':''}>الكل</option>
+        <option value="goat" ${fSpecies==='goat'?'selected':''}>ماعز</option>
+        <option value="sheep" ${fSpecies==='sheep'?'selected':''}>أغنام</option>
+      </select></div>
+    <div class="col-md-2"><label class="text-gray" style="font-size:.72rem;font-weight:600">الغرض</label>
+      <select class="field" onchange="fPurpose=this.value;renderAnimals()">
+        <option value="all" ${fPurpose==='all'?'selected':''}>الكل</option>
+        <option value="tarbiya" ${fPurpose==='tarbiya'?'selected':''}>تربية</option>
+        <option value="tasmeen" ${fPurpose==='tasmeen'?'selected':''}>تسمين</option>
+        <option value="birth" ${fPurpose==='birth'?'selected':''}>مواليد</option>
+      </select></div>
+    <div class="col-md-2"><label class="text-gray" style="font-size:.72rem;font-weight:600">الحالة</label>
+      <select class="field" onchange="fStatus=this.value;renderAnimals()">
+        <option value="alive" ${fStatus==='alive'?'selected':''}>حي</option>
+        <option value="dead" ${fStatus==='dead'?'selected':''}>نافق</option>
+        <option value="all" ${fStatus==='all'?'selected':''}>الكل</option>
+      </select></div>
+    ${can('animals')?`<div class="col-md-3 d-flex gap-2">
+      <button class="action-btn primary flex-grow-1" onclick="openAddAnimal()"><i class="bi bi-plus-lg"></i> إضافة</button>
+      <button class="action-btn danger" onclick="openMarkDeath()"><i class="bi bi-x-octagon"></i></button>
+    </div>`:''}
+  </div>`;
+}
+
+function renderAnimals(){
+  const el=document.getElementById('content');
+  let list=[...animals];
+  if(fStatus!=='all')list=list.filter(a=>a.status===fStatus);
+  if(fSpecies!=='all')list=list.filter(a=>a.species===fSpecies);
+  if(fPurpose!=='all')list=list.filter(a=>a.purpose===fPurpose);
+  if(fSearch){const q=fSearch.toLowerCase();list=list.filter(a=>(a.tag||'').toLowerCase().includes(q)||(a.breed||'').includes(q));}
+  list=list.slice(0,100);
+
+  if(!list.length){renderEmpty(el,'bi-search','لا توجد نتائج','<button class="action-btn primary" onclick="fSearch=\'\';fSpecies=\'all\';fPurpose=\'all\';fStatus=\'alive\';renderFilters();renderAnimals()">إعادة تعيين</button>');return;}
+
+  el.innerHTML=`<div class="mb-2 d-flex justify-content-between"><small class="text-gray">يُعرض ${ar(list.length)} حيوان</small><button class="action-btn sm" onclick="exportCSV()"><i class="bi bi-filetype-csv"></i> CSV</button></div>`+
+  list.map(a=>`<a href="animal-detail.html?id=${a._id}" style="text-decoration:none">
+    <div class="animal-row">
+      <div class="animal-avatar">${a.species==='goat'?'🐐':'🐑'}</div>
+      <div class="flex-grow-1">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <span class="fw-bold">${a.breed}</span>
+          ${a.tag?`<span class="type-badge badge-gray">#${a.tag}</span>`:''}
+          <span class="type-badge ${a.purpose==='tasmeen'?'badge-tasmeen':a.purpose==='birth'?'badge-blue':'badge-tarbiya'}">${{tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[a.purpose]||a.purpose}</span>
+          <span class="type-badge ${a.status==='alive'?'badge-tarbiya':'badge-danger'}">${a.status==='alive'?'حي':'نافق'}</span>
+        </div>
+        <small class="text-gray">${a.gender==='male'?'♂ ذكر':'♀ أنثى'} • ${(a.created_at||'').slice(0,10)||'—'}</small>
+      </div>
+      <i class="bi bi-chevron-left text-gray"></i>
+    </div></a>`).join('');
+}
+
+// Add Animal Modal
+function openAddAnimal(){
+  const s=getSettings();
+  showModal(`<div class="farm-modal" onclick="event.stopPropagation()">
+    <h4><i class="bi bi-plus-circle accent-text"></i> إضافة حيوان</h4>
+    <div class="row g-2">
+      <div class="col-6"><label>النوع</label><select class="field" id="m-sp" onchange="updateBreeds()"><option value="goat">ماعز</option><option value="sheep">أغنام</option></select></div>
+      <div class="col-6"><label>الغرض</label><select class="field" id="m-purpose" onchange="toggleBreedWrap()"><option value="tarbiya">تربية</option><option value="tasmeen">تسمين</option><option value="birth">مواليد</option></select></div>
+    </div>
+    <div id="m-brw"><label>السلالة</label><select class="field" id="m-breed">${s.goatBreeds.map(b=>`<option>${b}</option>`).join('')}</select></div>
+    <div class="row g-2">
+      <div class="col-6"><label>الجنس</label><select class="field" id="m-gender"><option value="female">أنثى</option><option value="male">ذكر</option></select></div>
+      <div class="col-6"><label>تاريخ الميلاد</label><input type="date" class="field" id="m-bdate"></div>
+    </div>
+    <div class="row g-2">
+      <div class="col-6"><label>رقم الترقيم</label><input class="field" id="m-tag" placeholder="A-123"></div>
+      <div class="col-6"><label>الكمية</label><input type="number" class="field" id="m-qty" value="1" min="1" max="500"></div>
+    </div>
+    <label>ملاحظات</label><textarea class="field" id="m-notes" rows="2"></textarea>
+    <div class="d-flex gap-2 justify-content-end mt-3">
+      <button class="action-btn" onclick="closeModal()">إلغاء</button>
+      <button class="action-btn primary" onclick="submitAddAnimal()">حفظ</button>
+    </div>
+  </div>`);
+}
+window.updateBreeds=function(){const s=getSettings();const sp=document.getElementById('m-sp').value;document.getElementById('m-breed').innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(b=>`<option>${b}</option>`).join('');};
+window.toggleBreedWrap=function(){document.getElementById('m-brw').style.display=document.getElementById('m-purpose').value==='birth'?'none':'block';};
+
+window.submitAddAnimal=async function(){
+  const species=document.getElementById('m-sp').value;
+  const purpose=document.getElementById('m-purpose').value;
+  const breed=purpose==='birth'?'مواليد':document.getElementById('m-breed').value;
+  const gender=document.getElementById('m-gender').value;
+  const tag=document.getElementById('m-tag').value.trim();
+  const bdate=document.getElementById('m-bdate').value||null;
+  const notes=document.getElementById('m-notes').value.trim();
+  const qty=parseInt(document.getElementById('m-qty').value)||1;
+  closeModal();
+  toast('جاري الحفظ...','info');
+  let ok=0;
+  for(let i=0;i<qty;i++){
+    const rec={species,breed,gender,purpose,status:'alive',birth_date:bdate,tag:qty===1?(tag||null):(tag?`${tag}-${i+1}`:null),notes:notes||null};
+    try{await fbPost('animals',rec);ok++;}catch(e){console.error(e);}
+  }
+  if(ok>0){
+    await logActivity('add','animals',`أضاف ${ar(ok)} حيوان — ${breed} ${gender==='male'?'ذكر':'أنثى'} ${purpose==='tarbiya'?'تربية':purpose==='tasmeen'?'تسمين':'مواليد'}`);
+    toast(`تمت إضافة ${ar(ok)} حيوان`);
+    animals=await fbGet('animals');renderAnimals();
+  }else toast('فشل الحفظ','error');
+};
+
+// Mark Death
+function openMarkDeath(){
+  const alive=animals.filter(a=>a.status==='alive');
+  showModal(`<div class="farm-modal" onclick="event.stopPropagation()">
+    <h4 style="color:#ff8a8a"><i class="bi bi-exclamation-triangle"></i> تسجيل نفوق</h4>
+    <label>السلالة</label>
+    <select class="field" id="d-breed" onchange="updateDeathList()">
+      <option value="">— الكل —</option>
+      ${[...new Set(alive.map(a=>a.breed))].map(b=>`<option>${b}</option>`).join('')}
+    </select>
+    <label>الحيوان (<span id="d-cnt">${ar(alive.length)}</span>)</label>
+    <select class="field" id="d-animal">
+      <option value="">— اختر —</option>
+      ${alive.slice(0,200).map(a=>`<option value="${a._id}">${a.breed} • ${a.gender==='male'?'ذكر':'أنثى'}${a.tag?` • #${a.tag}`:''}</option>`).join('')}
+    </select>
+    <div class="d-flex gap-2 justify-content-end mt-3">
+      <button class="action-btn" onclick="closeModal()">إلغاء</button>
+      <button class="action-btn danger" onclick="submitDeath()">تأكيد</button>
+    </div>
+  </div>`);
+}
+window.updateDeathList=function(){
+  const breed=document.getElementById('d-breed').value;
+  const cands=animals.filter(a=>a.status==='alive'&&(!breed||a.breed===breed));
+  document.getElementById('d-cnt').textContent=ar(cands.length);
+  document.getElementById('d-animal').innerHTML='<option value="">— اختر —</option>'+cands.slice(0,200).map(a=>`<option value="${a._id}">${a.breed} • ${a.gender==='male'?'ذكر':'أنثى'}${a.tag?` • #${a.tag}`:''}</option>`).join('');
+};
+window.submitDeath=async function(){
+  const id=document.getElementById('d-animal').value;if(!id){toast('يرجى اختيار حيوان','error');return;}
+  const a=animals.find(x=>x._id===id);
+  closeModal();
+  try{
+    await fbPatch('animals',id,{status:'dead',died_at:new Date().toISOString()});
+    await logActivity('edit','animals',`تسجيل نفوق — ${a?.breed||''} ${a?.tag?'#'+a.tag:''}`);
+    toast('تم تسجيل النفوق');
+    animals=await fbGet('animals');renderAnimals();
+  }catch(e){toast('فشل: '+e.message,'error');}
+};
+
+function exportCSV(){
+  const rows=[['النوع','السلالة','الجنس','الغرض','الحالة','الترقيم'],...animals.map(a=>[a.species==='goat'?'ماعز':'أغنام',a.breed,a.gender==='male'?'ذكر':'أنثى',{tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[a.purpose]||a.purpose,a.status==='alive'?'حي':'نافق',a.tag||''])];
+  const csv=rows.map(r=>r.join(',')).join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download=`animals-${todayStr()}.csv`;a.click();
+  toast('تم التصدير');
+}
+</script>
+</body>
+</html>
