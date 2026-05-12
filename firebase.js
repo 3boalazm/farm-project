@@ -60,26 +60,31 @@ async function fbGetOne(path,id){
   return data?{...data,_id:id}:null;
 }
 
+const JSON_HEADERS={'Content-Type':'application/json'};
+
 async function fbPost(path,data){
-  const r=await fetch(fbUrl(path),{method:'POST',body:JSON.stringify({...data,created_at:new Date().toISOString()})});
-  if(!r.ok)throw new Error(`Firebase POST ${path}: ${r.status}`);
+  const body=JSON.stringify({...data,created_at:new Date().toISOString()});
+  const r=await fetch(fbUrl(path),{method:'POST',headers:JSON_HEADERS,body});
+  if(!r.ok){const t=await r.text();throw new Error(`POST ${path}: ${r.status} ${t}`);}
   const res=await r.json();
-  return res.name; // Firebase auto-generated ID
+  return res.name;
 }
 
 async function fbPut(path,id,data){
-  const r=await fetch(fbUrl(path,id),{method:'PUT',body:JSON.stringify({...data,updated_at:new Date().toISOString()})});
-  if(!r.ok)throw new Error(`Firebase PUT ${path}/${id}: ${r.status}`);
+  const body=JSON.stringify({...data,updated_at:new Date().toISOString()});
+  const r=await fetch(fbUrl(path,id),{method:'PUT',headers:JSON_HEADERS,body});
+  if(!r.ok){const t=await r.text();throw new Error(`PUT ${path}/${id}: ${r.status} ${t}`);}
 }
 
 async function fbPatch(path,id,patch){
-  const r=await fetch(fbUrl(path,id),{method:'PATCH',body:JSON.stringify({...patch,updated_at:new Date().toISOString()})});
-  if(!r.ok)throw new Error(`Firebase PATCH ${path}/${id}: ${r.status}`);
+  const body=JSON.stringify({...patch,updated_at:new Date().toISOString()});
+  const r=await fetch(fbUrl(path,id),{method:'PATCH',headers:JSON_HEADERS,body});
+  if(!r.ok){const t=await r.text();throw new Error(`PATCH ${path}/${id}: ${r.status} ${t}`);}
 }
 
 async function fbDelete(path,id){
   const r=await fetch(fbUrl(path,id),{method:'DELETE'});
-  if(!r.ok)throw new Error(`Firebase DELETE ${path}/${id}: ${r.status}`);
+  if(!r.ok){const t=await r.text();throw new Error(`DELETE ${path}/${id}: ${r.status} ${t}`);}
 }
 
 // ── ACTIVITY LOG ─────────────────────────────────────────
