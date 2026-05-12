@@ -1,5 +1,46 @@
-﻿// animal_detail.js
-let animal={}, offspring=[], vaccinations=[], medications=[], activities=[];
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>بروفايل الحيوان — بيان المزرعة</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+.info-card{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:14px;padding:14px;transition:.2s}
+.info-card:hover{border-color:#444}
+.info-label{font-size:.72rem;color:var(--gray);font-weight:600;margin-bottom:4px}
+.info-value{font-weight:700;font-size:.95rem}
+.data-table{width:100%;border-collapse:separate;border-spacing:0;font-size:.82rem}
+.data-table th{background:rgba(255,255,255,.03);font-weight:700;font-size:.78rem;padding:10px 8px;color:var(--gray);border-bottom:1px solid var(--border)}
+.data-table td{padding:10px 8px;vertical-align:middle;border-bottom:1px solid #1e1e1e}
+.data-table tr:hover td{background:rgba(255,255,255,.025)}
+.data-table tr:last-child td{border-bottom:none}
+.btn-link{color:var(--green);text-decoration:none;font-size:.82rem;font-weight:600;padding:3px 8px;border-radius:6px;background:rgba(0,230,118,.1);border:1px solid rgba(0,230,118,.25)}
+.btn-link:hover{background:rgba(0,230,118,.2);color:var(--green)}
+.section-card{background:linear-gradient(135deg,#181818,#202020);border:1px solid #2e2e2e;border-radius:18px;padding:20px;margin-bottom:16px}
+.tag-link{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;font-size:.78rem;font-weight:600;text-decoration:none;transition:.2s;border:1px solid transparent}
+.tag-link:hover{transform:translateY(-1px)}
+.alert-warning{background:rgba(255,193,7,.08);border:1px solid rgba(255,193,7,.25);border-radius:10px;padding:10px 14px;font-size:.82rem;color:var(--yellow)}
+</style>
+</head>
+<body>
+<div class="page-wrap">
+  <div id="page-header"></div>
+  <div id="content"><div class="text-center py-5"><div class="spinner"></div></div></div>
+  <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
+    © <span id="footer-year"></span> <span id="footer-farm"></span>
+  </footer>
+</div>
+<div id="toast-wrap"></div>
+<div id="modal-root"></div>
+<script src="config.js"></script>
+<script src="firebase.js"></script>
+<script src="shared.js"></script>
+<script>
+'use strict';
+let animal={}, offspring=[], vaccinations=[], medications=[];
 const params=new URLSearchParams(location.search);
 const animalId=params.get('id');
 
@@ -11,205 +52,179 @@ document.addEventListener('DOMContentLoaded',async()=>{
   document.getElementById('footer-farm').textContent=s.farmName;
   renderNavbar('animals.html');
 
+  if(!animalId){
+    document.getElementById('content').innerHTML=`<div class="empty-state"><i class="bi bi-exclamation-triangle"></i><p>لم يتم تحديد الحيوان</p><a href="animals.html" class="action-btn">رجوع</a></div>`;
+    return;
+  }
+
   renderLoading(document.getElementById('content'));
   try{
-    animal=await fbGet(`animals/${animalId}`);
-    offspring=await fbGet(`animals/${animalId}/offspring`)||[];
-    vaccinations=await fbGet(`animals/${animalId}/vaccinations`)||[];
-    medications=await fbGet(`animals/${animalId}/medications`)||[];
-    activities=await fbGet(`animals/${animalId}/activities`)||[];
-    renderDetail();
+    // Use fbGetSingle for direct object fetch (not array)
+    animal=await fbGetSingle(`animals/${animalId}`)||{};
+    if(!animal.species){
+      // Try from list as fallback
+      const allAnimals=await fbGet('animals');
+      const found=allAnimals.find(a=>a._id===animalId);
+      if(found){animal=found;}
+    }
+    const [off,vacc,meds]=await Promise.all([
+      fbGet(`animals/${animalId}/offspring`),
+      fbGet(`animals/${animalId}/vaccinations`),
+      fbGet(`animals/${animalId}/medications`)
+    ]);
+    offspring=off||[];vaccinations=vacc||[];medications=meds||[];
+    renderDetail(s);
   }catch(e){
-    renderEmpty(document.getElementById('content'),'bi-exclamation-triangle','خطأ في تحميل البيانات',`<button class="action-btn primary" onclick="location.href='animals.html'">العودة للقائمة</button>`);
+    renderEmpty(document.getElementById('content'),'bi-exclamation-triangle','خطأ في تحميل البيانات: '+e.message,`<a href="animals.html" class="action-btn primary">العودة للقائمة</a>`);
     toast('خطأ: '+e.message,'error');
   }
 });
 
-function renderDetail(){
-  const age=calculateAge(animal.birth_date);
+function renderDetail(s){
+  const age=calcAge(animal.birth_date);
   const isFemale=animal.gender==='female';
   const pregnancyStatus=animal.pregnancy_status||'empty';
-  
-  document.getElementById('content').innerHTML=`
-  <div class="wonder-card mb-4">
-    <div class="d-flex justify-content-between align-items-start mb-3">
+  const el=document.getElementById('content');
+
+  // Breadcrumb back link
+  const backSection=animal.species==='goat'?'<a href="goats.html" class="tag-link" style="color:var(--green);border-color:rgba(0,230,118,.3)"><i class="bi bi-arrow-right"></i> الماعز</a>':'<a href="sheep.html" class="tag-link" style="color:var(--blue);border-color:rgba(33,150,243,.3)"><i class="bi bi-arrow-right"></i> الأغنام</a>';
+
+  el.innerHTML=`
+  <div class="mb-3 d-flex gap-2 align-items-center flex-wrap">
+    <a href="animals.html" class="tag-link" style="color:var(--gray);border-color:#333"><i class="bi bi-list-ul"></i> القطيع</a>
+    <i class="bi bi-chevron-left text-gray" style="font-size:.65rem"></i>
+    ${backSection}
+    <i class="bi bi-chevron-left text-gray" style="font-size:.65rem"></i>
+    <span class="text-gray" style="font-size:.8rem">${animal.breed||'—'} ${animal.tag?'#'+animal.tag:''}</span>
+  </div>
+
+  <!-- Profile Header -->
+  <div class="section-card mb-4" style="background:linear-gradient(135deg,rgba(255,107,53,.08),rgba(0,0,0,0));border-color:rgba(255,107,53,.2)">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
       <div class="d-flex align-items-center gap-3">
-        <div style="font-size:3.5rem">${animal.species==='goat'?'🐐':''}</div>
+        <div style="font-size:4rem;line-height:1">${animal.species==='goat'?'🐐':'🐑'}</div>
         <div>
-          <h3 class="fw-bold mb-1">${animal.breed} ${animal.tag?`<span class="type-badge badge-gray me-2">#${animal.tag}</span>`:''}</h3>
+          <h3 class="fw-bold mb-1">${animal.breed||'غير معروف'} ${animal.tag?`<span class="type-badge badge-gray" style="font-size:.8rem">#${animal.tag}</span>`:''}</h3>
           <div class="d-flex gap-2 flex-wrap">
-            <span class="type-badge ${animal.purpose==='tasmeen'?'badge-tasmeen':animal.purpose==='birth'?'badge-blue':'badge-tarbiya'}">${{tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[animal.purpose]}</span>
+            <span class="type-badge ${animal.purpose==='tasmeen'?'badge-tasmeen':animal.purpose==='birth'?'badge-blue':'badge-tarbiya'}">${{tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[animal.purpose]||animal.purpose||'—'}</span>
             <span class="type-badge ${animal.status==='alive'?'badge-tarbiya':'badge-danger'}">${animal.status==='alive'?'حي':'نافق'}</span>
-            ${isFemale?`<span class="type-badge ${pregnancyStatus==='pregnant'?'badge-blue':pregnancyStatus==='inseminated'?'badge-warning':pregnancyStatus==='with_kid'?'badge-success':'badge-gray'}">${getPregnancyLabel(pregnancyStatus)}</span>`:''}
+            ${isFemale?`<span class="type-badge ${pregnancyStatus==='pregnant'?'badge-blue':pregnancyStatus==='inseminated'?'badge-yellow':pregnancyStatus==='with_kid'?'badge-tarbiya':'badge-gray'}">${getPregnancyLabel(pregnancyStatus)}</span>`:''}
+            ${animal.barn?`<span class="type-badge badge-gray"><i class="bi bi-building me-1" style="font-size:.65rem"></i>${animal.barn}</span>`:''}
           </div>
         </div>
       </div>
       ${can('animals')&&animal.status==='alive'?`
       <div class="dropdown">
-        <button class="action-btn" data-bs-toggle="dropdown"><i class="bi bi-three-dots-vertical"></i></button>
-        <ul class="dropdown-menu dropdown-menu-end">
-          <li><a class="dropdown-item" onclick="openEditAnimal()"><i class="bi bi-pencil me-2"></i>تعديل البيانات</a></li>
-          <li><a class="dropdown-item" onclick="openAddVaccination()"><i class="bi bi-shield-check me-2"></i>إضافة تطعيم</a></li>
-          <li><a class="dropdown-item" onclick="openAddMedication()"><i class="bi bi-capsule me-2"></i>إضافة دواء</a></li>
+        <button class="action-btn" data-bs-toggle="dropdown"><i class="bi bi-three-dots-vertical"></i> إجراءات</button>
+        <ul class="dropdown-menu dropdown-menu-start" style="background:#1e1e1e;border:1px solid #333;border-radius:14px;padding:8px">
+          <li><button class="dropdown-item" style="color:var(--light);border-radius:8px;padding:8px 14px" onclick="openEditAnimal()"><i class="bi bi-pencil me-2" style="color:var(--blue)"></i>تعديل البيانات</button></li>
+          <li><button class="dropdown-item" style="color:var(--light);border-radius:8px;padding:8px 14px" onclick="openAddVaccination()"><i class="bi bi-shield-check me-2" style="color:var(--green)"></i>إضافة تطعيم</button></li>
+          <li><button class="dropdown-item" style="color:var(--light);border-radius:8px;padding:8px 14px" onclick="openAddMedication()"><i class="bi bi-capsule me-2" style="color:var(--yellow)"></i>إضافة دواء</button></li>
           ${isFemale?`
-          <li><a class="dropdown-item" onclick="openUpdatePregnancy()"><i class="bi bi-heart-pulse me-2"></i>تحديث الحالة التناسلية</a></li>
-          <li><a class="dropdown-item" onclick="openAddOffspring()"><i class="bi bi-stars me-2"></i>تسجيل مولود</a></li>`:''}
-          <li><hr class="dropdown-divider"></li>
-          <li><a class="dropdown-item text-danger" onclick="openRemoveAnimal()"><i class="bi bi-trash me-2"></i>إخراج من القطيع</a></li>
+          <li><button class="dropdown-item" style="color:var(--light);border-radius:8px;padding:8px 14px" onclick="openUpdatePregnancy()"><i class="bi bi-heart-pulse me-2" style="color:var(--purple)"></i>تحديث الحالة التناسلية</button></li>
+          <li><button class="dropdown-item" style="color:var(--light);border-radius:8px;padding:8px 14px" onclick="openAddOffspring()"><i class="bi bi-stars me-2" style="color:var(--yellow)"></i>تسجيل مولود</button></li>`:''}
+          <li><hr style="border-color:#333;margin:6px 10px"></li>
+          <li><button class="dropdown-item" style="color:var(--red);border-radius:8px;padding:8px 14px" onclick="openRemoveAnimal()"><i class="bi bi-trash me-2"></i>إخراج من القطيع</button></li>
         </ul>
-      </div>`:''}
+      </div>`:can('animals')?`<a href="animals.html" class="action-btn"><i class="bi bi-arrow-right"></i> رجوع</a>`:''}
     </div>
+  </div>
 
-    <div class="row g-3">
-      <div class="col-md-4">
-        <div class="info-card">
-          <div class="info-label">النوع</div>
-          <div class="info-value">${animal.species==='goat'?'ماعز':'أغنام'}</div>
-        </div>
-      </div>
-      <div class="col-md-4">
-        <div class="info-card">
-          <div class="info-label">الجنس</div>
-          <div class="info-value">${animal.gender==='male'?'♂ ذكر':'♀ أنثى'}</div>
-        </div>
-      </div>
-      <div class="col-md-4">
-        <div class="info-card">
-          <div class="info-label">العمر</div>
-          <div class="info-value">${age.years} سنة و ${age.months} شهر</div>
-        </div>
-      </div>
-      <div class="col-md-4">
-        <div class="info-card">
-          <div class="info-label">تاريخ الميلاد</div>
-          <div class="info-value">${animal.birth_date?formatDate(animal.birth_date):'غير محدد'}</div>
-        </div>
-      </div>
-      <div class="col-md-4">
-        <div class="info-card">
-          <div class="info-label">رقم الترقيم</div>
-          <div class="info-value">${animal.tag||'-'}</div>
-        </div>
-      </div>
-      <div class="col-md-4">
-        <div class="info-card">
-          <div class="info-label">عدد الولادات</div>
-          <div class="info-value">${offspring.length}</div>
-        </div>
-      </div>
+  <!-- Stats Row -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3"><div class="stat-mini"><div class="num green-text">${ar(offspring.length)}</div><div class="lbl">مواليد مسجّلة</div></div></div>
+    <div class="col-6 col-md-3"><div class="stat-mini"><div class="num" style="color:var(--blue)">${ar(vaccinations.length)}</div><div class="lbl">تطعيمات</div></div></div>
+    <div class="col-6 col-md-3"><div class="stat-mini"><div class="num" style="color:var(--yellow)">${ar(medications.length)}</div><div class="lbl">أدوية</div></div></div>
+    <div class="col-6 col-md-3"><div class="stat-mini"><div class="num accent-text">${age.years>0?ar(age.years)+' سنة':ar(age.months)+' شهر'}</div><div class="lbl">العمر</div></div></div>
+  </div>
+
+  <!-- Info Grid -->
+  <div class="row g-3 mb-4">
+    ${[['النوع',animal.species==='goat'?'🐐 ماعز':'🐑 أغنام'],['السلالة',animal.breed||'—'],['الجنس',animal.gender==='male'?'♂ ذكر':'♀ أنثى'],['الغرض',{tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[animal.purpose]||'—'],['العمر',age.years>0?ar(age.years)+' سنة و '+ar(age.months)+' شهر':ar(age.months)+' شهر'],['تاريخ الميلاد',animal.birth_date||'غير محدد'],['رقم الترقيم',animal.tag||'—'],['الجمالون/العنبر',animal.barn||'غير محدد'],['الأم',animal.mother_tag?`#${animal.mother_tag} ${animal.mother_breed?'('+animal.mother_breed+')':''}` :'—'],['الأب',animal.father_tag?`#${animal.father_tag}` :'—']].map(([k,v])=>`<div class="col-md-3 col-6"><div class="info-card"><div class="info-label">${k}</div><div class="info-value">${v}</div></div></div>`).join('')}
+  </div>
+
+  ${animal.notes?`<div class="section-card mb-4"><div class="info-label mb-2"><i class="bi bi-chat-left-text accent-text me-2"></i>ملاحظات</div><div>${animal.notes}</div></div>`:''}
+
+  <!-- Quick Links -->
+  <div class="d-flex gap-2 flex-wrap mb-4">
+    <a href="health.html" class="tag-link" style="color:var(--red);border-color:rgba(244,67,54,.3)"><i class="bi bi-heart-pulse-fill"></i> السجل الصحي</a>
+    <a href="breeding.html" class="tag-link" style="color:var(--purple);border-color:rgba(156,39,176,.3)"><i class="bi bi-diagram-2-fill"></i> التكاثر</a>
+    <a href="vaccine.html" class="tag-link" style="color:var(--green);border-color:rgba(0,230,118,.3)"><i class="bi bi-bandaid-fill"></i> التحصين</a>
+    ${animal.barn?`<a href="barns.html" class="tag-link" style="color:var(--blue);border-color:rgba(33,150,243,.3)"><i class="bi bi-building"></i> ${animal.barn}</a>`:''}
+  </div>
+
+  <!-- Offspring -->
+  <div class="section-card mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 class="fw-bold mb-0"><i class="bi bi-stars accent-text me-2"></i>المواليد (${ar(offspring.length)})</h5>
+      ${isFemale&&can('animals')?`<button class="action-btn primary sm" onclick="openAddOffspring()"><i class="bi bi-plus-lg"></i> تسجيل مولود</button>`:''}
     </div>
+    ${offspring.length===0?`<div class="text-gray text-center py-3" style="font-size:.85rem">لا توجد مواليد مسجّلة</div>`:`
+    <div class="table-responsive"><table class="data-table">
+      <thead><tr><th>الترقيم</th><th>الجنس</th><th>تاريخ الميلاد</th><th>الحالة</th><th>عرض</th></tr></thead>
+      <tbody>${offspring.map(o=>`<tr><td class="fw-bold">${o.tag||'—'}</td><td>${o.gender==='male'?'♂ ذكر':'♀ أنثى'}</td><td class="text-gray">${o.birth_date||'—'}</td><td><span class="type-badge ${o.status==='alive'?'badge-tarbiya':'badge-danger'}" style="font-size:.7rem">${o.status==='alive'?'حي':'نافق'}</span></td><td><a href="animal-detail.html?id=${o._id}" class="btn-link">عرض</a></td></tr>`).join('')}</tbody>
+    </table></div>`}
+  </div>
 
-    ${animal.notes?`<div class="mt-3"><div class="info-label">ملاحظات</div><div class="info-value">${animal.notes}</div></div>`:''}
+  <!-- Vaccinations -->
+  <div class="section-card mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 class="fw-bold mb-0"><i class="bi bi-shield-check me-2" style="color:var(--green)"></i>التطعيمات (${ar(vaccinations.length)})</h5>
+      ${can('health')?`<button class="action-btn primary sm" onclick="openAddVaccination()"><i class="bi bi-plus-lg"></i> إضافة</button>`:''}
+    </div>
+    ${vaccinations.length===0?`<div class="text-gray text-center py-3" style="font-size:.85rem">لا توجد تطعيمات مسجّلة</div>`:`
+    <div class="table-responsive"><table class="data-table">
+      <thead><tr><th>اسم التطعيم</th><th>التاريخ</th><th>الجرعة التالية</th><th>ملاحظات</th></tr></thead>
+      <tbody>${vaccinations.map(v=>`<tr><td class="fw-bold">${v.name||'—'}</td><td class="text-gray">${v.date||'—'}</td><td class="text-gray">${v.next_date||'—'}</td><td class="text-gray">${v.notes||'—'}</td></tr>`).join('')}</tbody>
+    </table></div>`}
+  </div>
+
+  <!-- Medications -->
+  <div class="section-card mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 class="fw-bold mb-0"><i class="bi bi-capsule me-2" style="color:var(--yellow)"></i>الأدوية والعلاج (${ar(medications.length)})</h5>
+      ${can('health')?`<button class="action-btn primary sm" onclick="openAddMedication()"><i class="bi bi-plus-lg"></i> إضافة</button>`:''}
+    </div>
+    ${medications.length===0?`<div class="text-gray text-center py-3" style="font-size:.85rem">لا توجد أدوية مسجّلة</div>`:`
+    <div class="table-responsive"><table class="data-table">
+      <thead><tr><th>الدواء</th><th>تاريخ البدء</th><th>تاريخ الانتهاء</th><th>الجرعة</th><th>ملاحظات</th></tr></thead>
+      <tbody>${medications.map(m=>`<tr><td class="fw-bold">${m.name||'—'}</td><td class="text-gray">${m.start_date||'—'}</td><td class="text-gray">${m.end_date||'—'}</td><td>${m.dosage||'—'}</td><td class="text-gray">${m.notes||'—'}</td></tr>`).join('')}</tbody>
+    </table></div>`}
   </div>`;
-
-  // Offspring Section
-  if(offspring.length>0){
-    document.getElementById('content').innerHTML+=`
-    <div class="wonder-card mb-4">
-      <h5 class="fw-bold mb-3"><i class="bi bi-stars accent-text me-2"></i>الأولاد (${offspring.length})</h5>
-      <div class="table-responsive">
-        <table class="data-table">
-          <thead><tr><th>الترقيم</th><th>الجنس</th><th>تاريخ الميلاد</th><th>الحالة</th><th>إجراءات</th></tr></thead>
-          <tbody>
-            ${offspring.map(o=>`<tr>
-              <td>${o.tag||'-'}</td>
-              <td>${o.gender==='male'?'ذكر':'أنثى'}</td>
-              <td>${formatDate(o.birth_date)}</td>
-              <td><span class="type-badge ${o.status==='alive'?'badge-tarbiya':'badge-danger'}">${o.status==='alive'?'حي':'نافق'}</span></td>
-              <td><a href="animal-detail.html?id=${o._id}" class="btn-link">عرض</a></td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>`;
-  }
-
-  // Vaccinations Section
-  if(vaccinations.length>0){
-    document.getElementById('content').innerHTML+=`
-    <div class="wonder-card mb-4">
-      <h5 class="fw-bold mb-3"><i class="bi bi-shield-check text-success me-2"></i>التطعيمات (${vaccinations.length})</h5>
-      <div class="table-responsive">
-        <table class="data-table">
-          <thead><tr><th>اسم التطعيم</th><th>التاريخ</th><th>الجرعة التالية</th><th>ملاحظات</th></tr></thead>
-          <tbody>
-            ${vaccinations.map(v=>`<tr>
-              <td>${v.name}</td>
-              <td>${formatDate(v.date)}</td>
-              <td>${v.next_date?formatDate(v.next_date):'-'}</td>
-              <td>${v.notes||'-'}</td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>`;
-  }
-
-  // Medications Section
-  if(medications.length>0){
-    document.getElementById('content').innerHTML+=`
-    <div class="wonder-card mb-4">
-      <h5 class="fw-bold mb-3"><i class="bi bi-capsule text-warning me-2"></i>الأدوية (${medications.length})</h5>
-      <div class="table-responsive">
-        <table class="data-table">
-          <thead><tr><th>اسم الدواء</th><th>تاريخ البدء</th><th>تاريخ الانتهاء</th><th>الجرعة</th><th>ملاحظات</th></tr></thead>
-          <tbody>
-            ${medications.map(m=>`<tr>
-              <td>${m.name}</td>
-              <td>${formatDate(m.start_date)}</td>
-              <td>${m.end_date?formatDate(m.end_date):'-'}</td>
-              <td>${m.dosage||'-'}</td>
-              <td>${m.notes||'-'}</td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>`;
-  }
 }
 
-function calculateAge(birthDate){
-  if(!birthDate) return {years:0,months:0};
-  const birth=new Date(birthDate);
-  const now=new Date();
-  let years=now.getFullYear()-birth.getFullYear();
-  let months=now.getMonth()-birth.getMonth();
-  if(months<0){years--;months+=12;}
-  return {years,months};
+function calcAge(birth_date){
+  if(!birth_date)return{years:0,months:0};
+  const b=new Date(birth_date),n=new Date();
+  let y=n.getFullYear()-b.getFullYear(),m=n.getMonth()-b.getMonth();
+  if(m<0){y--;m+=12;}return{years:y,months:m};
 }
+function getPregnancyLabel(s){return{pregnant:'عشار',empty:'فاضية',inseminated:'تم التلقيح',with_kid:'والدة'}[s]||s;}
 
-function getPregnancyLabel(status){
-  return {
-    'pregnant':'عشار',
-    'empty':'فاضية',
-    'inseminated':'تم تلقيحها',
-    'with_kid':'والدة'
-  }[status]||status;
-}
-
-function formatDate(dateStr){
-  if(!dateStr) return '-';
-  const d=new Date(dateStr);
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-
-// Modals
 function openEditAnimal(){
   const s=getSettings();
+  const breeds=animal.species==='goat'?s.goatBreeds:s.sheepBreeds;
+  const barns=['','ج١ع١','ج١ع٢','ج٢ع١','ج٢ع٢','ج٣ع١','ج٣ع٢','ج٤ع١','ج٤ع٢','ج٥ع١','ج٥ع٢'];
   showModal(`<div class="farm-modal" onclick="event.stopPropagation()">
     <h4><i class="bi bi-pencil accent-text"></i> تعديل بيانات الحيوان</h4>
     <div class="row g-2">
-      <div class="col-6"><label>النوع</label><select class="field" id="e-sp"><option value="goat" ${animal.species==='goat'?'selected':''}>ماعز</option><option value="sheep" ${animal.species==='sheep'?'selected':''}>أغنام</option></select></div>
+      <div class="col-6"><label>النوع</label><select class="field" id="e-sp" onchange="updateEBreeds()"><option value="goat" ${animal.species==='goat'?'selected':''}>ماعز</option><option value="sheep" ${animal.species==='sheep'?'selected':''}>أغنام</option></select></div>
       <div class="col-6"><label>الغرض</label><select class="field" id="e-purpose"><option value="tarbiya" ${animal.purpose==='tarbiya'?'selected':''}>تربية</option><option value="tasmeen" ${animal.purpose==='tasmeen'?'selected':''}>تسمين</option><option value="birth" ${animal.purpose==='birth'?'selected':''}>مواليد</option></select></div>
     </div>
     <div class="row g-2">
-      <div class="col-6"><label>السلالة</label><select class="field" id="e-breed">${(animal.species==='goat'?s.goatBreeds:s.sheepBreeds).map(b=>`<option ${b===animal.breed?'selected':''}>${b}</option>`).join('')}</select></div>
+      <div class="col-6"><label>السلالة</label><select class="field" id="e-breed">${breeds.map(b=>`<option ${b===animal.breed?'selected':''}>${b}</option>`).join('')}</select></div>
       <div class="col-6"><label>الجنس</label><select class="field" id="e-gender"><option value="female" ${animal.gender==='female'?'selected':''}>أنثى</option><option value="male" ${animal.gender==='male'?'selected':''}>ذكر</option></select></div>
     </div>
     <div class="row g-2">
       <div class="col-6"><label>تاريخ الميلاد</label><input type="date" class="field" id="e-bdate" value="${animal.birth_date||''}"></div>
       <div class="col-6"><label>رقم الترقيم</label><input class="field" id="e-tag" value="${animal.tag||''}"></div>
     </div>
+    <div class="row g-2">
+      <div class="col-6"><label>رقم الأم</label><input class="field" id="e-mother-tag" value="${animal.mother_tag||''}" placeholder="F-101"></div>
+      <div class="col-6"><label>رقم الأب</label><input class="field" id="e-father-tag" value="${animal.father_tag||''}" placeholder="M-001"></div>
+    </div>
+    <label>الجمالون/العنبر</label>
+    <select class="field" id="e-barn">${barns.map(b=>`<option value="${b}" ${animal.barn===b?'selected':''}>${b||'— غير محدد —'}</option>`).join('')}</select>
     <label>ملاحظات</label><textarea class="field" id="e-notes" rows="2">${animal.notes||''}</textarea>
     <div class="d-flex gap-2 justify-content-end mt-3">
       <button class="action-btn" onclick="closeModal()">إلغاء</button>
@@ -217,209 +232,116 @@ function openEditAnimal(){
     </div>
   </div>`);
 }
-
+window.updateEBreeds=function(){const s=getSettings();const sp=document.getElementById('e-sp').value;document.getElementById('e-breed').innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(b=>`<option>${b}</option>`).join('');};
 window.submitEditAnimal=async function(){
-  const data={
-    species:document.getElementById('e-sp').value,
-    purpose:document.getElementById('e-purpose').value,
-    breed:document.getElementById('e-breed').value,
-    gender:document.getElementById('e-gender').value,
-    birth_date:document.getElementById('e-bdate').value||null,
-    tag:document.getElementById('e-tag').value.trim(),
-    notes:document.getElementById('e-notes').value.trim()
-  };
+  const data={species:document.getElementById('e-sp').value,purpose:document.getElementById('e-purpose').value,breed:document.getElementById('e-breed').value,gender:document.getElementById('e-gender').value,birth_date:document.getElementById('e-bdate').value||null,tag:document.getElementById('e-tag').value.trim(),mother_tag:document.getElementById('e-mother-tag').value.trim()||null,father_tag:document.getElementById('e-father-tag').value.trim()||null,barn:document.getElementById('e-barn').value||null,notes:document.getElementById('e-notes').value.trim()};
   closeModal();toast('جاري الحفظ...','info');
-  try{
-    await fbPatch(`animals/${animalId}`,data);
-    await logActivity('edit','animals',`تعديل بيانات الحيوان #${animal.tag||animalId}`);
-    toast('تم التعديل');
-    animal=await fbGet(`animals/${animalId}`);
-    renderDetail();
-  }catch(e){toast('فشل: '+e.message,'error');}
+  try{await fbPatch('animals',animalId,data);await logActivity('edit','animals',`تعديل #${animal.tag||animalId}`);toast('تم التعديل');animal=await fbGetSingle(`animals/${animalId}`)||animal;renderDetail(getSettings());}
+  catch(e){toast('فشل: '+e.message,'error');}
 };
 
 function openUpdatePregnancy(){
   showModal(`<div class="farm-modal" onclick="event.stopPropagation()">
     <h4><i class="bi bi-heart-pulse accent-text"></i> تحديث الحالة التناسلية</h4>
-    <label>الحالة الحالية</label>
-    <select class="field" id="p-status">
-      <option value="empty" ${animal.pregnancy_status==='empty'?'selected':''}>فاضية</option>
-      <option value="inseminated" ${animal.pregnancy_status==='inseminated'?'selected':''}>تم التلقيح</option>
-      <option value="pregnant" ${animal.pregnancy_status==='pregnant'?'selected':''}>عشار</option>
-      <option value="with_kid" ${animal.pregnancy_status==='with_kid'?'selected':''}>والدة (معاها مولود)</option>
-    </select>
-    <div class="d-flex gap-2 justify-content-end mt-3">
-      <button class="action-btn" onclick="closeModal()">إلغاء</button>
-      <button class="action-btn primary" onclick="submitPregnancyUpdate()">حفظ</button>
-    </div>
+    <label>الحالة</label><select class="field" id="p-status"><option value="empty" ${animal.pregnancy_status==='empty'||!animal.pregnancy_status?'selected':''}>فاضية</option><option value="inseminated" ${animal.pregnancy_status==='inseminated'?'selected':''}>تم التلقيح</option><option value="pregnant" ${animal.pregnancy_status==='pregnant'?'selected':''}>عشار (حامل)</option><option value="with_kid" ${animal.pregnancy_status==='with_kid'?'selected':''}>والدة</option></select>
+    <div class="d-flex gap-2 justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إلغاء</button><button class="action-btn primary" onclick="submitPregnancyUpdate()">حفظ</button></div>
   </div>`);
 }
-
 window.submitPregnancyUpdate=async function(){
-  const status=document.getElementById('p-status').value;
-  closeModal();toast('جاري الحفظ...','info');
-  try{
-    await fbPatch(`animals/${animalId}`,{pregnancy_status:status});
-    await logActivity('edit','animals',`تحديث الحالة التناسلية لـ #${animal.tag||animalId} إلى ${getPregnancyLabel(status)}`);
-    toast('تم التحديث');
-    animal=await fbGet(`animals/${animalId}`);
-    renderDetail();
-  }catch(e){toast('فشل: '+e.message,'error');}
+  const status=document.getElementById('p-status').value;closeModal();toast('جاري الحفظ...','info');
+  try{await fbPatch('animals',animalId,{pregnancy_status:status});await logActivity('edit','animals',`تحديث الحالة التناسلية لـ #${animal.tag||animalId}`);toast('تم التحديث');animal=await fbGetSingle(`animals/${animalId}`)||animal;renderDetail(getSettings());}
+  catch(e){toast('فشل: '+e.message,'error');}
 };
 
 function openAddOffspring(){
+  const s=getSettings();
   showModal(`<div class="farm-modal" onclick="event.stopPropagation()">
     <h4><i class="bi bi-stars accent-text"></i> تسجيل مولود جديد</h4>
+    <div class="d-flex gap-2 p-2 mb-3" style="background:rgba(0,230,118,.06);border-radius:10px;font-size:.82rem"><i class="bi bi-info-circle-fill green-text"></i><span class="text-gray">الأم: <strong>${animal.breed} ${animal.tag?'#'+animal.tag:''}</strong></span></div>
     <div class="row g-2">
-      <div class="col-6"><label>الجنس</label><select class="field" id="o-gender"><option value="female">أنثى</option><option value="male">ذكر</option></select></div>
-      <div class="col-6"><label>تاريخ الميلاد</label><input type="date" class="field" id="o-bdate" value="${new Date().toISOString().slice(0,10)}"></div>
-    </div>
-    <div class="row g-2">
-      <div class="col-6"><label>رقم الترقيم</label><input class="field" id="o-tag" placeholder="A-002"></div>
+      <div class="col-6"><label>جنس المولود</label><select class="field" id="o-gender"><option value="female">أنثى</option><option value="male">ذكر</option></select></div>
       <div class="col-6"><label>عدد المواليد</label><input type="number" class="field" id="o-qty" value="1" min="1" max="5"></div>
     </div>
-    <label>ملاحظات</label><textarea class="field" id="o-notes" rows="2"></textarea>
-    <div class="d-flex gap-2 justify-content-end mt-3">
-      <button class="action-btn" onclick="closeModal()">إلغاء</button>
-      <button class="action-btn primary" onclick="submitAddOffspring()">حفظ</button>
+    <div class="row g-2">
+      <div class="col-6"><label>تاريخ الميلاد</label><input type="date" class="field" id="o-bdate" value="${todayStr()}"></div>
+      <div class="col-6"><label>رقم الترقيم</label><input class="field" id="o-tag" placeholder="A-002"></div>
     </div>
+    <div class="row g-2">
+      <div class="col-6"><label>وزن الميلاد (كجم)</label><input type="number" class="field" id="o-weight" step="0.1" placeholder="3.5"></div>
+      <div class="col-6"><label>سلالة المولود</label><select class="field" id="o-breed">${s.goatBreeds.concat(s.sheepBreeds).map(b=>`<option value="${b}" ${b===animal.breed?'selected':''}>${b}</option>`).join('')}</select></div>
+    </div>
+    <label>ملاحظات</label><textarea class="field" id="o-notes" rows="2"></textarea>
+    <div class="d-flex gap-2 justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إلغاء</button><button class="action-btn primary" onclick="submitAddOffspring()">حفظ</button></div>
   </div>`);
 }
-
 window.submitAddOffspring=async function(){
   const qty=parseInt(document.getElementById('o-qty').value)||1;
-  const data={
-    gender:document.getElementById('o-gender').value,
-    birth_date:document.getElementById('o-bdate').value,
-    tag:document.getElementById('o-tag').value.trim(),
-    notes:document.getElementById('o-notes').value.trim(),
-    species:animal.species,
-    purpose:'birth',
-    status:'alive'
-  };
+  const data={gender:document.getElementById('o-gender').value,birth_date:document.getElementById('o-bdate').value,tag:document.getElementById('o-tag').value.trim(),breed:document.getElementById('o-breed').value,birth_weight:parseFloat(document.getElementById('o-weight').value)||null,notes:document.getElementById('o-notes').value.trim(),species:animal.species,purpose:'birth',status:'alive',mother_tag:animal.tag||null,mother_breed:animal.breed||null,mother_id:animalId};
   closeModal();toast('جاري الحفظ...','info');
   let ok=0;
-  for(let i=0;i<qty;i++){
-    const rec={...data,tag:qty===1?data.tag:(data.tag?`${data.tag}-${i+1}`:null)};
-    try{
-      await fbPost(`animals/${animalId}/offspring`,rec);
-      ok++;
-    }catch(e){console.error(e);}
-  }
-  if(ok>0){
-    await fbPatch(`animals/${animalId}`,{pregnancy_status:'with_kid'});
-    await logActivity('add','offspring',`تسجيل ${ar(ok)} مولود لـ #${animal.tag||animalId}`);
-    toast(`تم تسجيل ${ar(ok)} مولود`);
-    offspring=await fbGet(`animals/${animalId}/offspring`)||[];
-    renderDetail();
-  }else toast('فشل الحفظ','error');
+  for(let i=0;i<qty;i++){const rec={...data,tag:qty===1?data.tag:(data.tag?`${data.tag}-${i+1}`:null)};try{await fbPost(`animals/${animalId}/offspring`,rec);ok++;}catch(e){console.error(e);}}
+  if(ok>0){await fbPatch('animals',animalId,{pregnancy_status:'with_kid'});await logActivity('add','animals',`تسجيل ${ar(ok)} مولود للأم #${animal.tag||animalId}`);toast(`تم تسجيل ${ar(ok)} مولود`);offspring=await fbGet(`animals/${animalId}/offspring`)||[];renderDetail(getSettings());}
+  else toast('فشل الحفظ','error');
 };
 
 function openAddVaccination(){
   showModal(`<div class="farm-modal" onclick="event.stopPropagation()">
-    <h4><i class="bi bi-shield-check text-success"></i> إضافة تطعيم</h4>
-    <label>اسم التطعيم</label>
-    <input class="field" id="v-name" placeholder="مثال: طاعون المجترات">
-    <div class="row g-2">
-      <div class="col-6"><label>تاريخ التطعيم</label><input type="date" class="field" id="v-date" value="${new Date().toISOString().slice(0,10)}"></div>
-      <div class="col-6"><label>الجرعة التالية</label><input type="date" class="field" id="v-next"></div>
-    </div>
+    <h4><i class="bi bi-shield-check" style="color:var(--green)"></i> إضافة تطعيم</h4>
+    <label>اسم التطعيم *</label><input class="field" id="v-name" placeholder="طاعون المجترات">
+    <div class="row g-2"><div class="col-6"><label>تاريخ التطعيم</label><input type="date" class="field" id="v-date" value="${todayStr()}"></div><div class="col-6"><label>الجرعة التالية</label><input type="date" class="field" id="v-next"></div></div>
     <label>ملاحظات</label><textarea class="field" id="v-notes" rows="2"></textarea>
-    <div class="d-flex gap-2 justify-content-end mt-3">
-      <button class="action-btn" onclick="closeModal()">إلغاء</button>
-      <button class="action-btn primary" onclick="submitAddVaccination()">حفظ</button>
-    </div>
+    <div class="d-flex gap-2 justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إلغاء</button><button class="action-btn primary" onclick="submitAddVaccination()">حفظ</button></div>
   </div>`);
 }
-
 window.submitAddVaccination=async function(){
-  const data={
-    name:document.getElementById('v-name').value.trim(),
-    date:document.getElementById('v-date').value,
-    next_date:document.getElementById('v-next').value||null,
-    notes:document.getElementById('v-notes').value.trim()
-  };
-  if(!data.name){toast('يرجى إدخال اسم التطعيم','error');return;}
+  const name=document.getElementById('v-name').value.trim();if(!name){toast('يرجى إدخال اسم التطعيم','error');return;}
+  const data={name,date:document.getElementById('v-date').value,next_date:document.getElementById('v-next').value||null,notes:document.getElementById('v-notes').value.trim()};
   closeModal();toast('جاري الحفظ...','info');
-  try{
-    await fbPost(`animals/${animalId}/vaccinations`,data);
-    await logActivity('add','vaccination',`تطعيم #${animal.tag||animalId} - ${data.name}`);
-    toast('تم إضافة التطعيم');
-    vaccinations=await fbGet(`animals/${animalId}/vaccinations`)||[];
-    renderDetail();
-  }catch(e){toast('فشل: '+e.message,'error');}
+  try{await fbPost(`animals/${animalId}/vaccinations`,data);await logActivity('add','vaccine',`تطعيم #${animal.tag||animalId}: ${name}`);toast('تم إضافة التطعيم');vaccinations=await fbGet(`animals/${animalId}/vaccinations`)||[];renderDetail(getSettings());}
+  catch(e){toast('فشل: '+e.message,'error');}
 };
 
 function openAddMedication(){
   showModal(`<div class="farm-modal" onclick="event.stopPropagation()">
-    <h4><i class="bi bi-capsule text-warning"></i> إضافة دواء</h4>
-    <label>اسم الدواء</label>
-    <input class="field" id="m-name" placeholder="مثال: مضاد حيوي">
-    <div class="row g-2">
-      <div class="col-6"><label>تاريخ البدء</label><input type="date" class="field" id="m-start" value="${new Date().toISOString().slice(0,10)}"></div>
-      <div class="col-6"><label>تاريخ الانتهاء</label><input type="date" class="field" id="m-end"></div>
-    </div>
-    <div class="row g-2">
-      <div class="col-6"><label>الجرعة</label><input class="field" id="m-dosage" placeholder="مثال: 5 مل"></div>
-    </div>
+    <h4><i class="bi bi-capsule" style="color:var(--yellow)"></i> إضافة دواء</h4>
+    <label>اسم الدواء *</label><input class="field" id="m-name" placeholder="مضاد حيوي">
+    <div class="row g-2"><div class="col-6"><label>تاريخ البدء</label><input type="date" class="field" id="m-start" value="${todayStr()}"></div><div class="col-6"><label>تاريخ الانتهاء</label><input type="date" class="field" id="m-end"></div></div>
+    <div class="row g-2"><div class="col-6"><label>الجرعة</label><input class="field" id="m-dosage" placeholder="5 مل"></div></div>
     <label>ملاحظات</label><textarea class="field" id="m-notes" rows="2"></textarea>
-    <div class="d-flex gap-2 justify-content-end mt-3">
-      <button class="action-btn" onclick="closeModal()">إلغاء</button>
-      <button class="action-btn primary" onclick="submitAddMedication()">حفظ</button>
-    </div>
+    <div class="d-flex gap-2 justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إلغاء</button><button class="action-btn primary" onclick="submitAddMedication()">حفظ</button></div>
   </div>`);
 }
-
 window.submitAddMedication=async function(){
-  const data={
-    name:document.getElementById('m-name').value.trim(),
-    start_date:document.getElementById('m-start').value,
-    end_date:document.getElementById('m-end').value||null,
-    dosage:document.getElementById('m-dosage').value.trim(),
-    notes:document.getElementById('m-notes').value.trim()
-  };
-  if(!data.name){toast('يرجى إدخال اسم الدواء','error');return;}
+  const name=document.getElementById('m-name').value.trim();if(!name){toast('يرجى إدخال اسم الدواء','error');return;}
+  const data={name,start_date:document.getElementById('m-start').value,end_date:document.getElementById('m-end').value||null,dosage:document.getElementById('m-dosage').value.trim(),notes:document.getElementById('m-notes').value.trim()};
   closeModal();toast('جاري الحفظ...','info');
-  try{
-    await fbPost(`animals/${animalId}/medications`,data);
-    await logActivity('add','medication',`دواء #${animal.tag||animalId} - ${data.name}`);
-    toast('تم إضافة الدواء');
-    medications=await fbGet(`animals/${animalId}/medications`)||[];
-    renderDetail();
-  }catch(e){toast('فشل: '+e.message,'error');}
+  try{await fbPost(`animals/${animalId}/medications`,data);await logActivity('add','health',`دواء #${animal.tag||animalId}: ${name}`);toast('تم إضافة الدواء');medications=await fbGet(`animals/${animalId}/medications`)||[];renderDetail(getSettings());}
+  catch(e){toast('فشل: '+e.message,'error');}
 };
 
 function openRemoveAnimal(){
   showModal(`<div class="farm-modal" onclick="event.stopPropagation()">
     <h4 style="color:var(--red)"><i class="bi bi-exclamation-triangle"></i> إخراج الحيوان من القطيع</h4>
-    <label>سبب الإخراج</label>
-    <select class="field" id="r-reason">
-      <option value="sale">بيع</option>
-      <option value="slaughter">ذبح</option>
-      <option value="death">نفوق</option>
-    </select>
-    <label>تاريخ الإخراج</label>
-    <input type="date" class="field" id="r-date" value="${new Date().toISOString().slice(0,10)}">
-    <label>ملاحظات</label><textarea class="field" id="r-notes" rows="2" placeholder="سعر البيع، السبب، إلخ..."></textarea>
-    <div class="alert alert-warning mt-3">⚠️ هذا الإجراء لا يمكن التراجع عنه</div>
-    <div class="d-flex gap-2 justify-content-end mt-3">
-      <button class="action-btn" onclick="closeModal()">إلغاء</button>
-      <button class="action-btn danger" onclick="submitRemoveAnimal()">تأكيد</button>
-    </div>
+    <label>سبب الإخراج</label><select class="field" id="r-reason"><option value="sale">بيع</option><option value="slaughter">ذبح</option><option value="death">نفوق</option></select>
+    <label>التاريخ</label><input type="date" class="field" id="r-date" value="${todayStr()}">
+    <label>ملاحظات (سعر البيع مثلاً)</label><textarea class="field" id="r-notes" rows="2"></textarea>
+    <div class="alert-warning mt-3">⚠️ هذا الإجراء لا يمكن التراجع عنه. سيُغيَّر الحيوان إلى "نافق".</div>
+    <div class="d-flex gap-2 justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إلغاء</button><button class="action-btn danger" onclick="submitRemoveAnimal()">تأكيد الإخراج</button></div>
   </div>`);
 }
-
 window.submitRemoveAnimal=async function(){
-  const reason=document.getElementById('r-reason').value;
-  const date=document.getElementById('r-date').value;
-  const notes=document.getElementById('r-notes').value.trim();
+  const reason=document.getElementById('r-reason').value;const date=document.getElementById('r-date').value;const notes=document.getElementById('r-notes').value.trim();
   closeModal();toast('جاري الحفظ...','info');
   try{
     const updates={status:'dead',removed_at:date,removal_reason:reason,removal_notes:notes};
-    if(reason==='death') updates.died_at=date;
-    await fbPatch(`animals/${animalId}`,updates);
-    await logActivity('remove','animals',`إخراج #${animal.tag||animalId} - ${reason==='sale'?'بيع':reason==='slaughter'?'ذبح':'نفوق'}`);
-    toast('تم إخراج الحيوان من القطيع');
+    if(reason==='death')updates.died_at=date;
+    await fbPatch('animals',animalId,updates);
+    await logActivity('remove','animals',`إخراج #${animal.tag||animalId} — ${reason==='sale'?'بيع':reason==='slaughter'?'ذبح':'نفوق'}`);
+    toast('تم إخراج الحيوان');
     setTimeout(()=>location.href='animals.html',1500);
   }catch(e){toast('فشل: '+e.message,'error');}
-}
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

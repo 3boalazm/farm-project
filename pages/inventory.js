@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
   renderNavbar('inventory.html');
+  renderRelatedLinks('inventory.js');
   await loadInventory();
   renderInventoryPage(s);
 });

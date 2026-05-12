@@ -23,7 +23,7 @@
 <script>
 const BARNS=[{id:'ج١',label:'جمالون ١',stalls:['ج١ع١','ج١ع٢']},{id:'ج٢',label:'جمالون ٢',stalls:['ج٢ع١','ج٢ع٢']},{id:'ج٣',label:'جمالون ٣',stalls:['ج٣ع١','ج٣ع٢']},{id:'ج٤',label:'جمالون ٤',stalls:['ج٤ع١','ج٤ع٢']},{id:'ج٥',label:'جمالون ٥',stalls:['ج٥ع١','ج٥ع٢']}];
 const STALL_LABELS={'ج١ع١':'ج١ع١ (عنبر ١)','ج١ع٢':'ج١ع٢ (عنبر ٢)','ج٢ع١':'ج٢ع١','ج٢ع٢':'ج٢ع٢','ج٣ع١':'ج٣ع١','ج٣ع٢':'ج٣ع٢','ج٤ع١':'ج٤ع١','ج٤ع٢':'ج٤ع٢','ج٥ع١':'ج٥ع١','ج٥ع٢':'ج٥ع٢'};
-const MAX_STALL=200;
+const MAX_STALL=70; const WARN_STALL=50;
 let animals=[], selectedBarn=null;
 
 document.addEventListener('DOMContentLoaded', async ()=>{
@@ -61,8 +61,9 @@ function renderBarnsPage(){
     <div class="d-flex flex-wrap gap-2 justify-content-center" style="direction:ltr">
       ${BARNS.map(b=>{
         const total=alive.filter(a=>b.stalls.includes(a.barn)).length;
+        const barnTotal=total;
         const cap=MAX_STALL*2;const pct=Math.min(100,Math.round(total/cap*100));
-        const color=pct>80?'var(--red)':pct>60?'var(--orange)':'var(--green)';
+        const color=barnTotal>=MAX_STALL?'var(--red)':barnTotal>=WARN_STALL?'var(--orange)':'var(--green)';
         return`<div onclick="showBarnDetail('${b.id}')" style="width:140px;height:140px;border:2px solid ${color}44;border-radius:20px;background:${color}11;cursor:pointer;padding:14px;text-align:center;transition:.3s;display:flex;flex-direction:column;align-items:center;justify-content:center" onmouseover="this.style.borderColor='${color}'" onmouseout="this.style.borderColor='${color}44'">
           <div style="font-size:1.8rem">🏗️</div>
           <div class="fw-bold" style="color:${color};font-size:.9rem">${b.label}</div>
@@ -84,7 +85,7 @@ function renderBarnsPage(){
           ${BARNS.map(b=>b.stalls.map((stall,si)=>{
             const sa=alive.filter(a=>a.barn===stall);
             const pct=Math.min(100,Math.round(sa.length/MAX_STALL*100));
-            const c=pct>80?'var(--red)':pct>60?'var(--orange)':'var(--green)';
+            const c=sa.length>=MAX_STALL?'var(--red)':sa.length>=WARN_STALL?'var(--orange)':'var(--green)';
             return`<tr style="cursor:pointer" onclick="showStallDetail('${stall}')">
               ${si===0?`<td rowspan="2" class="fw-bold accent-text">${b.label}</td>`:''}
               <td class="fw-bold">${stall}</td>
@@ -123,6 +124,12 @@ window.showBarnDetail=function(barnId){
     </div>
     <div class="d-flex justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إغلاق</button></div>
   </div>`);
+};
+
+window.checkStallCapacity=function(stall,count){
+  if(count>=MAX_STALL)return\`<div class="type-badge badge-danger" style="font-size:.7rem"><i class="bi bi-exclamation-triangle-fill me-1"></i>ممتلئ (${ar(count)}/${ar(MAX_STALL)})</div>\`;
+  if(count>=WARN_STALL)return\`<div class="type-badge badge-yellow" style="font-size:.7rem"><i class="bi bi-exclamation-circle me-1"></i>شبه ممتلئ — ينصح بالنقل عند \${ar(WARN_STALL)}</div>\`;
+  return'';
 };
 
 window.showStallDetail=function(stall){

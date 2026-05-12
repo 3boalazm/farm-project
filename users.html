@@ -86,20 +86,38 @@ async function showUserDetail(id){
 
 function openAddUser(){showUserModal({});}
 async function openEditUser(id){showUserModal(await Users.get(id)||{});}
+const ALL_PERMS={dash:'الرئيسية',animals:'القطيع',health:'الصحة',vaccine:'التحصين',breeding:'التكاثر',inventory:'المخزن',finance:'المالية',reports:'التقارير',users:'المستخدمون',activity:'سجل الأنشطة'};
+const ROLE_DPERMS={admin:Object.keys(ALL_PERMS),supervisor:['dash','animals','health','vaccine','breeding','inventory','reports'],vet:['dash','health','vaccine','breeding'],worker:['dash','animals']};
+
 function showUserModal(u){
   const isEdit=!!(u.id&&u.name);
-  showModal(`<div class="farm-modal" onclick="event.stopPropagation()">
+  const defPerms=ROLE_DPERMS[u.role||'worker']||[];
+  const actPerms=u.custom_perms||defPerms;
+  showModal(`<div class="farm-modal" onclick="event.stopPropagation()" style="max-height:92vh;overflow-y:auto">
     <h4><i class="bi bi-person-plus-fill accent-text"></i> ${isEdit?'تعديل':'إضافة'} مستخدم</h4>
     <label>الاسم *</label><input class="field" id="u-name" value="${u.name||''}">
-    <label>الدور</label><select class="field" id="u-role">${Object.entries(ROLES).map(([k,v])=>`<option value="${k}" ${u.role===k?'selected':''}>${v.label}</option>`).join('')}</select>
+    <label>الدور</label>
+    <select class="field" id="u-role" onchange="window._fillDefPerms()">${Object.entries(ROLES).map(([k,v])=>`<option value="${k}" ${u.role===k?'selected':''}>${v.label}</option>`).join('')}</select>
     <label>رمز PIN ${isEdit?'(اتركه فارغاً للإبقاء)':'*'}</label>
     <input type="password" class="field" id="u-pin" placeholder="••••" maxlength="8">
-    <label>الحالة</label><select class="field" id="u-active"><option value="true" ${u.active!==false?'selected':''}>نشط</option><option value="false" ${u.active===false?'selected':''}>غير نشط</option></select>
+    <label>الحالة</label>
+    <select class="field" id="u-active"><option value="true" ${u.active!==false?'selected':''}>نشط</option><option value="false" ${u.active===false?'selected':''}>غير نشط</option></select>
+    <div class="mt-3 p-3" style="background:rgba(255,255,255,.03);border-radius:12px;border:1px solid #2a2a2a">
+      <div class="fw-bold mb-2" style="font-size:.85rem"><i class="bi bi-shield-fill accent-text me-2"></i>تخصيص الصلاحيات <small class="text-gray fw-normal">(يمكن تركها للإعدادات الافتراضية)</small></div>
+      <div class="row g-2" id="perms-grid">
+        ${Object.entries(ALL_PERMS).map(([k,l])=>`<div class="col-6"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px;background:rgba(255,255,255,.03);border-radius:8px;border:1px solid #2a2a2a"><input type="checkbox" class="perm-cb" value="${k}" ${actPerms.includes(k)?'checked':''} style="accent-color:var(--green)"><span style="font-size:.82rem">${l}</span></label></div>`).join('')}
+      </div>
+      <div class="d-flex gap-2 mt-2">
+        <button class="action-btn sm" onclick="window._fillDefPerms()"><i class="bi bi-arrow-counterclockwise"></i> افتراضي</button>
+        <button class="action-btn sm" onclick="document.querySelectorAll('.perm-cb').forEach(c=>c.checked=true)"><i class="bi bi-check-all"></i> الكل</button>
+      </div>
+    </div>
     <div class="d-flex gap-2 justify-content-end mt-3">
       <button class="action-btn" onclick="closeModal()">إلغاء</button>
       <button class="action-btn primary" onclick="submitUser('${u.id||''}')">حفظ</button>
     </div>
   </div>`);
+  window._fillDefPerms=function(){const r=document.getElementById('u-role')?.value||'worker';const d=ROLE_DPERMS[r]||[];document.querySelectorAll('.perm-cb').forEach(c=>{c.checked=d.includes(c.value);});};
 }
 window.submitUser=async function(existingId){
   const name=document.getElementById('u-name').value.trim();if(!name){toast('يرجى إدخال الاسم','error');return;}
@@ -108,14 +126,17 @@ window.submitUser=async function(existingId){
   const active=document.getElementById('u-active').value==='true';
   if(!existingId&&!pin){toast('يرجى إدخال رمز PIN','error');return;}
   if(pin&&pin.length<4){toast('PIN يجب أن يكون 4 أرقام على الأقل','error');return;}
+  const selectedPerms=[...document.querySelectorAll('.perm-cb:checked')].map(c=>c.value);
+  const defaults=ROLE_DPERMS[role]||[];
+  const customPerms=JSON.stringify([...selectedPerms].sort())===JSON.stringify([...defaults].sort())?null:selectedPerms;
   if(existingId){
-    const patch={name,role,active};if(pin)patch.pin=pin;
+    const patch={name,role,active,custom_perms:customPerms};if(pin)patch.pin=pin;
     await Users.update(existingId,patch);
-    logActivity('edit','users',`تعديل بيانات المستخدم: ${name}`);
+    logActivity('edit','users',`تعديل بيانات المستخدم: ${name}${customPerms?' (صلاحيات مخصصة)':''}`);
     toast('تم التحديث');
   }else{
-    await Users.add({id:genId(),name,role,pin,active,created:todayStr()});
-    logActivity('add','users',`إضافة مستخدم جديد: ${name} — ${ROLES[role]?.label}`);
+    await Users.add({id:genId(),name,role,pin,active,custom_perms:customPerms,created:todayStr()});
+    logActivity('add','users',`إضافة مستخدم: ${name} — ${ROLES[role]?.label}${customPerms?' (مخصص)':''}`);
     toast('تمت الإضافة');
   }
   closeModal();

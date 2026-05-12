@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
   renderNavbar('vaccine.html');
+  renderRelatedLinks('vaccine.js');
   vaccines=await fbGet('vaccinations');
   renderVaccPage(s);
 });

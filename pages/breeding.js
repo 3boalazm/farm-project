@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
   renderNavbar('breeding.html');
+  renderRelatedLinks('breeding.js');
   breedingRecs=await fbGet('breeding');
   renderBreedingPage(s);
 });
@@ -156,11 +157,18 @@ window.openBModal=function(id, prefTag='', prefBreed='', prefSpecies='goat'){
     <div id="b-born-fields" style="display:${r.status==='born'?'block':'none'}">
       <label>تاريخ الولادة الفعلي</label><input type="date" class="field" id="b-ad" value="${r.actual_birth||''}">
       <div class="row g-2">
-        <div class="col-4"><label>الإجمالي</label><input type="number" class="field" min="0" id="b-tot" value="${r.offspring_count||''}"></div>
+        <div class="col-4"><label>الإجمالي *</label><input type="number" class="field" min="0" id="b-tot" value="${r.offspring_count||''}"></div>
         <div class="col-4"><label>ذكور</label><input type="number" class="field" min="0" id="b-mal" value="${r.male_offspring||''}"></div>
         <div class="col-4"><label>إناث</label><input type="number" class="field" min="0" id="b-fem" value="${r.female_offspring||''}"></div>
       </div>
       <label>أوزان المواليد عند الميلاد (كجم)</label><input class="field" id="b-weights" value="${r.birth_weights||''}" placeholder="مثال: 4.5, 3.8">
+      <div style="border:1px solid rgba(255,193,7,.3);border-radius:12px;padding:12px;margin-top:8px;background:rgba(255,193,7,.05)">
+        <div class="fw-bold mb-2" style="font-size:.82rem;color:var(--yellow)"><i class="bi bi-person-heart me-1"></i>بيانات الأم (إلزامية)</div>
+        <div class="row g-2">
+          <div class="col-6"><label>رقم ترقيم الأم *</label><input class="field" id="b-mother-tag" value="${r.female_tag||ft||''}" placeholder="F-101"></div>
+          <div class="col-6"><label>سلالة الأم *</label><select class="field" id="b-mother-breed"><option value="">— اختر —</option>${getSettings().goatBreeds.concat(getSettings().sheepBreeds).map(b=>`<option value="${b}" ${(r.female_breed||fb)===b?'selected':''}>${b}</option>`).join('')}</select></div>
+        </div>
+      </div>
     </div>
     <label>ملاحظات</label><textarea class="field" id="b-notes" rows="2">${r.notes||''}</textarea>
     <div class="d-flex gap-2 justify-content-end mt-3">
@@ -176,8 +184,16 @@ window.toggleBornFields=function(){document.getElementById('b-born-fields').styl
 
 window.submitBreeding=async function(){
   const ft=document.getElementById('b-ft').value.trim();if(!ft){toast('يرجى إدخال ترقيم الأنثى','error');return;}
+  const status2=document.getElementById('b-st').value;
+  if(status2==='born'){
+    const mt=document.getElementById('b-mother-tag')?.value.trim();
+    const mb=document.getElementById('b-mother-breed')?.value;
+    if(!mt||!mb){toast('يرجى إدخال رقم ترقيم الأم وسلالتها','error');return;}
+  }
   const status=document.getElementById('b-st').value;
-  const data={female_tag:ft,female_breed:document.getElementById('b-fb').value,female_species:document.getElementById('b-sp').value,male_tag:document.getElementById('b-mt').value.trim(),male_breed:document.getElementById('b-mb').value,barn:document.getElementById('b-barn').value,mating_date:document.getElementById('b-md').value,expected_birth:document.getElementById('b-ed').value||null,status,actual_birth:status==='born'?document.getElementById('b-ad').value:null,offspring_count:status==='born'?+document.getElementById('b-tot').value||null:null,male_offspring:status==='born'?+document.getElementById('b-mal').value||null:null,female_offspring:status==='born'?+document.getElementById('b-fem').value||null:null,birth_weights:status==='born'?document.getElementById('b-weights').value.trim():null,notes:document.getElementById('b-notes').value.trim()||null};
+  const motherTag=document.getElementById('b-mother-tag')?.value.trim()||ft;
+  const motherBreed=document.getElementById('b-mother-breed')?.value||document.getElementById('b-fb').value;
+  const data={female_tag:ft,female_breed:document.getElementById('b-fb').value,female_species:document.getElementById('b-sp').value,male_tag:document.getElementById('b-mt').value.trim(),male_breed:document.getElementById('b-mb').value,barn:document.getElementById('b-barn').value,mating_date:document.getElementById('b-md').value,expected_birth:document.getElementById('b-ed').value||null,status,mother_tag:motherTag,mother_breed:motherBreed,actual_birth:status==='born'?document.getElementById('b-ad').value:null,offspring_count:status==='born'?+document.getElementById('b-tot').value||null:null,male_offspring:status==='born'?+document.getElementById('b-mal').value||null:null,female_offspring:status==='born'?+document.getElementById('b-fem').value||null:null,birth_weights:status==='born'?document.getElementById('b-weights').value.trim():null,notes:document.getElementById('b-notes').value.trim()||null};
   closeModal();toast('جاري الحفظ...','info');
   try{
     if(editBId){await fbPatch('breeding',editBId,data);await logActivity('edit','breeding','تعديل سجل تقريع: '+ft);}

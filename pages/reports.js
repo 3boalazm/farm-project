@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
   renderNavbar('reports.html');
+  renderRelatedLinks('reports.js');
   renderPageHeader('<i class="bi bi-graph-up accent-text"></i> التقارير والإحصائيات','','<button class="action-btn" onclick="exportAllExcel()"><i class="bi bi-file-earmark-excel-fill" style="color:#4caf50"></i> تصدير Excel</button>');
   const el=document.getElementById('content');
   renderLoading(el);

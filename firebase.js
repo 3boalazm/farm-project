@@ -61,12 +61,13 @@ const ROLE_PERMS={
 
 function can(page){
   const u=getUser();
-
-  if(!u) return false;
-
-  if(u.role==='admin') return true;
-
-  return (ROLE_PERMS[u.role]||(()=>false))(page);
+  if(!u)return false;
+  if(u.role==='admin')return true;
+  // Check custom permissions first
+  if(u.custom_perms&&Array.isArray(u.custom_perms)){
+    return u.custom_perms.includes(page);
+  }
+  return(ROLE_PERMS[u.role]||(()=>false))(page);
 }
 
 // ── FIREBASE REST ────────────────────────────────────────
@@ -124,6 +125,38 @@ async function fbGetOne(path,id){
 
   return data?{...data,_id:id}:null;
 }
+// جلب عنصر واحد مباشرة (لا يحوّله لقائمة)
+async function fbGetSingle(path){
+  try{
+    const r=await fetch(fbUrl(path));
+    if(r.status===404||r.status===204)return null;
+    if(!r.ok)throw new Error(`Firebase GET ${path}: ${r.status}`);
+    const data=await r.json();
+    return data||null;
+  }catch(e){
+    console.error('fbGetSingle Error:',e);
+    return null;
+  }
+}
+
+// جلب الطقس من OpenWeatherMap
+const WEATHER_API_KEY='2b08987a3d184056b13210204261205';
+const FARM_LAT=30.95, FARM_LON=29.797; // العامرية، الإسكندرية
+async function getWeather(){
+  try{
+    const r=await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${FARM_LAT}&lon=${FARM_LON}&appid=${WEATHER_API_KEY}&units=metric&lang=ar`);
+    if(!r.ok)return null;
+    return await r.json();
+  }catch(e){console.warn('Weather fetch failed:',e);return null;}
+}
+async function getWeatherForecast(){
+  try{
+    const r=await fetch(`https://api.openweathermap.org/data/2.5/forecast?lat=${FARM_LAT}&lon=${FARM_LON}&appid=${WEATHER_API_KEY}&units=metric&lang=ar&cnt=8`);
+    if(!r.ok)return null;
+    return await r.json();
+  }catch(e){return null;}
+}
+
 
 const JSON_HEADERS={
   'Content-Type':'application/json'

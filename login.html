@@ -17,8 +17,10 @@
     <div class="row g-2 mb-4" id="role-btns"></div>
     <div class="pin-display mb-3" id="pin-display">____</div>
     <div class="row g-2" id="pin-pad" dir="ltr"></div>
-    <small class="text-gray d-block mt-3">رمز المدير الافتراضي: <strong>1234</strong></small>
+    
   </div>
+</div>
+<div style="text-align:center;margin-top:14px;font-size:.72rem;color:var(--gray)"><i class="bi bi-keyboard me-1"></i>يمكن الكتابة بالكيبورد | Tab للتنقل بين الأدوار | Enter للتأكيد</div>
 </div>
 <div id="toast-wrap"></div>
 <script src="config.js"></script>
@@ -90,6 +92,17 @@
       setTimeout(()=>{disp.textContent='____';disp.style.color='';},1400);
     }
   }
+
+  // ✅ دعم الكيبورد (PC + موبايل بلوتوث كيبورد)
+  document.addEventListener('keydown',function(e){
+    if(e.key>='0'&&e.key<='9'){window.pinPress(e.key);}
+    else if(e.key==='Backspace'||e.key==='Delete'){window.pinPress('⌫');}
+    else if(e.key==='Enter'){window.pinPress('✓');}
+    else if(e.key==='ArrowLeft'||e.key==='Tab'){
+      const roles=Object.keys(ROLES);const idx=roles.indexOf(lRole);
+      window.selectRole(roles[(idx+1)%roles.length]);e.preventDefault();
+    }
+  });
 
   // Register logout activity before leaving
   window.addEventListener('beforeunload',()=>{

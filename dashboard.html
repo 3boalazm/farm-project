@@ -55,18 +55,29 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     can('animals')?`<a href="animals.html" class="action-btn primary"><i class="bi bi-plus-lg"></i> إضافة حيوان</a><a href="reports.html" class="action-btn"><i class="bi bi-graph-up"></i> التقارير</a>`:''
   );
 
+  const goatBirths=alive.filter(a=>a.species==='goat'&&a.purpose==='birth').length;
+  const sheepBirths=alive.filter(a=>a.species==='sheep'&&a.purpose==='birth').length;
   const quickStats=[
     {l:'إجمالي القطيع', v:tG+tS+births, c:'var(--orange)', i:'bi-bar-chart-fill', href:'animals.html'},
-    {l:'الماعز',         v:tG,            c:'var(--green)',  i:'bi-tropical-storm', href:'animals.html?species=goat'},
-    {l:'الأغنام',        v:tS,            c:'var(--blue)',   i:'bi-cloud-fill',     href:'animals.html?species=sheep'},
-    {l:'المواليد',       v:births,        c:'var(--yellow)', i:'bi-stars',          href:'animals.html?purpose=birth'},
+    {l:'الماعز',         v:tG,            c:'var(--green)',  i:'bi-tropical-storm', href:'goats.html'},
+    {l:'الأغنام',        v:tS,            c:'var(--blue)',   i:'bi-cloud-fill',     href:'sheep.html'},
     {l:'حوامل',          v:pregnant,      c:'var(--purple)', i:'bi-diagram-2',      href:'breeding.html'},
-    {l:'قيد العلاج',     v:treating,      c:'var(--red)',    i:'bi-heart-pulse',    href:'health.html'},
+    {l:'ولدات الماعز',   v:goatBirths,    c:'var(--green)',  i:'bi-stars',          href:'goats.html'},
+    {l:'ولدات الأغنام',  v:sheepBirths,   c:'var(--blue)',   i:'bi-stars',          href:'sheep.html'},
   ];
 
-  const allBreeds=[...s.goatBreeds.map(k=>({k,e:'🐐'})),...s.sheepBreeds.map(k=>({k,e:'🐑'}))];
+  const allBreeds=[...s.goatBreeds.map(k=>({k,e:'🐐',sp:'goat'})),...s.sheepBreeds.map(k=>({k,e:'🐑',sp:'sheep'}))];
 
-  el.innerHTML=`
+  // Breed data for pie chart
+  const breedData=allBreeds.map(({k,e,sp})=>{
+    const a=alive.filter(x=>x.breed===k);
+    return{breed:k,emoji:e,species:sp,total:a.length,tarbiya:a.filter(x=>x.purpose==='tarbiya').length,tasmeen:a.filter(x=>x.purpose==='tasmeen').length,births:a.filter(x=>x.purpose==='birth').length,males:a.filter(x=>x.gender==='male').length,females:a.filter(x=>x.gender==='female').length};
+  }).filter(b=>b.total>0).sort((a,b)=>b.total-a.total);
+  const totalAlive=alive.length||1;
+  // Pie chart colors
+  const PIE_COLORS=['#00e676','#2196f3','#ff6b35','#9c27b0','#ffc107','#f44336','#00bcd4','#8bc34a','#ff9800','#e91e63'];
+
+  el.innerHTML=\`
   <div class="row g-3 mb-4">
     ${quickStats.map((st,i)=>`<div class="col-6 col-md-4 col-lg-2">
       <a href="${st.href}" style="text-decoration:none">
@@ -75,6 +86,77 @@ document.addEventListener('DOMContentLoaded', async ()=>{
         <small class="text-gray">${st.l}</small></div>
       </a></div>`).join('')}
   </div>
+
+  // Render after innerHTML
+  setTimeout(()=>{
+    // Pie Chart
+    const bsEl=document.getElementById('breed-section-here');
+    if(bsEl&&breedData.length>0){
+      const size=220;const cx=size/2,cy=size/2,r=85,ir=45;
+      let startAngle=0;
+      const slices=breedData.map((b,i)=>{
+        const angle=(b.total/totalAlive)*2*Math.PI;
+        const endAngle=startAngle+angle;
+        const x1=cx+r*Math.cos(startAngle-Math.PI/2),y1=cy+r*Math.sin(startAngle-Math.PI/2);
+        const x2=cx+r*Math.cos(endAngle-Math.PI/2),y2=cy+r*Math.sin(endAngle-Math.PI/2);
+        const xi=cx+ir*Math.cos(startAngle-Math.PI/2),yi=cy+ir*Math.sin(startAngle-Math.PI/2);
+        const xi2=cx+ir*Math.cos(endAngle-Math.PI/2),yi2=cy+ir*Math.sin(endAngle-Math.PI/2);
+        const large=angle>Math.PI?1:0;
+        const path=`M ${xi} ${yi} A ${ir} ${ir} 0 ${large} 1 ${xi2} ${yi2} L ${x2} ${y2} A ${r} ${r} 0 ${large} 0 ${x1} ${y1} Z`;
+        const mid=(startAngle+endAngle)/2-Math.PI/2;
+        const lx=cx+(r+20)*Math.cos(mid),ly=cy+(r+20)*Math.sin(mid);
+        const result={path,color:PIE_COLORS[i%PIE_COLORS.length],breed:b.breed,total:b.total,pct:Math.round(b.total/totalAlive*100),lx,ly};
+        startAngle=endAngle;return result;
+      });
+      bsEl.innerHTML=\`<div class="row g-3 mb-4">
+        <div class="col-md-5">
+          <div class="wonder-card text-center">
+            <h6 class="fw-bold mb-3"><i class="bi bi-pie-chart-fill accent-text"></i> توزيع القطيع</h6>
+            <svg width="\${size}" height="\${size}" viewBox="0 0 \${size} \${size}" style="overflow:visible;max-width:100%">
+              \${slices.map(sl=>\`<path d="\${sl.path}" fill="\${sl.color}" opacity=".85" stroke="#141414" stroke-width="2"><title>\${sl.breed}: \${ar(sl.total)}</title></path>\`).join('')}
+              <circle cx="\${cx}" cy="\${cy}" r="\${ir}" fill="#141414"/>
+              <text x="\${cx}" y="\${cy-8}" text-anchor="middle" fill="#e8e8e8" font-size="22" font-weight="700" font-family="Lexend">\${ar(totalAlive)}</text>
+              <text x="\${cx}" y="\${cy+12}" text-anchor="middle" fill="#888" font-size="11" font-family="Cairo">رأس حي</text>
+            </svg>
+            <div class="d-flex flex-wrap justify-content-center gap-2 mt-2">
+              \${slices.map(sl=>\`<span style="font-size:.72rem;display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:50%;background:\${sl.color};display:inline-block"></span>\${sl.breed} \${ar(sl.pct)}٪</span>\`).join('')}
+            </div>
+          </div>
+        </div>
+        <div class="col-md-7">
+          <div class="wonder-card p-0">
+            <div class="p-3 pb-2 fw-bold" style="font-size:.9rem"><i class="bi bi-table accent-text me-2"></i>ملخص المزرعة</div>
+            <div class="table-responsive"><table style="width:100%;border-collapse:separate;border-spacing:0;font-size:.8rem">
+              <thead><tr style="background:rgba(255,255,255,.03)"><th style="padding:8px;color:var(--gray);font-weight:700;border-bottom:1px solid var(--border)">القسم</th><th style="padding:8px;color:var(--gray);font-weight:700;border-bottom:1px solid var(--border)">السلالة</th><th style="padding:8px;color:var(--gray);font-weight:700;border-bottom:1px solid var(--border)">تربية</th><th style="padding:8px;color:var(--gray);font-weight:700;border-bottom:1px solid var(--border)">تسمين</th><th style="padding:8px;color:var(--gray);font-weight:700;border-bottom:1px solid var(--border)">ولدات</th><th style="padding:8px;color:var(--gray);font-weight:700;border-bottom:1px solid var(--border)">الإجمالي</th></tr></thead>
+              <tbody>
+                \${breedData.map(b=>\`<tr style="border-bottom:1px solid #1e1e1e"><td style="padding:8px;color:var(--gray)">\${b.species==='goat'?'ماعز':'أغنام'}</td><td style="padding:8px;font-weight:700">\${b.breed}</td><td style="padding:8px">\${ar(b.tarbiya)}</td><td style="padding:8px">\${ar(b.tasmeen)}</td><td style="padding:8px;color:var(--yellow)">\${ar(b.births)}</td><td style="padding:8px;font-weight:700;color:var(--green)">\${ar(b.total)}</td></tr>\`).join('')}
+              </tbody>
+            </table></div>
+          </div>
+        </div>
+      </div>\`;
+    }
+
+    // Weather widget
+    getWeather().then(w=>{
+      if(!w||!w.main)return;
+      const temp=Math.round(w.main.temp);const feels=Math.round(w.main.feels_like);
+      const desc=w.weather?.[0]?.description||'';
+      const humidity=w.main.humidity;
+      const isHot=temp>=35,isCold=temp<=10;
+      const wEl=document.getElementById('weather-widget');
+      if(!wEl)return;
+      wEl.innerHTML=\`<div class="d-flex align-items-center gap-3 flex-wrap">
+        <div style="font-size:2rem">\${isHot?'🌡️':isCold?'🥶':temp>=25?'☀️':'🌤️'}</div>
+        <div>
+          <div style="font-size:1.4rem;font-weight:700;color:\${isHot?'var(--red)':isCold?'var(--blue)':'var(--green)'}">\${ar(temp)}°م</div>
+          <div style="font-size:.78rem;color:var(--gray)">\${desc} • رطوبة \${ar(humidity)}٪ • يبدو كأنه \${ar(feels)}°م</div>
+        </div>
+        \${isHot?\`<div class="type-badge badge-danger" style="font-size:.7rem"><i class="bi bi-exclamation-triangle-fill me-1"></i>إجهاد حراري — زِد المياه وأخِّر الرعي</div>\`:''}
+        \${isCold?\`<div class="type-badge badge-blue" style="font-size:.7rem"><i class="bi bi-snow me-1"></i>برد شديد — تحقق من التدفئة</div>\`:''}
+      </div>\`;
+    });
+  },100);
 
   ${can('finance')?`<div class="row g-3 mb-4">
     <div class="col-md-4"><div class="wonder-card text-center">
