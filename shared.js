@@ -40,9 +40,11 @@ const NAV_PAGES=[
   {href:'inventory.html', icon:'bi-boxes',             label:'مخزن',        perm:'inventory'},
   {href:'finance.html',   icon:'bi-wallet2',           label:'مالية',       perm:'finance'},
   {href:'reports.html',   icon:'bi-graph-up',          label:'تقارير',      perm:'reports'},
+  {href:'barns.html',      icon:'bi-grid-3x3-gap-fill', label:'الجمالونات',   perm:'animals'},
 ];
 const SIDEBAR_EXTRA=[
   {href:'notifications.html', icon:'bi-bell-fill',     label:'الإشعارات'},
+  {href:'barns.html',         icon:'bi-grid-3x3-gap-fill', label:'الجمالونات والعنابر', perm:'animals'},
   {href:'activity.html',      icon:'bi-clock-history', label:'سجل الأنشطة', perm:'admin'},
   {href:'users.html',         icon:'bi-people-fill',   label:'المستخدمون',  perm:'users'},
   {href:'settings.html',      icon:'bi-gear-fill',     label:'الإعدادات'},

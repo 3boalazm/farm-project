@@ -121,6 +121,7 @@ function openAddAnimal(){
       <div class="col-6"><label>رقم الترقيم</label><input class="field" id="m-tag" placeholder="A-123"></div>
       <div class="col-6"><label>الكمية</label><input type="number" class="field" id="m-qty" value="1" min="1" max="500"></div>
     </div>
+    <label>الجمالون/العنبر</label><select class="field" id="m-barn"><option value="">— غير محدد —</option><option>ج١ع١</option><option>ج١ع٢</option><option>ج٢ع١</option><option>ج٢ع٢</option><option>ج٣ع١</option><option>ج٣ع٢</option><option>ج٤ع١</option><option>ج٤ع٢</option><option>ج٥ع١</option><option>ج٥ع٢</option></select>
     <label>ملاحظات</label><textarea class="field" id="m-notes" rows="2"></textarea>
     <div class="d-flex gap-2 justify-content-end mt-3">
       <button class="action-btn" onclick="closeModal()">إلغاء</button>
@@ -144,7 +145,8 @@ window.submitAddAnimal=async function(){
   toast('جاري الحفظ...','info');
   let ok=0;
   for(let i=0;i<qty;i++){
-    const rec={species,breed,gender,purpose,status:'alive',birth_date:bdate,tag:qty===1?(tag||null):(tag?`${tag}-${i+1}`:null),notes:notes||null};
+    const barn=document.getElementById('m-barn')?.value||null;
+    const rec={species,breed,gender,purpose,status:'alive',birth_date:bdate,tag:qty===1?(tag||null):(tag?`${tag}-${i+1}`:null),notes:notes||null,barn:barn||null};
     try{await fbPost('animals',rec);ok++;}catch(e){console.error(e);}
   }
   if(ok>0){
