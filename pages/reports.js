@@ -37,6 +37,8 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   // Barn distribution
   const barns=['ج١ع١','ج١ع٢','ج٢ع١','ج٢ع٢','ج٣ع١','ج٣ع٢','ج٤ع١','ج٤ع٢','ج٥ع١','ج٥ع٢'];
   const barnDist=barns.map(b=>({barn:b,count:alive.filter(a=>a.barn===b).length,breeds:[...new Set(alive.filter(a=>a.barn===b).map(a=>a.breed))]}));
+  // Pass animals to window for barn detail
+  window._reportAnimals=animals;
 
   el.innerHTML=`
   <!-- KPI Cards -->

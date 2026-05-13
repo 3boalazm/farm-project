@@ -26,7 +26,7 @@ function renderHealthPage(s){
 
   // Withdrawal alert banner
   const withdrawalAlert=inWithdrawal.length>0?`<div class="withdrawal-alert mb-4">
-    <div class="fw-bold mb-2 red-text"><i class="bi bi-exclamation-triangle-fill me-2"></i>تحذير: ${ar(inWithdrawal.length)} حيوان في فترة السحب — يُمنع البيع أو الذبح أو استخدام المنتجات</div>
+    <div class="fw-bold mb-2 red-text"><i class="bi bi-exclamation-triangle-fill me-2"></i>تحذير: ${ar(inWithdrawal.length)} حيوان في تأثير العلاج — يُمنع البيع أو الذبح أو استخدام المنتجات</div>
     ${inWithdrawal.map(r=>{const dLeft=Math.ceil((new Date(r.withdrawal_end)-new Date())/86400000);return`<div class="d-flex align-items-center gap-2 mt-2 flex-wrap">
       <span class="type-badge badge-danger">${r.animal_tag||r.animal_breed}</span>
       <small class="text-gray">${r.medication} — ينتهي ${r.withdrawal_end} <span style="color:var(--red)">(متبقي ${ar(Math.max(0,dLeft))} يوم)</span></small>
@@ -95,12 +95,12 @@ window.showHealthDetail=function(id){
     <h4><i class="bi bi-heart-pulse-fill accent-text"></i> تفاصيل السجل الصحي</h4>
     <div class="d-flex gap-2 mb-3 flex-wrap">
       <span class="type-badge ${r.status==='active'?'badge-tasmeen':'badge-tarbiya'}">${r.status==='active'?'قيد العلاج':'مكتمل'}</span>
-      ${inW?`<span class="type-badge badge-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>فترة سحب نشطة</span>`:''}
+      ${inW?`<span class="type-badge badge-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>فترة تأثير علاج نشط</span>`:''}
     </div>
-    ${[['الحيوان',`${r.animal_breed||'—'} ${r.animal_tag?'#'+r.animal_tag:''}`],['النوع',r.animal_species==='goat'?'ماعز':'أغنام'],['الجمالون/العنبر',r.barn||'—'],['التشخيص',r.diagnosis],['الدواء',r.medication],['الجرعة',r.dosage||'—'],['تاريخ العلاج',r.date||'—'],['نهاية العلاج',r.treatment_end||'—'],['أيام السحب',r.withdrawal_days?ar(r.withdrawal_days)+' يوم':'—'],['ينتهي السحب',r.withdrawal_end||'—'],['BCS',r.bcs?r.bcs+'/5':'—'],['الطبيب',r.vet_name||'—'],['ملاحظات',r.notes||'—']].map(([k,v])=>`<div class="info-row"><span class="info-label">${k}</span><span class="info-value fw-bold">${v}</span></div>`).join('')}
+    ${[['الحيوان',`${r.animal_breed||'—'} ${r.animal_tag?'#'+r.animal_tag:''}`],['النوع',r.animal_species==='goat'?'ماعز':'أغنام'],['الجمالون/العنبر',r.barn||'—'],['التشخيص',r.diagnosis],['الدواء',r.medication],['الجرعة',r.dosage||'—'],['تاريخ العلاج',r.date||'—'],['نهاية العلاج',r.treatment_end||'—'],['أيام تأثير العلاج',r.withdrawal_days?ar(r.withdrawal_days)+' يوم':'—'],['انتهاء تأثير العلاج',r.withdrawal_end||'—'],['BCS',r.bcs?r.bcs+'/5':'—'],['الطبيب',r.vet_name||'—'],['ملاحظات',r.notes||'—']].map(([k,v])=>`<div class="info-row"><span class="info-label">${k}</span><span class="info-value fw-bold">${v}</span></div>`).join('')}
     ${inW?`<div class="mt-3 p-3 text-center" style="background:rgba(244,67,54,.08);border-radius:10px;border:1px solid rgba(244,67,54,.25)">
       <div style="font-size:1.8rem;font-weight:800;color:var(--red)">${ar(Math.max(0,dLeft))}</div>
-      <small class="text-gray">يوم متبقي حتى انتهاء فترة السحب (${r.withdrawal_end})</small>
+      <small class="text-gray">يوم متبقي حتى انتهاء تأثير العلاج (${r.withdrawal_end})</small>
     </div>`:''}
     <div class="d-flex gap-2 justify-content-end mt-3">
       <button class="action-btn" onclick="closeModal()">إغلاق</button>
@@ -136,7 +136,7 @@ window.openHealthModal=function(id){
     </div>
     <div class="row g-2">
       <div class="col-6"><label>نهاية العلاج</label><input type="date" class="field" id="h-tend" value="${r.treatment_end||''}" onchange="calcWithdrawal()"></div>
-      <div class="col-6"><label>أيام السحب</label><input type="number" class="field" id="h-wdays" value="${r.withdrawal_days||0}" min="0" onchange="calcWithdrawal()"></div>
+      <div class="col-6"><label>أيام تأثير العلاج</label><input type="number" class="field" id="h-wdays" value="${r.withdrawal_days||0}" min="0" onchange="calcWithdrawal()"></div>
     </div>
     <div id="h-wshow" style="display:${r.withdrawal_end?'block':'none'};background:rgba(244,67,54,.06);border:1px solid rgba(244,67,54,.25);border-radius:10px;padding:8px 12px;margin-top:8px;font-size:.8rem;color:var(--red)">
       ⚠️ لا يجوز البيع أو الذبح أو استخدام المنتجات قبل: <strong id="h-wdate">${r.withdrawal_end||''}</strong>
@@ -186,7 +186,7 @@ window.submitHealth=async function(){
 };
 
 window.exportHealthCSV=function(){
-  const rows=[['الحيوان','السلالة','الجمالون','التاريخ','التشخيص','الدواء','الجرعة','أيام السحب','ينتهي السحب','الحالة','BCS'],
+  const rows=[['الحيوان','السلالة','الجمالون','التاريخ','التشخيص','الدواء','الجرعة','أيام تأثير العلاج','انتهاء تأثير العلاج','الحالة','BCS'],
     ...healthRecs.map(r=>[r.animal_tag||'',r.animal_breed||'',r.barn||'',r.date||'',r.diagnosis||'',r.medication||'',r.dosage||'',r.withdrawal_days||0,r.withdrawal_end||'',r.status==='active'?'نشط':'مكتمل',r.bcs||''])
   ];
   const csv=rows.map(r=>r.map(x=>`"${x}"`).join(',')).join('\n');

@@ -13,7 +13,8 @@
   <div id="page-header"></div>
   <div id="content"><div class="text-center py-5"><div class="spinner"></div></div></div>
   <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
-    © <span id="footer-year"></span> <span id="footer-farm"></span>
+    © <span id="footer-year"></span> <span id="footer-farm"></span><br>
+    <small style="font-size:.72rem;color:#555">إشراف: لواء أحمد رجب نوح &nbsp;|&nbsp; تطوير: جندي مصطفى محمد إبراهيم</small>
   </footer>
 </div>
 <script src="config.js"></script>
@@ -52,7 +53,8 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   renderPageHeader(
     'مرحباً '+getUser().name+' 👋',
     s.farmName+' — '+todayAr(),
-    can('animals')?'<a href="animals.html" class="action-btn primary"><i class="bi bi-plus-lg"></i> إضافة حيوان</a><a href="reports.html" class="action-btn"><i class="bi bi-graph-up"></i> التقارير</a>':''
+    '<a href="diary.html" class="action-btn" style="background:rgba(255,107,53,.1);border-color:rgba(255,107,53,.3);color:var(--orange)"><i class="bi bi-journal-text"></i> يومية المزرعة</a>'+
+    (can('animals')?'<button class="action-btn primary" onclick="openAddAnimalDash()"><i class="bi bi-plus-lg"></i> إضافة حيوان</button><button class="action-btn" onclick="openAddBirthsDash()" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.35);color:var(--yellow)"><i class="bi bi-stars"></i> مواليد</button><button class="action-btn danger" onclick="openMarkDeathDash()"><i class="bi bi-x-octagon"></i> نفوق</button>':'')
   );
 
   // Build breed stats for pie chart
@@ -65,13 +67,14 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   const PIE_COLORS=['#00e676','#2196f3','#ff6b35','#9c27b0','#ffc107','#f44336','#00bcd4','#8bc34a','#ff9800','#e91e63'];
 
   // Quick stats cards
+  const treating=health.filter(r=>r.status==='active').length;
   const quickStats=[
-    {l:'إجمالي القطيع',v:tG+tS+births,c:'var(--orange)',i:'bi-bar-chart-fill',href:'animals.html'},
-    {l:'الماعز',v:tG,c:'var(--green)',i:'bi-tropical-storm',href:'goats.html'},
-    {l:'الأغنام',v:tS,c:'var(--blue)',i:'bi-cloud-fill',href:'sheep.html'},
+    {l:'إجمالي القطيع',v:tG+tS+births,c:'var(--orange)',i:'bi-bar-chart-fill',href:'animals.html?status=alive'},
+    {l:'الماعز',v:tG,c:'var(--green)',i:'bi-tropical-storm',href:'animals.html?species=goat&purpose=tarbiya,tasmeen'},
+    {l:'الأغنام',v:tS,c:'var(--blue)',i:'bi-cloud-fill',href:'animals.html?species=sheep&purpose=tarbiya,tasmeen'},
     {l:'حوامل',v:pregnant,c:'var(--purple)',i:'bi-diagram-2',href:'breeding.html'},
-    {l:'ولدات الماعز',v:goatBirths,c:'var(--green)',i:'bi-stars',href:'goats.html'},
-    {l:'ولدات الأغنام',v:sheepBirths,c:'var(--blue)',i:'bi-stars',href:'sheep.html'},
+    {l:'ولدات الماعز',v:goatBirths,c:'var(--green)',i:'bi-stars',href:'animals.html?species=goat&purpose=birth'},
+    {l:'ولدات الأغنام',v:sheepBirths,c:'var(--blue)',i:'bi-stars',href:'animals.html?species=sheep&purpose=birth'},
   ];
 
   // Build HTML
@@ -151,6 +154,93 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     if(wEl)wEl.innerHTML='<div class="d-flex align-items-center gap-3 flex-wrap"><div style="font-size:2rem">'+emoji+'</div><div><div style="font-size:1.4rem;font-weight:700;color:'+(isHot?'var(--red)':isCold?'var(--blue)':'var(--green)')+'">'+ar(temp)+'°م</div><div style="font-size:.78rem;color:var(--gray)">'+desc+' • رطوبة '+ar(humidity)+'٪ • يبدو كأنه '+ar(feels)+'°م</div></div>'+alertHtml+'</div>';
   }).catch(function(){});
 });
+
+// ── Dashboard Quick Actions ──────────────────────────────
+window.openAddAnimalDash=function(){
+  const s=getSettings();
+  showModal('<div class="farm-modal" onclick="event.stopPropagation()">'+
+    '<h4><i class="bi bi-plus-circle accent-text"></i> إضافة حيوان سريع</h4>'+
+    '<div class="row g-2">'+
+      '<div class="col-6"><label>النوع</label><select class="field" id="da-sp"><option value="goat">ماعز</option><option value="sheep">أغنام</option></select></div>'+
+      '<div class="col-6"><label>الغرض</label><select class="field" id="da-pur"><option value="tarbiya">تربية</option><option value="tasmeen">تسمين</option></select></div>'+
+    '</div>'+
+    '<label>السلالة</label><select class="field" id="da-breed">'+s.goatBreeds.map(b=>'<option>'+b+'</option>').join('')+'</select>'+
+    '<div class="row g-2">'+
+      '<div class="col-6"><label>الجنس</label><select class="field" id="da-gender"><option value="female">أنثى</option><option value="male">ذكر</option></select></div>'+
+      '<div class="col-6"><label>رقم الترقيم</label><input class="field" id="da-tag" placeholder="A-001"></div>'+
+    '</div>'+
+    '<label>الجمالون</label><select class="field" id="da-barn"><option value="">— غير محدد —</option><option>ج١ع١</option><option>ج١ع٢</option><option>ج٢ع١</option><option>ج٢ع٢</option><option>ج٣ع١</option><option>ج٣ع٢</option><option>ج٤ع١</option><option>ج٤ع٢</option><option>ج٥ع١</option><option>ج٥ع٢</option></select>'+
+    '<div class="d-flex gap-2 justify-content-end mt-3">'+
+      '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
+      '<button class="action-btn primary" onclick="submitAddAnimalDash()">حفظ</button>'+
+    '</div>'+
+  '</div>');
+};
+
+window.submitAddAnimalDash=async function(){
+  const sp=document.getElementById('da-sp').value;
+  const breed=document.getElementById('da-breed').value;
+  const gender=document.getElementById('da-gender').value;
+  const purpose=document.getElementById('da-pur').value;
+  const tag=document.getElementById('da-tag').value.trim();
+  const barn=document.getElementById('da-barn').value;
+  closeModal();toast('جاري الحفظ...','info');
+  try{
+    await fbPost('animals',{species:sp,breed,gender,purpose,status:'alive',tag:tag||null,barn:barn||null,birth_date:todayStr()});
+    await logActivity('add','animals','إضافة سريعة من الداشبورد: '+breed+' '+gender);
+    toast('تمت الإضافة');
+    setTimeout(()=>location.reload(),1000);
+  }catch(e){toast('فشل: '+e.message,'error');}
+};
+
+window.openAddBirthsDash=function(){
+  showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()">'+
+    '<h4><i class="bi bi-stars" style="color:var(--yellow)"></i> إضافة مواليد</h4>'+
+    '<div class="row g-2">'+
+      '<div class="col-6"><label>النوع</label><select class="field" id="db-sp"><option value="goat">ماعز</option><option value="sheep">أغنام</option></select></div>'+
+      '<div class="col-6"><label>الجنس</label><select class="field" id="db-g"><option value="female">أنثى</option><option value="male">ذكر</option></select></div>'+
+    '</div>'+
+    '<div class="row g-2">'+
+      '<div class="col-6"><label>الكمية</label><input type="number" class="field" id="db-qty" value="1" min="1"></div>'+
+      '<div class="col-6"><label>تاريخ الميلاد</label><input type="date" class="field" id="db-d" value="'+todayStr()+'"></div>'+
+    '</div>'+
+    '<div class="d-flex gap-2 justify-content-end mt-3">'+
+      '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
+      '<button class="action-btn primary" onclick="submitBirthsDash()">حفظ</button>'+
+    '</div>'+
+  '</div>');
+};
+window.submitBirthsDash=async function(){
+  const sp=document.getElementById('db-sp').value;
+  const g=document.getElementById('db-g').value;
+  const qty=+document.getElementById('db-qty').value||1;
+  const d=document.getElementById('db-d').value;
+  closeModal();toast('جاري الحفظ...','info');
+  let ok=0;
+  for(let i=0;i<qty;i++){try{await fbPost('animals',{species:sp,breed:'مواليد',gender:g,purpose:'birth',status:'alive',birth_date:d});ok++;}catch(e){}}
+  if(ok){await logActivity('add','animals','إضافة '+ar(ok)+' مواليد من الداشبورد');toast('تمت إضافة '+ar(ok)+' مواليد');setTimeout(()=>location.reload(),1000);}
+};
+window.openMarkDeathDash=async function(){
+  const animals2=await fbGet('animals');
+  const alive=animals2.filter(a=>a.status==='alive');
+  showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()">'+
+    '<h4 style="color:var(--red)"><i class="bi bi-x-octagon"></i> تسجيل نفوق</h4>'+
+    '<label>الحيوان</label><select class="field" id="dd-a"><option value="">— اختر —</option>'+
+    alive.slice(0,200).map(a=>'<option value="'+a._id+'">'+a.breed+(a.tag?' #'+a.tag:'')+(a.gender==='male'?' ذكر':' أنثى')+'</option>').join('')+
+    '</select>'+
+    '<label>التاريخ</label><input type="date" class="field" id="dd-d" value="'+todayStr()+'">'+
+    '<div class="d-flex gap-2 justify-content-end mt-3">'+
+      '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
+      '<button class="action-btn danger" onclick="submitDeathDash()">تسجيل</button>'+
+    '</div>'+
+  '</div>');
+};
+window.submitDeathDash=async function(){
+  const id=document.getElementById('dd-a').value;if(!id){toast('يرجى اختيار حيوان','error');return;}
+  closeModal();
+  try{await fbPatch('animals',id,{status:'dead',died_at:document.getElementById('dd-d').value});await logActivity('edit','animals','تسجيل نفوق من الداشبورد');toast('تم تسجيل النفوق');}
+  catch(e){toast('فشل: '+e.message,'error');}
+};
 </script>
 </body>
 </html>

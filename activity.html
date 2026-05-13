@@ -13,7 +13,8 @@
   <div id="page-header"></div>
   <div id="content"><div class="text-center py-5"><div class="spinner"></div></div></div>
   <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
-    © <span id="footer-year"></span> <span id="footer-farm"></span>
+    © <span id="footer-year"></span> <span id="footer-farm"></span><br>
+    <small style="font-size:.72rem;color:#555">إشراف: لواء أحمد رجب نوح &nbsp;|&nbsp; تطوير: جندي مصطفى محمد إبراهيم</small>
   </footer>
 </div>
 <script src="config.js"></script>
@@ -50,7 +51,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   renderPageHeader(
     '<i class="bi bi-clock-history accent-text"></i> سجل الأنشطة',
     'كل ما يحدث في التطبيق موثّق هنا',
-    `<button class="action-btn danger" onclick="clearOldLogs()"><i class="bi bi-trash"></i> مسح القديم (أكثر من 30 يوم)</button>`
+    (can('admin')?`<button class="action-btn primary" onclick="backupActivity()"><i class="bi bi-download"></i> نسخ احتياطية الآن</button><button class="action-btn danger" onclick="deleteAllActivity()"><i class="bi bi-trash-fill"></i> مسح الكل</button><button class="action-btn" onclick="clearOldLogs()"><i class="bi bi-clock-history"></i> مسح القديم</button>`:'')
   );
 
   renderLoading(document.getElementById('content'));
@@ -190,6 +191,35 @@ function renderActivityPage(){
     ${logs.length>200?`<div class="text-center py-3 text-gray" style="font-size:.82rem">يُعرض أول ${ar(200)} نشاط فقط — استخدم الفلاتر لتضييق النتائج</div>`:''}
   </div>`}`;
 }
+
+// Track if backup was done this session
+var _activityBackedUp=false;
+
+window.backupActivity=async function(){
+  if(!allLogs.length){toast('لا توجد أنشطة للنسخ','info');return;}
+  const rows=[['التاريخ','الوقت','المستخدم','الدور','الإجراء','القسم','التفاصيل']];
+  allLogs.forEach(l=>{rows.push([l.date||'',l.timestamp?.slice(11,19)||'',l.userName||'',ROLES[l.userRole]?.label||l.userRole||'',ACTION_CFG[l.action]?.label||l.action||'',RESOURCE_LABELS[l.resource]||l.resource||'',l.description||'']);});
+  const csv=rows.map(r=>r.map(v=>'"'+v+'"').join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
+  a.download='activity-backup-'+todayStr()+'.csv';a.click();
+  _activityBackedUp=true;
+  toast('تم حفظ النسخة الاحتياطية ('+ar(allLogs.length)+' سجل)');
+};
+
+window.deleteAllActivity=async function(){
+  if(!_activityBackedUp){
+    toast('⚠️ لا يمكن المسح قبل أخذ نسخة احتياطية. اضغط "نسخ احتياطية" أولاً','error');
+    return;
+  }
+  if(!confirm('مسح كل سجل الأنشطة؟\nتم أخذ النسخة الاحتياطية بالفعل.'))return;
+  toast('جاري المسح...','info');
+  let deleted=0;
+  for(const log of allLogs){try{await fbDelete('activity_log',log._id);deleted++;}catch(e){}}
+  toast('تم مسح '+ar(deleted)+' سجل');
+  allLogs=[];_activityBackedUp=false;
+  renderActivityPage();
+};
 
 window.clearOldLogs=async function(){
   if(!confirm('حذف الأنشطة الأقدم من 30 يوم؟'))return;

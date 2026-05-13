@@ -41,6 +41,7 @@ const NAV_PAGES=[
   {href:'finance.html',   icon:'bi-wallet2',           label:'مالية',       perm:'finance'},
   {href:'reports.html',   icon:'bi-graph-up',          label:'تقارير',      perm:'reports'},
   {href:'barns.html',      icon:'bi-grid-3x3-gap-fill', label:'الجمالونات',   perm:'animals'},
+  {href:'diary.html',      icon:'bi-journal-text',      label:'يومية المزرعة',perm:'dash'},
 ];
 const SIDEBAR_EXTRA=[
   {href:'#',                  icon:'bi-bell-fill',     label:'الإشعارات', onclick:'openNotificationsPopup()'},
@@ -204,9 +205,12 @@ window.openNotificationsPopup = async function(){
   try{
     const t=new Date();
     const today=t.toISOString().slice(0,10);
-    const [animals,vaccines,breeding,health,meds,feeds]=await Promise.all([
+    const u=getUser();
+    const isAdmin=u&&u.role==='admin';
+    const [animals,vaccines,breeding,health,meds,feeds,loginNotifs]=await Promise.all([
       fbGet('animals'),fbGet('vaccinations'),fbGet('breeding'),
-      fbGet('health'),fbGet('inventory_meds'),fbGet('inventory_feeds')
+      fbGet('health'),fbGet('inventory_meds'),fbGet('inventory_feeds'),
+      isAdmin?fbGet('login_notifications'):Promise.resolve([])
     ]);
 
     const notifs=[];
@@ -238,7 +242,7 @@ window.openNotificationsPopup = async function(){
     // 5. Withdrawal periods
     health.filter(r=>r.status==='active'&&r.withdrawal_end&&r.withdrawal_end>=today).forEach(r=>{
       const d=Math.ceil((new Date(r.withdrawal_end)-t)/86400000);
-      notifs.push({type:'danger',cat:'الصحة',icon:'bi-exclamation-triangle-fill',title:'فترة سحب: '+(r.animal_tag||r.animal_breed),msg:r.medication+' — يُمنع البيع حتى '+r.withdrawal_end+' ('+ar(d)+' يوم)',href:'health.html'});
+      notifs.push({type:'danger',cat:'الصحة',icon:'bi-exclamation-triangle-fill',title:'فترة سحب: '+(r.animal_tag||r.animal_breed),msg:r.medication+' — لا يُنصح بالبيع حتى انتهاء تأثير العلاج في '+r.withdrawal_end+' ('+ar(d)+' يوم)',href:'health.html'});
     });
 
     // 6. Expiring medicines
@@ -256,6 +260,14 @@ window.openNotificationsPopup = async function(){
     meds.filter(m=>+m.quantity<=+m.min_quantity&&+m.min_quantity>0).forEach(m=>{
       notifs.push({type:'warning',cat:'المخزن',icon:'bi-capsule',title:'مخزون دواء منخفض: '+m.name,msg:'المتبقي '+m.quantity+' '+(m.unit||'')+' — الحد الأدنى '+m.min_quantity,href:'inventory.html'});
     });
+
+    // 0. Login notifications for admin
+    if(isAdmin&&loginNotifs.length>0){
+      const today=new Date().toISOString().slice(0,10);
+      loginNotifs.filter(n=>n.date===today).slice(0,5).forEach(function(n){
+        notifs.push({type:'info',cat:'تسجيلات الدخول',icon:'bi-box-arrow-in-right',title:'دخل: '+n.userName,msg:n.roleLabel+' — '+n.timestamp?.slice(11,16)||'',href:'activity.html'});
+      });
+    }
 
     // 9. Recent deaths
     const recentDead=animals.filter(a=>a.status==='dead'&&a.died_at&&Math.floor((t-new Date(a.died_at))/86400000)<=3);
@@ -310,4 +322,19 @@ window.openNotificationsPopup = async function(){
     var body=document.getElementById('notif-modal-body');
     if(body)body.innerHTML='<div class="empty-state"><i class="bi bi-exclamation-triangle"></i><p>خطأ في تحميل الإشعارات: '+e.message+'</p></div>';
   }
+};
+// ── INFO TOOLTIPS (!) for calculations ──────────────────
+function infoTip(text){
+  return '<span class="info-tooltip" onclick="showInfoModal(this)" data-tip="'+encodeURIComponent(text)+'">!</span>';
+}
+window.showInfoModal=function(el){
+  const text=decodeURIComponent(el.getAttribute('data-tip'));
+  showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()" style="max-width:420px">'+
+    '<div class="d-flex align-items-center gap-2 mb-3">'+
+      '<div class="info-tooltip" style="width:28px;height:28px;font-size:.9rem">!</div>'+
+      '<h5 class="fw-bold mb-0">شرح العملية الحسابية</h5>'+
+    '</div>'+
+    '<div style="background:rgba(255,107,53,.06);border:1px solid rgba(255,107,53,.2);border-radius:12px;padding:14px;font-size:.88rem;line-height:1.7">'+text+'</div>'+
+    '<div class="d-flex justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">حسناً</button></div>'+
+  '</div>');
 };

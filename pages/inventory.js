@@ -87,7 +87,12 @@ function daysLeft(d){return Math.ceil((new Date(d)-new Date())/86400000);}
 window.showFCR=function(){
   showModal(`<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:460px">
     <h4><i class="bi bi-calculator accent-text"></i> حاسبة كفاءة التحويل الغذائي (FCR)</h4>
-    <p class="text-gray" style="font-size:.85rem">FCR = كمية العلف المستهلك ÷ الزيادة في الوزن</p>
+    <div style="background:rgba(255,107,53,.06);border-radius:10px;padding:10px 14px;font-size:.83rem;margin-bottom:12px">
+      <strong>FCR = كمية العلف المستهلك ÷ الزيادة في الوزن</strong><br>
+      <span class="text-gray">مثال: إذا أكل الحيوان 100 كجم علف وزاد وزنه 20 كجم، فالـ FCR = 100 ÷ 20 = 5</span><br>
+      <span class="text-gray">التقييم: أقل من 3 = ممتاز | 3-5 = جيد | 5-7 = مقبول | أكثر من 7 = ضعيف</span><br>
+      <span style="color:var(--orange)">كلما قل الرقم كان الحيوان أكثر كفاءة في تحويل العلف لوزن</span>
+    </div>
     <label>كمية العلف المستهلك (كجم)</label><input type="number" class="field" id="fcr-feed" step="0.1" min="0" placeholder="مثال: 100">
     <label>الزيادة في الوزن (كجم)</label><input type="number" class="field" id="fcr-weight" step="0.1" min="0" placeholder="مثال: 20">
     <label>عدد الأيام</label><input type="number" class="field" id="fcr-days" value="30" min="1">

@@ -14,7 +14,8 @@
   <div id="filters-bar" class="wonder-card mb-4"></div>
   <div id="content"><div class="text-center py-5"><div class="spinner"></div></div></div>
   <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
-    © <span id="footer-year"></span> <span id="footer-farm"></span>
+    © <span id="footer-year"></span> <span id="footer-farm"></span><br>
+    <small style="font-size:.72rem;color:#555">إشراف: لواء أحمد رجب نوح &nbsp;|&nbsp; تطوير: جندي مصطفى محمد إبراهيم</small>
   </footer>
 </div>
 <script src="config.js"></script>
@@ -26,6 +27,7 @@ const params=new URLSearchParams(location.search);
 if(params.get('species'))fSpecies=params.get('species');
 if(params.get('purpose'))fPurpose=params.get('purpose');
 if(params.get('breed'))fSearch=params.get('breed');
+if(params.get('status'))fStatus=params.get('status');
 
 document.addEventListener('DOMContentLoaded',async()=>{
   if(!requireAuth())return;
@@ -271,6 +273,10 @@ function openResetModal(){
         '<input type="checkbox" id="reset-breeding" style="accent-color:var(--green)">'+
         '<div><div class="fw-bold">مسح سجلات التكاثر المنتهية</div><small class="text-gray">ولدت أو فشل فقط — ليس الحوامل</small></div>'+
       '</label>'+
+      '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;background:rgba(244,67,54,.1);border-radius:10px;border:2px solid rgba(244,67,54,.4)">'+
+        '<input type="checkbox" id="reset-all" style="accent-color:var(--red)">'+
+        '<div><div class="fw-bold red-text">⚠️ إعادة تعيين كل بيانات المزرعة</div><small style="color:var(--red)">يمسح الكل: حيوانات، صحة، تكاثر، تحصين، مالية، مخزن، أنشطة</small></div>'+
+      '</label>'+
     '</div>'+
     '<div style="background:rgba(156,39,176,.06);border:1px solid rgba(156,39,176,.25);border-radius:10px;padding:10px 14px;font-size:.8rem;color:var(--purple)">'+
       '<i class="bi bi-exclamation-triangle-fill me-1"></i>هذا الإجراء لا يمكن التراجع عنه'+
@@ -312,6 +318,20 @@ window.submitReset=async function(){
   if(resetBreeding){
     try{const bs=await fbGet('breeding');for(const b of bs){if(b.status==='born'||b.status==='failed'){await fbDelete('breeding',b._id);done++;}}}catch(e){}
     await logActivity('delete','breeding','مسح سجلات التكاثر المنتهية');
+  }
+  if(document.getElementById('reset-all')?.checked){
+    if(!confirm('تحذير نهائي: سيتم مسح كل بيانات المزرعة تماماً!\nاكتب "تأكيد" في المربع التالي للمتابعة')){return;}
+    const conf=prompt('اكتب "تأكيد" للمتابعة:');
+    if(conf!=='تأكيد'){toast('تم الإلغاء','info');return;}
+    toast('جاري مسح كل البيانات...','info');
+    const tables=['animals','health','breeding','vaccinations','finance','inventory_meds','inventory_feeds','inventory_equipment','activity_log'];
+    for(const table of tables){
+      try{const recs=await fbGet(table);for(const r of recs){try{await fbDelete(table,r._id);done++;}catch(e){}}}catch(e){}
+    }
+    await logActivity('delete','system','إعادة تعيين كاملة لكل بيانات المزرعة');
+    toast('تم مسح '+ar(done)+' سجل من كل البيانات');
+    setTimeout(()=>location.reload(),1500);
+    return;
   }
   toast('تم تنفيذ العملية على '+ar(done)+' سجل');
   animals=await fbGet('animals');renderFilters();renderAnimals();

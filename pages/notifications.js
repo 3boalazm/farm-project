@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   // 5. Active withdrawal periods
   health.filter(r=>r.status==='active'&&r.withdrawal_end&&r.withdrawal_end>=today).forEach(r=>{
     const d=Math.ceil((new Date(r.withdrawal_end)-t)/86400000);
-    notifs.push({type:'danger',cat:'الصحة',icon:'bi-exclamation-triangle-fill',title:`فترة سحب نشطة: ${r.animal_tag||r.animal_breed}`,msg:`${r.medication} — يُمنع البيع حتى ${r.withdrawal_end} (متبقي ${ar(d)} يوم)`,date:r.withdrawal_end});
+    notifs.push({type:'danger',cat:'الصحة',icon:'bi-exclamation-triangle-fill',title:`فترة تأثير علاج نشط: ${r.animal_tag||r.animal_breed}`,msg:`${r.medication} — لا يُنصح بالبيع حتى انتهاء تأثير العلاج في ${r.withdrawal_end} (متبقي ${ar(d)} يوم)`,date:r.withdrawal_end});
   });
 
   // 6. Expiring medicines

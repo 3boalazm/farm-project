@@ -13,7 +13,8 @@
   <div id="page-header"></div>
   <div id="content"><div class="text-center py-5"><div class="spinner"></div></div></div>
   <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
-    © <span id="footer-year"></span> <span id="footer-farm"></span>
+    © <span id="footer-year"></span> <span id="footer-farm"></span><br>
+    <small style="font-size:.72rem;color:#555">إشراف: لواء أحمد رجب نوح &nbsp;|&nbsp; تطوير: جندي مصطفى محمد إبراهيم</small>
   </footer>
 </div>
 <script src="config.js"></script>
@@ -83,6 +84,17 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     <div class="col-6 col-md-3"><div class="stat-mini"><div class="num red-text">${ar(dead.length)}</div><div class="lbl">النافق</div></div></div>
   </div>
 
+  <!-- Filtered Links -->
+  <div class="d-flex gap-2 flex-wrap mb-3">
+    <a href="animals.html?species=sheep&status=alive&purpose=tarbiya,tasmeen" class="action-btn primary sm"><i class="bi bi-list-ul"></i> كل الأغنام</a>
+    <a href="animals.html?species=sheep&purpose=birth" class="action-btn sm" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.3);color:var(--yellow)"><i class="bi bi-stars"></i> المواليد</a>
+    <a href="animals.html?species=sheep&purpose=tasmeen" class="action-btn sm" style="background:rgba(255,107,53,.1);border-color:rgba(255,107,53,.3);color:var(--orange)"><i class="bi bi-graph-up"></i> التسمين</a>
+    <a href="animals.html?species=sheep&status=dead" class="action-btn danger sm"><i class="bi bi-x-octagon"></i> النافق</a>
+    <a href="breeding.html" class="action-btn sm" style="background:rgba(156,39,176,.1);border-color:rgba(156,39,176,.3);color:var(--purple)"><i class="bi bi-diagram-2-fill"></i> التكاثر</a>
+    <a href="health.html" class="action-btn sm" style="background:rgba(244,67,54,.1);border-color:rgba(244,67,54,.3);color:var(--red)"><i class="bi bi-heart-pulse-fill"></i> الصحة</a>
+  </div>
+  <div id="pie-container-sheep" class="wonder-card mb-4 text-center" style="max-width:350px"></div>
+
   <h6 class="fw-bold mb-3"><i class="bi bi-grid-3x3-gap-fill accent-text"></i> السلالات</h6>
   <div class="row g-3 mb-4">${breedsHtml}</div>
 
@@ -96,6 +108,27 @@ document.addEventListener('DOMContentLoaded', async ()=>{
 
   // Store animals for modals
   window._animals=animals;
+  // Render pie chart
+  const breedDatasheep=s.sheepBreeds.map(b=>({b,cnt:alive.filter(a=>a.breed===b).length})).filter(x=>x.cnt>0);
+  const totalsheep=breedDatasheep.reduce((t,x)=>t+x.cnt,0)||1;
+  const COLORS=['#00e676','#2196f3','#ff6b35','#9c27b0','#ffc107','#f44336'];
+  if(breedDatasheep.length){
+    const size=180,cx=90,cy=90,r=70,ir=30;let sa=0;let paths='',legend='';
+    breedDatasheep.forEach(function(x,i){
+      const angle=(x.cnt/totalsheep)*2*Math.PI;if(angle>=2*Math.PI-0.001)return;
+      const ea=sa+angle,lg=angle>Math.PI?1:0;
+      const x1=cx+r*Math.cos(sa-Math.PI/2),y1=cy+r*Math.sin(sa-Math.PI/2);
+      const x2=cx+r*Math.cos(ea-Math.PI/2),y2=cy+r*Math.sin(ea-Math.PI/2);
+      const xi=cx+ir*Math.cos(sa-Math.PI/2),yi=cy+ir*Math.sin(sa-Math.PI/2);
+      const xi2=cx+ir*Math.cos(ea-Math.PI/2),yi2=cy+ir*Math.sin(ea-Math.PI/2);
+      paths+='<path d="M '+xi+' '+yi+' A '+ir+' '+ir+' 0 '+lg+' 1 '+xi2+' '+yi2+' L '+x2+' '+y2+' A '+r+' '+r+' 0 '+lg+' 0 '+x1+' '+y1+' Z" fill="'+COLORS[i%COLORS.length]+'" opacity=".85" stroke="#141414" stroke-width="2"></path>';
+      legend+='<span style="font-size:.7rem;display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:'+COLORS[i%COLORS.length]+';display:inline-block"></span>'+x.b+' '+ar(x.cnt)+'</span>';
+      sa=ea;
+    });
+    const pc=document.getElementById('pie-container-sheep');
+    if(pc)pc.innerHTML='<h6 class="fw-bold mb-2">توزيع السلالات</h6><svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'">'+paths+'<circle cx="'+cx+'" cy="'+cy+'" r="'+ir+'" fill="#141414"/><text x="'+cx+'" y="'+(cy-6)+'" text-anchor="middle" fill="#e8e8e8" font-size="18" font-weight="700" font-family="Lexend">'+ar(totalsheep)+
+    '</text><text x="'+cx+'" y="'+(cy+12)+'" text-anchor="middle" fill="#888" font-size="10" font-family="Cairo">رأس</text></svg><div style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:8px">'+legend+'</div>';
+  }
 });
 
 function openAddAnimal(species){
