@@ -37,6 +37,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   const alive=animals.filter(a=>a.status==='alive');
   const goats=alive.filter(a=>a.species==='sheep'&&a.purpose!=='birth');
   const births=alive.filter(a=>a.species==='sheep'&&a.purpose==='birth');
+  const allSpeciesAnimals=alive.filter(a=>a.species==='sheep');
   const dead=animals.filter(a=>a.status==='dead'&&a.species==='sheep');
   const sorted=[...s.sheepBreeds].sort((a,b)=>breedStats(animals,b).total-breedStats(animals,a).total);
 
@@ -111,7 +112,9 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   // Render pie chart
   const breedDatasheep=s.sheepBreeds.map(b=>({b,cnt:alive.filter(a=>a.breed===b).length})).filter(x=>x.cnt>0);
   const totalsheep=breedDatasheep.reduce((t,x)=>t+x.cnt,0)||1;
-  const COLORS=['#00e676','#2196f3','#ff6b35','#9c27b0','#ffc107','#f44336'];
+  const _savedColors=JSON.parse(localStorage.getItem('breed_colors')||'{}');
+  const _defColors=['#00e676','#2196f3','#ff6b35','#9c27b0','#ffc107','#f44336','#00bcd4','#8bc34a'];
+  const COLORS=breedDatasheep.map((x,i)=>_savedColors[x.b]||_defColors[i%_defColors.length]);
   if(breedDatasheep.length){
     const size=180,cx=90,cy=90,r=70,ir=30;let sa=0;let paths='',legend='';
     breedDatasheep.forEach(function(x,i){

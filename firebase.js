@@ -50,6 +50,7 @@ const ROLES={
   supervisor: {label:'مشرف',       icon:'bi-person-badge-fill', color:'var(--blue)'},
   vet:        {label:'طبيب بيطري', icon:'bi-heart-pulse-fill',  color:'var(--green)'},
   worker:     {label:'عامل',       icon:'bi-person-fill',       color:'var(--gray)'},
+  visitor:    {label:'زائر',       icon:'bi-eye-fill',          color:'#90a4ae'},
 };
 
 const ROLE_PERMS={
@@ -57,6 +58,7 @@ const ROLE_PERMS={
   supervisor: p=>!['users','finance','activity'].includes(p),
   vet:        p=>['health','vaccine','breeding','dash','notifications'].includes(p),
   worker:     p=>['dash','animals','notifications'].includes(p),
+  visitor:    p=>['dash','animals','goats','sheep'].includes(p),
 };
 
 function can(page){

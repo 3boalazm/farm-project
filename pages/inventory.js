@@ -85,27 +85,65 @@ function renderEquipTable(){
 function daysLeft(d){return Math.ceil((new Date(d)-new Date())/86400000);}
 
 window.showFCR=function(){
-  showModal(`<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:460px">
-    <h4><i class="bi bi-calculator accent-text"></i> حاسبة كفاءة التحويل الغذائي (FCR)</h4>
-    <div style="background:rgba(255,107,53,.06);border-radius:10px;padding:10px 14px;font-size:.83rem;margin-bottom:12px">
-      <strong>FCR = كمية العلف المستهلك ÷ الزيادة في الوزن</strong><br>
-      <span class="text-gray">مثال: إذا أكل الحيوان 100 كجم علف وزاد وزنه 20 كجم، فالـ FCR = 100 ÷ 20 = 5</span><br>
-      <span class="text-gray">التقييم: أقل من 3 = ممتاز | 3-5 = جيد | 5-7 = مقبول | أكثر من 7 = ضعيف</span><br>
-      <span style="color:var(--orange)">كلما قل الرقم كان الحيوان أكثر كفاءة في تحويل العلف لوزن</span>
-    </div>
-    <label>كمية العلف المستهلك (كجم)</label><input type="number" class="field" id="fcr-feed" step="0.1" min="0" placeholder="مثال: 100">
-    <label>الزيادة في الوزن (كجم)</label><input type="number" class="field" id="fcr-weight" step="0.1" min="0" placeholder="مثال: 20">
-    <label>عدد الأيام</label><input type="number" class="field" id="fcr-days" value="30" min="1">
-    <div id="fcr-result" class="mt-3 p-3 text-center" style="background:rgba(0,230,118,.06);border-radius:12px;display:none">
-      <div class="summary-number" id="fcr-val" style="color:var(--green)">—</div>
-      <small class="text-gray">FCR (كلما قل كان أفضل)</small>
-      <div id="fcr-rating" class="mt-2" style="font-size:.85rem"></div>
-    </div>
-    <div class="d-flex gap-2 justify-content-end mt-3">
-      <button class="action-btn" onclick="closeModal()">إغلاق</button>
-      <button class="action-btn primary" onclick="calcFCR()"><i class="bi bi-calculator"></i> احسب</button>
-    </div>
-  </div>`);
+  var feedTypes=[
+    {id:'concentrate', label:'علف مركز', unit:'كجم'},
+    {id:'clover_dry',  label:'برسيم جاف (دريس)', unit:'كجم'},
+    {id:'clover_green',label:'برسيم أخضر', unit:'كجم'},
+    {id:'peanut',      label:'عرش فول سوداني', unit:'كجم'},
+    {id:'panicum',     label:'بونيكام', unit:'كجم'},
+    {id:'salt',        label:'قوالب أملاح وفيتامينات', unit:'قرص'},
+    {id:'custom1',     label:'إضافة يدوية ١', unit:'كجم'},
+    {id:'custom2',     label:'إضافة يدوية ٢', unit:'كجم'},
+  ];
+
+  showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:520px;max-height:92vh;overflow-y:auto">'+
+    '<h4><i class="bi bi-calculator accent-text"></i> حاسبة كفاءة التحويل الغذائي (FCR)</h4>'+
+    '<div style="background:rgba(255,107,53,.06);border-radius:10px;padding:10px 14px;font-size:.82rem;margin-bottom:12px">'+
+      '<strong>FCR = إجمالي العلف المستهلك ÷ الزيادة في الوزن</strong><br>'+
+      '<span class="text-gray">كلما قل الرقم كان الحيوان أكثر كفاءة: أقل من 3 = ممتاز | 3-5 = جيد | 5-7 = مقبول | أكثر من 7 = ضعيف</span>'+
+    '</div>'+
+    '<h6 class="fw-bold mb-2">أنواع الغذاء المقدم (كجم/يوم)</h6>'+
+    '<div class="row g-2 mb-3" id="fcr-feeds">'+
+      feedTypes.map(f=>'<div class="col-6"><label class="text-gray" style="font-size:.72rem">'+f.label+'</label><input type="number" class="field fcr-feed-input" data-unit="'+f.unit+'" id="fcr-'+f.id+'" step="0.1" min="0" placeholder="0" value="0"></div>').join('')+
+    '</div>'+
+    '<div class="row g-2">'+
+      '<div class="col-6"><label>إجمالي الأيام</label><input type="number" class="field" id="fcr-days" value="30" min="1"></div>'+
+      '<div class="col-6"><label>الزيادة في الوزن (كجم)</label><input type="number" class="field" id="fcr-weight" step="0.1" min="0" placeholder="مثال: 20"></div>'+
+    '</div>'+
+    '<div id="fcr-result" class="mt-3 p-3 text-center" style="background:rgba(0,230,118,.06);border-radius:12px;display:none">'+
+      '<div style="display:flex;justify-content:space-around;flex-wrap:wrap;gap:10px;margin-bottom:10px">'+
+        '<div class="stat-mini" style="flex:1"><div class="num accent-text" id="fcr-total-feed">—</div><div class="lbl">إجمالي العلف (كجم)</div></div>'+
+        '<div class="stat-mini" style="flex:1"><div class="num green-text" id="fcr-val">—</div><div class="lbl">معامل FCR</div></div>'+
+      '</div>'+
+      '<div id="fcr-rating" class="mt-2" style="font-size:.88rem"></div>'+
+      '<div id="fcr-breakdown" class="mt-3" style="font-size:.78rem;text-align:right"></div>'+
+    '</div>'+
+    '<div class="d-flex gap-2 justify-content-end mt-3">'+
+      '<button class="action-btn" onclick="closeModal()">إغلاق</button>'+
+      '<button class="action-btn primary" onclick="window._calcFCR()"><i class="bi bi-calculator"></i> احسب</button>'+
+    '</div>'+
+  '</div>');
+};
+
+window._calcFCR=function(){
+  const days=+document.getElementById('fcr-days').value||1;
+  const weight=+document.getElementById('fcr-weight').value||0;
+  if(!weight){toast('يرجى إدخال الزيادة في الوزن','error');return;}
+  const inputs=document.querySelectorAll('.fcr-feed-input');
+  let totalPerDay=0;let breakdown='<strong>تفاصيل العلف اليومي:</strong><br>';let hasAny=false;
+  inputs.forEach(inp=>{
+    const v=+inp.value||0;const label=inp.previousElementSibling?.textContent||'';
+    if(v>0){totalPerDay+=v;breakdown+=label+': '+v+' '+inp.dataset.unit+'/يوم<br>';hasAny=true;}
+  });
+  if(!hasAny){toast('يرجى إدخال كمية علف واحدة على الأقل','error');return;}
+  const totalFeed=totalPerDay*days;
+  const fcr=(totalFeed/weight).toFixed(2);
+  const el=document.getElementById('fcr-result');el.style.display='block';
+  document.getElementById('fcr-total-feed').textContent=ar(Math.round(totalFeed));
+  document.getElementById('fcr-val').textContent=fcr;
+  const rating=fcr<=3?'ممتاز 🟢 — كفاءة عالية جداً':fcr<=5?'جيد 🟡 — كفاءة طبيعية':fcr<=7?'مقبول 🟠 — يمكن التحسين':'ضعيف 🔴 — راجع نوع الغذاء والكميات';
+  document.getElementById('fcr-rating').textContent='التقييم: '+rating;
+  document.getElementById('fcr-breakdown').innerHTML=breakdown;
 };
 window.calcFCR=function(){
   const feed=+document.getElementById('fcr-feed').value;const weight=+document.getElementById('fcr-weight').value;

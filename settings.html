@@ -47,6 +47,20 @@ function renderSettings(){
     </div>
   </div>
 
+  <!-- Theme & Display -->
+  <div class="settings-section">
+    <h6 class="fw-bold mb-3"><i class="bi bi-palette-fill accent-text"></i> المظهر والعرض</h6>
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+      <div>
+        <div class="fw-bold mb-1">الوضع اللوني</div>
+        <small class="text-gray">تبديل بين الوضع الداكن والفاتح</small>
+      </div>
+      <button class="action-btn primary" onclick="toggleTheme()" id="settings-theme-btn">
+        <i class="bi bi-circle-half"></i> <span id="settings-theme-label">تبديل الوضع</span>
+      </button>
+    </div>
+  </div>
+
   <!-- Farm Info -->
   <div class="settings-section">
     <h6 class="fw-bold mb-3"><i class="bi bi-building accent-text"></i> معلومات المزرعة</h6>
@@ -65,6 +79,14 @@ function renderSettings(){
     <h6 class="fw-bold mb-3"><i class="bi bi-tropical-storm accent-text"></i> سلالات الماعز</h6>
     <div id="goat-chips" class="mb-3">${s.goatBreeds.map(b=>`<span class="tag-chip">🐐 ${b}<button class="rm" onclick="removeBreed('goat','${b}')"><i class="bi bi-x-lg"></i></button></span>`).join('')}</div>
     <div class="d-flex gap-2"><input class="field" id="new-goat" placeholder="أضف سلالة..." style="flex:1"><button class="action-btn primary" onclick="addBreed('goat')"><i class="bi bi-plus-lg"></i></button></div>
+  </div>
+
+  <!-- Breed Colors -->
+  <div class="settings-section">
+    <h6 class="fw-bold mb-3"><i class="bi bi-palette accent-text"></i> ألوان السلالات في الرسم البياني</h6>
+    <div id="breed-colors-grid" class="row g-2"></div>
+    <small class="text-gray d-block mt-2">اختر لون كل سلالة ليظهر في الرسم الدائري</small>
+    <button class="action-btn primary mt-2" onclick="saveBreedColors()"><i class="bi bi-floppy-fill"></i> حفظ الألوان</button>
   </div>
 
   <!-- Sheep Breeds -->
@@ -115,6 +137,39 @@ window.removeBreed=function(type,name){
   if(arr.length<=1){toast('يجب الإبقاء على سلالة واحدة','error');return;}
   arr.splice(arr.indexOf(name),1);saveSettings(s);renderSettings();toast('تم الحذف');
 };
+
+// Render breed color picker
+function renderBreedColors(){
+  const s=getSettings();
+  const savedColors=JSON.parse(localStorage.getItem('breed_colors')||'{}');
+  const allBreeds=[...s.goatBreeds.map(b=>({b,sp:'goat'})),...s.sheepBreeds.map(b=>({b,sp:'sheep'}))];
+  const defaultColors=['#00e676','#2196f3','#ff6b35','#9c27b0','#ffc107','#f44336','#00bcd4','#8bc34a'];
+  const grid=document.getElementById('breed-colors-grid');
+  if(!grid)return;
+  grid.innerHTML=allBreeds.map((item,i)=>{
+    const saved=savedColors[item.b]||defaultColors[i%defaultColors.length];
+    return '<div class="col-6 col-md-4 col-lg-3"><div class="d-flex align-items-center gap-2 p-2" style="background:rgba(255,255,255,.04);border-radius:10px;border:1px solid #2a2a2a">'+
+      '<input type="color" value="'+saved+'" data-breed="'+item.b+'" style="width:36px;height:36px;border:none;border-radius:8px;cursor:pointer;background:none;padding:0">'+
+      '<div style="font-size:.82rem;font-weight:600">'+item.b+'</div>'+
+    '</div></div>';
+  }).join('');
+}
+window.saveBreedColors=function(){
+  const colors={};
+  document.querySelectorAll('[data-breed]').forEach(inp=>{colors[inp.dataset.breed]=inp.value;});
+  localStorage.setItem('breed_colors',JSON.stringify(colors));
+  toast('تم حفظ الألوان');
+};
+
+// Update theme label
+function updateSettingsThemeLabel(){
+  const lbl=document.getElementById('settings-theme-label');
+  if(lbl)lbl.textContent=document.body.classList.contains('light-mode')?'الوضع الداكن':'الوضع الفاتح';
+}
+
+// Initialize
+renderBreedColors();
+updateSettingsThemeLabel();
 </script>
 </body>
 </html>

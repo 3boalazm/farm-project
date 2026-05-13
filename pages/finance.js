@@ -112,6 +112,7 @@ window.openFinModal=function(id){
       <div class="col-6"><label>المبلغ (${s.currency}) *</label><input type="number" class="field" id="f-amount" value="${r.amount||''}" min="0" step="0.01"></div>
       <div class="col-6"><label>الجمالون</label><select class="field" id="f-barn">${barns.map(b=>`<option value="${b}" ${r.barn===b?'selected':''}>${b||'— الكل —'}</option>`).join('')}</select></div>
     </div>
+    <label>القائم بالمعاملة</label><input class="field" id="f-by" value="${r.added_by||getUser()?.name||''}" placeholder="اسم الشخص">
     <label>الوصف</label><input class="field" id="f-desc" value="${r.description||''}" placeholder="تفاصيل المعاملة">
     <div class="d-flex gap-2 justify-content-end mt-3">
       <button class="action-btn" onclick="closeModal()">إلغاء</button>
@@ -125,7 +126,7 @@ window.updateFinCats=function(){const t=document.getElementById('f-type').value;
 window.submitFin=async function(){
   const amount=+document.getElementById('f-amount').value;const cat=document.getElementById('f-cat').value;
   if(!amount||!cat){toast('يرجى إدخال المبلغ والفئة','error');return;}
-  const data={date:document.getElementById('f-date').value,type:document.getElementById('f-type').value,category:cat,amount,description:document.getElementById('f-desc').value.trim()||null,barn:document.getElementById('f-barn').value||null};
+  const data={date:document.getElementById('f-date').value,type:document.getElementById('f-type').value,category:cat,amount,description:document.getElementById('f-desc').value.trim()||null,barn:document.getElementById('f-barn').value||null,added_by:document.getElementById('f-by')?.value.trim()||getUser()?.name||null};
   closeModal();toast('جاري الحفظ...','info');
   try{
     if(editFinId){await fbPatch('finance',editFinId,data);await logActivity('edit','finance',`تعديل معاملة: ${cat} ${amount}`);}

@@ -44,7 +44,7 @@ const NAV_PAGES=[
   {href:'diary.html',      icon:'bi-journal-text',      label:'يومية المزرعة',perm:'dash'},
 ];
 const SIDEBAR_EXTRA=[
-  {href:'#',                  icon:'bi-bell-fill',     label:'الإشعارات', onclick:'openNotificationsPopup()'},
+  {href:'notifications.html', icon:'bi-bell-fill',     label:'الإشعارات'},
   {href:'barns.html',         icon:'bi-grid-3x3-gap-fill', label:'الجمالونات والعنابر', perm:'animals'},
   {href:'activity.html',      icon:'bi-clock-history', label:'سجل الأنشطة', perm:'admin'},
   {href:'users.html',         icon:'bi-people-fill',   label:'المستخدمون',  perm:'users'},
@@ -102,6 +102,85 @@ function renderNavbar(activePage=''){
   <div id="toast-wrap"></div>
   <div id="modal-root"></div>`;
   document.body.insertAdjacentHTML('afterbegin', html);
+}
+
+// ── Theme Toggle ────────────────────────────────────────
+function initTheme(){
+  const saved=localStorage.getItem('farm_theme')||'dark';
+  if(saved==='light'){document.body.classList.add('light-mode');}
+  updateThemeIcon();
+}
+function toggleTheme(){
+  document.body.classList.toggle('light-mode');
+  localStorage.setItem('farm_theme',document.body.classList.contains('light-mode')?'light':'dark');
+  updateThemeIcon();
+}
+function updateThemeIcon(){
+  const ic=document.getElementById('theme-icon');
+  if(!ic)return;
+  const isLight=document.body.classList.contains('light-mode');
+  ic.className='bi bi-'+(isLight?'sun-fill':'moon-fill');
+}
+
+// ── Notifications Dropdown (bell icon) ──────────────────
+let _notifOpen=false;
+function toggleNotifDropdown(e){
+  e.stopPropagation();
+  const dd=document.getElementById('notif-dropdown');
+  if(!dd)return;
+  _notifOpen=!_notifOpen;
+  if(_notifOpen){
+    dd.style.display='block';
+    loadNotifDropdown();
+  }else{dd.style.display='none';}
+}
+document.addEventListener('click',()=>{
+  if(!_notifOpen)return;
+  const dd=document.getElementById('notif-dropdown');
+  if(dd)dd.style.display='none';
+  _notifOpen=false;
+});
+async function loadNotifDropdown(){
+  const dd=document.getElementById('notif-dropdown');
+  if(!dd)return;
+  dd.innerHTML='<div class="notif-dropdown-header"><span class="fw-bold"><i class="bi bi-bell-fill accent-text me-2"></i>الإشعارات</span><a href="notifications.html" style="font-size:.78rem;color:var(--gray)">عرض الكل</a></div><div class="notif-dropdown-body"><div class="text-center py-3"><div class="spinner" style="width:22px;height:22px;border-width:2px"></div></div></div>';
+  try{
+    const t=new Date();const today=t.toISOString().slice(0,10);
+    const [vaccines,breeding,health,meds,feeds,loginN]=await Promise.all([
+      fbGet('vaccinations'),fbGet('breeding'),fbGet('health'),
+      fbGet('inventory_meds'),fbGet('inventory_feeds'),
+      getUser()?.role==='admin'?fbGet('login_notifications'):Promise.resolve([])
+    ]);
+    const notifs=[];
+    // Login notifications
+    loginN.filter(n=>n.date===today).slice(0,3).forEach(n=>{notifs.push({type:'info',icon:'bi-box-arrow-in-right',title:'دخل: '+n.userName,msg:n.roleLabel,href:'activity.html'});});
+    // Upcoming births
+    breeding.filter(r=>r.status==='pregnant'&&r.expected_birth).forEach(r=>{
+      const d=Math.ceil((new Date(r.expected_birth)-t)/86400000);
+      if(d>=0&&d<=7)notifs.push({type:d<=2?'danger':'warning',icon:'bi-stars',title:'ولادة متوقعة',msg:(r.female_tag||r.female_breed)+' — بعد '+ar(d)+' يوم',href:'breeding.html'});
+    });
+    // Overdue vaccines
+    vaccines.filter(v=>v.status==='overdue').slice(0,2).forEach(v=>{notifs.push({type:'danger',icon:'bi-bandaid-fill',title:'تحصين متأخر: '+v.name,msg:v.target_section||'—',href:'vaccine.html'});});
+    // Withdrawal
+    health.filter(r=>r.status==='active'&&r.treatment_effect_end&&r.treatment_effect_end>=today).slice(0,2).forEach(r=>{notifs.push({type:'danger',icon:'bi-exclamation-triangle-fill',title:'تأثير علاج نشط',msg:(r.animal_tag||r.animal_breed)+'حتى '+r.treatment_effect_end,href:'health.html'});});
+    // Low stock
+    meds.filter(m=>+m.quantity<=+m.min_quantity&&+m.min_quantity>0).slice(0,2).forEach(m=>{notifs.push({type:'warning',icon:'bi-capsule',title:'مخزون منخفض: '+m.name,msg:'متبقي '+m.quantity,href:'inventory.html'});});
+    feeds.filter(f=>+f.quantity<=+f.min_quantity&&+f.min_quantity>0).slice(0,2).forEach(f=>{notifs.push({type:'warning',icon:'bi-bag-fill',title:'علف منخفض: '+f.name,msg:'متبقي '+f.quantity+' '+f.unit,href:'inventory.html'});});
+
+    const catC={danger:'var(--red)',warning:'var(--orange)',info:'var(--blue)',success:'var(--green)'};
+    const body=dd.querySelector('.notif-dropdown-body');
+    if(body){
+      body.innerHTML=notifs.length===0?'<div class="text-center py-4 text-gray" style="font-size:.85rem"><i class="bi bi-check-circle-fill green-text d-block mb-2" style="font-size:1.5rem"></i>لا توجد تنبيهات 🎉</div>':
+        notifs.slice(0,8).map(n=>'<div class="notif-item-sm n-'+n.type+'" onclick="if(''+n.href+'')window.location.href=''+n.href+''">'+
+          '<div style="width:28px;height:28px;border-radius:50%;background:'+catC[n.type]+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="bi '+n.icon+'" style="font-size:.8rem;color:'+catC[n.type]+'"></i></div>'+
+          '<div><div style="font-size:.82rem;font-weight:700">'+n.title+'</div><div style="font-size:.75rem;color:var(--gray)">'+n.msg+'</div></div>'+
+        '</div>').join('');
+      // Update badge
+      const cnt=notifs.filter(n=>n.type==='danger').length;
+      const b=document.getElementById('bell-badge');
+      if(b){if(cnt>0){b.style.display='flex';b.textContent=cnt>9?'9+':cnt;}else b.style.display='none';}
+    }
+  }catch(e){console.error('notif dropdown:',e);}
 }
 
 function openSidebar(){

@@ -53,20 +53,25 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   const sheep=alive.filter(a=>a.species==='sheep'&&a.purpose!=='birth');
   const goatBirths=alive.filter(a=>a.species==='goat'&&a.purpose==='birth');
   const sheepBirths=alive.filter(a=>a.species==='sheep'&&a.purpose==='birth');
-  const goatBreeds=[...s2.goatBreeds];const sheepBreeds=[...s2.sheepBreeds];
+  const goatBreeds=[...s2.goatBreeds,'مواليد'];const sheepBreeds=[...s2.sheepBreeds];
 
   function breedRow(breed,sp){
-    const a=alive.filter(x=>x.breed===breed&&x.species===sp);
+    const a=alive.filter(x=>x.species===sp&&(x.breed===breed||(breed==='مواليد'&&x.purpose==='birth')));
     if(!a.length)return'';
-    return '<div class="detail-row">'+
-      '<span class="detail-key">'+breed+'</span>'+
-      '<span class="detail-val d-flex gap-2 align-items-center">'+
-        '<span class="type-badge badge-tarbiya">'+ar(a.filter(x=>x.purpose==='tarbiya').length)+'تربية</span>'+
-        '<span class="type-badge badge-tasmeen">'+ar(a.filter(x=>x.purpose==='tasmeen').length)+'تسمين</span>'+
-        '<span style="color:var(--yellow)">'+ar(a.filter(x=>x.purpose==='birth').length)+' ولدات</span>'+
-        '<span class="type-badge badge-gray">ذ:'+ar(a.filter(x=>x.gender==='male').length)+' | ♀:'+ar(a.filter(x=>x.gender==='female').length)+'</span>'+
-        '<span class="fw-bold green-text">'+ar(a.length)+'</span>'+
-      '</span>'+
+    const tarbiya=a.filter(x=>x.purpose==='tarbiya');
+    const tasmeen=a.filter(x=>x.purpose==='tasmeen');
+    const births=a.filter(x=>x.purpose==='birth');
+    const males=a.filter(x=>x.gender==='male');
+    const females=a.filter(x=>x.gender==='female');
+    return '<div class="detail-row" style="flex-wrap:wrap;gap:6px">'+
+      '<span class="detail-key fw-bold">'+breed+'</span>'+
+      '<div class="d-flex gap-2 flex-wrap align-items-center">'+
+        (tarbiya.length?'<span class="type-badge badge-tarbiya">'+ar(tarbiya.length)+' تربية</span>':'')+
+        (tasmeen.length?'<span class="type-badge badge-tasmeen">'+ar(tasmeen.length)+' تسمين</span>':'')+
+        (births.length?'<span class="type-badge badge-blue">'+ar(births.length)+' ولادة</span>':'')+
+        '<span class="type-badge badge-gray">ذ: '+ar(males.length)+' | ♀: '+ar(females.length)+'</span>'+
+        '<span class="fw-bold green-text">الإجمالي: '+ar(a.length)+'</span>'+
+      '</div>'+
     '</div>';
   }
 
@@ -133,12 +138,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     '<div class="diary-section">'+
       '<div class="diary-section-title"><i class="bi bi-tropical-storm accent-text me-2"></i>قسم الماعز <span class="type-badge badge-tarbiya ms-2">'+ar(goats.length+goatBirths.length)+'</span></div>'+
       goatBreeds.map(b=>breedRow(b,'goat')).join('')+
-      '<div class="detail-row" style="background:rgba(255,193,7,.05);border-radius:8px;padding:8px;margin-top:6px">'+
-        '<span class="detail-key">🌟 ولدات الماعز</span>'+
-        '<span class="detail-val" style="color:var(--yellow)">'+
-          'ذكور: '+ar(goatBirths.filter(a=>a.gender==='male').length)+' | إناث: '+ar(goatBirths.filter(a=>a.gender==='female').length)+
-        '</span>'+
-      '</div>'+
+
     '</div>'+
   '</div>'+
 
@@ -147,12 +147,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     '<div class="diary-section">'+
       '<div class="diary-section-title"><i class="bi bi-cloud-fill accent-text me-2"></i>قسم الأغنام <span class="type-badge badge-blue ms-2">'+ar(sheep.length+sheepBirths.length)+'</span></div>'+
       sheepBreeds.map(b=>breedRow(b,'sheep')).join('')+
-      '<div class="detail-row" style="background:rgba(255,193,7,.05);border-radius:8px;padding:8px;margin-top:6px">'+
-        '<span class="detail-key">🌟 ولدات الأغنام</span>'+
-        '<span class="detail-val" style="color:var(--yellow)">'+
-          'ذكور: '+ar(sheepBirths.filter(a=>a.gender==='male').length)+' | إناث: '+ar(sheepBirths.filter(a=>a.gender==='female').length)+
-        '</span>'+
-      '</div>'+
+
     '</div>'+
   '</div>'+
 

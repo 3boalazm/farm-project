@@ -51,7 +51,9 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   renderPageHeader(
     '<i class="bi bi-clock-history accent-text"></i> سجل الأنشطة',
     'كل ما يحدث في التطبيق موثّق هنا',
-    (can('admin')?`<button class="action-btn primary" onclick="backupActivity()"><i class="bi bi-download"></i> نسخ احتياطية الآن</button><button class="action-btn danger" onclick="deleteAllActivity()"><i class="bi bi-trash-fill"></i> مسح الكل</button><button class="action-btn" onclick="clearOldLogs()"><i class="bi bi-clock-history"></i> مسح القديم</button>`:'')
+    (can('admin')?`<button class="action-btn primary" onclick="backupActivity()"><i class="bi bi-download"></i> نسخ احتياطية</button>`+
+    `<div class="dropdown d-inline-block"><button class="action-btn" data-bs-toggle="dropdown"><i class="bi bi-trash-fill"></i> مسح حسب الفترة ▾</button><ul class="dropdown-menu" style="background:#1e1e1e;border:1px solid #333;border-radius:12px;padding:6px"><li><button class="dropdown-item" style="color:var(--light);padding:8px 14px;border-radius:8px" onclick="clearByPeriod(1)">آخر ساعة</button></li><li><button class="dropdown-item" style="color:var(--light);padding:8px 14px;border-radius:8px" onclick="clearByPeriod(24)">آخر يوم</button></li><li><button class="dropdown-item" style="color:var(--light);padding:8px 14px;border-radius:8px" onclick="clearByPeriod(168)">آخر أسبوع</button></li><li><button class="dropdown-item" style="color:var(--light);padding:8px 14px;border-radius:8px" onclick="clearByPeriod(720)">آخر شهر</button></li><li><button class="dropdown-item" style="color:var(--light);padding:8px 14px;border-radius:8px" onclick="clearByPeriod(1440)">آخر شهرين</button></li><li><hr style="border-color:#333;margin:4px 10px"></li><li><button class="dropdown-item" style="color:var(--red);padding:8px 14px;border-radius:8px" onclick="deleteAllActivity()">مسح الكل</button></li></ul></div>`
+    :'')
   );
 
   renderLoading(document.getElementById('content'));
@@ -218,6 +220,19 @@ window.deleteAllActivity=async function(){
   for(const log of allLogs){try{await fbDelete('activity_log',log._id);deleted++;}catch(e){}}
   toast('تم مسح '+ar(deleted)+' سجل');
   allLogs=[];_activityBackedUp=false;
+  renderActivityPage();
+};
+
+window.clearByPeriod=async function(hours){
+  const labels={1:'آخر ساعة',24:'آخر يوم',168:'آخر أسبوع',720:'آخر شهر',1440:'آخر شهرين'};
+  if(!confirm('مسح أنشطة '+labels[hours]+'؟'))return;
+  const cutoff=new Date();cutoff.setHours(cutoff.getHours()-hours);
+  const toDelete=allLogs.filter(l=>new Date(l.timestamp)>=cutoff);
+  if(!toDelete.length){toast('لا توجد أنشطة في هذه الفترة','info');return;}
+  let deleted=0;
+  for(const log of toDelete){try{await fbDelete('activity_log',log._id);deleted++;}catch(e){}}
+  toast('تم مسح '+ar(deleted)+' سجل');
+  allLogs=allLogs.filter(l=>new Date(l.timestamp)<cutoff);
   renderActivityPage();
 };
 

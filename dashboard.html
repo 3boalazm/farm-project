@@ -64,7 +64,9 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     return{breed:b.k,species:b.sp,total:a.length,tarbiya:a.filter(x=>x.purpose==='tarbiya').length,tasmeen:a.filter(x=>x.purpose==='tasmeen').length,births:a.filter(x=>x.purpose==='birth').length};
   }).filter(b=>b.total>0).sort((a,b)=>b.total-a.total);
   const totalAlive=alive.length||1;
-  const PIE_COLORS=['#00e676','#2196f3','#ff6b35','#9c27b0','#ffc107','#f44336','#00bcd4','#8bc34a','#ff9800','#e91e63'];
+  const _sc=JSON.parse(localStorage.getItem('breed_colors')||'{}');
+  const _dc=['#00e676','#2196f3','#ff6b35','#9c27b0','#ffc107','#f44336','#00bcd4','#8bc34a','#ff9800','#e91e63'];
+  const PIE_COLORS=breedData.map((b,i)=>_sc[b.breed]||_dc[i%_dc.length]);
 
   // Quick stats cards
   const treating=health.filter(r=>r.status==='active').length;
