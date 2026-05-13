@@ -107,12 +107,19 @@ function renderNavbar(activePage=''){
 // ── Theme Toggle ────────────────────────────────────────
 function initTheme(){
   const saved=localStorage.getItem('farm_theme')||'dark';
-  if(saved==='light'){document.body.classList.add('light-mode');}
+  if(saved==='light'){
+    document.body.classList.add('light-mode');
+    document.documentElement.classList.add('light-mode');
+  } else {
+    document.body.classList.remove('light-mode');
+    document.documentElement.classList.remove('light-mode');
+  }
   updateThemeIcon();
 }
 function toggleTheme(){
-  document.body.classList.toggle('light-mode');
-  localStorage.setItem('farm_theme',document.body.classList.contains('light-mode')?'light':'dark');
+  const isLight=document.body.classList.toggle('light-mode');
+  document.documentElement.classList.toggle('light-mode', isLight);
+  localStorage.setItem('farm_theme', isLight?'light':'dark');
   updateThemeIcon();
 }
 function updateThemeIcon(){
