@@ -59,9 +59,9 @@ var _pendingChanges={}; // key: sp-breed-purpose-gender => desired count
 // ── SCHEMA ───────────────────────────────────────────
 var SHEEP_BREEDS=['برقي','دودبر','ميت ماستر'];
 var GOAT_BREEDS=['بور','شامي','بلدي'];
-var PURPOSES=['tarbiya','tasmeen','birth'];
-var PURPOSE_LABELS={tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'};
-var PURPOSE_ROW_STYLES={tarbiya:'row-tarbiya',tasmeen:'row-tasmeen',birth:'row-births'};
+var PURPOSES=['tarbiya','tasmeen'];
+var PURPOSE_LABELS={tarbiya:'تربية',tasmeen:'تسمين'};
+var PURPOSE_ROW_STYLES={tarbiya:'row-tarbiya',tasmeen:'row-tasmeen'};
 
 // ── INIT ─────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async function(){
@@ -139,8 +139,9 @@ function renderDiary(){
   function rowTotal(purpose){
     var t=0;
     SHEEP_BREEDS.forEach(function(b){t+=getCount('sheep',b,purpose,'male')+getCount('sheep',b,purpose,'female');});
-    t+=getCount('sheep','مواليد',purpose,'male')+getCount('sheep','مواليد',purpose,'female');
     GOAT_BREEDS.forEach(function(b){t+=getCount('goat',b,purpose,'male')+getCount('goat',b,purpose,'female');});
+    // مواليد column for this purpose row
+    t+=getCount('sheep','مواليد',purpose,'male')+getCount('sheep','مواليد',purpose,'female');
     t+=getCount('goat','مواليد',purpose,'male')+getCount('goat','مواليد',purpose,'female');
     return t;
   }
@@ -185,7 +186,7 @@ function renderDiary(){
   // Header row 2: breed names
   tbl+='<tr>';
   SHEEP_BREEDS.forEach(function(b){tbl+='<th colspan="2" class="sheep-hd">'+b+'</th>';});
-  tbl+='<th colspan="2" class="births-hd">ولدات</th>';
+  tbl+='<th colspan="2" class="births-hd">مواليد</th>';
   GOAT_BREEDS.forEach(function(b){tbl+='<th colspan="2" class="goat-hd">'+b+'</th>';});
   tbl+='<th colspan="2" class="births-hd">ولدات</th>';
   tbl+='</tr>';
@@ -221,8 +222,36 @@ function renderDiary(){
     tbl+='<td class="total-col">'+ar(rowT)+'</td></tr>';
   });
 
-  // Total row
-  tbl+='<tr class="row-total"><td style="text-align:right">الإجمالي</td>';
+  // Sub-total row: تربية + تسمين per column (excluding births)
+  tbl+='<tr class="row-births"><td class="fw-bold" style="text-align:right;color:var(--yellow)">إجمالي</td>';
+  SHEEP_BREEDS.forEach(function(b){
+    var m=getCount('sheep',b,'tarbiya','male')+getCount('sheep',b,'tasmeen','male');
+    var f=getCount('sheep',b,'tarbiya','female')+getCount('sheep',b,'tasmeen','female');
+    tbl+='<td class="'+(m>0?'m-col':'zero')+'">'+(m>0?ar(m):'—')+'</td>';
+    tbl+='<td class="'+(f>0?'f-col':'zero')+'">'+(f>0?ar(f):'—')+'</td>';
+  });
+  // Sheep births (مواليد column) — show births in إجمالي row too
+  var sbm2=getCount('sheep','مواليد','birth','male')+getCount('sheep','مواليد','tarbiya','male')+getCount('sheep','مواليد','tasmeen','male');
+  var sbf2=getCount('sheep','مواليد','birth','female')+getCount('sheep','مواليد','tarbiya','female')+getCount('sheep','مواليد','tasmeen','female');
+  tbl+='<td class="'+(sbm2>0?'m-col':'zero')+'">'+(sbm2>0?ar(sbm2):'—')+'</td>';
+  tbl+='<td class="'+(sbf2>0?'f-col':'zero')+'">'+(sbf2>0?ar(sbf2):'—')+'</td>';
+  GOAT_BREEDS.forEach(function(b){
+    var m=getCount('goat',b,'tarbiya','male')+getCount('goat',b,'tasmeen','male');
+    var f=getCount('goat',b,'tarbiya','female')+getCount('goat',b,'tasmeen','female');
+    tbl+='<td class="'+(m>0?'m-col':'zero')+'">'+(m>0?ar(m):'—')+'</td>';
+    tbl+='<td class="'+(f>0?'f-col':'zero')+'">'+(f>0?ar(f):'—')+'</td>';
+  });
+  // Goat births (مواليد column)
+  var gbm2=getCount('goat','مواليد','birth','male')+getCount('goat','مواليد','tarbiya','male')+getCount('goat','مواليد','tasmeen','male');
+  var gbf2=getCount('goat','مواليد','birth','female')+getCount('goat','مواليد','tarbiya','female')+getCount('goat','مواليد','tasmeen','female');
+  tbl+='<td class="'+(gbm2>0?'m-col':'zero')+'">'+(gbm2>0?ar(gbm2):'—')+'</td>';
+  tbl+='<td class="'+(gbf2>0?'f-col':'zero')+'">'+(gbf2>0?ar(gbf2):'—')+'</td>';
+  // إجمالي التربية+التسمين only
+  var subT=alive.filter(function(a){return a.purpose==='tarbiya'||a.purpose==='tasmeen';}).length;
+  tbl+='<td class="total-col">'+ar(subT)+'</td></tr>';
+
+  // Grand total row: الإجمالي الكلي (تربية + تسمين + مواليد)
+  tbl+='<tr class="row-total"><td style="text-align:right">الإجمالي الكلي</td>';
   // Sheep breeds totals
   SHEEP_BREEDS.forEach(function(b){
     var m=colTotal('sheep',b,'male'),f=colTotal('sheep',b,'female');
