@@ -1,12 +1,7 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<script>
-(function(){
-  var t=localStorage.getItem('farm_theme');
-  if(t==='light')document.documentElement.classList.add('light-mode');
-})();
-</script>
+<script>(function(){var t=localStorage.getItem('farm_theme');if(t==='light')document.documentElement.classList.add('light-mode');}());</script>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>إدارة القطيع — بيان المزرعة</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -17,11 +12,12 @@
 <body>
 <div class="page-wrap">
   <div id="page-header"></div>
-  <div id="filters-bar" class="wonder-card mb-4"></div>
-  <div id="content"><div class="text-center py-5"><div class="spinner"></div></div></div>
+  <div id="filters-bar" class="wonder-card mb-3"></div>
+  <div id="bulk-bar" style="display:none" class="mb-3"></div>
+  <div id="content"><div class="text-center py-5"><div class="spinner"></div><div class="text-gray mt-2">جاري التحميل...</div></div></div>
   <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
-    © <span id="footer-year"></span> <span id="footer-farm"></span><br>
-    <small style="font-size:.72rem;color:#555">إشراف: لواء أحمد رجب نوح &nbsp;|&nbsp; تطوير: جندي مصطفى محمد إبراهيم</small>
+    <span id="footer-year"></span> &copy; <span id="footer-farm"></span><br>
+    <small style="font-size:.72rem;color:var(--text-muted)">إشراف: لواء أحمد رجب نوح | تطوير: جندي مصطفى محمد إبراهيم</small>
   </footer>
 </div>
 <script src="config.js"></script>
@@ -29,651 +25,482 @@
 <script src="shared.js"></script>
 <script src="notifications-service.js"></script>
 <script>
-let animals=[], fSearch='', fSpecies='all', fPurpose='all', fStatus='alive';
+'use strict';
+// ── State ────────────────────────────────────────────
+var animals=[];
+var fSpecies='all', fPurpose='all', fStatus='alive', fSearch='';
+var _selected=new Set();
+var _selectMode=false;
+
 const params=new URLSearchParams(location.search);
 if(params.get('species'))fSpecies=params.get('species');
 if(params.get('purpose'))fPurpose=params.get('purpose');
-if(params.get('breed'))fSearch=params.get('breed');
 if(params.get('status'))fStatus=params.get('status');
+if(params.get('breed'))fSearch=params.get('breed');
 
-document.addEventListener('DOMContentLoaded',async()=>{
+// ── Init ─────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async function(){
   if(!requireAuth())return;
   initFirebase();
-  const s=getSettings();
+  var s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
   renderNavbar('animals.html');
-  renderPageHeader('إدارة القطيع','','');
+  renderPageHeader('<i class="bi bi-list-ul accent-text"></i> إدارة القطيع','','');
 
-  renderLoading(document.getElementById('content'));
-  try{animals=await fbGet('animals');}catch(e){toast('خطأ: '+e.message,'error');}
+  try{
+    animals=await fbGet('animals');
+    animals.sort(function(a,b){return (a.breed||'').localeCompare(b.breed||'');});
+  }catch(e){
+    document.getElementById('content').innerHTML='<div class="empty-state"><i class="bi bi-wifi-off"></i><p>تعذر الاتصال بقاعدة البيانات</p><small class="text-gray">'+e.message+'</small><br><button class="action-btn primary mt-3" onclick="location.reload()">إعادة المحاولة</button></div>';
+    return;
+  }
   renderFilters();
   renderAnimals();
 });
 
+// ── Render Filters ───────────────────────────────────
 function renderFilters(){
-  const s=getSettings();
-  document.getElementById('filters-bar').innerHTML=`
-  <div class="row g-2 align-items-end">
-    <div class="col-md-3"><label class="text-gray" style="font-size:.72rem;font-weight:600">البحث</label>
-      <input class="field" placeholder="ترقيم أو سلالة..." value="${fSearch}" oninput="fSearch=this.value;renderAnimals()"></div>
-    <div class="col-md-2"><label class="text-gray" style="font-size:.72rem;font-weight:600">النوع</label>
-      <select class="field" onchange="fSpecies=this.value;renderAnimals()">
-        <option value="all" ${fSpecies==='all'?'selected':''}>الكل</option>
-        <option value="goat" ${fSpecies==='goat'?'selected':''}>ماعز</option>
-        <option value="sheep" ${fSpecies==='sheep'?'selected':''}>أغنام</option>
-      </select></div>
-    <div class="col-md-2"><label class="text-gray" style="font-size:.72rem;font-weight:600">الغرض</label>
-      <select class="field" onchange="fPurpose=this.value;renderAnimals()">
-        <option value="all" ${fPurpose==='all'?'selected':''}>الكل</option>
-        <option value="tarbiya" ${fPurpose==='tarbiya'?'selected':''}>تربية</option>
-        <option value="tasmeen" ${fPurpose==='tasmeen'?'selected':''}>تسمين</option>
-        <option value="birth" ${fPurpose==='birth'?'selected':''}>مواليد</option>
-      </select></div>
-    <div class="col-md-2"><label class="text-gray" style="font-size:.72rem;font-weight:600">الحالة</label>
-      <select class="field" onchange="fStatus=this.value;renderAnimals()">
-        <option value="alive" ${fStatus==='alive'?'selected':''}>حي</option>
-        <option value="dead" ${fStatus==='dead'?'selected':''}>نافق</option>
-        <option value="all" ${fStatus==='all'?'selected':''}>الكل</option>
-      </select></div>
-    ${can('animals')?`<div class="col-md-3 d-flex gap-2 flex-wrap">
-      <button class="action-btn primary flex-grow-1" onclick="openAddAnimal()"><i class="bi bi-plus-lg"></i> إضافة</button>
-      <button class="action-btn" onclick="openUnifiedBirthModal('goat')" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.35);color:var(--yellow)"><i class="bi bi-stars"></i></button>
-      <button class="action-btn danger" onclick="openMarkDeath()"><i class="bi bi-x-octagon"></i></button>
-      ${can('admin')?`<button class="action-btn" onclick="openResetModal()" title="إعادة تعيين (مدير فقط)" style="background:rgba(156,39,176,.1);border-color:rgba(156,39,176,.35);color:var(--purple)"><i class="bi bi-arrow-counterclockwise"></i></button>`:''}
-    </div>`:''}
-  </div>`;
+  var s=getSettings();
+  var fb=document.getElementById('filters-bar');
+  if(!fb)return;
+  var breeds=[...new Set(animals.map(function(a){return a.breed;}))].filter(Boolean).sort();
+  fb.innerHTML=
+    '<div class="row g-2 align-items-end">'+
+      '<div class="col-md-3">'+
+        '<label class="text-gray" style="font-size:.72rem;font-weight:600">البحث</label>'+
+        '<input class="field" placeholder="ترقيم أو سلالة..." id="f-search" value="'+fSearch+'" oninput="fSearch=this.value;renderAnimals()">'+
+      '</div>'+
+      '<div class="col-md-2">'+
+        '<label class="text-gray" style="font-size:.72rem;font-weight:600">النوع</label>'+
+        '<select class="field" id="f-sp" onchange="fSpecies=this.value;renderAnimals()">'+
+          '<option value="all" '+(fSpecies==='all'?'selected':'')+'>الكل</option>'+
+          '<option value="goat" '+(fSpecies==='goat'?'selected':'')+'>ماعز</option>'+
+          '<option value="sheep" '+(fSpecies==='sheep'?'selected':'')+'>أغنام</option>'+
+        '</select>'+
+      '</div>'+
+      '<div class="col-md-2">'+
+        '<label class="text-gray" style="font-size:.72rem;font-weight:600">الغرض</label>'+
+        '<select class="field" id="f-pur" onchange="fPurpose=this.value;renderAnimals()">'+
+          '<option value="all" '+(fPurpose==='all'?'selected':'')+'>الكل</option>'+
+          '<option value="tarbiya" '+(fPurpose==='tarbiya'?'selected':'')+'>تربية</option>'+
+          '<option value="tasmeen" '+(fPurpose==='tasmeen'?'selected':'')+'>تسمين</option>'+
+          '<option value="birth" '+(fPurpose==='birth'?'selected':'')+'>مواليد</option>'+
+        '</select>'+
+      '</div>'+
+      '<div class="col-md-2">'+
+        '<label class="text-gray" style="font-size:.72rem;font-weight:600">الحالة</label>'+
+        '<select class="field" id="f-st" onchange="fStatus=this.value;renderAnimals()">'+
+          '<option value="alive" '+(fStatus==='alive'?'selected':'')+'>حي</option>'+
+          '<option value="dead" '+(fStatus==='dead'?'selected':'')+'>نافق</option>'+
+          '<option value="all" '+(fStatus==='all'?'selected':'')+'>الكل</option>'+
+        '</select>'+
+      '</div>'+
+      '<div class="col-md-3 d-flex gap-2 flex-wrap">'+
+        (can('animals')?
+          '<button class="action-btn primary flex-grow-1" onclick="openAddAnimal()"><i class="bi bi-plus-lg"></i> إضافة</button>'+
+          '<button class="action-btn" onclick="openUnifiedBirthModal(\'goat\')" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.3);color:var(--yellow)" data-hint="تسجيل مواليد"><i class="bi bi-stars"></i></button>'+
+          '<button class="action-btn danger" onclick="openMarkDeath()" data-hint="تسجيل نفوق"><i class="bi bi-x-octagon"></i></button>':'')+
+        (can('admin')?'<button class="action-btn" onclick="openResetModal()" style="background:rgba(156,39,176,.1);border-color:rgba(156,39,176,.3);color:var(--purple)" data-hint="إعادة تعيين"><i class="bi bi-arrow-counterclockwise"></i></button>':'')+
+      '</div>'+
+    '</div>';
 }
 
+// ── Render Animals ───────────────────────────────────
 function renderAnimals(){
-  const el=document.getElementById('content');
-  let list=[...animals];
-  if(fStatus!=='all')list=list.filter(a=>a.status===fStatus);
-  if(fSpecies!=='all')list=list.filter(a=>a.species===fSpecies);
-  if(fPurpose!=='all')list=list.filter(a=>a.purpose===fPurpose);
-  if(fSearch){const q=fSearch.toLowerCase();list=list.filter(a=>(a.tag||'').toLowerCase().includes(q)||(a.breed||'').includes(q));}
-  list=list.slice(0,100);
+  var el=document.getElementById('content');
+  if(!el)return;
 
-  if(!list.length){renderEmpty(el,'bi-search','لا توجد نتائج','<button class="action-btn primary" onclick="fSearch=\'\';fSpecies=\'all\';fPurpose=\'all\';fStatus=\'alive\';renderFilters();renderAnimals()">إعادة تعيين</button>');return;}
-
-  // Bulk action bar
-  var bulkBar='';
-  if(_selectMode){
-    bulkBar='<div id="bulk-bar" style="position:sticky;top:62px;z-index:90;background:rgba(33,150,243,.1);border:1px solid rgba(33,150,243,.35);border-radius:12px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
-      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:700;font-size:.85rem">'+
-        '<input type="checkbox" id="select-all-cb" style="accent-color:var(--blue);width:16px;height:16px" onchange="toggleSelectAll(this.checked)">'+
-        '<span id="sel-count" style="color:var(--blue)">'+ar(_selected.size)+' محدد</span>'+
-      '</label>'+
-      '<button class="action-btn primary sm" onclick="bulkAction(\'transfer\')" data-hint="نقل للجمالون"><i class="bi bi-arrow-left-right"></i> نقل</button>'+
-      '<button class="action-btn sm" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.3);color:var(--yellow)" onclick="bulkAction(\'sell\')" data-hint="تسجيل بيع"><i class="bi bi-currency-dollar"></i> بيع</button>'+
-      '<button class="action-btn danger sm" onclick="bulkAction(\'death\')" data-hint="تسجيل نفوق"><i class="bi bi-x-octagon-fill"></i> نفوق</button>'+
-      '<button class="action-btn danger sm" onclick="bulkAction(\'delete\')" data-hint="حذف نهائي"><i class="bi bi-trash-fill"></i> حذف</button>'+
-      '<button class="action-btn sm" onclick="toggleSelectMode(false)" style="margin-right:auto"><i class="bi bi-x-lg"></i> إلغاء التحديد</button>'+
-    '</div>';
+  // Apply filters
+  var list=animals.slice();
+  if(fStatus!=='all')list=list.filter(function(a){return a.status===fStatus;});
+  if(fSpecies!=='all')list=list.filter(function(a){return a.species===fSpecies;});
+  if(fPurpose!=='all'){
+    var purArr=fPurpose.split(',');
+    list=list.filter(function(a){return purArr.indexOf(a.purpose)>=0;});
+  }
+  if(fSearch){
+    var q=fSearch.toLowerCase();
+    list=list.filter(function(a){return (a.tag||'').toLowerCase().indexOf(q)>=0||(a.breed||'').indexOf(q)>=0;});
   }
 
-  var countRow='<div class="mb-2 d-flex justify-content-between align-items-center">'+
-    '<small class="text-gray">يُعرض '+ar(list.length)+' حيوان'+( animals.length>100?' (من '+ar(animals.length)+')':'')+' </small>'+
+  // Update bulk bar
+  renderBulkBar();
+
+  // Empty state
+  if(!list.length){
+    el.innerHTML='<div class="empty-state"><i class="bi bi-search"></i>'+
+      '<p>لا توجد حيوانات'+( animals.length===0?' — قاعدة البيانات فارغة':' تطابق هذه الفلاتر')+'</p>'+
+      (animals.length===0?'<a href="import.html" class="action-btn primary">استيراد بيانات المزرعة</a>':
+        '<button class="action-btn primary" onclick="fSearch=\'\';fSpecies=\'all\';fPurpose=\'all\';fStatus=\'alive\';renderFilters();renderAnimals()">إعادة تعيين الفلاتر</button>')+
+    '</div>';
+    return;
+  }
+
+  // Count bar
+  var shown=list.slice(0,150);
+  var countHtml='<div class="mb-2 d-flex justify-content-between align-items-center gap-2 flex-wrap">'+
+    '<small class="text-gray">يُعرض '+ar(shown.length)+(list.length>shown.length?' من '+ar(list.length):'')+' حيوان (إجمالي: '+ar(animals.filter(function(a){return a.status==='alive';}).length)+')</small>'+
     '<div class="d-flex gap-2">'+
-      '<button class="action-btn sm" onclick="toggleSelectMode(!_selectMode)" style="'+(  _selectMode?'background:rgba(33,150,243,.1);border-color:rgba(33,150,243,.35);color:var(--blue)':'')+'" data-hint="تحديد متعدد للعمليات الجماعية">'+
-        '<i class="bi bi-check2-square"></i> '+(_selectMode?'وضع التحديد فعّال':'تحديد')+'</button>'+
-      '<button class="action-btn sm" onclick="exportCSV()"><i class="bi bi-filetype-csv"></i> CSV</button>'+
+      '<button class="action-btn sm" onclick="toggleSelectMode()" style="'+(  _selectMode?'background:rgba(33,150,243,.1);border-color:rgba(33,150,243,.4);color:var(--blue)':'')+'" data-hint="تحديد متعدد للعمليات الجماعية"><i class="bi bi-check2-square"></i> '+(_selectMode?ar(_selected.size)+' محدد':'تحديد')+'</button>'+
+      '<button class="action-btn sm" onclick="exportCSV()" data-hint="تصدير CSV"><i class="bi bi-filetype-csv"></i></button>'+
     '</div>'+
   '</div>';
 
-  el.innerHTML=bulkBar+countRow+
-  list.map(function(a){
-    var purposeLabel={tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[a.purpose]||a.purpose;
-    var purposeBadge=a.purpose==='tasmeen'?'badge-tasmeen':a.purpose==='birth'?'badge-blue':'badge-tarbiya';
-    var statusBadge=a.status==='alive'?'badge-tarbiya':'badge-danger';
+  // Rows
+  var rows=shown.map(function(a){
+    var purposeLabel={tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[a.purpose]||a.purpose||'—';
+    var purposeCls=a.purpose==='tasmeen'?'badge-tasmeen':a.purpose==='birth'?'badge-blue':'badge-tarbiya';
+    var statusCls=a.status==='alive'?'badge-tarbiya':'badge-danger';
     var statusLabel=a.status==='alive'?'حي':'نافق';
-    var menuBtn='';
-    if(can('admin')){
-      var bid=a._id, bbreed=encodeURIComponent(a.breed||''), btag=encodeURIComponent(a.tag||''), bst=a.status||'alive';
-      menuBtn='<button style="background:rgba(255,255,255,.06);border:1px solid #333;border-radius:10px;color:#888;font-size:1rem;padding:7px 9px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:.2s" onmouseenter="this.style.color=\'#fff\';this.style.borderColor=\'#555\'" onmouseleave="this.style.color=\'#888\';this.style.borderColor=\'#333\'" onclick="event.preventDefault();event.stopPropagation();openAnimalMenu(\''+bid+'\',\''+bbreed+'\',\''+btag+'\',\''+bst+'\')" title="خيارات الحيوان"><i class="bi bi-three-dots-vertical"></i></button>';
-    }
-    var isSelected=_selected.has(a._id);
-    return '<div class="animal-row" style="position:relative;display:flex;align-items:center;'+(isSelected?'background:rgba(33,150,243,.08);border-color:rgba(33,150,243,.4)':'')+'">'+
-      (_selectMode?'<label style="padding:0 6px 0 0;cursor:pointer;flex-shrink:0" onclick="event.stopPropagation()"><input type="checkbox" class="anim-cb" data-id="'+a._id+'" '+(isSelected?'checked':'')+' style="accent-color:var(--blue);width:17px;height:17px" onchange="toggleSelect(\''+a._id+'\')"></label>':'')+
-      '<a href="animal-detail.html?id='+a._id+'" style="text-decoration:none;display:flex;align-items:center;gap:14px;flex:1;min-width:0" onclick="'+(_selectMode?'event.preventDefault();toggleSelect(\''+a._id+'\')':'')+'">'+
+    var sel=_selected.has(a._id);
+    var rowStyle=sel?'border-color:rgba(33,150,243,.5);background:rgba(33,150,243,.05);':'';
+    var cb=_selectMode?'<label style="padding-left:4px;cursor:pointer;flex-shrink:0"><input type="checkbox" class="anim-cb" data-id="'+a._id+'" '+(sel?'checked':'')+' style="accent-color:var(--blue);width:17px;height:17px" onchange="toggleOne(\''+a._id+'\',this.checked)"></label>':'';
+    var menuBtn=can('admin')?
+      '<button class="icon-btn" onclick="event.stopPropagation();openAnimalMenu(\''+a._id+'\',\''+encodeURIComponent(a.breed||'')+'\',\''+encodeURIComponent(a.tag||'')+'\',\''+(a.status||'alive')+'\')"><i class="bi bi-three-dots-vertical"></i></button>':'';
+    return '<div class="animal-row" style="'+rowStyle+'" onclick="'+(  _selectMode?'toggleOne(\''+a._id+'\',!_selected.has(\''+a._id+'\'))':'')+'">'+
+      cb+
+      '<a href="animal-detail.html?id='+a._id+'" style="text-decoration:none;display:flex;align-items:center;gap:12px;flex:1;min-width:0" onclick="if(_selectMode)event.preventDefault()">'+
         '<div class="animal-avatar">'+(a.species==='goat'?'🐐':'🐑')+'</div>'+
         '<div class="flex-grow-1" style="min-width:0">'+
-          '<div class="d-flex align-items-center gap-2 flex-wrap">'+
-            '<span class="fw-bold">'+a.breed+'</span>'+
+          '<div class="d-flex gap-2 flex-wrap align-items-center">'+
+            '<span class="fw-bold">'+(a.breed||'—')+'</span>'+
             (a.tag?'<span class="type-badge badge-gray">#'+a.tag+'</span>':'')+
-            '<span class="type-badge '+purposeBadge+'">'+purposeLabel+'</span>'+
-            '<span class="type-badge '+statusBadge+'">'+statusLabel+'</span>'+
+            '<span class="type-badge '+purposeCls+'">'+purposeLabel+'</span>'+
+            '<span class="type-badge '+(a.gender==='male'?'badge-blue':'badge-purple')+'" style="font-size:.68rem">'+(a.gender==='male'?'♂ ذكر':'♀ أنثى')+'</span>'+
+            (a.status!=='alive'?'<span class="type-badge '+statusCls+'">'+statusLabel+'</span>':'')+
+            (a.barn?'<span class="type-badge badge-gray" style="font-size:.68rem"><i class="bi bi-building me-1"></i>'+a.barn+'</span>':'')+
           '</div>'+
-          '<small class="text-gray">'+(a.gender==='male'?'♂ ذكر':'♀ أنثى')+' • '+((a.created_at||'').slice(0,10)||'—')+'</small>'+
+          '<small class="text-gray">'+(a.species==='goat'?'ماعز':'أغنام')+(a.birth_date?' • مواليد: '+a.birth_date:' • غير محدد')+'</small>'+
         '</div>'+
         '<i class="bi bi-chevron-left text-gray"></i>'+
       '</a>'+
       menuBtn+
     '</div>';
   }).join('');
+
+  el.innerHTML=countHtml+rows+
+    (list.length>150?'<div class="text-center py-3 text-gray" style="font-size:.82rem"><i class="bi bi-info-circle me-1"></i>يُعرض أول '+ar(150)+' — استخدم الفلاتر لتضييق النتائج</div>':'');
 }
 
-// Add Animal Modal
-function openAddAnimal(){
-  const s=getSettings();
-  showModal(`<div class="farm-modal" onclick="event.stopPropagation()">
-    <h4><i class="bi bi-plus-circle accent-text"></i> إضافة حيوان</h4>
-    <div class="row g-2">
-      <div class="col-6"><label>النوع</label><select class="field" id="m-sp" onchange="updateBreeds()"><option value="goat">ماعز</option><option value="sheep">أغنام</option></select></div>
-      <div class="col-6"><label>الغرض</label><select class="field" id="m-purpose" onchange="toggleBreedWrap()"><option value="tarbiya">تربية</option><option value="tasmeen">تسمين</option><option value="birth">مواليد</option></select></div>
-    </div>
-    <div id="m-brw"><label>السلالة</label><select class="field" id="m-breed">${s.goatBreeds.map(b=>`<option>${b}</option>`).join('')}</select></div>
-    <div class="row g-2">
-      <div class="col-6"><label>الجنس</label><select class="field" id="m-gender"><option value="female">أنثى</option><option value="male">ذكر</option></select></div>
-      <div class="col-6"><label>تاريخ الميلاد</label><input type="date" class="field" id="m-bdate"></div>
-    </div>
-    <div class="row g-2">
-      <div class="col-6"><label>رقم الترقيم</label><input class="field" id="m-tag" placeholder="A-123"></div>
-      <div class="col-6"><label>الكمية</label><input type="number" class="field" id="m-qty" value="1" min="1" max="500"></div>
-    </div>
-    <label>الجمالون/العنبر</label><select class="field" id="m-barn"><option value="">— غير محدد —</option><option>ج١ع١</option><option>ج١ع٢</option><option>ج٢ع١</option><option>ج٢ع٢</option><option>ج٣ع١</option><option>ج٣ع٢</option><option>ج٤ع١</option><option>ج٤ع٢</option><option>ج٥ع١</option><option>ج٥ع٢</option></select>
-    <label>ملاحظات</label><textarea class="field" id="m-notes" rows="2"></textarea>
-    <div class="d-flex gap-2 justify-content-end mt-3">
-      <button class="action-btn" onclick="closeModal()">إلغاء</button>
-      <button class="action-btn primary" onclick="submitAddAnimal()">حفظ</button>
-    </div>
-  </div>`);
-}
-window.updateBreeds=function(){const s=getSettings();const sp=document.getElementById('m-sp').value;document.getElementById('m-breed').innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(b=>`<option>${b}</option>`).join('');};
-window.toggleBreedWrap=function(){document.getElementById('m-brw').style.display=document.getElementById('m-purpose').value==='birth'?'none':'block';};
-
-window.submitAddAnimal=async function(){
-  const species=document.getElementById('m-sp').value;
-  const purpose=document.getElementById('m-purpose').value;
-  const breed=purpose==='birth'?'مواليد':document.getElementById('m-breed').value;
-  const gender=document.getElementById('m-gender').value;
-  const tag=document.getElementById('m-tag').value.trim();
-  const bdate=document.getElementById('m-bdate').value||null;
-  const notes=document.getElementById('m-notes').value.trim();
-  const qty=parseInt(document.getElementById('m-qty').value)||1;
-  closeModal();
-  toast('جاري الحفظ...','info');
-  let ok=0;
-  for(let i=0;i<qty;i++){
-    const barn=document.getElementById('m-barn')?.value||null;
-    const rec={species,breed,gender,purpose,status:'alive',birth_date:bdate,tag:qty===1?(tag||null):(tag?`${tag}-${i+1}`:null),notes:notes||null,barn:barn||null};
-    try{await fbPost('animals',rec);ok++;}catch(e){console.error(e);}
-  }
-  if(ok>0){
-    await logActivity('add','animals',`أضاف ${ar(ok)} حيوان — ${breed} ${gender==='male'?'ذكر':'أنثى'} ${purpose==='tarbiya'?'تربية':purpose==='tasmeen'?'تسمين':'مواليد'}`);
-    toast(`تمت إضافة ${ar(ok)} حيوان`);
-    animals=await fbGet('animals');renderAnimals();
-  }else toast('فشل الحفظ','error');
-};
-
-// Mark Death
-function openMarkDeath(){
-  const alive=animals.filter(a=>a.status==='alive');
-  showModal(`<div class="farm-modal" onclick="event.stopPropagation()">
-    <h4 style="color:#ff8a8a"><i class="bi bi-exclamation-triangle"></i> تسجيل نفوق</h4>
-    <label>السلالة</label>
-    <select class="field" id="d-breed" onchange="updateDeathList()">
-      <option value="">— الكل —</option>
-      ${[...new Set(alive.map(a=>a.breed))].map(b=>`<option>${b}</option>`).join('')}
-    </select>
-    <label>الحيوان (<span id="d-cnt">${ar(alive.length)}</span>)</label>
-    <select class="field" id="d-animal">
-      <option value="">— اختر —</option>
-      ${alive.slice(0,200).map(a=>`<option value="${a._id}">${a.breed} • ${a.gender==='male'?'ذكر':'أنثى'}${a.tag?` • #${a.tag}`:''}</option>`).join('')}
-    </select>
-    <div class="d-flex gap-2 justify-content-end mt-3">
-      <button class="action-btn" onclick="closeModal()">إلغاء</button>
-      <button class="action-btn danger" onclick="submitDeath()">تأكيد</button>
-    </div>
-  </div>`);
-}
-window.updateDeathList=function(){
-  const breed=document.getElementById('d-breed').value;
-  const cands=animals.filter(a=>a.status==='alive'&&(!breed||a.breed===breed));
-  document.getElementById('d-cnt').textContent=ar(cands.length);
-  document.getElementById('d-animal').innerHTML='<option value="">— اختر —</option>'+cands.slice(0,200).map(a=>`<option value="${a._id}">${a.breed} • ${a.gender==='male'?'ذكر':'أنثى'}${a.tag?` • #${a.tag}`:''}</option>`).join('');
-};
-window.submitDeath=async function(){
-  const id=document.getElementById('d-animal').value;if(!id){toast('يرجى اختيار حيوان','error');return;}
-  const a=animals.find(x=>x._id===id);
-  closeModal();
-  try{
-    await fbPatch('animals',id,{status:'dead',died_at:new Date().toISOString()});
-    await logActivity('edit','animals',`تسجيل نفوق — ${a?.breed||''} ${a?.tag?'#'+a.tag:''}`);
-    toast('تم تسجيل النفوق');
-    animals=await fbGet('animals');renderAnimals();
-  }catch(e){toast('فشل: '+e.message,'error');}
-};
-
-function openAddBirths(){
-  const s=getSettings();
-  showModal(`<div class="farm-modal" onclick="event.stopPropagation()">
-    <h4><i class="bi bi-stars" style="color:var(--yellow)"></i> إضافة مواليد</h4>
-    
-    <div class="row g-2">
-      <div class="col-6"><label>النوع</label>
-        <select class="field" id="b-species" onchange="updateBirthBreeds()">
-          <option value="goat">ماعز</option>
-          <option value="sheep">أغنام</option>
-        </select>
-      </div>
-      <div class="col-6"><label>السلالة</label>
-        <select class="field" id="b-breed">
-          ${s.goatBreeds.map(b=>`<option>${b}</option>`).join('')}
-        </select>
-      </div>
-    </div>
-    
-    <div class="row g-2">
-      <div class="col-6"><label>الجنس</label>
-        <select class="field" id="b-gender">
-          <option value="female">أنثى</option>
-          <option value="male">ذكر</option>
-        </select>
-      </div>
-      <div class="col-6"><label>الكمية</label>
-        <input type="number" class="field" id="b-qty" value="1" min="1" max="100">
-      </div>
-    </div>
-    
-    <div class="row g-2">
-      <div class="col-6"><label>رقم الأم</label>
-        <input class="field" id="b-mother-tag" placeholder="F-101">
-      </div>
-      <div class="col-6"><label>رقم الأب</label>
-        <input class="field" id="b-father-tag" placeholder="M-001">
-      </div>
-    </div>
-    
-    <label>الجمالون/العنبر</label>
-    <select class="field" id="b-barn">
-      <option value="">— غير محدد —</option>
-      <option>ج١ع١</option>
-      <option>ج١ع٢</option>
-      <option>ج٢ع١</option>
-      <option>ج٢ع٢</option>
-      <option>ج٣ع١</option>
-      <option>ج٣ع٢</option>
-      <option>ج٤ع١</option>
-      <option>ج٤ع٢</option>
-      <option>ج٥ع١</option>
-      <option>ج٥ع٢</option>
-    </select>
-    
-    <label>تاريخ الميلاد</label>
-    <input type="date" class="field" id="b-bdate" value="${todayStr()}">
-    
-    <label>ملاحظات</label>
-    <textarea class="field" id="b-notes" rows="2"></textarea>
-    
-    <div class="d-flex gap-2 justify-content-end mt-3">
-      <button class="action-btn" onclick="closeModal()">إلغاء</button>
-      <button class="action-btn primary" onclick="submitBirths()">حفظ</button>
-    </div>
-  </div>`);
-  
-  // تحديث السلالات حسب النوع
-  window.updateBirthBreeds=function(){
-    const sp=document.getElementById('b-species').value;
-    document.getElementById('b-breed').innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(b=>`<option>${b}</option>`).join('');
-  };
+// ── Bulk Selection ───────────────────────────────────
+function renderBulkBar(){
+  var bb=document.getElementById('bulk-bar');
+  if(!bb)return;
+  if(!_selectMode){bb.style.display='none';return;}
+  bb.style.display='flex';
+  bb.style.cssText='display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:rgba(33,150,243,.08);border:1px solid rgba(33,150,243,.3);border-radius:12px;padding:10px 14px;margin-bottom:10px';
+  bb.innerHTML=
+    '<label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-weight:700;font-size:.83rem" data-hint="تحديد / إلغاء تحديد الكل">'+
+      '<input type="checkbox" id="select-all-cb" style="accent-color:var(--blue);width:16px;height:16px" onchange="selectAll(this.checked)">'+
+      '<span style="color:var(--blue)">'+ar(_selected.size)+' محدد</span>'+
+    '</label>'+
+    '<button class="action-btn primary sm" onclick="doBulk(\'transfer\')" data-hint="نقل للجمالون"><i class="bi bi-arrow-left-right"></i> نقل</button>'+
+    '<button class="action-btn sm" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.3);color:var(--yellow)" onclick="doBulk(\'sell\')" data-hint="تسجيل بيع"><i class="bi bi-currency-dollar"></i> بيع</button>'+
+    '<button class="action-btn danger sm" onclick="doBulk(\'death\')" data-hint="تسجيل نفوق"><i class="bi bi-x-octagon-fill"></i> نفوق</button>'+
+    '<button class="action-btn danger sm" onclick="doBulk(\'delete\')" data-hint="حذف نهائي"><i class="bi bi-trash-fill"></i> حذف</button>'+
+    '<button class="action-btn sm" onclick="toggleSelectMode()" style="margin-right:auto"><i class="bi bi-x-lg"></i> إلغاء</button>';
 }
 
-window.submitBirths=async function(){
-  const species=document.getElementById('b-species').value;
-  const breed=document.getElementById('b-breed').value;
-  const gender=document.getElementById('b-gender').value;
-  const qty=parseInt(document.getElementById('b-qty').value)||1;
-  const motherTag=document.getElementById('b-mother-tag').value.trim()||null;
-  const fatherTag=document.getElementById('b-father-tag').value.trim()||null;
-  const barn=document.getElementById('b-barn').value||null;
-  const bdate=document.getElementById('b-bdate').value||null;
-  const notes=document.getElementById('b-notes').value.trim();
-  
-  closeModal();
-  toast('جاري الحفظ...','info');
-  
-  let ok=0;
-  for(let i=0;i<qty;i++){
-    try{
-      await fbPost('animals',{
-        species,
-        breed,
-        gender,
-        purpose:'birth',
-        status:'alive',
-        birth_date:bdate,
-        mother_tag:motherTag,
-        father_tag:fatherTag,
-        barn:barn,
-        notes:notes||null
-      });
-      ok++;
-    }catch(e){
-      console.error(e);
-    }
-  }
-  
-  if(ok>0){
-    await logActivity('add','animals',`أضاف ${ar(ok)} مواليد ${breed} (${species==='goat'?'ماعز':'أغنام'})`);
-    toast(`تمت إضافة ${ar(ok)} مواليد`);
-    animals=await fbGet('animals');
-    renderAnimals();
-  }else{
-    toast('فشل الحفظ','error');
-  }
-};
-
-function openResetModal(){
-  if(!can('admin')){toast('هذه الميزة للمديرين فقط','error');return;}
-  showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:440px">'+
-    '<h4 style="color:var(--purple)"><i class="bi bi-arrow-counterclockwise"></i> إعادة تعيين (مدير فقط)</h4>'+
-    '<p class="text-gray" style="font-size:.85rem">اختر ما تريد حذفه نهائياً من قاعدة البيانات</p>'+
-    '<div class="d-flex flex-column gap-2 mb-3">'+
-      '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;background:rgba(244,67,54,.06);border-radius:10px;border:1px solid rgba(244,67,54,.2)">'+
-        '<input type="checkbox" id="reset-dead" style="accent-color:var(--red)">'+
-        '<div><div class="fw-bold">حذف النافق وسجلاتهم</div><small class="text-gray">يشمل سجلاتهم الصحية وسجلات التكاثر</small></div>'+
-      '</label>'+
-      '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;background:rgba(255,193,7,.06);border-radius:10px;border:1px solid rgba(255,193,7,.2)">'+
-        '<input type="checkbox" id="reset-births" style="accent-color:var(--yellow)">'+
-        '<div><div class="fw-bold">تحويل المواليد لتربية</div><small class="text-gray">نقل المواليد الأحياء لقسم التربية</small></div>'+
-      '</label>'+
-      '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;background:rgba(33,150,243,.06);border-radius:10px;border:1px solid rgba(33,150,243,.2)">'+
-        '<input type="checkbox" id="reset-health" style="accent-color:var(--blue)">'+
-        '<div><div class="fw-bold">مسح السجلات الصحية المكتملة</div><small class="text-gray">تنظيف السجلات بحالة "مكتمل"</small></div>'+
-      '</label>'+
-      '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;background:rgba(0,230,118,.06);border-radius:10px;border:1px solid rgba(0,230,118,.2)">'+
-        '<input type="checkbox" id="reset-breeding" style="accent-color:var(--green)">'+
-        '<div><div class="fw-bold">مسح سجلات التكاثر المنتهية</div><small class="text-gray">ولدت أو فشل فقط — ليس الحوامل</small></div>'+
-      '</label>'+
-      '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;background:rgba(244,67,54,.1);border-radius:10px;border:2px solid rgba(244,67,54,.4)">'+
-        '<input type="checkbox" id="reset-all" style="accent-color:var(--red)">'+
-        '<div><div class="fw-bold red-text">⚠️ إعادة تعيين كل بيانات المزرعة</div><small style="color:var(--red)">يمسح الكل: حيوانات، صحة، تكاثر، تحصين، مالية، مخزن، أنشطة</small></div>'+
-      '</label>'+
-    '</div>'+
-    '<div style="background:rgba(156,39,176,.06);border:1px solid rgba(156,39,176,.25);border-radius:10px;padding:10px 14px;font-size:.8rem;color:var(--purple)">'+
-      '<i class="bi bi-exclamation-triangle-fill me-1"></i>هذا الإجراء لا يمكن التراجع عنه'+
-    '</div>'+
-    '<div class="d-flex gap-2 justify-content-end mt-3">'+
-      '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
-      '<button class="action-btn" style="background:rgba(156,39,176,.15);border-color:rgba(156,39,176,.4);color:var(--purple)" onclick="submitReset()">تنفيذ</button>'+
-    '</div>'+
-  '</div>');
-}
-
-// ✅ الدالة المصححة - تم تعديل شرط التحقق ليشمل خيار "الكل"
-window.submitReset=async function(){
-  const resetDead=document.getElementById('reset-dead')?.checked;
-  const resetBirths=document.getElementById('reset-births')?.checked;
-  const resetHealth=document.getElementById('reset-health')?.checked;
-  const resetBreeding=document.getElementById('reset-breeding')?.checked;
-  const resetAll=document.getElementById('reset-all')?.checked;
-  
-  // ✅ التصحيح: إضافة resetAll للشرط حتى لا يظهر الخطأ عند اختيار "الكل" فقط
-  if(!resetDead&&!resetBirths&&!resetHealth&&!resetBreeding&&!resetAll){
-    toast('يرجى اختيار خيار على الأقل','error');
-    return;
-  }
-  
-  closeModal();toast('جاري التنفيذ...','info');
-  let done=0;
-  
-  // إذا تم اختيار "الكل" ننفذه مباشرة ونتجاهل الخيارات الأخرى
-  if(resetAll){
-    if(!confirm('تحذير نهائي: سيتم مسح كل بيانات المزرعة تماماً!\nهذا الإجراء لا يمكن التراجع عنه.'))return;
-    const conf=prompt('اكتب "تأكيد" للمتابعة:');
-    if(conf!=='تأكيد'){toast('تم الإلغاء','info');return;}
-    closeModal();
-    toast('جاري مسح كل البيانات...','info');
-    
-    const tables=['animals','health','breeding','vaccinations','finance',
-                  'inventory_meds','inventory_feeds','inventory_equipment',
-                  'activity_log','login_notifications','weights','milk'];
-    let deletedTables=0;
-    for(const table of tables){
-      try{
-        const url=FB_URL+'/'+table+'.json'+(FB_SECRET?'?auth='+FB_SECRET:'');
-        const r=await fetch(url,{method:'DELETE'});
-        if(r.ok){deletedTables++;console.log('✓ deleted table:',table);}
-        else{console.warn('failed to delete',table,r.status);}
-      }catch(e){console.error('error deleting',table,e);}
-    }
-    try{
-      await fbPost('activity_log',{
-        userId:getUser()?.id,userName:getUser()?.name,userRole:getUser()?.role,
-        action:'delete',resource:'system',
-        description:'إعادة تعيين كاملة لكل بيانات المزرعة',
-        date:todayStr(),timestamp:new Date().toISOString()
-      });
-    }catch(e){}
-    toast('✅ تم مسح '+ar(deletedTables)+' جدول من قاعدة البيانات');
-    setTimeout(()=>location.reload(),2000);
-    return;
-  }
-  
-  // تنفيذ الخيارات الفردية (إذا لم يتم اختيار "الكل")
-  if(resetDead){
-    const dead=animals.filter(a=>a.status==='dead');
-    const deadTags=dead.map(a=>a.tag).filter(Boolean);
-    for(const a of dead){try{await fbDelete('animals',a._id);done++;}catch(e){}}
-    try{const hs=await fbGet('health');for(const h of hs){if(deadTags.includes(h.animal_tag)){try{await fbDelete('health',h._id);}catch(e){}}}}catch(e){}
-    try{const bs=await fbGet('breeding');for(const b of bs){if(deadTags.includes(b.female_tag)){try{await fbDelete('breeding',b._id);}catch(e){}}}}catch(e){}
-    await logActivity('delete','animals','حذف النافق وسجلاتهم ('+ar(dead.length)+' رأس)');
-  }
-  if(resetBirths){
-    const births=animals.filter(a=>a.purpose==='birth'&&a.status==='alive');
-    for(const a of births){try{await fbPatch('animals',a._id,{purpose:'tarbiya'});done++;}catch(e){}}
-    await logActivity('edit','animals','تحويل المواليد إلى تربية ('+ar(births.length)+' رأس)');
-  }
-  if(resetHealth){
-    try{const hs=await fbGet('health');for(const h of hs){if(h.status==='completed'){await fbDelete('health',h._id);done++;}}}catch(e){}
-    await logActivity('delete','health','مسح السجلات الصحية المكتملة');
-  }
-  if(resetBreeding){
-    try{const bs=await fbGet('breeding');for(const b of bs){if(b.status==='born'||b.status==='failed'){await fbDelete('breeding',b._id);done++;}}}catch(e){}
-    await logActivity('delete','breeding','مسح سجلات التكاثر المنتهية');
-  }
-  
-  toast('تم تنفيذ العملية على '+ar(done)+' سجل');
-  animals=await fbGet('animals');renderFilters();renderAnimals();
-};
-
-window.openAnimalMenu=function(id,breedEnc,tagEnc,status){
-  const breed=decodeURIComponent(breedEnc);
-  const tag=decodeURIComponent(tagEnc);
-  const label=(breed||'—')+(tag?' #'+tag:'');
-  var html='<div class="farm-modal narrow" onclick="event.stopPropagation()" style="max-width:360px">'+
-    '<h5 class="fw-bold mb-3"><i class="bi bi-three-dots-vertical accent-text me-2"></i>'+label+'</h5>'+
-    '<div class="d-flex flex-column gap-2">'+
-      '<a href="animal-detail.html?id='+id+'" class="action-btn" style="justify-content:flex-start;gap:10px"><i class="bi bi-eye-fill" style="color:var(--green)"></i> عرض البروفايل</a>';
-  if(status==='alive'){
-    html+='<button class="action-btn" style="justify-content:flex-start;gap:10px" onclick="closeModal();openMarkDeathSingle(\''+id+'\',\''+encodeURIComponent(label)+'\')"><i class="bi bi-x-octagon-fill" style="color:var(--orange)"></i> تسجيل نفوق</button>';
-  }
-  html+='<button class="action-btn danger" style="justify-content:flex-start;gap:10px" onclick="closeModal();deleteAnimalFull(\''+id+'\',\''+encodeURIComponent(label)+'\')"><i class="bi bi-trash-fill"></i> حذف نهائي من كل البيانات</button>'+
-    '</div>'+
-    '<div class="d-flex justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إغلاق</button></div>'+
-  '</div>';
-  showModal(html);
-}
-window.openMarkDeathSingle=function(id,labelEnc){
-  const label=decodeURIComponent(labelEnc);
-  showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()" style="max-width:360px">'+
-    '<h5 style="color:var(--orange)"><i class="bi bi-x-octagon-fill me-2"></i>تسجيل نفوق</h5>'+
-    '<p class="text-gray" style="font-size:.85rem">'+label+'</p>'+
-    '<label>تاريخ النفوق</label><input type="date" class="field" id="death-date" value="'+todayStr()+'">'+
-    '<label>السبب (اختياري)</label><input class="field" id="death-reason" placeholder="مرض، حادثة...">'+
-    '<div class="d-flex gap-2 justify-content-end mt-3">'+
-      '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
-      '<button class="action-btn danger" onclick="submitDeathSingle(\''+id+'\',\''+encodeURIComponent(label)+'\')">تأكيد</button>'+
-    '</div>'+
-  '</div>');
-}
-window.submitDeathSingle=async function(id,labelEnc){
-  const label=decodeURIComponent(labelEnc);
-  const date=document.getElementById('death-date').value;
-  const reason=document.getElementById('death-reason').value.trim();
-  closeModal();toast('جاري الحفظ...','info');
-  try{
-    await fbPatch('animals',id,{status:'dead',died_at:date,removal_reason:reason||null});
-    await logActivity('edit','animals','تسجيل نفوق: '+label+(reason?' — '+reason:''));
-    toast('تم تسجيل النفوق');
-    animals=await fbGet('animals');renderAnimals();
-  }catch(e){toast('فشل: '+e.message,'error');}
-}
-window.deleteAnimalFull=async function(id,labelEnc){
-  const label=decodeURIComponent(labelEnc);
-  if(!confirm('حذف نهائي: '+label+'\nسيتم حذف الحيوان من كل قواعد البيانات (الصحة، التكاثر، التحصين).\nلا يمكن التراجع.'))return;
-  closeModal();toast('جاري الحذف الشامل...','info');
-  const a=animals.find(x=>x._id===id)||{};
-  const tag=a.tag||null;
-  const breed=a.breed||null;
-  try{
-    await fbDelete('animals',id);
-    try{const offs=await fbGet('animals/'+id+'/offspring');for(const o of offs){await fbDelete('animals/'+id+'/offspring',o._id);}}catch(e){}
-    try{const vs=await fbGet('animals/'+id+'/vaccinations');for(const v of vs){await fbDelete('animals/'+id+'/vaccinations',v._id);}}catch(e){}
-    try{const ms=await fbGet('animals/'+id+'/medications');for(const m of ms){await fbDelete('animals/'+id+'/medications',m._id);}}catch(e){}
-    if(tag){try{const hs=await fbGet('health');for(const h of hs){if(h.animal_tag===tag){await fbDelete('health',h._id);}}}catch(e){}}
-    if(tag){try{const bs=await fbGet('breeding');for(const b of bs){if(b.female_tag===tag){await fbDelete('breeding',b._id);}}}catch(e){}}
-    await logActivity('delete','animals','حذف شامل: '+label+(tag?' #'+tag:''));
-    toast('تم الحذف الشامل لـ '+label);
-    animals=await fbGet('animals');renderAnimals();
-  }catch(e){toast('فشل: '+e.message,'error');}
-}
-
-// ── Select Mode ─────────────────────────────────────
-window.toggleSelectMode=function(on){
-  _selectMode=on;
-  if(!on)_selected.clear();
+window.toggleSelectMode=function(){
+  _selectMode=!_selectMode;
+  if(!_selectMode)_selected.clear();
   renderAnimals();
 };
-
-window.toggleSelect=function(id){
-  if(_selected.has(id))_selected.delete(id);
-  else _selected.add(id);
-  // Update count label
-  var lbl=document.getElementById('sel-count');
-  if(lbl)lbl.textContent=ar(_selected.size)+' محدد';
-  // Update row highlight
+window.toggleOne=function(id,checked){
+  if(checked)_selected.add(id);
+  else _selected.delete(id);
+  // Update the row visually without re-render
   var cb=document.querySelector('.anim-cb[data-id="'+id+'"]');
-  if(cb){var row=cb.closest('.animal-row');if(row){row.style.background=_selected.has(id)?'rgba(33,150,243,.08)':'';row.style.borderColor=_selected.has(id)?'rgba(33,150,243,.4)':'';}}
+  if(cb){
+    cb.checked=checked;
+    var row=cb.closest('.animal-row');
+    if(row){
+      row.style.borderColor=checked?'rgba(33,150,243,.5)':'';
+      row.style.background=checked?'rgba(33,150,243,.05)':'';
+    }
+  }
+  var span=document.querySelector('#bulk-bar span[style*="blue"]');
+  if(span)span.textContent=ar(_selected.size)+' محدد';
 };
-
-window.toggleSelectAll=function(checked){
-  var cbs=document.querySelectorAll('.anim-cb');
-  cbs.forEach(function(cb){
+window.selectAll=function(checked){
+  document.querySelectorAll('.anim-cb').forEach(function(cb){
+    cb.checked=checked;
     var id=cb.dataset.id;
     if(checked)_selected.add(id);
     else _selected.delete(id);
-    cb.checked=checked;
     var row=cb.closest('.animal-row');
-    if(row){row.style.background=checked?'rgba(33,150,243,.08)':'';row.style.borderColor=checked?'rgba(33,150,243,.4)':'';}
+    if(row){row.style.borderColor=checked?'rgba(33,150,243,.5)':'';row.style.background=checked?'rgba(33,150,243,.05)':'';}
   });
-  var lbl=document.getElementById('sel-count');if(lbl)lbl.textContent=ar(_selected.size)+' محدد';
+  var span=document.querySelector('#bulk-bar span[style*="blue"]');
+  if(span)span.textContent=ar(_selected.size)+' محدد';
 };
 
 // ── Bulk Actions ─────────────────────────────────────
-window.bulkAction=async function(action){
+window.doBulk=function(action){
   var ids=[..._selected];
-  if(!ids.length){toast('يرجى تحديد حيوان واحد على الأقل','error');return;}
-  var count=ar(ids.length);
-  var sel=animals.filter(function(a){return ids.includes(a._id);});
-
+  if(!ids.length){toast('حدد حيواناً واحداً على الأقل','error');return;}
+  var cnt=ar(ids.length);
+  var s=getSettings();
   if(action==='transfer'){
     var barns=['ج١ع١','ج١ع٢','ج٢ع١','ج٢ع٢','ج٣ع١','ج٣ع٢','ج٤ع١','ج٤ع٢','ج٥ع١','ج٥ع٢'];
     showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()">'+
-      '<h4><i class="bi bi-arrow-left-right accent-text"></i> نقل '+count+' حيوان</h4>'+
-      '<label>إلى الجمالون/العنبر</label>'+
-      '<select class="field" id="bulk-barn">'+barns.map(function(b){return'<option value="'+b+'">'+b+'</option>';}).join('')+'</select>'+
+      '<h4><i class="bi bi-arrow-left-right accent-text"></i> نقل '+cnt+' حيوان</h4>'+
+      '<label>الجمالون الجديد</label>'+
+      '<select class="field" id="b-barn">'+barns.map(function(b){return'<option>'+b+'</option>';}).join('')+'</select>'+
       '<label>سبب النقل</label>'+
-      '<select class="field" id="bulk-reason"><option>إعادة توزيع</option><option>عزل</option><option>فطام</option><option>تسمين</option><option>علاج</option><option>أخرى</option></select>'+
+      '<select class="field" id="b-reason"><option>إعادة توزيع</option><option>عزل</option><option>فطام</option><option>تسمين</option><option>علاج</option><option>أخرى</option></select>'+
       '<div class="d-flex gap-2 justify-content-end mt-3">'+
         '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
-        '<button class="action-btn primary" onclick="_execBulk(\'transfer\')">نقل '+count+'</button>'+
-      '</div>'+
-    '</div>');
+        '<button class="action-btn primary" onclick="execBulk(\'transfer\')">نقل '+cnt+'</button>'+
+      '</div></div>');
   }
   else if(action==='death'){
     showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()">'+
-      '<h4 style="color:var(--red)"><i class="bi bi-x-octagon-fill"></i> تسجيل نفوق '+count+' حيوان</h4>'+
-      '<div class="withdrawal-alert mb-3">'+sel.map(function(a){return a.breed+(a.tag?' #'+a.tag:'')+' ('+(a.gender==='male'?'ذكر':'أنثى')+')';}).slice(0,8).join(' | ')+(sel.length>8?' و '+(sel.length-8)+' آخرين':'')+' </div>'+
-      '<label>تاريخ النفوق</label><input type="date" class="field" id="bulk-date" value="'+todayStr()+'">'+
-      '<label>السبب</label><select class="field" id="bulk-death-reason"><option>مرض</option><option>حادث</option><option>إجهاد حراري</option><option>ولادة</option><option>غير معروف</option></select>'+
+      '<h4 style="color:var(--red)"><i class="bi bi-x-octagon-fill"></i> نفوق '+cnt+' حيوان</h4>'+
+      '<label>تاريخ النفوق</label><input type="date" class="field" id="b-date" value="'+todayStr()+'">'+
+      '<label>السبب</label>'+
+      '<select class="field" id="b-reason"><option>مرض</option><option>حادث</option><option>إجهاد حراري</option><option>غير معروف</option></select>'+
       '<div class="d-flex gap-2 justify-content-end mt-3">'+
         '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
-        '<button class="action-btn danger" onclick="_execBulk(\'death\')">تأكيد النفوق</button>'+
-      '</div>'+
-    '</div>');
+        '<button class="action-btn danger" onclick="execBulk(\'death\')">تأكيد النفوق</button>'+
+      '</div></div>');
   }
   else if(action==='sell'){
     showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()">'+
-      '<h4 style="color:var(--yellow)"><i class="bi bi-currency-dollar"></i> تسجيل بيع '+count+' حيوان</h4>'+
-      '<div class="d-flex gap-2"><div class="flex-grow-1"><label>تاريخ البيع</label><input type="date" class="field" id="bulk-date" value="'+todayStr()+'"></div>'+
-      '<div class="flex-grow-1"><label>إجمالي مبلغ البيع ('+getSettings().currency+')</label><input type="number" class="field" id="bulk-price" placeholder="0" min="0"></div></div>'+
-      '<label>المشتري (اختياري)</label><input class="field" id="bulk-buyer" placeholder="اسم المشتري">'+
+      '<h4 style="color:var(--yellow)"><i class="bi bi-currency-dollar"></i> بيع '+cnt+' حيوان</h4>'+
+      '<div class="row g-2">'+
+        '<div class="col-6"><label>التاريخ</label><input type="date" class="field" id="b-date" value="'+todayStr()+'"></div>'+
+        '<div class="col-6"><label>المبلغ الإجمالي ('+s.currency+')</label><input type="number" class="field" id="b-price" placeholder="0" min="0"></div>'+
+      '</div>'+
+      '<label>المشتري</label><input class="field" id="b-buyer" placeholder="اسم المشتري — اختياري">'+
       '<div class="d-flex gap-2 justify-content-end mt-3">'+
         '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
-        '<button class="action-btn" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.3);color:var(--yellow)" onclick="_execBulk(\'sell\')">تأكيد البيع</button>'+
-      '</div>'+
-    '</div>');
+        '<button class="action-btn" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.3);color:var(--yellow)" onclick="execBulk(\'sell\')">تأكيد البيع</button>'+
+      '</div></div>');
   }
   else if(action==='delete'){
-    if(!confirm('حذف نهائي '+count+' حيوان من كل قاعدة البيانات؟\nلا يمكن التراجع!'))return;
-    await _execBulkDirect('delete',ids);
+    if(!confirm('حذف نهائي '+cnt+' حيوان؟\nلا يمكن التراجع!'))return;
+    execBulkDo('delete',ids);
   }
 };
 
-window._execBulk=async function(action){
+window.execBulk=async function(action){
   var ids=[..._selected];
-  if(!ids.length)return;
   closeModal();
   toast('جاري التنفيذ على '+ar(ids.length)+' حيوان...','info');
   var ok=0;
-
   if(action==='transfer'){
-    var barn=document.getElementById('bulk-barn')?.value;
-    var reason=document.getElementById('bulk-reason')?.value||'نقل';
-    for(var id of ids){try{await fbPatch('animals',id,{barn:barn});ok++;}catch(e){}}
-    await logActivity('edit','animals','نقل جماعي '+ar(ok)+' حيوان → '+barn+' | '+reason);
+    var barn=document.getElementById('b-barn')?.value;
+    var reason=document.getElementById('b-reason')?.value;
+    for(var i=0;i<ids.length;i++){try{await fbPatch('animals',ids[i],{barn:barn});ok++;}catch(e){}}
+    await logActivity('edit','animals','نقل جماعي '+ar(ok)+' حيوان إلى '+barn+' | '+reason);
     toast('تم نقل '+ar(ok)+' حيوان إلى '+barn);
   }
   else if(action==='death'){
-    var date=document.getElementById('bulk-date')?.value||todayStr();
-    var reason=document.getElementById('bulk-death-reason')?.value||'غير معروف';
-    for(var id of ids){try{await fbPatch('animals',id,{status:'dead',died_at:date,death_reason:reason});ok++;}catch(e){}}
-    await logActivity('edit','animals','تسجيل نفوق جماعي '+ar(ok)+' حيوان | '+reason);
+    var date=document.getElementById('b-date')?.value||todayStr();
+    var reason=document.getElementById('b-reason')?.value;
+    for(var i=0;i<ids.length;i++){try{await fbPatch('animals',ids[i],{status:'dead',died_at:date,death_reason:reason});ok++;}catch(e){}}
+    await logActivity('edit','animals','نفوق جماعي '+ar(ok)+' | '+reason);
     toast('تم تسجيل نفوق '+ar(ok)+' حيوان');
   }
   else if(action==='sell'){
-    var date=document.getElementById('bulk-date')?.value||todayStr();
-    var price=parseFloat(document.getElementById('bulk-price')?.value)||0;
-    var buyer=document.getElementById('bulk-buyer')?.value||'—';
-    for(var id of ids){try{await fbPatch('animals',id,{status:'dead',sold_at:date,removal_reason:'sale'});ok++;}catch(e){}}
-    if(price>0){
-      await fbPost('finance',{date:date,type:'income',category:'بيع حيوانات',amount:price,description:'بيع '+ar(ok)+' حيوان | '+buyer,added_by:getUser()?.name||'—'});
-    }
-    await logActivity('edit','animals','بيع جماعي '+ar(ok)+' حيوان | '+buyer+(price>0?' | '+ar(price)+' '+getSettings().currency:''));
-    toast('تم تسجيل بيع '+ar(ok)+' حيوان'+(price>0?' بمبلغ '+ar(price)+' '+getSettings().currency:''));
+    var date=document.getElementById('b-date')?.value||todayStr();
+    var price=parseFloat(document.getElementById('b-price')?.value)||0;
+    var buyer=document.getElementById('b-buyer')?.value||'—';
+    for(var i=0;i<ids.length;i++){try{await fbPatch('animals',ids[i],{status:'dead',sold_at:date,removal_reason:'sale'});ok++;}catch(e){}}
+    if(price>0)await fbPost('finance',{date:date,type:'income',category:'بيع حيوانات',amount:price,description:'بيع '+ar(ok)+' حيوان | '+buyer,added_by:getUser()?.name});
+    await logActivity('edit','animals','بيع جماعي '+ar(ok)+' | '+buyer+(price>0?' | '+ar(price)+' '+getSettings().currency:''));
+    toast('تم بيع '+ar(ok)+' حيوان'+(price>0?' بمبلغ '+ar(price)+' '+getSettings().currency:''));
   }
   _selected.clear();_selectMode=false;
   animals=await fbGet('animals');
   renderFilters();renderAnimals();
 };
 
-window._execBulkDirect=async function(action,ids){
+window.execBulkDo=async function(action,ids){
   toast('جاري الحذف...','info');var ok=0;
-  for(var id of ids){try{await fbDelete('animals',id);ok++;}catch(e){}}
+  for(var i=0;i<ids.length;i++){try{await fbDelete('animals',ids[i]);ok++;}catch(e){}}
   await logActivity('delete','animals','حذف جماعي '+ar(ok)+' حيوان');
   toast('تم حذف '+ar(ok)+' حيوان');
   _selected.clear();_selectMode=false;
+  animals=await fbGet('animals');
+  renderFilters();renderAnimals();
+};
+
+// ── Add Animal Modal ─────────────────────────────────
+window.openAddAnimal=function(){
+  var s=getSettings();
+  var barns=['','ج١ع١','ج١ع٢','ج٢ع١','ج٢ع٢','ج٣ع١','ج٣ع٢','ج٤ع١','ج٤ع٢','ج٥ع١','ج٥ع٢'];
+  showModal('<div class="farm-modal" onclick="event.stopPropagation()">'+
+    '<h4><i class="bi bi-plus-circle accent-text"></i> إضافة حيوان</h4>'+
+    '<div class="row g-2">'+
+      '<div class="col-6"><label>النوع</label><select class="field" id="m-sp" onchange="updateBreeds()"><option value="goat">ماعز</option><option value="sheep">أغنام</option></select></div>'+
+      '<div class="col-6"><label>الغرض</label><select class="field" id="m-pur"><option value="tarbiya">تربية</option><option value="tasmeen">تسمين</option><option value="birth">مواليد</option></select></div>'+
+    '</div>'+
+    '<label>السلالة</label><select class="field" id="m-breed">'+s.goatBreeds.map(function(b){return'<option>'+b+'</option>';}).join('')+'</select>'+
+    '<div class="row g-2">'+
+      '<div class="col-6"><label>الجنس</label><select class="field" id="m-gender"><option value="female">أنثى ♀</option><option value="male">ذكر ♂</option></select></div>'+
+      '<div class="col-6"><label>رقم الترقيم</label><input class="field" id="m-tag" placeholder="A-001"></div>'+
+    '</div>'+
+    '<div class="row g-2">'+
+      '<div class="col-6"><label>تاريخ الميلاد</label><input type="date" class="field" id="m-bdate" value="'+todayStr()+'"></div>'+
+      '<div class="col-6"><label>الجمالون</label><select class="field" id="m-barn">'+barns.map(function(b){return'<option value="'+b+'">'+( b||'— غير محدد —')+'</option>';}).join('')+'</select></div>'+
+    '</div>'+
+    '<div class="d-flex gap-2 justify-content-end mt-3">'+
+      '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
+      '<button class="action-btn primary" onclick="submitAddAnimal()">حفظ</button>'+
+    '</div></div>');
+};
+window.updateBreeds=function(){
+  var s=getSettings();var sp=document.getElementById('m-sp')?.value;
+  var sel=document.getElementById('m-breed');
+  if(sel)sel.innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(function(b){return'<option>'+b+'</option>';}).join('');
+};
+window.submitAddAnimal=async function(){
+  var sp=document.getElementById('m-sp').value;
+  var breed=document.getElementById('m-breed').value;
+  var gender=document.getElementById('m-gender').value;
+  var purpose=document.getElementById('m-pur').value;
+  var tag=document.getElementById('m-tag').value.trim();
+  var barn=document.getElementById('m-barn').value;
+  var bdate=document.getElementById('m-bdate').value;
+  closeModal();toast('جاري الحفظ...','info');
+  try{
+    await fbPost('animals',{species:sp,breed,gender,purpose,status:'alive',tag:tag||null,barn:barn||null,birth_date:bdate||null});
+    await logActivity('add','animals','إضافة: '+breed+' '+(gender==='male'?'ذكر':'أنثى'));
+    toast('تمت الإضافة');
+    animals=await fbGet('animals');renderFilters();renderAnimals();
+  }catch(e){toast('فشل: '+e.message,'error');}
+};
+
+// ── Mark Death ───────────────────────────────────────
+window.openMarkDeath=function(){
+  var alive=animals.filter(function(a){return a.status==='alive';});
+  showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()">'+
+    '<h4 style="color:var(--red)"><i class="bi bi-x-octagon-fill"></i> تسجيل نفوق</h4>'+
+    '<label>الحيوان</label>'+
+    '<select class="field" id="d-id">'+
+      alive.slice(0,300).map(function(a){return'<option value="'+a._id+'">'+(a.breed||'—')+(a.tag?' #'+a.tag:'')+' ('+(a.gender==='male'?'ذكر':'أنثى')+')</option>';}).join('')+
+    '</select>'+
+    '<label>التاريخ</label><input type="date" class="field" id="d-date" value="'+todayStr()+'">'+
+    '<div class="d-flex gap-2 justify-content-end mt-3">'+
+      '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
+      '<button class="action-btn danger" onclick="submitDeath()">تسجيل</button>'+
+    '</div></div>');
+};
+window.submitDeath=async function(){
+  var id=document.getElementById('d-id').value;
+  var date=document.getElementById('d-date').value;
+  if(!id){toast('اختر حيواناً','error');return;}
+  closeModal();
+  try{
+    await fbPatch('animals',id,{status:'dead',died_at:date});
+    await logActivity('edit','animals','نفوق: '+id);
+    toast('تم تسجيل النفوق');
+    animals=await fbGet('animals');renderFilters();renderAnimals();
+  }catch(e){toast('فشل: '+e.message,'error');}
+};
+
+// ── Animal Menu ──────────────────────────────────────
+window.openAnimalMenu=function(id,breed,tag,status){
+  var breedD=decodeURIComponent(breed);
+  var tagD=decodeURIComponent(tag);
+  var label=breedD+(tagD?' #'+tagD:'');
+  showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()" style="max-width:360px">'+
+    '<div class="fw-bold mb-3">'+label+'</div>'+
+    '<div class="d-flex flex-column gap-2">'+
+      '<a href="animal-detail.html?id='+id+'" class="action-btn" style="justify-content:flex-start;gap:10px"><i class="bi bi-eye-fill green-text"></i> عرض البروفايل الكامل</a>'+
+      (status==='alive'?'<button class="action-btn" style="justify-content:flex-start;gap:10px" onclick="closeModal();openMarkDeathSingle(\''+id+'\',\''+encodeURIComponent(label)+'\')"><i class="bi bi-x-octagon-fill accent-text"></i> تسجيل نفوق</button>':'')+
+      '<button class="action-btn danger" style="justify-content:flex-start;gap:10px" onclick="closeModal();deleteAnimalFull(\''+id+'\',\''+encodeURIComponent(label)+'\')"><i class="bi bi-trash-fill"></i> حذف نهائي</button>'+
+    '</div>'+
+    '<div class="d-flex justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إغلاق</button></div>'+
+  '</div>');
+};
+window.openMarkDeathSingle=function(id,labelEnc){
+  var lbl=decodeURIComponent(labelEnc);
+  showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()">'+
+    '<h4 style="color:var(--red)">تسجيل نفوق: '+lbl+'</h4>'+
+    '<label>التاريخ</label><input type="date" class="field" id="ds-date" value="'+todayStr()+'">'+
+    '<div class="d-flex gap-2 justify-content-end mt-3">'+
+      '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
+      '<button class="action-btn danger" onclick="submitDeathSingle(\''+id+'\')">تأكيد</button>'+
+    '</div></div>');
+};
+window.submitDeathSingle=async function(id){
+  var date=document.getElementById('ds-date').value;
+  closeModal();
+  try{
+    await fbPatch('animals',id,{status:'dead',died_at:date});
+    await logActivity('edit','animals','نفوق: '+id);
+    toast('تم تسجيل النفوق');
+    animals=await fbGet('animals');renderFilters();renderAnimals();
+  }catch(e){toast('فشل: '+e.message,'error');}
+};
+window.deleteAnimalFull=async function(id,labelEnc){
+  var lbl=decodeURIComponent(labelEnc);
+  if(!confirm('حذف نهائي: '+lbl+'؟'))return;
+  try{
+    await fbDelete('animals',id);
+    await logActivity('delete','animals','حذف: '+id);
+    toast('تم الحذف');
+    animals=animals.filter(function(a){return a._id!==id;});
+    renderFilters();renderAnimals();
+  }catch(e){toast('فشل: '+e.message,'error');}
+};
+
+// ── Reset Modal ──────────────────────────────────────
+window.openResetModal=function(){
+  showModal('<div class="farm-modal" onclick="event.stopPropagation()">'+
+    '<h4 style="color:var(--purple)"><i class="bi bi-arrow-counterclockwise"></i> إعادة تعيين (مدير فقط)</h4>'+
+    '<div class="d-flex flex-column gap-2 mb-3">'+
+      '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;background:rgba(244,67,54,.06);border-radius:10px;border:1px solid rgba(244,67,54,.2)">'+
+        '<input type="checkbox" id="reset-dead" style="accent-color:var(--red)">'+
+        '<div><div class="fw-bold">حذف النافق وسجلاتهم</div><small class="text-gray">يشمل سجلاتهم الصحية وسجلات التكاثر</small></div></label>'+
+      '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;background:rgba(0,230,118,.06);border-radius:10px;border:1px solid rgba(0,230,118,.2)">'+
+        '<input type="checkbox" id="reset-births" style="accent-color:var(--green)">'+
+        '<div><div class="fw-bold">تحويل المواليد لتربية</div><small class="text-gray">نقل المواليد الأحياء لقسم التربية</small></div></label>'+
+      '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;background:rgba(244,67,54,.1);border-radius:10px;border:2px solid rgba(244,67,54,.4)">'+
+        '<input type="checkbox" id="reset-all" style="accent-color:var(--red)">'+
+        '<div><div class="fw-bold red-text">⚠️ مسح كل بيانات المزرعة</div><small style="color:var(--red)">حيوانات، صحة، تكاثر، تحصين، مالية، مخزن، أنشطة</small></div></label>'+
+    '</div>'+
+    '<div class="d-flex gap-2 justify-content-end">'+
+      '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
+      '<button class="action-btn" style="background:rgba(156,39,176,.15);border-color:rgba(156,39,176,.4);color:var(--purple)" onclick="submitReset()">تنفيذ</button>'+
+    '</div></div>');
+};
+window.submitReset=async function(){
+  if(document.getElementById('reset-all')?.checked){
+    if(!confirm('مسح كل بيانات المزرعة نهائياً؟'))return;
+    var conf=prompt('اكتب "تأكيد" للمتابعة:');
+    if(conf!=='تأكيد'){toast('تم الإلغاء','info');return;}
+    closeModal();toast('جاري المسح...','info');
+    var tables=['animals','health','breeding','vaccinations','finance','inventory_meds','inventory_feeds','inventory_equipment','activity_log'];
+    for(var t of tables){try{await fetch(FB_URL+'/'+t+'.json'+(FB_SECRET?'?auth='+FB_SECRET:''),{method:'DELETE'});}catch(e){}}
+    toast('تم مسح كل البيانات');setTimeout(function(){location.reload();},1500);return;
+  }
+  closeModal();var done=0;
+  if(document.getElementById('reset-dead')?.checked){
+    var dead=animals.filter(function(a){return a.status==='dead';});
+    for(var a of dead){try{await fbDelete('animals',a._id);done++;}catch(e){}}
+  }
+  if(document.getElementById('reset-births')?.checked){
+    var births=animals.filter(function(a){return a.status==='alive'&&a.purpose==='birth';});
+    for(var a of births){try{await fbPatch('animals',a._id,{purpose:'tarbiya'});done++;}catch(e){}}
+  }
+  if(done)toast('تم تنفيذ العملية على '+ar(done)+' سجل');
   animals=await fbGet('animals');renderFilters();renderAnimals();
 };
 
-function exportCSV(){
-  const rows=[['النوع','السلالة','الجنس','الغرض','الحالة','الترقيم'],...animals.map(a=>[a.species==='goat'?'ماعز':'أغنام',a.breed,a.gender==='male'?'ذكر':'أنثى',{tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[a.purpose]||a.purpose,a.status==='alive'?'حي':'نافق',a.tag||''])];
-  const csv=rows.map(r=>r.join(',')).join('\n');
-  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download=`animals-${todayStr()}.csv`;a.click();
-  toast('تم التصدير');
-}
+// ── Export CSV ───────────────────────────────────────
+window.exportCSV=function(){
+  var list=animals;
+  var rows=[['الرقم','النوع','السلالة','الجنس','الغرض','الحالة','الترقيم','الجمالون','تاريخ الميلاد']];
+  list.forEach(function(a,i){rows.push([ar(i+1),a.species==='goat'?'ماعز':'أغنام',a.breed||'',a.gender==='male'?'ذكر':'أنثى',{tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[a.purpose]||a.purpose,a.status==='alive'?'حي':'نافق',a.tag||'',a.barn||'',a.birth_date||'']);});
+  var csv=rows.map(function(r){return r.map(function(v){return'"'+v+'"';}).join(',');}).join('\n');
+  var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download='animals-'+todayStr()+'.csv';a.click();
+  toast('تم التصدير ('+ar(list.length)+' حيوان)');
+};
 </script>
 </body>
 </html>
