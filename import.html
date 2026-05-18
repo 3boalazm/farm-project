@@ -3,7 +3,7 @@
 <head>
 <script>(function(){var t=localStorage.getItem('farm_theme');if(t==='light')document.documentElement.classList.add('light-mode');}());</script>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>استيراد البيانات — بيان المزرعة</title>
+<title>استيراد بيانات المزرعة</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
@@ -13,52 +13,127 @@
 <div class="page-wrap">
   <div id="page-header"></div>
   <div id="content">
+
     <div class="wonder-card mb-4" style="background:rgba(244,67,54,.06);border-color:rgba(244,67,54,.3)">
-      <div class="fw-bold mb-2 red-text"><i class="bi bi-exclamation-triangle-fill me-2"></i>تحذير مهم</div>
-      <p class="text-gray" style="font-size:.85rem">هذه الصفحة تستورد <strong>462 حيوان</strong> من بيانات المزرعة النموذجية. استخدمها مرة واحدة فقط. إذا كانت لديك بيانات سابقة في Firebase قد يحدث تكرار.</p>
+      <div class="fw-bold mb-2 red-text"><i class="bi bi-exclamation-triangle-fill me-2"></i>تحذير مهم — استخدم مرة واحدة فقط</div>
+      <p class="text-gray" style="font-size:.85rem;margin:0">هذا الزرار يستورد <strong style="color:var(--orange)">٤٦٢ حيوان</strong> من بيانات المزرعة. إذا كانت لديك بيانات سابقة في Firebase ستحدث <strong>تكرارات</strong>. تأكد أن القطيع فارغ أولاً.</p>
     </div>
 
+    <!-- Summary Table -->
     <div class="wonder-card mb-4">
-      <div class="fw-bold mb-3"><i class="bi bi-table accent-text me-2"></i>ملخص البيانات المراد استيرادها</div>
+      <div class="fw-bold mb-3"><i class="bi bi-table accent-text me-2"></i>بيان الماعز والأغنام — ٢٠٢٦/٠٤/٠٤</div>
       <div class="table-responsive">
-        <table class="tbl">
-          <thead><tr><th>النوع</th><th>السلالة</th><th>الغرض</th><th>ذكور</th><th>إناث</th><th>الإجمالي</th></tr></thead>
+        <table class="tbl" style="font-size:.78rem;text-align:center">
+          <thead>
+            <tr>
+              <th rowspan="2" style="text-align:right">النوع</th>
+              <th colspan="8" style="background:rgba(33,150,243,.08);color:var(--blue)">أغنام</th>
+              <th colspan="8" style="background:rgba(0,230,118,.08);color:var(--green)">ماعز</th>
+              <th rowspan="2" style="background:rgba(255,107,53,.08);color:var(--orange)">الإجمالي</th>
+            </tr>
+            <tr>
+              <th colspan="2" style="color:var(--blue)">برقي</th>
+              <th colspan="2" style="color:var(--blue)">دودبر</th>
+              <th colspan="2" style="color:var(--blue)">ميت ماستر</th>
+              <th colspan="2" style="color:var(--yellow)">ولدات</th>
+              <th colspan="2" style="color:var(--green)">بور</th>
+              <th colspan="2" style="color:var(--green)">شامي</th>
+              <th colspan="2" style="color:var(--green)">بلدي</th>
+              <th colspan="2" style="color:var(--yellow)">ولدات</th>
+            </tr>
+            <tr style="background:rgba(255,255,255,.03)">
+              <th></th>
+              <th class="text-gray" style="font-size:.68rem">ذ</th><th class="text-gray" style="font-size:.68rem">إ</th>
+              <th class="text-gray" style="font-size:.68rem">ذ</th><th class="text-gray" style="font-size:.68rem">إ</th>
+              <th class="text-gray" style="font-size:.68rem">ذ</th><th class="text-gray" style="font-size:.68rem">إ</th>
+              <th class="text-gray" style="font-size:.68rem">ذ</th><th class="text-gray" style="font-size:.68rem">إ</th>
+              <th class="text-gray" style="font-size:.68rem">ذ</th><th class="text-gray" style="font-size:.68rem">إ</th>
+              <th class="text-gray" style="font-size:.68rem">ذ</th><th class="text-gray" style="font-size:.68rem">إ</th>
+              <th class="text-gray" style="font-size:.68rem">ذ</th><th class="text-gray" style="font-size:.68rem">إ</th>
+              <th class="text-gray" style="font-size:.68rem">ذ</th><th class="text-gray" style="font-size:.68rem">إ</th>
+              <th></th>
+            </tr>
+          </thead>
           <tbody>
-            <tr><td>ماعز</td><td>بور</td><td>تربية</td><td>١٠</td><td>١٥</td><td>٢٥</td></tr>
-            <tr><td>ماعز</td><td>بور</td><td>تسمين</td><td>٤</td><td>-</td><td>٤</td></tr>
-            <tr><td>ماعز</td><td>شامي</td><td>تربية</td><td>١</td><td>١٤١</td><td>١٤٢</td></tr>
-            <tr><td>ماعز</td><td>شامي</td><td>تسمين</td><td>٤</td><td>-</td><td>٤</td></tr>
-            <tr><td>ماعز</td><td>بلدي</td><td>تربية</td><td>١</td><td>٢٦</td><td>٢٧</td></tr>
-            <tr><td>ماعز</td><td>بلدي</td><td>تسمين</td><td>٦</td><td>-</td><td>٦</td></tr>
-            <tr><td>ماعز</td><td>مواليد</td><td>مواليد</td><td>٤٢</td><td>٥٨</td><td>١١٤</td></tr>
-            <tr style="font-weight:700;background:rgba(0,230,118,.05)"><td colspan="3">إجمالي الماعز</td><td>٦٨</td><td>٢٤٠</td><td>٣٢٢ + ١١٤ = ٣٢٢+</td></tr>
-            <tr><td>أغنام</td><td>برقي</td><td>تربية</td><td>٢</td><td>٦٨</td><td>٧٠</td></tr>
-            <tr><td>أغنام</td><td>برقي</td><td>تسمين</td><td>١٥</td><td>-</td><td>١٥</td></tr>
-            <tr><td>أغنام</td><td>دودبر</td><td>تربية</td><td>١</td><td>١</td><td>٢</td></tr>
-            <tr><td>أغنام</td><td>ميت ماستر</td><td>تربية</td><td>١</td><td>-</td><td>١</td></tr>
-            <tr><td>أغنام</td><td>مواليد</td><td>مواليد+تسمين</td><td>١٧</td><td>٣٥</td><td>٥٢</td></tr>
-            <tr style="font-weight:700;background:rgba(33,150,243,.05)"><td colspan="3">إجمالي الأغنام</td><td>٣٦</td><td>١٠٤</td><td>١٤٠ + ٥٢</td></tr>
-            <tr style="font-weight:800;background:rgba(255,107,53,.08);color:var(--orange)"><td colspan="3">الإجمالي الكلي</td><td colspan="2">—</td><td>٤٦٢</td></tr>
+            <tr>
+              <td class="fw-bold" style="text-align:right">تربية</td>
+              <td>٢</td><td>٦٨</td>
+              <td>١</td><td>١</td>
+              <td>١</td><td>-</td>
+              <td>١٧</td><td>٢٣</td>
+              <td>١٠</td><td>١٥</td>
+              <td>١</td><td>١٤١</td>
+              <td>١</td><td>٢٦</td>
+              <td>٤٢</td><td>٥٨</td>
+              <td class="fw-bold green-text">٤٠٧</td>
+            </tr>
+            <tr>
+              <td class="fw-bold" style="text-align:right">تسمين</td>
+              <td>١٥</td><td>-</td>
+              <td>-</td><td>-</td>
+              <td>-</td><td>-</td>
+              <td>-</td><td>١٢</td>
+              <td>٤</td><td>-</td>
+              <td>٤</td><td>-</td>
+              <td>٦</td><td>-</td>
+              <td>١٤</td><td>-</td>
+              <td class="fw-bold accent-text">٥٥</td>
+            </tr>
+            <tr style="background:rgba(255,107,53,.05);font-weight:700">
+              <td style="text-align:right">إجمالي</td>
+              <td>١٧</td><td>٦٨</td>
+              <td>١</td><td>١</td>
+              <td>١</td><td>-</td>
+              <td>١٧</td><td>٣٥</td>
+              <td>١٤</td><td>١٥</td>
+              <td>٥</td><td>١٤١</td>
+              <td>٧</td><td>٢٦</td>
+              <td>٥٦</td><td>٥٨</td>
+              <td class="fw-bold" style="color:var(--orange)">٤٦٢</td>
+            </tr>
           </tbody>
+          <tfoot>
+            <tr style="background:rgba(33,150,243,.06)">
+              <td colspan="9" style="text-align:center;padding:10px">
+                <span style="color:var(--blue)">إجمالي الأغنام: <strong>٨٨</strong></span>
+                &nbsp;+&nbsp;
+                <span style="color:var(--yellow)">ولدات: <strong>٥٢</strong></span>
+                &nbsp;=&nbsp; <strong>١٤٠</strong>
+              </td>
+              <td colspan="9" style="text-align:center;padding:10px">
+                <span style="color:var(--green)">إجمالي الماعز: <strong>٢٠٨</strong></span>
+                &nbsp;+&nbsp;
+                <span style="color:var(--yellow)">ولدات: <strong>١١٤</strong></span>
+                &nbsp;=&nbsp; <strong>٣٢٢</strong>
+              </td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     </div>
 
+    <!-- Progress -->
     <div class="wonder-card">
-      <div id="import-progress" style="display:none" class="mb-3">
-        <div class="text-gray mb-2" id="import-status">جاري الاستيراد...</div>
-        <div class="progress-wonder"><div class="progress-bar-wonder" id="import-bar" style="width:0%"></div></div>
+      <div id="import-progress" style="display:none;margin-bottom:16px">
+        <div class="d-flex justify-content-between mb-1">
+          <span class="text-gray" style="font-size:.82rem" id="import-status">جاري الاستيراد...</span>
+          <span class="fw-bold" id="import-pct">0٪</span>
+        </div>
+        <div class="progress-wonder"><div class="progress-bar-wonder" id="import-bar" style="width:0%;transition:width .3s"></div></div>
       </div>
-      <div class="d-flex gap-2">
-        <button class="action-btn primary" onclick="startImport()" id="import-btn" style="padding:12px 24px">
-          <i class="bi bi-cloud-arrow-up-fill"></i> بدء استيراد البيانات (٤٦٢ حيوان)
+      <div id="import-result" style="display:none" class="mb-3"></div>
+      <div class="d-flex gap-3 align-items-center flex-wrap">
+        <button class="action-btn primary" onclick="startImport()" id="import-btn" style="padding:12px 28px;font-size:.95rem">
+          <i class="bi bi-cloud-arrow-up-fill"></i> بدء استيراد ٤٦٢ حيوان
         </button>
         <a href="animals.html" class="action-btn"><i class="bi bi-list-ul"></i> عرض القطيع</a>
+        <a href="dashboard.html" class="action-btn"><i class="bi bi-house-fill"></i> الرئيسية</a>
       </div>
     </div>
   </div>
+
   <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
-    © <span id="footer-year"></span> <span id="footer-farm"></span><br>
+    <span id="footer-year"></span> &copy; <span id="footer-farm"></span><br>
     <small style="font-size:.72rem;color:var(--text-muted)">إشراف: لواء أحمد رجب نوح | تطوير: جندي مصطفى محمد إبراهيم</small>
   </footer>
 </div>
@@ -67,38 +142,64 @@
 <script src="shared.js"></script>
 <script src="import-data.js"></script>
 <script>
-document.addEventListener('DOMContentLoaded',()=>{
+document.addEventListener('DOMContentLoaded', function(){
   if(!requireAuth())return;
   initFirebase();
-  const s=getSettings();
+  var s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
   renderNavbar('');
-  renderPageHeader('<i class="bi bi-cloud-arrow-up-fill accent-text"></i> استيراد بيانات المزرعة','مرة واحدة فقط — بيانات المزرعة النموذجية بالعامرية','');
+  renderPageHeader(
+    '<i class="bi bi-cloud-arrow-up-fill accent-text"></i> استيراد بيانات المزرعة',
+    'المزرعة النموذجية بالعامرية — ٤٦٢ حيوان','');
 });
 
-window.startImport=async function(){
-  if(!confirm('هل أنت متأكد من استيراد ٤٦٢ حيوان؟\nتأكد أن قاعدة البيانات فارغة أو جديدة.'))return;
-  const btn=document.getElementById('import-btn');
-  const prog=document.getElementById('import-progress');
-  const status=document.getElementById('import-status');
-  const bar=document.getElementById('import-bar');
-  btn.disabled=true;btn.textContent='جاري الاستيراد...';
+window.startImport = async function(){
+  if(!confirm('هل أنت متأكد من استيراد ٤٦٢ حيوان؟\n\nتأكد أن قاعدة البيانات فارغة أو جديدة.'))return;
+  var btn=document.getElementById('import-btn');
+  var prog=document.getElementById('import-progress');
+  var result=document.getElementById('import-result');
+  var status=document.getElementById('import-status');
+  var bar=document.getElementById('import-bar');
+  var pct=document.getElementById('import-pct');
+
+  btn.disabled=true;
+  btn.innerHTML='<div class="spinner" style="width:18px;height:18px;border-width:2px;display:inline-block;margin-left:8px"></div> جاري الاستيراد...';
   prog.style.display='block';
-  let ok=0;
-  for(let i=0;i<FARM_ANIMALS.length;i++){
-    const a={...FARM_ANIMALS[i],created_at:new Date().toISOString()};
-    try{await fbPost('animals',a);ok++;}catch(e){console.error(e);}
-    const pct=Math.round((i+1)/FARM_ANIMALS.length*100);
-    bar.style.width=pct+'%';
-    status.textContent='جاري الاستيراد... '+ar(i+1)+' / '+ar(FARM_ANIMALS.length)+' ('+pct+'٪)';
+
+  var ok=0, failed=0;
+  var total=FARM_ANIMALS.length;
+
+  for(var i=0;i<total;i++){
+    var a=Object.assign({},FARM_ANIMALS[i],{
+      created_at: new Date().toISOString(),
+      imported_at: new Date().toISOString()
+    });
+    try{
+      await fbPost('animals', a);
+      ok++;
+    }catch(e){
+      failed++;
+      console.error('Failed:', a.tag, e.message);
+    }
+    var p=Math.round((i+1)/total*100);
+    bar.style.width=p+'%';
+    pct.textContent=ar(p)+'٪';
+    status.textContent='جاري الاستيراد... '+ar(i+1)+' / '+ar(total);
   }
-  await logActivity('add','animals','استيراد بيانات المزرعة: '+ar(ok)+' حيوان');
-  status.textContent='✅ تم الاستيراد بنجاح! '+ar(ok)+' حيوان';
+
+  await logActivity('add','animals','استيراد بيانات المزرعة: '+ar(ok)+' حيوان ('+ar(failed)+' فشل)');
+
+  result.style.display='block';
+  if(ok===total){
+    result.innerHTML='<div style="background:rgba(0,230,118,.1);border:1px solid rgba(0,230,118,.3);border-radius:12px;padding:14px 18px;color:var(--green);font-weight:700"><i class="bi bi-check-circle-fill me-2"></i>✅ تم استيراد '+ar(ok)+' حيوان بنجاح! جاري الانتقال لصفحة القطيع...</div>';
+  } else {
+    result.innerHTML='<div style="background:rgba(255,107,53,.1);border:1px solid rgba(255,107,53,.3);border-radius:12px;padding:14px 18px"><span class="fw-bold accent-text">تم استيراد '+ar(ok)+' من '+ar(total)+'</span><br><span class="text-gray">فشل: '+ar(failed)+'</span></div>';
+  }
   bar.style.width='100%';
-  toast('تم استيراد '+ar(ok)+' حيوان بنجاح');
-  btn.textContent='تم الاستيراد ✓';
-  setTimeout(()=>location.href='animals.html',2000);
+  status.textContent='اكتمل الاستيراد';
+  btn.innerHTML='<i class="bi bi-check-circle-fill me-2"></i>تم الاستيراد';
+  setTimeout(function(){ location.href='animals.html'; }, 2500);
 };
 </script>
 </body>
