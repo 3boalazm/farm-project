@@ -1,369 +1,368 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<script>
-(function(){
-  var t=localStorage.getItem('farm_theme');
-  if(t==='light')document.documentElement.classList.add('light-mode');
-})();
-</script>
+<script>(function(){var t=localStorage.getItem('farm_theme');if(t==='light')document.documentElement.classList.add('light-mode');}());</script>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>يومية المزرعة — بيان المزرعة</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
+<style>
+/* ── Diary Table ── */
+.diary-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:.78rem;text-align:center;direction:rtl}
+.diary-tbl th,.diary-tbl td{border:1px solid var(--border);padding:7px 6px;white-space:nowrap}
+.diary-tbl thead th{background:var(--bg-3);font-weight:700}
+.diary-tbl .row-tarbiya td{background:rgba(0,230,118,.03)}
+.diary-tbl .row-tasmeen td{background:rgba(255,107,53,.03)}
+.diary-tbl .row-births td{background:rgba(255,193,7,.04)}
+.diary-tbl .row-total td{background:rgba(255,107,53,.08);font-weight:800}
+.diary-tbl td.m-col{color:var(--blue);font-weight:600}
+.diary-tbl td.f-col{color:var(--orange);font-weight:600}
+.diary-tbl td.zero{color:var(--border-2)}
+.diary-tbl td.total-col{color:var(--orange);font-weight:800}
+.diary-tbl th.sheep-hd{background:rgba(33,150,243,.08);color:var(--blue)}
+.diary-tbl th.goat-hd{background:rgba(0,230,118,.08);color:var(--green)}
+.diary-tbl th.births-hd{background:rgba(255,193,7,.08);color:var(--yellow)}
+/* Edit inputs */
+.diary-cell-input{width:48px;background:rgba(33,150,243,.08);border:1px solid rgba(33,150,243,.4);border-radius:6px;padding:3px 4px;color:var(--text);font-family:'Lexend',sans-serif;font-size:.82rem;text-align:center;outline:none}
+.diary-cell-input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(33,150,243,.15)}
+.diary-cell-input.changed{background:rgba(255,193,7,.12);border-color:var(--yellow)}
+/* Summary footer */
+.diary-summary-row td{background:rgba(0,230,118,.07);font-weight:700}
+/* Print */
+@media print{
+  .no-print{display:none!important}
+  .diary-tbl{font-size:.7rem}
+  .page-wrap{padding:0;margin:0}
+}
+</style>
 </head>
 <body>
 <div class="page-wrap">
   <div id="page-header"></div>
-  <div id="content"><div class="text-center py-5"><div class="spinner"></div></div></div>
+  <div id="diary-main"><div class="text-center py-5"><div class="spinner"></div></div></div>
   <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
-    © <span id="footer-year"></span> <span id="footer-farm"></span><br>
-    <small id="footer-sub" style="font-size:.72rem;color:#555">إشراف: لواء أحمد رجب نوح &nbsp;|&nbsp; تطوير: جندي مصطفى محمد إبراهيم</small>
+    <span id="footer-year"></span> &copy; <span id="footer-farm"></span><br>
+    <small style="font-size:.72rem;color:var(--text-muted)">إشراف: لواء أحمد رجب نوح | تطوير: جندي مصطفى محمد إبراهيم</small>
   </footer>
 </div>
 <script src="config.js"></script>
 <script src="firebase.js"></script>
 <script src="shared.js"></script>
-<script src="notifications-service.js"></script>
 <script>
-document.addEventListener('DOMContentLoaded', async ()=>{
+'use strict';
+var _diaryMode='view'; // 'view' or 'edit'
+var _diaryAnimals=[];
+var _pendingChanges={}; // key: sp-breed-purpose-gender => desired count
+
+// ── SCHEMA ───────────────────────────────────────────
+var SHEEP_BREEDS=['برقي','دودبر','ميت ماستر'];
+var GOAT_BREEDS=['بور','شامي','بلدي'];
+var PURPOSES=['tarbiya','tasmeen','birth'];
+var PURPOSE_LABELS={tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'};
+var PURPOSE_ROW_STYLES={tarbiya:'row-tarbiya',tasmeen:'row-tasmeen',birth:'row-births'};
+
+// ── INIT ─────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async function(){
   if(!requireAuth())return;
   initFirebase();
-  const s=getSettings();
+  var s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
   renderNavbar('diary.html');
   renderPageHeader(
     '<i class="bi bi-journal-text accent-text"></i> يومية المزرعة',
-    todayAr(),
-    '<button class="action-btn" onclick="window.print()"><i class="bi bi-printer"></i> طباعة</button>'
+    s.farmName+' — '+todayAr(),
+    '<button class="action-btn no-print" onclick="window.print()"><i class="bi bi-printer"></i> طباعة</button>'+
+    (can('admin')?
+      '<button class="action-btn no-print" id="mode-btn" onclick="toggleDiaryMode()" style="background:rgba(33,150,243,.1);border-color:rgba(33,150,243,.35);color:var(--blue)">'+
+        '<i class="bi bi-pencil-square"></i> تعديل يدوي</button>':'')
   );
-  const el=document.getElementById('content');
-  renderLoading(el);
 
-  const [animals, breeding, health, vaccines, finance, meds, feeds, activity]=await Promise.all([
-    fbGet('animals'), fbGet('breeding'), fbGet('health'),
-    fbGet('vaccinations'), fbGet('finance'),
-    fbGet('inventory_meds'), fbGet('inventory_feeds'), fbGet('activity_log')
-  ]);
-
-  const alive=animals.filter(a=>a.status==='alive');
-  const dead=animals.filter(a=>a.status==='dead');
-  const s2=getSettings();
-  const curr=s2.currency;
-  const today=todayStr();
-
-  // Animal breakdown
-  const goats=alive.filter(a=>a.species==='goat'&&a.purpose!=='birth');
-  const sheep=alive.filter(a=>a.species==='sheep'&&a.purpose!=='birth');
-  const goatBirths=alive.filter(a=>a.species==='goat'&&a.purpose==='birth');
-  const sheepBirths=alive.filter(a=>a.species==='sheep'&&a.purpose==='birth');
-  const goatBreeds=[...s2.goatBreeds,'مواليد'];const sheepBreeds=[...s2.sheepBreeds];
-
-  function breedRow(breed,sp){
-    const a=alive.filter(x=>x.species===sp&&(x.breed===breed||(breed==='مواليد'&&x.purpose==='birth')));
-    if(!a.length)return'';
-    const tarbiya=a.filter(x=>x.purpose==='tarbiya');
-    const tasmeen=a.filter(x=>x.purpose==='tasmeen');
-    const births=a.filter(x=>x.purpose==='birth');
-    const males=a.filter(x=>x.gender==='male');
-    const females=a.filter(x=>x.gender==='female');
-    return '<div class="detail-row" style="flex-wrap:wrap;gap:6px">'+
-      '<span class="detail-key fw-bold">'+breed+'</span>'+
-      '<div class="d-flex gap-2 flex-wrap align-items-center">'+
-        (tarbiya.length?'<span class="type-badge badge-tarbiya">'+ar(tarbiya.length)+' تربية</span>':'')+
-        (tasmeen.length?'<span class="type-badge badge-tasmeen">'+ar(tasmeen.length)+' تسمين</span>':'')+
-        (births.length?'<span class="type-badge badge-blue">'+ar(births.length)+' ولادة</span>':'')+
-        '<span class="type-badge badge-gray">ذ: '+ar(males.length)+' | ♀: '+ar(females.length)+'</span>'+
-        '<span class="fw-bold green-text">الإجمالي: '+ar(a.length)+'</span>'+
-      '</div>'+
-    '</div>';
+  try{
+    _diaryAnimals=await fbGet('animals');
+  }catch(e){
+    document.getElementById('diary-main').innerHTML='<div class="empty-state"><i class="bi bi-wifi-off"></i><p>خطأ في الاتصال: '+e.message+'</p></div>';
+    return;
   }
-
-  // ── Build full breed×purpose×gender table (like the report image) ──
-  function buildFullTable(animals){
-    const alive=animals.filter(a=>a.status==='alive');
-    const goatBreeds2=[...s2.goatBreeds,'مواليد'];
-    const sheepBreeds2=[...s2.sheepBreeds,'مواليد'];
-    const purposes=['tarbiya','tasmeen'];
-    const purposeLabels={tarbiya:'تربية',tasmeen:'تسمين'};
-
-    function getCount(sp,breed,purpose,gender){
-      return alive.filter(a=>a.species===sp&&a.breed===breed&&a.purpose===purpose&&a.gender===gender).length;
-    }
-    function getBirths(sp,gender){
-      return alive.filter(a=>a.species===sp&&a.purpose==='birth'&&a.gender===gender).length;
-    }
-
-    // Build HTML table like the image
-    let tbl='<div class="table-responsive"><table style="width:100%;border-collapse:collapse;font-size:.78rem;direction:rtl;text-align:center">';
-    // Header
-    tbl+='<thead>';
-    tbl+='<tr style="background:var(--bg-3);border-bottom:2px solid var(--border)">';
-    tbl+='<th rowspan="2" style="padding:8px;border:1px solid var(--border);min-width:60px">النوع</th>';
-    // Sheep headers
-    sheepBreeds2.forEach(b=>{
-      if(b==='مواليد')tbl+='<th colspan="2" style="padding:8px;border:1px solid var(--border);color:var(--yellow)">ولدات</th>';
-      else tbl+='<th colspan="2" style="padding:8px;border:1px solid var(--border);color:var(--blue)">'+b+'</th>';
-    });
-    // Goat headers
-    goatBreeds2.forEach(b=>{
-      if(b==='مواليد')tbl+='<th colspan="2" style="padding:8px;border:1px solid var(--border);color:var(--yellow)">ولدات</th>';
-      else tbl+='<th colspan="2" style="padding:8px;border:1px solid var(--border);color:var(--green)">'+b+'</th>';
-    });
-    tbl+='<th rowspan="2" style="padding:8px;border:1px solid var(--border);background:rgba(255,107,53,.1);color:var(--orange)">الإجمالي</th>';
-    tbl+='</tr>';
-    // Subheader (ذكور/إناث for each breed)
-    tbl+='<tr style="background:var(--bg-hover)">';
-    [...sheepBreeds2,...goatBreeds2].forEach(()=>{
-      tbl+='<th style="padding:4px 6px;border:1px solid var(--border);font-size:.7rem;color:var(--text-gray)">ذكور</th>';
-      tbl+='<th style="padding:4px 6px;border:1px solid var(--border);font-size:.7rem;color:var(--text-gray)">إناث</th>';
-    });
-    tbl+='</tr>';
-    tbl+='</thead><tbody>';
-
-    let grandTotal=0;
-    [...purposes,'birth'].forEach(purpose=>{
-      if(purpose==='birth')return; // handled in totals
-      const label=purposeLabels[purpose];
-      let rowTotal=0;
-      tbl+='<tr style="border-bottom:1px solid var(--border)"><td style="padding:8px;border:1px solid var(--border);font-weight:700">'+(purpose==='tarbiya'?'تربية':'تسمين')+'</td>';
-      // Sheep
-      sheepBreeds2.forEach(breed=>{
-        let m=0,f=0;
-        if(breed==='مواليد'){m=getCount('sheep','مواليد',purpose,'male');f=getCount('sheep','مواليد',purpose,'female');}
-        else{m=getCount('sheep',breed,purpose,'male');f=getCount('sheep',breed,purpose,'female');}
-        rowTotal+=m+f;
-        tbl+='<td style="padding:6px;border:1px solid var(--border)">'+(m>0?ar(m):'-')+'</td>';
-        tbl+='<td style="padding:6px;border:1px solid var(--border)">'+(f>0?ar(f):'-')+'</td>';
-      });
-      // Goats
-      goatBreeds2.forEach(breed=>{
-        let m=0,f=0;
-        if(breed==='مواليد'){m=getCount('goat','مواليد',purpose,'male');f=getCount('goat','مواليد',purpose,'female');}
-        else{m=getCount('goat',breed,purpose,'male');f=getCount('goat',breed,purpose,'female');}
-        rowTotal+=m+f;
-        tbl+='<td style="padding:6px;border:1px solid var(--border)">'+(m>0?ar(m):'-')+'</td>';
-        tbl+='<td style="padding:6px;border:1px solid var(--border)">'+(f>0?ar(f):'-')+'</td>';
-      });
-      tbl+='<td style="padding:6px;border:1px solid var(--border);font-weight:700;color:var(--orange)">'+(rowTotal>0?ar(rowTotal):'-')+'</td>';
-      tbl+='</tr>';
-      grandTotal+=rowTotal;
-    });
-
-    // Births row
-    let birthTotal=0;
-    tbl+='<tr style="background:rgba(255,193,7,.04);border-bottom:1px solid var(--border)"><td style="padding:8px;border:1px solid var(--border);font-weight:700;color:var(--yellow)">مواليد</td>';
-    sheepBreeds2.forEach(breed=>{
-      const m=breed==='مواليد'?getBirths('sheep','male'):0;
-      const f=breed==='مواليد'?getBirths('sheep','female'):0;
-      birthTotal+=m+f;
-      tbl+='<td style="padding:6px;border:1px solid var(--border)">'+(m>0?ar(m):'-')+'</td>';
-      tbl+='<td style="padding:6px;border:1px solid var(--border)">'+(f>0?ar(f):'-')+'</td>';
-    });
-    goatBreeds2.forEach(breed=>{
-      const m=breed==='مواليد'?getBirths('goat','male'):0;
-      const f=breed==='مواليد'?getBirths('goat','female'):0;
-      birthTotal+=m+f;
-      tbl+='<td style="padding:6px;border:1px solid var(--border)">'+(m>0?ar(m):'-')+'</td>';
-      tbl+='<td style="padding:6px;border:1px solid var(--border)">'+(f>0?ar(f):'-')+'</td>';
-    });
-    tbl+='<td style="padding:6px;border:1px solid var(--border);font-weight:700;color:var(--yellow)">'+(birthTotal>0?ar(birthTotal):'-')+'</td></tr>';
-    grandTotal+=birthTotal;
-
-    // Total row
-    tbl+='<tr style="background:rgba(255,107,53,.07);font-weight:700"><td style="padding:8px;border:1px solid var(--border)">الإجمالي</td>';
-    const allCols=[...sheepBreeds2,...goatBreeds2];
-    allCols.forEach(breed=>{
-      const sp=sheepBreeds2.includes(breed)?'sheep':'goat';
-      const m=alive.filter(a=>a.species===sp&&a.breed===breed&&a.gender==='male').length;
-      const f=alive.filter(a=>a.species===sp&&a.breed===breed&&a.gender==='female').length;
-      tbl+='<td style="padding:6px;border:1px solid var(--border);color:var(--blue)">'+(m>0?ar(m):'-')+'</td>';
-      tbl+='<td style="padding:6px;border:1px solid var(--border);color:var(--orange)">'+(f>0?ar(f):'-')+'</td>';
-    });
-    tbl+='<td style="padding:8px;border:1px solid var(--border);font-size:1rem;color:var(--orange)">'+ar(grandTotal)+'</td></tr>';
-
-    // Summary footer
-    const totalSheep=alive.filter(a=>a.species==='sheep'&&a.purpose!=='birth').length;
-    const totalSheepBirth=alive.filter(a=>a.species==='sheep'&&a.purpose==='birth').length;
-    const totalGoat=alive.filter(a=>a.species==='goat'&&a.purpose!=='birth').length;
-    const totalGoatBirth=alive.filter(a=>a.species==='goat'&&a.purpose==='birth').length;
-    const totalCols=allCols.length*2+2;
-    tbl+='<tr style="background:rgba(0,230,118,.06)"><td colspan="'+(Math.floor(allCols.length/2)+1)+'" style="padding:8px;border:1px solid var(--border);text-align:center;color:var(--blue)">إجمالي الأغنام: <strong>'+ar(totalSheep)+'</strong> &nbsp;|&nbsp; الولدات: <strong style="color:var(--yellow)">'+ar(totalSheepBirth)+'</strong></td>';
-    tbl+='<td colspan="'+(Math.ceil(allCols.length/2)+1)+'" style="padding:8px;border:1px solid var(--border);text-align:center;color:var(--green)">إجمالي الماعز: <strong>'+ar(totalGoat)+'</strong> &nbsp;|&nbsp; الولدات: <strong style="color:var(--yellow)">'+ar(totalGoatBirth)+'</strong></td></tr>';
-    tbl+='</tbody></table></div>';
-    return tbl;
-  }
-
-  // ── Barn distribution with breed detail
-  const BARNS=['ج١ع١','ج١ع٢','ج٢ع١','ج٢ع٢','ج٣ع١','ج٣ع٢','ج٤ع١','ج٤ع٢','ج٥ع١','ج٥ع٢'];
-  function barnDetail(stall){
-    const a=alive.filter(x=>x.barn===stall);
-    if(!a.length)return'<div class="text-gray" style="font-size:.78rem">فارغ</div>';
-    const breeds=[...new Set(a.map(x=>x.breed))];
-    return breeds.map(b=>{
-      const ba=a.filter(x=>x.breed===b);
-      return '<div style="font-size:.78rem;margin-bottom:2px"><span class="fw-bold">'+b+'</span>: '+
-        ar(ba.filter(x=>x.species==='goat').length)+'🐐 + '+
-        ar(ba.filter(x=>x.species==='sheep').length)+'🐑 '+
-        '(ذ:'+ar(ba.filter(x=>x.gender==='male').length)+' / ♀:'+ar(ba.filter(x=>x.gender==='female').length)+')'+
-      '</div>';
-    }).join('');
-  }
-
-  // Finance today
-  const todayInc=finance.filter(r=>r.type==='income'&&r.date===today).reduce((t,r)=>t+(+r.amount||0),0);
-  const todayExp=finance.filter(r=>r.type==='expense'&&r.date===today).reduce((t,r)=>t+(+r.amount||0),0);
-  const totalInc=finance.filter(r=>r.type==='income').reduce((t,r)=>t+(+r.amount||0),0);
-  const totalExp=finance.filter(r=>r.type==='expense').reduce((t,r)=>t+(+r.amount||0),0);
-
-  // Today's activity
-  const todayActivity=activity.filter(a=>a.date===today).slice(0,10);
-  // Recent logins
-  const recentLogins=activity.filter(a=>a.action==='login').slice(0,5);
-
-  // Alerts
-  const upcoming=breeding.filter(r=>r.status==='pregnant'&&r.expected_birth&&daysUntil(r.expected_birth)>=0&&daysUntil(r.expected_birth)<=7);
-  const overdueVacc=vaccines.filter(v=>v.status==='overdue');
-  const withdrawal=health.filter(r=>r.status==='active'&&r.treatment_effect_end&&r.treatment_effect_end>=today);
-  const lowMeds=meds.filter(m=>+m.quantity<=+m.min_quantity&&+m.min_quantity>0);
-  const lowFeeds=feeds.filter(f=>+f.quantity<=+f.min_quantity&&+f.min_quantity>0);
-  const expMeds=meds.filter(m=>m.expiry&&daysUntil(m.expiry)>=0&&daysUntil(m.expiry)<=30);
-
-  function daysUntil(d){return Math.ceil((new Date(d)-new Date())/86400000);}
-
-  el.innerHTML=
-  // Full breed table
-  '<div class="wonder-card mb-4">'+
-    '<div class="d-flex justify-content-between align-items-center mb-3">'+
-      '<div class="fw-bold"><i class="bi bi-table accent-text me-2"></i>بيان الماعز والأغنام — '+todayAr()+'</div>'+
-      '<button class="action-btn sm" onclick="window.print()"><i class="bi bi-printer"></i> طباعة</button>'+
-    '</div>'+
-    buildFullTable(animals)+
-  '</div>'+
-  // HEADER STATS
-  '<div class="row g-3 mb-4">'+
-    '<div class="col-6 col-md-3"><a href="animals.html" style="text-decoration:none"><div class="summary-card"><div class="summary-number accent-text">'+ar(goats.length+sheep.length)+'</div><small class="text-gray">إجمالي القطيع</small></div></a></div>'+
-    '<div class="col-6 col-md-3"><a href="goats.html" style="text-decoration:none"><div class="summary-card"><div class="summary-number green-text">'+ar(goats.length)+'</div><small class="text-gray">الماعز</small></div></a></div>'+
-    '<div class="col-6 col-md-3"><a href="sheep.html" style="text-decoration:none"><div class="summary-card"><div class="summary-number" style="color:var(--blue)">'+ar(sheep.length)+'</div><small class="text-gray">الأغنام</small></div></a></div>'+
-    '<div class="col-6 col-md-3"><a href="animals.html?status=dead" style="text-decoration:none"><div class="summary-card"><div class="summary-number red-text">'+ar(dead.length)+'</div><small class="text-gray">النافق</small></div></a></div>'+
-  '</div>'+
-
-  // ALERTS
-  (upcoming.length||overdueVacc.length||withdrawal.length||lowMeds.length||lowFeeds.length?
-  '<div class="diary-section mb-4" style="border-color:rgba(244,67,54,.3);background:rgba(244,67,54,.04)">'+
-    '<div class="diary-section-title red-text"><i class="bi bi-bell-fill me-2"></i>تنبيهات اليوم</div>'+
-    (upcoming.map(r=>'<div class="detail-row"><span class="detail-key">🐑 ولادة متوقعة</span><span class="detail-val accent-text">'+r.female_tag+' ('+ar(daysUntil(r.expected_birth))+' يوم)</span></div>').join(''))+
-    (overdueVacc.map(v=>'<div class="detail-row"><span class="detail-key">💉 تحصين متأخر</span><span class="detail-val red-text">'+v.name+'</span></div>').join(''))+
-    (withdrawal.map(r=>'<div class="detail-row"><span class="detail-key">⚠️ تأثير علاج نشط</span><span class="detail-val red-text">'+(r.animal_tag||r.animal_breed)+' حتى '+r.treatment_effect_end+'</span></div>').join(''))+
-    (lowFeeds.map(f=>'<div class="detail-row"><span class="detail-key">📦 علف منخفض</span><span class="detail-val accent-text">'+f.name+' — متبقي '+f.quantity+' '+f.unit+'</span></div>').join(''))+
-    (lowMeds.map(m=>'<div class="detail-row"><span class="detail-key">💊 دواء منخفض</span><span class="detail-val accent-text">'+m.name+' — متبقي '+m.quantity+' '+m.unit+'</span></div>').join(''))+
-  '</div>':'') +
-
-  '<div class="row g-3">'+
-  // GOATS SECTION
-  '<div class="col-lg-6">'+
-    '<div class="diary-section">'+
-      '<div class="diary-section-title"><i class="bi bi-tropical-storm accent-text me-2"></i>قسم الماعز <span class="type-badge badge-tarbiya ms-2">'+ar(goats.length+goatBirths.length)+'</span></div>'+
-      goatBreeds.map(b=>breedRow(b,'goat')).join('')+
-
-    '</div>'+
-  '</div>'+
-
-  // SHEEP SECTION
-  '<div class="col-lg-6">'+
-    '<div class="diary-section">'+
-      '<div class="diary-section-title"><i class="bi bi-cloud-fill accent-text me-2"></i>قسم الأغنام <span class="type-badge badge-blue ms-2">'+ar(sheep.length+sheepBirths.length)+'</span></div>'+
-      sheepBreeds.map(b=>breedRow(b,'sheep')).join('')+
-
-    '</div>'+
-  '</div>'+
-
-  // BARNS
-  '<div class="col-12">'+
-    '<div class="diary-section">'+
-      '<div class="diary-section-title"><i class="bi bi-grid-3x3-gap-fill accent-text me-2"></i>توزيع الجمالونات والعنابر</div>'+
-      '<div class="row g-2">'+
-        BARNS.map(function(stall){
-          var cnt=alive.filter(a=>a.barn===stall).length;
-          var pct=Math.min(100,Math.round(cnt/70*100));
-          var c=cnt>=70?'var(--red)':cnt>=50?'var(--orange)':'var(--green)';
-          return '<div class="col-md-2 col-6"><div class="p-3" style="background:#181818;border:1px solid '+(cnt>=50?c+'55':'#2a2a2a')+';border-radius:12px">'+
-            '<div class="d-flex justify-content-between align-items-center mb-1"><span class="fw-bold" style="font-size:.82rem">'+stall+'</span><span class="fw-bold" style="color:'+c+'">'+ar(cnt)+'</span></div>'+
-            '<div style="height:4px;background:#1a1a1a;border-radius:4px"><div style="height:100%;width:'+pct+'%;background:'+c+';border-radius:4px"></div></div>'+
-            '<div style="margin-top:6px">'+barnDetail(stall)+'</div>'+
-          '</div></div>';
-        }).join('')+
-      '</div>'+
-    '</div>'+
-  '</div>'+
-
-  // FINANCE TODAY
-  '<div class="col-lg-6">'+
-    '<div class="diary-section">'+
-      '<div class="diary-section-title"><i class="bi bi-wallet2 accent-text me-2"></i>المالية — <a href="finance.html" style="color:var(--gray);font-size:.75rem">عرض الكل</a></div>'+
-      '<div class="detail-row"><span class="detail-key">إيرادات اليوم</span><span class="detail-val green-text">+'+todayInc.toLocaleString('ar-EG')+' '+curr+'</span></div>'+
-      '<div class="detail-row"><span class="detail-key">مصروفات اليوم</span><span class="detail-val accent-text">-'+todayExp.toLocaleString('ar-EG')+' '+curr+'</span></div>'+
-      '<div class="detail-row"><span class="detail-key">إجمالي الإيرادات</span><span class="detail-val green-text">'+totalInc.toLocaleString('ar-EG')+' '+curr+'</span></div>'+
-      '<div class="detail-row"><span class="detail-key">إجمالي المصروفات</span><span class="detail-val accent-text">'+totalExp.toLocaleString('ar-EG')+' '+curr+'</span></div>'+
-      '<div class="detail-row"><span class="detail-key">الرصيد</span><span class="detail-val fw-bold" style="color:'+(totalInc-totalExp>=0?'var(--green)':'var(--red)')+'">'+
-        (totalInc-totalExp>=0?'+':'')+(totalInc-totalExp).toLocaleString('ar-EG')+' '+curr+
-      '</span></div>'+
-    '</div>'+
-  '</div>'+
-
-  // TODAY ACTIVITY
-  '<div class="col-lg-6">'+
-    '<div class="diary-section">'+
-      '<div class="diary-section-title"><i class="bi bi-clock-history accent-text me-2"></i>أنشطة اليوم <span class="type-badge badge-gray ms-2">'+ar(todayActivity.length)+'</span> — <a href="activity.html" style="color:var(--gray);font-size:.75rem">عرض الكل</a></div>'+
-      (todayActivity.length===0?'<div class="text-gray text-center py-3">لا أنشطة مسجلة اليوم</div>':
-        todayActivity.map(function(a){
-          var cfg={add:{i:'bi-plus-circle-fill',c:'var(--green)'},edit:{i:'bi-pencil-fill',c:'var(--blue)'},delete:{i:'bi-trash-fill',c:'var(--red)'},login:{i:'bi-box-arrow-in-right',c:'var(--yellow)'}}[a.action]||{i:'bi-info-circle',c:'var(--gray)'};
-          return '<div class="detail-row">'+
-            '<span class="detail-key d-flex align-items-center gap-2"><i class="bi '+cfg.i+'" style="color:'+cfg.c+'"></i>'+a.userName+'</span>'+
-            '<span class="detail-val text-gray" style="font-size:.78rem">'+a.description+'</span>'+
-          '</div>';
-        }).join('')
-      )+
-    '</div>'+
-  '</div>'+
-
-  // HEALTH ACTIVE
-  '<div class="col-lg-6">'+
-    '<div class="diary-section">'+
-      '<div class="diary-section-title"><i class="bi bi-heart-pulse-fill accent-text me-2"></i>قيد العلاج الآن — <a href="health.html" style="color:var(--gray);font-size:.75rem">عرض الكل</a></div>'+
-      (health.filter(r=>r.status==='active').length===0?'<div class="text-gray text-center py-3">لا حيوانات قيد العلاج</div>':
-        health.filter(r=>r.status==='active').slice(0,5).map(function(r){
-          return '<div class="detail-row">'+
-            '<span class="detail-key">'+(r.animal_tag||r.animal_breed||'—')+'</span>'+
-            '<span class="detail-val text-gray" style="font-size:.78rem">'+r.diagnosis+' | '+r.medication+'</span>'+
-          '</div>';
-        }).join('')
-      )+
-    '</div>'+
-  '</div>'+
-
-  // UPCOMING VACCINATIONS
-  '<div class="col-lg-6">'+
-    '<div class="diary-section">'+
-      '<div class="diary-section-title"><i class="bi bi-bandaid-fill accent-text me-2"></i>تحصينات قادمة — <a href="vaccine.html" style="color:var(--gray);font-size:.75rem">عرض الكل</a></div>'+
-      (vaccines.filter(v=>v.status==='pending'&&v.scheduled_date&&daysUntil(v.scheduled_date)>=0&&daysUntil(v.scheduled_date)<=14).length===0?
-        '<div class="text-gray text-center py-3">لا تحصينات قادمة خلال ١٤ يوم</div>':
-        vaccines.filter(v=>v.status==='pending'&&v.scheduled_date&&daysUntil(v.scheduled_date)>=0&&daysUntil(v.scheduled_date)<=14).map(function(v){
-          var d=daysUntil(v.scheduled_date);
-          return '<div class="detail-row">'+
-            '<span class="detail-key">'+v.name+'</span>'+
-            '<span class="detail-val" style="color:'+(d<=3?'var(--red)':'var(--orange)')+'">بعد '+ar(d)+' يوم ('+v.scheduled_date+')</span>'+
-          '</div>';
-        }).join('')
-      )+
-    '</div>'+
-  '</div>'+
-
-  '</div>'; // end row
+  renderDiary();
 });
+
+// ── TOGGLE MODE ──────────────────────────────────────
+window.toggleDiaryMode=function(){
+  if(_diaryMode==='view'){
+    _diaryMode='edit';
+    _pendingChanges={};
+    var btn=document.getElementById('mode-btn');
+    if(btn){btn.innerHTML='<i class="bi bi-x-circle"></i> إلغاء التعديل';btn.style.background='rgba(244,67,54,.1)';btn.style.borderColor='rgba(244,67,54,.35)';btn.style.color='var(--red)';}
+  } else {
+    _diaryMode='view';
+    _pendingChanges={};
+    var btn=document.getElementById('mode-btn');
+    if(btn){btn.innerHTML='<i class="bi bi-pencil-square"></i> تعديل يدوي';btn.style.background='rgba(33,150,243,.1)';btn.style.borderColor='rgba(33,150,243,.35)';btn.style.color='var(--blue)';}
+  }
+  renderDiary();
+};
+
+// ── GET COUNT ────────────────────────────────────────
+function getCount(sp,breed,purpose,gender){
+  return _diaryAnimals.filter(function(a){
+    return a.status==='alive'&&a.species===sp&&a.breed===breed&&a.purpose===purpose&&a.gender===gender;
+  }).length;
+}
+
+// ── RENDER DIARY ─────────────────────────────────────
+function renderDiary(){
+  var el=document.getElementById('diary-main');
+  if(!el)return;
+
+  var isEdit=(_diaryMode==='edit');
+  var alive=_diaryAnimals.filter(function(a){return a.status==='alive';});
+
+  // Build table
+  // Columns: برقي(ذ,إ) | دودبر(ذ,إ) | ميت ماستر(ذ,إ) | ولدات أغنام(ذ,إ) | بور(ذ,إ) | شامي(ذ,إ) | بلدي(ذ,إ) | ولدات ماعز(ذ,إ) | الإجمالي
+  
+  function cell(sp, breed, purpose, gender){
+    var current=getCount(sp,breed,purpose,gender);
+    var key=sp+'-'+breed+'-'+purpose+'-'+gender;
+    var val=(_pendingChanges[key]!==undefined)?_pendingChanges[key]:current;
+    if(isEdit){
+      return '<td><input type="number" class="diary-cell-input'+(val!==current?' changed':'')+'" data-key="'+key+'" data-sp="'+sp+'" data-breed="'+breed+'" data-purpose="'+purpose+'" data-gender="'+gender+'" value="'+val+'" min="0" onchange="onCellChange(this)" oninput="onCellChange(this)"></td>';
+    }
+    var display=val>0?ar(val):'—';
+    var cls=gender==='male'?'m-col':'f-col';
+    if(val===0)cls='zero';
+    return '<td class="'+cls+'">'+display+'</td>';
+  }
+
+  function rowTotal(purpose){
+    var t=0;
+    SHEEP_BREEDS.forEach(function(b){t+=getCount('sheep',b,purpose,'male')+getCount('sheep',b,purpose,'female');});
+    t+=getCount('sheep','مواليد',purpose,'male')+getCount('sheep','مواليد',purpose,'female');
+    GOAT_BREEDS.forEach(function(b){t+=getCount('goat',b,purpose,'male')+getCount('goat',b,purpose,'female');});
+    t+=getCount('goat','مواليد',purpose,'male')+getCount('goat','مواليد',purpose,'female');
+    return t;
+  }
+
+  function colTotal(sp, breed, gender){
+    var t=0;
+    PURPOSES.forEach(function(p){t+=getCount(sp,breed,p,gender);});
+    return t;
+  }
+
+  function totalAll(){
+    return alive.length;
+  }
+
+  // Build table HTML
+  var tbl='<div class="wonder-card" style="overflow-x:auto">'+
+    '<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">'+
+      '<div class="fw-bold" style="font-size:.95rem"><i class="bi bi-table accent-text me-2"></i>بيان الماعز والأغنام — '+todayAr()+'</div>'+
+      '<div class="d-flex gap-2 no-print">'+
+        (isEdit?'<button class="action-btn primary" onclick="saveAllChanges()"><i class="bi bi-floppy-fill"></i> حفظ التعديلات</button>'+
+                '<button class="action-btn" onclick="resetPending()"><i class="bi bi-arrow-counterclockwise"></i> إعادة تعيين</button>':'')+
+        '<button class="action-btn sm" onclick="window.print()"><i class="bi bi-printer"></i> طباعة</button>'+
+      '</div>'+
+    '</div>'+
+    (isEdit?'<div class="mb-3 p-3" style="background:rgba(33,150,243,.06);border:1px solid rgba(33,150,243,.25);border-radius:10px;font-size:.82rem">'+
+      '<i class="bi bi-info-circle-fill me-2" style="color:var(--blue)"></i>'+
+      '<strong style="color:var(--blue)">وضع التعديل:</strong> عدّل الأرقام مباشرة في الجدول. '+
+      'الخلايا الصفراء تعني وجود تغيير غير محفوظ. '+
+      'عند الحفظ سيتم <strong>إضافة</strong> حيوانات جديدة أو <strong>تعطيل</strong> الزيادة المطلوبة.'+
+    '</div>':'');
+
+  tbl+='<table class="diary-tbl"><thead>';
+  
+  // Header row 1: species sections
+  tbl+='<tr>'+
+    '<th rowspan="3" style="min-width:65px">النوع</th>'+
+    '<th colspan="'+( SHEEP_BREEDS.length*2+2)+'" class="sheep-hd">أغنام</th>'+
+    '<th colspan="'+(GOAT_BREEDS.length*2+2)+'" class="goat-hd">ماعز</th>'+
+    '<th rowspan="3" style="background:rgba(255,107,53,.1);color:var(--orange)">الإجمالي</th>'+
+  '</tr>';
+
+  // Header row 2: breed names
+  tbl+='<tr>';
+  SHEEP_BREEDS.forEach(function(b){tbl+='<th colspan="2" class="sheep-hd">'+b+'</th>';});
+  tbl+='<th colspan="2" class="births-hd">ولدات</th>';
+  GOAT_BREEDS.forEach(function(b){tbl+='<th colspan="2" class="goat-hd">'+b+'</th>';});
+  tbl+='<th colspan="2" class="births-hd">ولدات</th>';
+  tbl+='</tr>';
+
+  // Header row 3: ذكور / إناث
+  tbl+='<tr>';
+  var allCols=(SHEEP_BREEDS.length+1+GOAT_BREEDS.length+1);
+  for(var ci=0;ci<allCols;ci++){
+    tbl+='<th style="font-size:.68rem;color:var(--blue)">ذكور</th>'+
+         '<th style="font-size:.68rem;color:var(--orange)">إناث</th>';
+  }
+  tbl+='</tr></thead><tbody>';
+
+  // Purpose rows
+  PURPOSES.forEach(function(purpose){
+    var cls=PURPOSE_ROW_STYLES[purpose];
+    var label=PURPOSE_LABELS[purpose];
+    var rowT=rowTotal(purpose);
+    tbl+='<tr class="'+cls+'"><td class="fw-bold" style="text-align:right">'+label+'</td>';
+    // Sheep breeds
+    SHEEP_BREEDS.forEach(function(b){
+      tbl+=cell('sheep',b,purpose,'male')+cell('sheep',b,purpose,'female');
+    });
+    // Sheep births
+    tbl+=cell('sheep','مواليد',purpose,'male')+cell('sheep','مواليد',purpose,'female');
+    // Goat breeds
+    GOAT_BREEDS.forEach(function(b){
+      tbl+=cell('goat',b,purpose,'male')+cell('goat',b,purpose,'female');
+    });
+    // Goat births
+    tbl+=cell('goat','مواليد',purpose,'male')+cell('goat','مواليد',purpose,'female');
+    // Row total
+    tbl+='<td class="total-col">'+ar(rowT)+'</td></tr>';
+  });
+
+  // Total row
+  tbl+='<tr class="row-total"><td style="text-align:right">الإجمالي</td>';
+  // Sheep breeds totals
+  SHEEP_BREEDS.forEach(function(b){
+    var m=colTotal('sheep',b,'male'),f=colTotal('sheep',b,'female');
+    tbl+='<td class="'+(m>0?'m-col':'zero')+'">'+( m>0?ar(m):'—')+'</td>';
+    tbl+='<td class="'+(f>0?'f-col':'zero')+'">'+( f>0?ar(f):'—')+'</td>';
+  });
+  // Sheep births total
+  var sbm=colTotal('sheep','مواليد','male'),sbf=colTotal('sheep','مواليد','female');
+  tbl+='<td class="'+(sbm>0?'m-col':'zero')+'">'+(sbm>0?ar(sbm):'—')+'</td>';
+  tbl+='<td class="'+(sbf>0?'f-col':'zero')+'">'+(sbf>0?ar(sbf):'—')+'</td>';
+  // Goat breeds totals
+  GOAT_BREEDS.forEach(function(b){
+    var m=colTotal('goat',b,'male'),f=colTotal('goat',b,'female');
+    tbl+='<td class="'+(m>0?'m-col':'zero')+'">'+( m>0?ar(m):'—')+'</td>';
+    tbl+='<td class="'+(f>0?'f-col':'zero')+'">'+( f>0?ar(f):'—')+'</td>';
+  });
+  // Goat births total
+  var gbm=colTotal('goat','مواليد','male'),gbf=colTotal('goat','مواليد','female');
+  tbl+='<td class="'+(gbm>0?'m-col':'zero')+'">'+(gbm>0?ar(gbm):'—')+'</td>';
+  tbl+='<td class="'+(gbf>0?'f-col':'zero')+'">'+(gbf>0?ar(gbf):'—')+'</td>';
+  tbl+='<td class="total-col" style="font-size:1rem">'+ar(totalAll())+'</td></tr>';
+
+  // Summary footer
+  var sheepTotal=alive.filter(function(a){return a.species==='sheep'&&a.purpose!=='birth';}).length;
+  var sheepBirths=alive.filter(function(a){return a.species==='sheep'&&a.purpose==='birth';}).length;
+  var goatTotal=alive.filter(function(a){return a.species==='goat'&&a.purpose!=='birth';}).length;
+  var goatBirths=alive.filter(function(a){return a.species==='goat'&&a.purpose==='birth';}).length;
+  var sheepCols=SHEEP_BREEDS.length*2+2;
+  var goatCols=GOAT_BREEDS.length*2+2;
+  tbl+='<tr class="diary-summary-row">'+
+    '<td></td>'+
+    '<td colspan="'+sheepCols+'" style="text-align:center;padding:8px;color:var(--blue)">'+
+      'إجمالي الأغنام: <strong>'+ar(sheepTotal)+'</strong> | الولدات: <strong style="color:var(--yellow)">'+ar(sheepBirths)+'</strong>'+
+    '</td>'+
+    '<td colspan="'+goatCols+'" style="text-align:center;padding:8px;color:var(--green)">'+
+      'إجمالي الماعز: <strong>'+ar(goatTotal)+'</strong> | الولدات: <strong style="color:var(--yellow)">'+ar(goatBirths)+'</strong>'+
+    '</td>'+
+    '<td></td>'+
+  '</tr>';
+
+  tbl+='</tbody></table></div>';
+  el.innerHTML=tbl;
+}
+
+// ── CELL CHANGE ──────────────────────────────────────
+window.onCellChange=function(input){
+  var key=input.dataset.key;
+  var sp=input.dataset.sp;
+  var breed=input.dataset.breed;
+  var purpose=input.dataset.purpose;
+  var gender=input.dataset.gender;
+  var newVal=parseInt(input.value)||0;
+  var current=getCount(sp,breed,purpose,gender);
+  if(newVal!==current){
+    _pendingChanges[key]=newVal;
+    input.classList.add('changed');
+  } else {
+    delete _pendingChanges[key];
+    input.classList.remove('changed');
+  }
+  // Update row total in real-time
+};
+
+// ── SAVE ALL CHANGES ─────────────────────────────────
+window.saveAllChanges=async function(){
+  var keys=Object.keys(_pendingChanges);
+  if(!keys.length){toast('لا توجد تغييرات','info');return;}
+
+  // Show summary of what will change
+  var adds=0,removes=0;
+  keys.forEach(function(k){
+    var inp=document.querySelector('input[data-key="'+k+'"]');
+    if(!inp)return;
+    var sp=inp.dataset.sp, breed=inp.dataset.breed, purpose=inp.dataset.purpose, gender=inp.dataset.gender;
+    var current=getCount(sp,breed,purpose,gender);
+    var desired=_pendingChanges[k];
+    var diff=desired-current;
+    if(diff>0)adds+=diff;
+    else removes+=Math.abs(diff);
+  });
+
+  var msg='سيتم:\n'+(adds>0?'• إضافة '+adds+' حيوان\n':'')+(removes>0?'• إزالة (تعطيل) '+removes+' حيوان\n':'')+'\nتأكد من صحة الأرقام قبل المتابعة.';
+  if(!confirm(msg))return;
+
+  toast('جاري تطبيق التعديلات...','info');
+  var totalAdded=0,totalRemoved=0;
+
+  for(var k in _pendingChanges){
+    var inp=document.querySelector('input[data-key="'+k+'"]');
+    if(!inp)continue;
+    var sp=inp.dataset.sp, breed=inp.dataset.breed, purpose=inp.dataset.purpose, gender=inp.dataset.gender;
+    var current=getCount(sp,breed,purpose,gender);
+    var desired=_pendingChanges[k];
+    var diff=desired-current;
+
+    if(diff>0){
+      // Add animals
+      for(var i=0;i<diff;i++){
+        try{
+          await fbPost('animals',{
+            species:sp, breed:breed, gender:gender, purpose:purpose,
+            status:'alive', tag:null, barn:null,
+            birth_date:todayStr(),
+            added_by:getUser()?.name,
+            notes:'تمت الإضافة من يومية المزرعة — '+todayStr()
+          });
+          totalAdded++;
+        }catch(e){console.error('add error',e);}
+      }
+    } else if(diff<0){
+      // Remove (mark dead) from the specific category
+      var toRemove=_diaryAnimals.filter(function(a){
+        return a.status==='alive'&&a.species===sp&&a.breed===breed&&a.purpose===purpose&&a.gender===gender;
+      }).slice(0,Math.abs(diff));
+      for(var j=0;j<toRemove.length;j++){
+        try{
+          await fbPatch('animals',toRemove[j]._id,{status:'dead',died_at:todayStr(),death_reason:'تعديل من يومية المزرعة'});
+          totalRemoved++;
+        }catch(e){console.error('remove error',e);}
+      }
+    }
+  }
+
+  await logActivity('edit','animals','تعديل يدوي من يومية المزرعة: +'+ar(totalAdded)+' —'+ar(totalRemoved));
+  toast('✅ تم حفظ التعديلات: +'+ar(totalAdded)+' إضافة، —'+ar(totalRemoved)+' إزالة');
+
+  // Reload data
+  _diaryAnimals=await fbGet('animals');
+  _pendingChanges={};
+  _diaryMode='view';
+  var btn=document.getElementById('mode-btn');
+  if(btn){btn.innerHTML='<i class="bi bi-pencil-square"></i> تعديل يدوي';btn.style.background='rgba(33,150,243,.1)';btn.style.borderColor='rgba(33,150,243,.35)';btn.style.color='var(--blue)';}
+  renderDiary();
+};
+
+window.resetPending=function(){
+  _pendingChanges={};
+  renderDiary();
+  toast('تم إعادة تعيين التعديلات','info');
+};
 </script>
 </body>
 </html>
