@@ -275,25 +275,53 @@ function renderDiary(){
   tbl+='<td class="total-col" style="font-size:1rem">'+ar(totalAll())+'</td></tr>';
 
   // Summary footer
-  var sheepTotal=alive.filter(function(a){return a.species==='sheep'&&a.purpose!=='birth';}).length;
-  var sheepBirths=alive.filter(function(a){return a.species==='sheep'&&a.purpose==='birth';}).length;
-  var goatTotal=alive.filter(function(a){return a.species==='goat'&&a.purpose!=='birth';}).length;
-  var goatBirths=alive.filter(function(a){return a.species==='goat'&&a.purpose==='birth';}).length;
+  var sheepTotal=alive.filter(function(a){return a.species==='sheep'&&a.breed!=='مواليد';}).length;
+  // مواليد = animals with breed='مواليد' (birth purpose + any مواليد breed)
+  var sheepBirths=alive.filter(function(a){return a.species==='sheep'&&a.breed==='مواليد';}).length;
+  var goatTotal=alive.filter(function(a){return a.species==='goat'&&a.breed!=='مواليد';}).length;
+  var goatBirths=alive.filter(function(a){return a.species==='goat'&&a.breed==='مواليد';}).length;
   var sheepCols=SHEEP_BREEDS.length*2+2;
   var goatCols=GOAT_BREEDS.length*2+2;
   tbl+='<tr class="diary-summary-row">'+
     '<td></td>'+
-    '<td colspan="'+sheepCols+'" style="text-align:center;padding:8px;color:var(--blue)">'+
-      'إجمالي الأغنام: <strong>'+ar(sheepTotal)+'</strong> | الولدات: <strong style="color:var(--yellow)">'+ar(sheepBirths)+'</strong>'+
+    '<td colspan="'+sheepCols+'" style="text-align:center;padding:10px;color:var(--blue)">'+
+      '<span style="font-size:.82rem">إجمالي الأغنام: </span><strong style="font-size:1rem">'+ar(sheepTotal)+'</strong>'+
+      '<span style="margin:0 8px;color:var(--border-2)">|</span>'+
+      '<span style="font-size:.82rem">المواليد: </span><strong style="font-size:1rem;color:var(--yellow)">'+ar(sheepBirths)+'</strong>'+
+      '<span style="font-size:.82rem;color:var(--text-muted);margin-right:6px">(ذ: '+ar(alive.filter(function(a){return a.species==="sheep"&&a.breed==="مواليد"&&a.gender==="male";}).length)+' | إ: '+ar(alive.filter(function(a){return a.species==="sheep"&&a.breed==="مواليد"&&a.gender==="female";}).length)+')</span>'+
     '</td>'+
-    '<td colspan="'+goatCols+'" style="text-align:center;padding:8px;color:var(--green)">'+
-      'إجمالي الماعز: <strong>'+ar(goatTotal)+'</strong> | الولدات: <strong style="color:var(--yellow)">'+ar(goatBirths)+'</strong>'+
+    '<td colspan="'+goatCols+'" style="text-align:center;padding:10px;color:var(--green)">'+
+      '<span style="font-size:.82rem">إجمالي الماعز: </span><strong style="font-size:1rem">'+ar(goatTotal)+'</strong>'+
+      '<span style="margin:0 8px;color:var(--border-2)">|</span>'+
+      '<span style="font-size:.82rem">المواليد: </span><strong style="font-size:1rem;color:var(--yellow)">'+ar(goatBirths)+'</strong>'+
+      '<span style="font-size:.82rem;color:var(--text-muted);margin-right:6px">(ذ: '+ar(alive.filter(function(a){return a.species==="goat"&&a.breed==="مواليد"&&a.gender==="male";}).length)+' | إ: '+ar(alive.filter(function(a){return a.species==="goat"&&a.breed==="مواليد"&&a.gender==="female";}).length)+')</span>'+
     '</td>'+
     '<td></td>'+
   '</tr>';
-
-  tbl+='</tbody></table></div>';
+  // Mobile summary cards (shown below table on small screens)
+  tbl+='</table>'+
+  '<div class="d-flex flex-wrap gap-3 mt-3 no-table-extra" style="justify-content:center">'+
+    '<div style="background:rgba(33,150,243,.08);border:1px solid rgba(33,150,243,.25);border-radius:12px;padding:12px 20px;text-align:center;min-width:160px">'+
+      '<div class="text-gray" style="font-size:.72rem;margin-bottom:4px">إجمالي الأغنام</div>'+
+      '<div style="font-family:Lexend;font-size:1.5rem;font-weight:700;color:var(--blue)">'+ar(sheepTotal+sheepBirths)+'</div>'+
+      '<div style="font-size:.72rem;color:var(--text-muted)">بدون مواليد: '+ar(sheepTotal)+' | مواليد: <span style="color:var(--yellow)">'+ar(sheepBirths)+'</span></div>'+
+    '</div>'+
+    '<div style="background:rgba(0,230,118,.08);border:1px solid rgba(0,230,118,.25);border-radius:12px;padding:12px 20px;text-align:center;min-width:160px">'+
+      '<div class="text-gray" style="font-size:.72rem;margin-bottom:4px">إجمالي الماعز</div>'+
+      '<div style="font-family:Lexend;font-size:1.5rem;font-weight:700;color:var(--green)">'+ar(goatTotal+goatBirths)+'</div>'+
+      '<div style="font-size:.72rem;color:var(--text-muted)">بدون مواليد: '+ar(goatTotal)+' | مواليد: <span style="color:var(--yellow)">'+ar(goatBirths)+'</span></div>'+
+    '</div>'+
+    '<div style="background:rgba(255,107,53,.08);border:1px solid rgba(255,107,53,.25);border-radius:12px;padding:12px 20px;text-align:center;min-width:160px">'+
+      '<div class="text-gray" style="font-size:.72rem;margin-bottom:4px">إجمالي المزرعة</div>'+
+      '<div style="font-family:Lexend;font-size:1.5rem;font-weight:700;color:var(--orange)">'+ar(alive.length)+'</div>'+
+      '<div style="font-size:.72rem;color:var(--text-muted)">مواليد: <span style="color:var(--yellow)">'+ar(sheepBirths+goatBirths)+'</span></div>'+
+    '</div>'+
+  '</div>'+
+  '</div>';
   el.innerHTML=tbl;
+  return;
+
+  tbl+='</tbody>';
 }
 
 // ── CELL CHANGE ──────────────────────────────────────
