@@ -1,273 +1,321 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<script>
-(function(){
-  var t=localStorage.getItem('farm_theme');
-  if(t==='light')document.documentElement.classList.add('light-mode');
-})();
-</script>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>سجل الأنشطة — بيان المزرعة</title>
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سجل الأنشطة — بيان المزرعة</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+        
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.3s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        
+        .btn-danger {
+            background-color: #e74c3c;
+            color: white;
+        }
+        
+        .btn-warning {
+            background-color: #f39c12;
+            color: white;
+        }
+        
+        .btn-success {
+            background-color: #27ae60;
+            color: white;
+        }
+        
+        .btn-info {
+            background-color: #3498db;
+            color: white;
+        }
+        
+        .btn-secondary {
+            background-color: #95a5a6;
+            color: white;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        th, td {
+            padding: 12px;
+            text-align: right;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        th {
+            background-color: #34495e;
+            color: white;
+        }
+        
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 2px solid #ecf0f1;
+            color: #7f8c8d;
+            font-size: 14px;
+        }
+        
+        .date-filter {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .date-filter input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        #importFileInput {
+            display: none;
+        }
+    </style>
 </head>
 <body>
-<div class="page-wrap">
-  <div id="page-header"></div>
-  <div id="content"><div class="text-center py-5"><div class="spinner"></div></div></div>
-  <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
-    © <span id="footer-year"></span> <span id="footer-farm"></span><br>
-    <small style="font-size:.72rem;color:#555">إشراف: لواء أحمد رجب نوح &nbsp;|&nbsp; تطوير: جندي مصطفى محمد إبراهيم</small>
-  </footer>
-</div>
-<script src="config.js"></script>
-<script src="firebase.js"></script>
-<script src="shared.js"></script>
-<script>
-const ACTION_CFG={
-  add:    {icon:'bi-plus-circle-fill',  cls:'act-add',    label:'إضافة'},
-  edit:   {icon:'bi-pencil-fill',       cls:'act-edit',   label:'تعديل'},
-  delete: {icon:'bi-trash-fill',        cls:'act-delete', label:'حذف'},
-  login:  {icon:'bi-box-arrow-in-right',cls:'act-login',  label:'دخول'},
-  logout: {icon:'bi-box-arrow-left',    cls:'act-login',  label:'خروج'},
-};
-const RESOURCE_LABELS={
-  animals:'القطيع', health:'السجل الصحي', vaccine:'التحصين',
-  breeding:'التكاثر', finance:'المالية', inventory:'المخزن',
-  settings:'الإعدادات', users:'المستخدمون', system:'النظام',
-};
-
-let allLogs=[], filterUser='all', filterAction='all', filterResource='all', filterDate='';
-
-document.addEventListener('DOMContentLoaded', async ()=>{
-  if(!requireAuth())return;
-  if(!can('admin')&&!can('activity')){
-    document.getElementById('content').innerHTML=`<div class="empty-state"><i class="bi bi-shield-x"></i><p>هذه الصفحة للمديرين فقط</p><a href="dashboard.html" class="action-btn">الرئيسية</a></div>`;
-    renderNavbar('activity.html');return;
-  }
-  initFirebase();
-  const s=getSettings();
-  document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
-  document.getElementById('footer-farm').textContent=s.farmName;
-  renderNavbar('activity.html');
-
-  renderPageHeader(
-    '<i class="bi bi-clock-history accent-text"></i> سجل الأنشطة',
-    'كل ما يحدث في التطبيق موثّق هنا',
-    (can('admin')?`<button class="action-btn primary" onclick="backupActivity()"><i class="bi bi-download"></i> نسخ احتياطية</button>`+
-    `<div class="dropdown d-inline-block"><button class="action-btn" data-bs-toggle="dropdown"><i class="bi bi-trash-fill"></i> مسح حسب الفترة ▾</button><ul class="dropdown-menu" style="background:#1e1e1e;border:1px solid #333;border-radius:12px;padding:6px"><li><button class="dropdown-item" style="color:var(--light);padding:8px 14px;border-radius:8px" onclick="clearByPeriod(1)">آخر ساعة</button></li><li><button class="dropdown-item" style="color:var(--light);padding:8px 14px;border-radius:8px" onclick="clearByPeriod(24)">آخر يوم</button></li><li><button class="dropdown-item" style="color:var(--light);padding:8px 14px;border-radius:8px" onclick="clearByPeriod(168)">آخر أسبوع</button></li><li><button class="dropdown-item" style="color:var(--light);padding:8px 14px;border-radius:8px" onclick="clearByPeriod(720)">آخر شهر</button></li><li><button class="dropdown-item" style="color:var(--light);padding:8px 14px;border-radius:8px" onclick="clearByPeriod(1440)">آخر شهرين</button></li><li><hr style="border-color:#333;margin:4px 10px"></li><li><button class="dropdown-item" style="color:var(--red);padding:8px 14px;border-radius:8px" onclick="deleteAllActivity()">مسح الكل</button></li></ul></div>`
-    :'')
-  );
-
-  renderLoading(document.getElementById('content'));
-  try{
-    allLogs=await fbGet('activity_log');
-    allLogs.sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp));
-  }catch(e){toast('خطأ: '+e.message,'error');}
-  renderActivityPage();
-});
-
-function renderActivityPage(){
-  const el=document.getElementById('content');
-
-  // Stats
-  const total=allLogs.length;
-  const today=new Date().toISOString().slice(0,10);
-  const todayCount=allLogs.filter(l=>l.date===today).length;
-  const users=[...new Set(allLogs.map(l=>l.userName))];
-  const addCount=allLogs.filter(l=>l.action==='add').length;
-  const editCount=allLogs.filter(l=>l.action==='edit').length;
-  const deleteCount=allLogs.filter(l=>l.action==='delete').length;
-
-  // Apply filters
-  let logs=allLogs;
-  if(filterUser!=='all')logs=logs.filter(l=>l.userId===filterUser||l.userName===filterUser);
-  if(filterAction!=='all')logs=logs.filter(l=>l.action===filterAction);
-  if(filterResource!=='all')logs=logs.filter(l=>l.resource===filterResource);
-  if(filterDate)logs=logs.filter(l=>l.date===filterDate);
-
-  const allUsers=[...new Set(allLogs.map(l=>({id:l.userId,name:l.userName})).map(u=>JSON.stringify(u)))].map(s=>JSON.parse(s));
-  const allResources=[...new Set(allLogs.map(l=>l.resource))];
-
-  el.innerHTML=`
-  <!-- Stats -->
-  <div class="row g-3 mb-4">
-    <div class="col-6 col-md-3"><div class="stat-mini"><div class="num accent-text">${ar(total)}</div><div class="lbl">إجمالي الأنشطة</div></div></div>
-    <div class="col-6 col-md-3"><div class="stat-mini"><div class="num green-text">${ar(todayCount)}</div><div class="lbl">أنشطة اليوم</div></div></div>
-    <div class="col-6 col-md-3"><div class="stat-mini"><div class="num" style="color:var(--blue)">${ar(users.length)}</div><div class="lbl">مستخدمون نشطون</div></div></div>
-    <div class="col-6 col-md-3"><div class="stat-mini"><div class="num" style="color:var(--red)">${ar(deleteCount)}</div><div class="lbl">حذف</div></div></div>
-  </div>
-
-  <!-- Activity by user summary -->
-  ${allUsers.length>0?`<div class="wonder-card mb-4">
-    <h6 class="fw-bold mb-3"><i class="bi bi-people-fill accent-text"></i> ملخص حسب المستخدم</h6>
-    <div class="row g-2">
-      ${allUsers.map(u=>{
-        const uLogs=allLogs.filter(l=>l.userName===u.name);
-        const uRole=uLogs[0]?.userRole||'worker';
-        const adds=uLogs.filter(l=>l.action==='add').length;
-        const edits=uLogs.filter(l=>l.action==='edit').length;
-        const dels=uLogs.filter(l=>l.action==='delete').length;
-        const lastAct=uLogs[0];
-        return`<div class="col-md-6">
-          <div class="d-flex align-items-center gap-3 p-3" style="background:rgba(255,255,255,.03);border-radius:12px;cursor:pointer"
-            onclick="filterUser='${u.name}';renderActivityPage()">
-            <div class="user-avatar" style="width:40px;height:40px;font-size:.9rem;background:${ROLES[uRole]?.color||'var(--gray)'}22">${u.name.slice(0,1)}</div>
-            <div class="flex-grow-1">
-              <div class="fw-bold" style="font-size:.88rem">${u.name}</div>
-              <small class="text-gray"><span class="type-badge role-badge-${uRole}" style="font-size:.65rem">${ROLES[uRole]?.label}</span></small>
-              <div class="mt-1" style="font-size:.75rem">
-                <span class="green-text me-2"><i class="bi bi-plus-circle"></i> ${ar(adds)}</span>
-                <span class="blue-text me-2"><i class="bi bi-pencil"></i> ${ar(edits)}</span>
-                <span class="red-text"><i class="bi bi-trash"></i> ${ar(dels)}</span>
-              </div>
-            </div>
-            <div class="text-gray" style="font-size:.7rem;text-align:left">${lastAct?timeAr(lastAct.timestamp).split(' ')[0]:'—'}</div>
-          </div></div>`;
-      }).join('')}
-    </div>
-  </div>`:''}
-
-  <!-- Filters -->
-  <div class="wonder-card mb-3">
-    <div class="row g-2 align-items-end">
-      <div class="col-md-3">
-        <label class="text-gray" style="font-size:.72rem;font-weight:600">المستخدم</label>
-        <select class="field" onchange="filterUser=this.value;renderActivityPage()">
-          <option value="all" ${filterUser==='all'?'selected':''}>الكل</option>
-          ${allUsers.map(u=>`<option value="${u.name}" ${filterUser===u.name?'selected':''}>${u.name}</option>`).join('')}
-        </select>
-      </div>
-      <div class="col-md-2">
-        <label class="text-gray" style="font-size:.72rem;font-weight:600">الإجراء</label>
-        <select class="field" onchange="filterAction=this.value;renderActivityPage()">
-          <option value="all" ${filterAction==='all'?'selected':''}>الكل</option>
-          ${Object.entries(ACTION_CFG).map(([k,v])=>`<option value="${k}" ${filterAction===k?'selected':''}>${v.label}</option>`).join('')}
-        </select>
-      </div>
-      <div class="col-md-3">
-        <label class="text-gray" style="font-size:.72rem;font-weight:600">القسم</label>
-        <select class="field" onchange="filterResource=this.value;renderActivityPage()">
-          <option value="all" ${filterResource==='all'?'selected':''}>الكل</option>
-          ${allResources.map(r=>`<option value="${r}" ${filterResource===r?'selected':''}>${RESOURCE_LABELS[r]||r}</option>`).join('')}
-        </select>
-      </div>
-      <div class="col-md-2">
-        <label class="text-gray" style="font-size:.72rem;font-weight:600">التاريخ</label>
-        <input type="date" class="field" value="${filterDate}" onchange="filterDate=this.value;renderActivityPage()">
-      </div>
-      <div class="col-md-2">
-        <button class="action-btn w-100" onclick="filterUser='all';filterAction='all';filterResource='all';filterDate='';renderActivityPage()">
-          <i class="bi bi-x-circle"></i> إعادة تعيين
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Log count -->
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <small class="text-gray">يُعرض ${ar(logs.length)} نشاط${logs.length!==total?` من ${ar(total)} إجمالي`:''}</small>
-    <button class="action-btn sm" onclick="exportActivityCSV()"><i class="bi bi-filetype-csv"></i> تصدير CSV</button>
-  </div>
-
-  <!-- Log list -->
-  ${logs.length===0?`<div class="empty-state"><i class="bi bi-clock-history"></i><p>لا توجد أنشطة بهذه الفلاتر</p></div>`:`
-  <div class="wonder-card">
-    ${logs.slice(0,200).map(log=>{
-      const cfg=ACTION_CFG[log.action]||{icon:'bi-info-circle',cls:'act-login',label:log.action};
-      const roleColor=ROLES[log.userRole]?.color||'var(--gray)';
-      const roleLabel=ROLES[log.userRole]?.label||log.userRole;
-      return`<div class="activity-row">
-        <div class="activity-icon ${cfg.cls}"><i class="bi ${cfg.icon}"></i></div>
-        <div class="flex-grow-1">
-          <div class="d-flex align-items-center gap-2 flex-wrap">
-            <span class="fw-bold" style="font-size:.88rem">${log.userName||'—'}</span>
-            <span class="type-badge" style="background:${roleColor}22;color:${roleColor};border:1px solid ${roleColor}44;font-size:.65rem">${roleLabel}</span>
-            <span class="type-badge badge-gray" style="font-size:.65rem">${RESOURCE_LABELS[log.resource]||log.resource||'—'}</span>
-          </div>
-          <div style="font-size:.85rem;color:var(--light);margin-top:2px">${log.description||'—'}</div>
-          <div style="font-size:.72rem;color:var(--gray);margin-top:2px">
-            <i class="bi bi-clock" style="margin-left:3px"></i>${timeAr(log.timestamp)}
-          </div>
+    <div class="container">
+        <h1>سجل الأنشطة — بيان المزرعة</h1>
+        
+        <div class="toolbar">
+            <button class="btn btn-danger" onclick="clearByPeriod()">
+                🗑️ مسح حسب الفترة
+            </button>
+            
+            <button class="btn btn-warning" onclick="resetAssignments()">
+                🔄 إعادة تعيين
+            </button>
+            
+            <button class="btn btn-success" onclick="exportBackup()">
+                💾 نسخ احتياطية
+            </button>
+            
+            <button class="btn btn-info" onclick="triggerImport()">
+                📥 استيراد نسخة احتياطية
+            </button>
+            
+            <button class="btn btn-secondary" onclick="exportCSV()">
+                📄 تصدير CSV
+            </button>
         </div>
-        <span class="type-badge ${cfg.cls}" style="font-size:.7rem;flex-shrink:0">${cfg.label}</span>
-      </div>`;
-    }).join('')}
-    ${logs.length>200?`<div class="text-center py-3 text-gray" style="font-size:.82rem">يُعرض أول ${ar(200)} نشاط فقط — استخدم الفلاتر لتضييق النتائج</div>`:''}
-  </div>`}`;
-}
-
-// Track if backup was done this session
-var _activityBackedUp=false;
-
-window.backupActivity=async function(){
-  if(!allLogs.length){toast('لا توجد أنشطة للنسخ','info');return;}
-  const rows=[['التاريخ','الوقت','المستخدم','الدور','الإجراء','القسم','التفاصيل']];
-  allLogs.forEach(l=>{rows.push([l.date||'',l.timestamp?.slice(11,19)||'',l.userName||'',ROLES[l.userRole]?.label||l.userRole||'',ACTION_CFG[l.action]?.label||l.action||'',RESOURCE_LABELS[l.resource]||l.resource||'',l.description||'']);});
-  const csv=rows.map(r=>r.map(v=>'"'+v+'"').join(',')).join('\n');
-  const a=document.createElement('a');
-  a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
-  a.download='activity-backup-'+todayStr()+'.csv';a.click();
-  _activityBackedUp=true;
-  toast('تم حفظ النسخة الاحتياطية ('+ar(allLogs.length)+' سجل)');
-};
-
-window.deleteAllActivity=async function(){
-  if(!_activityBackedUp){
-    toast('⚠️ لا يمكن المسح قبل أخذ نسخة احتياطية. اضغط "نسخ احتياطية" أولاً','error');
-    return;
-  }
-  if(!confirm('مسح كل سجل الأنشطة؟\nتم أخذ النسخة الاحتياطية بالفعل.'))return;
-  toast('جاري المسح...','info');
-  let deleted=0;
-  for(const log of allLogs){try{await fbDelete('activity_log',log._id);deleted++;}catch(e){}}
-  toast('تم مسح '+ar(deleted)+' سجل');
-  allLogs=[];_activityBackedUp=false;
-  renderActivityPage();
-};
-
-window.clearByPeriod=async function(hours){
-  const labels={1:'آخر ساعة',24:'آخر يوم',168:'آخر أسبوع',720:'آخر شهر',1440:'آخر شهرين'};
-  if(!confirm('مسح أنشطة '+labels[hours]+'؟'))return;
-  const cutoff=new Date();cutoff.setHours(cutoff.getHours()-hours);
-  const toDelete=allLogs.filter(l=>new Date(l.timestamp)>=cutoff);
-  if(!toDelete.length){toast('لا توجد أنشطة في هذه الفترة','info');return;}
-  let deleted=0;
-  for(const log of toDelete){try{await fbDelete('activity_log',log._id);deleted++;}catch(e){}}
-  toast('تم مسح '+ar(deleted)+' سجل');
-  allLogs=allLogs.filter(l=>new Date(l.timestamp)<cutoff);
-  renderActivityPage();
-};
-
-window.clearOldLogs=async function(){
-  if(!confirm('حذف الأنشطة الأقدم من 30 يوم؟'))return;
-  const cutoff=new Date();cutoff.setDate(cutoff.getDate()-30);
-  const oldLogs=allLogs.filter(l=>new Date(l.timestamp)<cutoff);
-  if(!oldLogs.length){toast('لا توجد أنشطة قديمة','info');return;}
-  let deleted=0;
-  for(const log of oldLogs){
-    try{await fbDelete('activity_log',log._id);deleted++;}catch(e){}
-  }
-  toast(`تم حذف ${ar(deleted)} نشاط`);
-  allLogs=allLogs.filter(l=>new Date(l.timestamp)>=cutoff);
-  renderActivityPage();
-};
-
-window.exportActivityCSV=function(){
-  const logs=allLogs;
-  const rows=[['التاريخ','الوقت','المستخدم','الدور','الإجراء','القسم','التفاصيل'],
-    ...logs.map(l=>[l.date||'',l.timestamp?.slice(11,19)||'',l.userName||'',ROLES[l.userRole]?.label||l.userRole||'',ACTION_CFG[l.action]?.label||l.action||'',RESOURCE_LABELS[l.resource]||l.resource||'',l.description||''])
-  ];
-  const csv=rows.map(r=>r.map(v=>`"${v}"`).join(',')).join('\n');
-  const a=document.createElement('a');
-  a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
-  a.download=`activity-log-${new Date().toISOString().slice(0,10)}.csv`;
-  a.click();
-  toast('تم التصدير');
-};
-</script>
+        
+        <div class="date-filter">
+            <label>من:</label>
+            <input type="date" id="dateFrom">
+            <label>إلى:</label>
+            <input type="date" id="dateTo">
+        </div>
+        
+        <table id="activityTable">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>التاريخ</th>
+                    <th>النشاط</th>
+                    <th>التفاصيل</th>
+                    <th>المسؤول</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                <!-- سيتم ملء البيانات هنا -->
+            </tbody>
+        </table>
+        
+        <div class="footer">
+            © إشراف: لواء أحمد رجب نوح | تطوير: جندي مصطفى محمد إبراهيم
+        </div>
+    </div>
+    
+    <input type="file" id="importFileInput" accept=".json">
+    
+    <script>
+        // تحميل البيانات عند فتح الصفحة
+        document.addEventListener('DOMContentLoaded', function() {
+            loadActivities();
+        });
+        
+        // 1. دالة مسح حسب الفترة
+        function clearByPeriod() {
+            const dateFrom = document.getElementById('dateFrom').value;
+            const dateTo = document.getElementById('dateTo').value;
+            
+            if (!dateFrom || !dateTo) {
+                alert('الرجاء تحديد فترة زمنية (من وإلى)');
+                return;
+            }
+            
+            if (confirm('هل أنت متأكد من مسح الأنشطة في هذه الفترة؟ لا يمكن التراجع عن هذا الإجراء.')) {
+                let activities = JSON.parse(localStorage.getItem('activityData')) || [];
+                
+                // تصفية الأنشطة خارج الفترة المحددة
+                activities = activities.filter(activity => {
+                    const activityDate = new Date(activity.date);
+                    const from = new Date(dateFrom);
+                    const to = new Date(dateTo);
+                    return activityDate < from || activityDate > to;
+                });
+                
+                localStorage.setItem('activityData', JSON.stringify(activities));
+                alert('تم المسح بنجاح!');
+                loadActivities();
+            }
+        }
+        
+        // 2. دالة إعادة التعيين
+        function resetAssignments() {
+            if (confirm('هل تريد إعادة تعيين كل البيانات الافتراضية؟')) {
+                localStorage.removeItem('activityData');
+                alert('تمت إعادة التعيين.');
+                loadActivities();
+            }
+        }
+        
+        // 3. دالة تصدير نسخة احتياطية
+        function exportBackup() {
+            const activities = localStorage.getItem('activityData') || '[]';
+            const dataStr = JSON.stringify(JSON.parse(activities), null, 2);
+            const dataBlob = new Blob([dataStr], {type: 'application/json'});
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'backup_' + new Date().toISOString().split('T')[0] + '.json';
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+        
+        // 4. دالة استيراد نسخة احتياطية
+        function triggerImport() {
+            document.getElementById('importFileInput').click();
+        }
+        
+        document.getElementById('importFileInput').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    localStorage.setItem('activityData', JSON.stringify(importedData));
+                    alert('تم استيراد النسخة الاحتياطية بنجاح! 🎉');
+                    loadActivities();
+                } catch (error) {
+                    alert('حدث خطأ أثناء قراءة الملف. تأكد أن الملف بصيغة JSON صحيحة.');
+                    console.error(error);
+                }
+            };
+            reader.readAsText(file);
+        });
+        
+        // 5. دالة تصدير CSV
+        function exportCSV() {
+            const activities = JSON.parse(localStorage.getItem('activityData')) || [];
+            let csv = 'التاريخ,النشاط,التفاصيل,المسؤول\n';
+            activities.forEach(activity => {
+                csv += `${activity.date},${activity.name},${activity.details},${activity.responsible}\n`;
+            });
+            const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'activities_' + new Date().toISOString().split('T')[0] + '.csv';
+            link.click();
+        }
+        
+        // تحميل وعرض الأنشطة
+        function loadActivities() {
+            const activities = JSON.parse(localStorage.getItem('activityData')) || [];
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+            
+            if (activities.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;">لا توجد أنشطة مسجلة</td></tr>';
+                return;
+            }
+            
+            activities.forEach((activity, index) => {
+                const row = `<tr>
+                    <td>${index + 1}</td>
+                    <td>${activity.date || '-'}</td>
+                    <td>${activity.name || '-'}</td>
+                    <td>${activity.details || '-'}</td>
+                    <td>${activity.responsible || '-'}</td>
+                </tr>`;
+                tbody.innerHTML += row;
+            });
+        }
+        
+        // إضافة نشاط جديد (للتجربة)
+        function addActivity(date, name, details, responsible) {
+            let activities = JSON.parse(localStorage.getItem('activityData')) || [];
+            activities.push({date, name, details, responsible});
+            localStorage.setItem('activityData', JSON.stringify(activities));
+            loadActivities();
+        }
+        
+        // إضافة بعض البيانات التجريبية
+        if (!localStorage.getItem('activityData')) {
+            addActivity('2026-05-01', 'صيانة المعدات', 'صيانة الجرارات', 'أحمد محمد');
+            addActivity('2026-05-05', 'ري المحاصيل', 'ري الأرض الزراعية', 'محمد علي');
+            addActivity('2026-05-10', 'حصاد القمح', 'حصاد محصول القمح', 'خالد حسن');
+        }
+    </script>
 </body>
 </html>
