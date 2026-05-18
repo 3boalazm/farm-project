@@ -96,7 +96,32 @@ function renderAnimals(){
 
   if(!list.length){renderEmpty(el,'bi-search','لا توجد نتائج','<button class="action-btn primary" onclick="fSearch=\'\';fSpecies=\'all\';fPurpose=\'all\';fStatus=\'alive\';renderFilters();renderAnimals()">إعادة تعيين</button>');return;}
 
-  el.innerHTML='<div class="mb-2 d-flex justify-content-between"><small class="text-gray">يُعرض '+ar(list.length)+' حيوان</small><button class="action-btn sm" onclick="exportCSV()"><i class="bi bi-filetype-csv"></i> CSV</button></div>'+
+  // Bulk action bar
+  var bulkBar='';
+  if(_selectMode){
+    bulkBar='<div id="bulk-bar" style="position:sticky;top:62px;z-index:90;background:rgba(33,150,243,.1);border:1px solid rgba(33,150,243,.35);border-radius:12px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
+      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:700;font-size:.85rem">'+
+        '<input type="checkbox" id="select-all-cb" style="accent-color:var(--blue);width:16px;height:16px" onchange="toggleSelectAll(this.checked)">'+
+        '<span id="sel-count" style="color:var(--blue)">'+ar(_selected.size)+' محدد</span>'+
+      '</label>'+
+      '<button class="action-btn primary sm" onclick="bulkAction(\'transfer\')" data-hint="نقل للجمالون"><i class="bi bi-arrow-left-right"></i> نقل</button>'+
+      '<button class="action-btn sm" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.3);color:var(--yellow)" onclick="bulkAction(\'sell\')" data-hint="تسجيل بيع"><i class="bi bi-currency-dollar"></i> بيع</button>'+
+      '<button class="action-btn danger sm" onclick="bulkAction(\'death\')" data-hint="تسجيل نفوق"><i class="bi bi-x-octagon-fill"></i> نفوق</button>'+
+      '<button class="action-btn danger sm" onclick="bulkAction(\'delete\')" data-hint="حذف نهائي"><i class="bi bi-trash-fill"></i> حذف</button>'+
+      '<button class="action-btn sm" onclick="toggleSelectMode(false)" style="margin-right:auto"><i class="bi bi-x-lg"></i> إلغاء التحديد</button>'+
+    '</div>';
+  }
+
+  var countRow='<div class="mb-2 d-flex justify-content-between align-items-center">'+
+    '<small class="text-gray">يُعرض '+ar(list.length)+' حيوان'+( animals.length>100?' (من '+ar(animals.length)+')':'')+' </small>'+
+    '<div class="d-flex gap-2">'+
+      '<button class="action-btn sm" onclick="toggleSelectMode(!_selectMode)" style="'+(  _selectMode?'background:rgba(33,150,243,.1);border-color:rgba(33,150,243,.35);color:var(--blue)':'')+'" data-hint="تحديد متعدد للعمليات الجماعية">'+
+        '<i class="bi bi-check2-square"></i> '+(_selectMode?'وضع التحديد فعّال':'تحديد')+'</button>'+
+      '<button class="action-btn sm" onclick="exportCSV()"><i class="bi bi-filetype-csv"></i> CSV</button>'+
+    '</div>'+
+  '</div>';
+
+  el.innerHTML=bulkBar+countRow+
   list.map(function(a){
     var purposeLabel={tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[a.purpose]||a.purpose;
     var purposeBadge=a.purpose==='tasmeen'?'badge-tasmeen':a.purpose==='birth'?'badge-blue':'badge-tarbiya';
@@ -107,8 +132,10 @@ function renderAnimals(){
       var bid=a._id, bbreed=encodeURIComponent(a.breed||''), btag=encodeURIComponent(a.tag||''), bst=a.status||'alive';
       menuBtn='<button style="background:rgba(255,255,255,.06);border:1px solid #333;border-radius:10px;color:#888;font-size:1rem;padding:7px 9px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:.2s" onmouseenter="this.style.color=\'#fff\';this.style.borderColor=\'#555\'" onmouseleave="this.style.color=\'#888\';this.style.borderColor=\'#333\'" onclick="event.preventDefault();event.stopPropagation();openAnimalMenu(\''+bid+'\',\''+bbreed+'\',\''+btag+'\',\''+bst+'\')" title="خيارات الحيوان"><i class="bi bi-three-dots-vertical"></i></button>';
     }
-    return '<div class="animal-row" style="position:relative;display:flex;align-items:center">'+
-      '<a href="animal-detail.html?id='+a._id+'" style="text-decoration:none;display:flex;align-items:center;gap:14px;flex:1;min-width:0">'+
+    var isSelected=_selected.has(a._id);
+    return '<div class="animal-row" style="position:relative;display:flex;align-items:center;'+(isSelected?'background:rgba(33,150,243,.08);border-color:rgba(33,150,243,.4)':'')+'">'+
+      (_selectMode?'<label style="padding:0 6px 0 0;cursor:pointer;flex-shrink:0" onclick="event.stopPropagation()"><input type="checkbox" class="anim-cb" data-id="'+a._id+'" '+(isSelected?'checked':'')+' style="accent-color:var(--blue);width:17px;height:17px" onchange="toggleSelect(\''+a._id+'\')"></label>':'')+
+      '<a href="animal-detail.html?id='+a._id+'" style="text-decoration:none;display:flex;align-items:center;gap:14px;flex:1;min-width:0" onclick="'+(_selectMode?'event.preventDefault();toggleSelect(\''+a._id+'\')':'')+'">'+
         '<div class="animal-avatar">'+(a.species==='goat'?'🐐':'🐑')+'</div>'+
         '<div class="flex-grow-1" style="min-width:0">'+
           '<div class="d-flex align-items-center gap-2 flex-wrap">'+
@@ -512,6 +539,135 @@ window.deleteAnimalFull=async function(id,labelEnc){
     animals=await fbGet('animals');renderAnimals();
   }catch(e){toast('فشل: '+e.message,'error');}
 }
+
+// ── Select Mode ─────────────────────────────────────
+window.toggleSelectMode=function(on){
+  _selectMode=on;
+  if(!on)_selected.clear();
+  renderAnimals();
+};
+
+window.toggleSelect=function(id){
+  if(_selected.has(id))_selected.delete(id);
+  else _selected.add(id);
+  // Update count label
+  var lbl=document.getElementById('sel-count');
+  if(lbl)lbl.textContent=ar(_selected.size)+' محدد';
+  // Update row highlight
+  var cb=document.querySelector('.anim-cb[data-id="'+id+'"]');
+  if(cb){var row=cb.closest('.animal-row');if(row){row.style.background=_selected.has(id)?'rgba(33,150,243,.08)':'';row.style.borderColor=_selected.has(id)?'rgba(33,150,243,.4)':'';}}
+};
+
+window.toggleSelectAll=function(checked){
+  var cbs=document.querySelectorAll('.anim-cb');
+  cbs.forEach(function(cb){
+    var id=cb.dataset.id;
+    if(checked)_selected.add(id);
+    else _selected.delete(id);
+    cb.checked=checked;
+    var row=cb.closest('.animal-row');
+    if(row){row.style.background=checked?'rgba(33,150,243,.08)':'';row.style.borderColor=checked?'rgba(33,150,243,.4)':'';}
+  });
+  var lbl=document.getElementById('sel-count');if(lbl)lbl.textContent=ar(_selected.size)+' محدد';
+};
+
+// ── Bulk Actions ─────────────────────────────────────
+window.bulkAction=async function(action){
+  var ids=[..._selected];
+  if(!ids.length){toast('يرجى تحديد حيوان واحد على الأقل','error');return;}
+  var count=ar(ids.length);
+  var sel=animals.filter(function(a){return ids.includes(a._id);});
+
+  if(action==='transfer'){
+    var barns=['ج١ع١','ج١ع٢','ج٢ع١','ج٢ع٢','ج٣ع١','ج٣ع٢','ج٤ع١','ج٤ع٢','ج٥ع١','ج٥ع٢'];
+    showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()">'+
+      '<h4><i class="bi bi-arrow-left-right accent-text"></i> نقل '+count+' حيوان</h4>'+
+      '<label>إلى الجمالون/العنبر</label>'+
+      '<select class="field" id="bulk-barn">'+barns.map(function(b){return'<option value="'+b+'">'+b+'</option>';}).join('')+'</select>'+
+      '<label>سبب النقل</label>'+
+      '<select class="field" id="bulk-reason"><option>إعادة توزيع</option><option>عزل</option><option>فطام</option><option>تسمين</option><option>علاج</option><option>أخرى</option></select>'+
+      '<div class="d-flex gap-2 justify-content-end mt-3">'+
+        '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
+        '<button class="action-btn primary" onclick="_execBulk(\'transfer\')">نقل '+count+'</button>'+
+      '</div>'+
+    '</div>');
+  }
+  else if(action==='death'){
+    showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()">'+
+      '<h4 style="color:var(--red)"><i class="bi bi-x-octagon-fill"></i> تسجيل نفوق '+count+' حيوان</h4>'+
+      '<div class="withdrawal-alert mb-3">'+sel.map(function(a){return a.breed+(a.tag?' #'+a.tag:'')+' ('+(a.gender==='male'?'ذكر':'أنثى')+')';}).slice(0,8).join(' | ')+(sel.length>8?' و '+(sel.length-8)+' آخرين':'')+' </div>'+
+      '<label>تاريخ النفوق</label><input type="date" class="field" id="bulk-date" value="'+todayStr()+'">'+
+      '<label>السبب</label><select class="field" id="bulk-death-reason"><option>مرض</option><option>حادث</option><option>إجهاد حراري</option><option>ولادة</option><option>غير معروف</option></select>'+
+      '<div class="d-flex gap-2 justify-content-end mt-3">'+
+        '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
+        '<button class="action-btn danger" onclick="_execBulk(\'death\')">تأكيد النفوق</button>'+
+      '</div>'+
+    '</div>');
+  }
+  else if(action==='sell'){
+    showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()">'+
+      '<h4 style="color:var(--yellow)"><i class="bi bi-currency-dollar"></i> تسجيل بيع '+count+' حيوان</h4>'+
+      '<div class="d-flex gap-2"><div class="flex-grow-1"><label>تاريخ البيع</label><input type="date" class="field" id="bulk-date" value="'+todayStr()+'"></div>'+
+      '<div class="flex-grow-1"><label>إجمالي مبلغ البيع ('+getSettings().currency+')</label><input type="number" class="field" id="bulk-price" placeholder="0" min="0"></div></div>'+
+      '<label>المشتري (اختياري)</label><input class="field" id="bulk-buyer" placeholder="اسم المشتري">'+
+      '<div class="d-flex gap-2 justify-content-end mt-3">'+
+        '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
+        '<button class="action-btn" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.3);color:var(--yellow)" onclick="_execBulk(\'sell\')">تأكيد البيع</button>'+
+      '</div>'+
+    '</div>');
+  }
+  else if(action==='delete'){
+    if(!confirm('حذف نهائي '+count+' حيوان من كل قاعدة البيانات؟\nلا يمكن التراجع!'))return;
+    await _execBulkDirect('delete',ids);
+  }
+};
+
+window._execBulk=async function(action){
+  var ids=[..._selected];
+  if(!ids.length)return;
+  closeModal();
+  toast('جاري التنفيذ على '+ar(ids.length)+' حيوان...','info');
+  var ok=0;
+
+  if(action==='transfer'){
+    var barn=document.getElementById('bulk-barn')?.value;
+    var reason=document.getElementById('bulk-reason')?.value||'نقل';
+    for(var id of ids){try{await fbPatch('animals',id,{barn:barn});ok++;}catch(e){}}
+    await logActivity('edit','animals','نقل جماعي '+ar(ok)+' حيوان → '+barn+' | '+reason);
+    toast('تم نقل '+ar(ok)+' حيوان إلى '+barn);
+  }
+  else if(action==='death'){
+    var date=document.getElementById('bulk-date')?.value||todayStr();
+    var reason=document.getElementById('bulk-death-reason')?.value||'غير معروف';
+    for(var id of ids){try{await fbPatch('animals',id,{status:'dead',died_at:date,death_reason:reason});ok++;}catch(e){}}
+    await logActivity('edit','animals','تسجيل نفوق جماعي '+ar(ok)+' حيوان | '+reason);
+    toast('تم تسجيل نفوق '+ar(ok)+' حيوان');
+  }
+  else if(action==='sell'){
+    var date=document.getElementById('bulk-date')?.value||todayStr();
+    var price=parseFloat(document.getElementById('bulk-price')?.value)||0;
+    var buyer=document.getElementById('bulk-buyer')?.value||'—';
+    for(var id of ids){try{await fbPatch('animals',id,{status:'dead',sold_at:date,removal_reason:'sale'});ok++;}catch(e){}}
+    if(price>0){
+      await fbPost('finance',{date:date,type:'income',category:'بيع حيوانات',amount:price,description:'بيع '+ar(ok)+' حيوان | '+buyer,added_by:getUser()?.name||'—'});
+    }
+    await logActivity('edit','animals','بيع جماعي '+ar(ok)+' حيوان | '+buyer+(price>0?' | '+ar(price)+' '+getSettings().currency:''));
+    toast('تم تسجيل بيع '+ar(ok)+' حيوان'+(price>0?' بمبلغ '+ar(price)+' '+getSettings().currency:''));
+  }
+  _selected.clear();_selectMode=false;
+  animals=await fbGet('animals');
+  renderFilters();renderAnimals();
+};
+
+window._execBulkDirect=async function(action,ids){
+  toast('جاري الحذف...','info');var ok=0;
+  for(var id of ids){try{await fbDelete('animals',id);ok++;}catch(e){}}
+  await logActivity('delete','animals','حذف جماعي '+ar(ok)+' حيوان');
+  toast('تم حذف '+ar(ok)+' حيوان');
+  _selected.clear();_selectMode=false;
+  animals=await fbGet('animals');renderFilters();renderAnimals();
+};
+
 function exportCSV(){
   const rows=[['النوع','السلالة','الجنس','الغرض','الحالة','الترقيم'],...animals.map(a=>[a.species==='goat'?'ماعز':'أغنام',a.breed,a.gender==='male'?'ذكر':'أنثى',{tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[a.purpose]||a.purpose,a.status==='alive'?'حي':'نافق',a.tag||''])];
   const csv=rows.map(r=>r.join(',')).join('\n');
