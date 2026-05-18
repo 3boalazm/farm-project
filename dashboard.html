@@ -1,12 +1,7 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<script>
-(function(){
-  var t=localStorage.getItem('farm_theme');
-  if(t==='light')document.documentElement.classList.add('light-mode');
-})();
-</script>
+<script>(function(){var t=localStorage.getItem('farm_theme');if(t==='light')document.documentElement.classList.add('light-mode');}());</script>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>الرئيسية — بيان المزرعة</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -19,8 +14,8 @@
   <div id="page-header"></div>
   <div id="content"><div class="text-center py-5"><div class="spinner"></div></div></div>
   <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
-    © <span id="footer-year"></span> <span id="footer-farm"></span><br>
-    <small style="font-size:.72rem;color:#555">إشراف: لواء أحمد رجب نوح &nbsp;|&nbsp; تطوير: جندي مصطفى محمد إبراهيم</small>
+    <span id="footer-year"></span> &copy; <span id="footer-farm"></span><br>
+    <small style="font-size:.72rem;color:var(--text-muted)">\u0625\u0634\u0631\u0627\u0641: \u0644\u0648\u0627\u0621 \u0623\u062d\u0645\u062f \u0631\u062c\u0628 \u0646\u0648\u062d | \u062a\u0637\u0648\u064a\u0631: \u062c\u0646\u062f\u064a \u0645\u0635\u0637\u0641\u0649 \u0645\u062d\u0645\u062f \u0625\u0628\u0631\u0627\u0647\u064a\u0645</small>
   </footer>
 </div>
 <script src="config.js"></script>
@@ -28,303 +23,187 @@
 <script src="shared.js"></script>
 <script src="notifications-service.js"></script>
 <script>
-document.addEventListener('DOMContentLoaded', async ()=>{
+document.addEventListener('DOMContentLoaded', async function(){
   if(!requireAuth())return;
   initFirebase();
-  const s=getSettings();
+  var s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
   renderNavbar('dashboard.html');
 
-  const el=document.getElementById('content');
+  var el=document.getElementById('content');
   renderLoading(el);
 
-  let animals=[], vaccinations=[], breeding=[], health=[], finance=[];
+  var animals=[], breeding=[], health=[], finance=[];
   try{
-    [animals,vaccinations,breeding,health,finance]=await Promise.all([
-      fbGet('animals'),fbGet('vaccinations'),fbGet('breeding'),fbGet('health'),fbGet('finance')
-    ]);
+    var results=await Promise.all([fbGet('animals'),fbGet('breeding'),fbGet('health'),fbGet('finance')]);
+    animals=results[0];breeding=results[1];health=results[2];finance=results[3];
   }catch(e){toast('خطأ في التحميل: '+e.message,'error');}
 
-  const alive=animals.filter(a=>a.status==='alive');
-  const tG=alive.filter(a=>a.species==='goat'&&a.purpose!=='birth').length;
-  const tS=alive.filter(a=>a.species==='sheep'&&a.purpose!=='birth').length;
-  const births=alive.filter(a=>a.purpose==='birth').length;
-  const goatBirths=alive.filter(a=>a.species==='goat'&&a.purpose==='birth').length;
-  const sheepBirths=alive.filter(a=>a.species==='sheep'&&a.purpose==='birth').length;
-  const pregnant=breeding.filter(r=>r.status==='pregnant').length;
-  const inc=finance.filter(r=>r.type==='income').reduce((t,r)=>t+(+r.amount||0),0);
-  const exp=finance.filter(r=>r.type==='expense').reduce((t,r)=>t+(+r.amount||0),0);
-  const curr=s.currency;
+  var alive=animals.filter(function(a){return a.status==='alive';});
+  var tG=alive.filter(function(a){return a.species==='goat'&&a.purpose!=='birth';}).length;
+  var tS=alive.filter(function(a){return a.species==='sheep'&&a.purpose!=='birth';}).length;
+  var births=alive.filter(function(a){return a.purpose==='birth';}).length;
+  var goatBirths=alive.filter(function(a){return a.species==='goat'&&a.purpose==='birth';}).length;
+  var sheepBirths=alive.filter(function(a){return a.species==='sheep'&&a.purpose==='birth';}).length;
+  var pregnant=breeding.filter(function(r){return r.status==='pregnant';}).length;
+  var treating=health.filter(function(r){return r.status==='active';}).length;
+  var inc=finance.filter(function(r){return r.type==='income';}).reduce(function(t,r){return t+(+r.amount||0);},0);
+  var exp=finance.filter(function(r){return r.type==='expense';}).reduce(function(t,r){return t+(+r.amount||0);},0);
+  var curr=s.currency;
 
   renderPageHeader(
-    'مرحباً '+getUser().name+' 👋',
+    'مرحباً '+getUser().name+' \u{1F44B}',
     s.farmName+' — '+todayAr(),
     '<a href="diary.html" class="action-btn" style="background:rgba(255,107,53,.1);border-color:rgba(255,107,53,.3);color:var(--orange)"><i class="bi bi-journal-text"></i> يومية المزرعة</a>'+
-    (can('animals')?'<button class="action-btn primary" onclick="openAddAnimalDash()"><i class="bi bi-plus-lg"></i> إضافة حيوان</button><button class="action-btn" onclick="openAddBirthsDash()" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.35);color:var(--yellow)"><i class="bi bi-stars"></i> مواليد</button><button class="action-btn danger" onclick="openMarkDeathDash()"><i class="bi bi-x-octagon"></i> نفوق</button>':'')
+    (can('animals')?'<button class="action-btn primary" onclick="openAddAnimalDash()"><i class="bi bi-plus-lg"></i> إضافة حيوان</button>'+
+    '<button class="action-btn" onclick="openUnifiedBirthModal(\'goat\')" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.35);color:var(--yellow)"><i class="bi bi-stars"></i> مواليد</button>'+
+    '<button class="action-btn danger" onclick="openMarkDeathDash()"><i class="bi bi-x-octagon"></i> نفوق</button>':'')
   );
 
-  // Build breed stats for pie chart
-  const allBreeds=[...s.goatBreeds.map(k=>({k,sp:'goat'})),...s.sheepBreeds.map(k=>({k,sp:'sheep'}))];
-  const breedData=allBreeds.map(function(b){
-    const a=alive.filter(x=>x.breed===b.k);
-    return{breed:b.k,species:b.sp,total:a.length,tarbiya:a.filter(x=>x.purpose==='tarbiya').length,tasmeen:a.filter(x=>x.purpose==='tasmeen').length,births:a.filter(x=>x.purpose==='birth').length};
-  }).filter(b=>b.total>0).sort((a,b)=>b.total-a.total);
-  const totalAlive=alive.length||1;
-  const _sc=JSON.parse(localStorage.getItem('breed_colors')||'{}');
-  const _dc=['#00e676','#2196f3','#ff6b35','#9c27b0','#ffc107','#f44336','#00bcd4','#8bc34a','#ff9800','#e91e63'];
-  const PIE_COLORS=breedData.map((b,i)=>_sc[b.breed]||_dc[i%_dc.length]);
+  // Breed data for pie chart
+  var allBreeds=s.goatBreeds.map(function(k){return{k:k,sp:'goat'};}).concat(s.sheepBreeds.map(function(k){return{k:k,sp:'sheep'};}));
+  var breedData=allBreeds.map(function(b){
+    var a=alive.filter(function(x){return x.breed===b.k;});
+    return{breed:b.k,species:b.sp,total:a.length,
+      tarbiya:a.filter(function(x){return x.purpose==='tarbiya';}).length,
+      tasmeen:a.filter(function(x){return x.purpose==='tasmeen';}).length,
+      births:a.filter(function(x){return x.purpose==='birth';}).length};
+  }).filter(function(b){return b.total>0;}).sort(function(a,b){return b.total-a.total;});
+  var totalAlive=alive.length||1;
+  var sc=JSON.parse(localStorage.getItem('breed_colors')||'{}');
+  var dc=['#00e676','#2196f3','#ff6b35','#9c27b0','#ffc107','#f44336','#00bcd4','#8bc34a','#ff9800','#e91e63'];
+  var PIE_COLORS=breedData.map(function(b,i){return sc[b.breed]||dc[i%dc.length];});
 
-  // Quick stats cards
-  const treating=health.filter(r=>r.status==='active').length;
-  const quickStats=[
-    {l:'إجمالي القطيع',v:tG+tS+births,c:'var(--orange)',i:'bi-bar-chart-fill',href:'animals.html?status=alive'},
-    {l:'الماعز',v:tG,c:'var(--green)',i:'bi-tropical-storm',href:'animals.html?species=goat&purpose=tarbiya,tasmeen'},
-    {l:'الأغنام',v:tS,c:'var(--blue)',i:'bi-cloud-fill',href:'animals.html?species=sheep&purpose=tarbiya,tasmeen'},
-    {l:'حوامل',v:pregnant,c:'var(--purple)',i:'bi-diagram-2',href:'breeding.html'},
-    {l:'ولدات الماعز',v:goatBirths,c:'var(--green)',i:'bi-stars',href:'animals.html?species=goat&purpose=birth'},
-    {l:'ولدات الأغنام',v:sheepBirths,c:'var(--blue)',i:'bi-stars',href:'animals.html?species=sheep&purpose=birth'},
+  // Quick stats
+  var quickStats=[
+    {l:'إجمالي القطيع',v:ar(tG+tS+births),c:'var(--orange)',i:'bi-bar-chart-fill',href:'animals.html'},
+    {l:'الماعز',v:ar(tG),c:'var(--green)',i:'bi-tropical-storm',href:'goats.html'},
+    {l:'الأغنام',v:ar(tS),c:'var(--blue)',i:'bi-cloud-fill',href:'sheep.html'},
+    {l:'حوامل',v:ar(pregnant),c:'var(--purple)',i:'bi-diagram-2',href:'breeding.html'},
+    {l:'ولدات الماعز',v:ar(goatBirths),c:'var(--green)',i:'bi-stars',href:'animals.html?species=goat&purpose=birth'},
+    {l:'ولدات الأغنام',v:ar(sheepBirths),c:'var(--blue)',i:'bi-stars',href:'animals.html?species=sheep&purpose=birth'},
   ];
 
-  // Build HTML
-  var statsHtml=quickStats.map(function(st){
-    return '<div class="col-6 col-md-4 col-lg-2"><a href="'+st.href+'" style="text-decoration:none"><div class="summary-card"><i class="bi '+st.i+' d-block mb-2" style="font-size:1.3rem;color:'+st.c+'"></i><div class="summary-number" style="color:'+st.c+'">'+ar(st.v)+'</div><small class="text-gray">'+st.l+'</small></div></a></div>';
-  }).join('');
-
-  var finHtml='';
-  if(can('finance')){
-    finHtml='<div class="row g-3 mb-4">'+
-      '<div class="col-md-4"><div class="wonder-card text-center"><div style="font-size:1.1rem;font-weight:700;color:var(--green)">'+inc.toLocaleString('ar-EG')+' '+curr+'</div><small class="text-gray">الإيرادات</small></div></div>'+
-      '<div class="col-md-4"><div class="wonder-card text-center"><div style="font-size:1.1rem;font-weight:700;color:var(--orange)">'+exp.toLocaleString('ar-EG')+' '+curr+'</div><small class="text-gray">المصروفات</small></div></div>'+
-      '<div class="col-md-4"><div class="wonder-card text-center"><div style="font-size:1.1rem;font-weight:700;color:'+(inc-exp>=0?'var(--green)':'var(--red)')+'">'+((inc-exp>=0?'+':'')+(inc-exp).toLocaleString('ar-EG'))+' '+curr+'</div><small class="text-gray">'+(inc-exp>=0?'صافي الربح':'صافي الخسارة')+'</small></div></div>'+
-    '</div>';
-  }
-
-  // Summary table HTML
   var tableRows=breedData.map(function(b){
-    return '<tr style="border-bottom:1px solid #1e1e1e"><td style="padding:8px;color:var(--gray)">'+(b.species==='goat'?'ماعز':'أغنام')+'</td><td style="padding:8px;font-weight:700">'+b.breed+'</td><td style="padding:8px">'+ar(b.tarbiya)+'</td><td style="padding:8px">'+ar(b.tasmeen)+'</td><td style="padding:8px;color:var(--yellow)">'+ar(b.births)+'</td><td style="padding:8px;font-weight:700;color:var(--green)">'+ar(b.total)+'</td></tr>';
+    return '<tr style="border-bottom:1px solid var(--border-3)"><td style="padding:8px;color:var(--text-gray)">'+
+      (b.species==='goat'?'ماعز':'أغنام')+
+      '</td><td style="padding:8px;font-weight:700">'+b.breed+'</td>'+
+      '<td style="padding:8px">'+ar(b.tarbiya)+'</td>'+
+      '<td style="padding:8px">'+ar(b.tasmeen)+'</td>'+
+      '<td style="padding:8px;color:var(--yellow)">'+ar(b.births)+'</td>'+
+      '<td style="padding:8px;font-weight:700;color:var(--green)">'+ar(b.total)+'</td></tr>';
   }).join('');
 
   el.innerHTML=
     '<div id="weather-widget" class="wonder-card mb-4 p-3"><div class="text-gray" style="font-size:.82rem"><i class="bi bi-cloud-sun me-2"></i>جاري تحميل حالة الطقس...</div></div>'+
-    '<div class="row g-3 mb-4">'+statsHtml+'</div>'+
-    finHtml+
+    '<div class="row g-3 mb-4">'+
+      quickStats.map(function(st){return '<div class="col-6 col-md-4 col-lg-2"><a href="'+st.href+'" style="text-decoration:none"><div class="summary-card"><i class="bi '+st.i+' d-block mb-2" style="font-size:1.3rem;color:'+st.c+'"></i><div class="summary-number" style="color:'+st.c+'">'+st.v+'</div><small class="text-gray">'+st.l+'</small></div></a></div>';}).join('')+
+    '</div>'+
+    (can('finance')?'<div class="row g-3 mb-4">'+
+      '<div class="col-md-4"><a href="finance.html" style="text-decoration:none"><div class="wonder-card text-center"><div style="font-size:1.1rem;font-weight:700;color:var(--green)">'+inc.toLocaleString('ar-EG')+' '+curr+'</div><small class="text-gray">الإيرادات</small></div></a></div>'+
+      '<div class="col-md-4"><a href="finance.html" style="text-decoration:none"><div class="wonder-card text-center"><div style="font-size:1.1rem;font-weight:700;color:var(--orange)">'+exp.toLocaleString('ar-EG')+' '+curr+'</div><small class="text-gray">المصروفات</small></div></a></div>'+
+      '<div class="col-md-4"><a href="cost.html" style="text-decoration:none"><div class="wonder-card text-center"><div style="font-size:1.1rem;font-weight:700;color:'+(inc-exp>=0?'var(--green)':'var(--red)')+'">'+((inc-exp>=0?'+':'')+(inc-exp).toLocaleString('ar-EG'))+' '+curr+'</div><small class="text-gray">صافي الربح/الخسارة</small></div></a></div>'+
+    '</div>':'') +
     '<div class="row g-3 mb-4">'+
       '<div class="col-md-5"><div class="wonder-card"><h6 class="fw-bold mb-3"><i class="bi bi-pie-chart-fill accent-text"></i> توزيع القطيع</h6><div id="pie-container" class="text-center"></div></div></div>'+
-      '<div class="col-md-7"><div class="wonder-card p-0"><div class="p-3 pb-2 fw-bold" style="font-size:.9rem"><i class="bi bi-table accent-text me-2"></i>ملخص المزرعة</div><div class="table-responsive"><table style="width:100%;border-collapse:separate;border-spacing:0;font-size:.8rem"><thead><tr style="background:rgba(255,255,255,.03)"><th style="padding:8px;color:var(--gray);font-weight:700;border-bottom:1px solid var(--border)">القسم</th><th style="padding:8px;color:var(--gray);font-weight:700;border-bottom:1px solid var(--border)">السلالة</th><th style="padding:8px;color:var(--gray);font-weight:700;border-bottom:1px solid var(--border)">تربية</th><th style="padding:8px;color:var(--gray);font-weight:700;border-bottom:1px solid var(--border)">تسمين</th><th style="padding:8px;color:var(--gray);font-weight:700;border-bottom:1px solid var(--border)">ولدات</th><th style="padding:8px;color:var(--gray);font-weight:700;border-bottom:1px solid var(--border)">الإجمالي</th></tr></thead><tbody>'+tableRows+'</tbody></table></div></div></div>'+
-    '</div>'+
-    '<div class="births-section">'+
-      '<h6 class="fw-bold mb-3"><i class="bi bi-stars" style="color:var(--yellow)"></i> الولدات — '+ar(births)+'</h6>'+
-      '<div class="row g-3">'+
-        '<div class="col-md-6"><div class="d-flex justify-content-between align-items-center p-3" style="background:rgba(255,255,255,.03);border-radius:12px"><div><div class="fw-bold">ولدات الماعز</div><small class="text-gray">'+ar(goatBirths)+'</small></div><div class="d-flex gap-3"><div class="text-center"><div class="fw-bold green-text">'+ar(alive.filter(a=>a.species==='goat'&&a.purpose==='birth'&&a.gender==='male').length)+'</div><small class="text-gray">ذكور</small></div><div class="text-center"><div class="fw-bold accent-text">'+ar(alive.filter(a=>a.species==='goat'&&a.purpose==='birth'&&a.gender==='female').length)+'</div><small class="text-gray">إناث</small></div></div></div></div>'+
-        '<div class="col-md-6"><div class="d-flex justify-content-between align-items-center p-3" style="background:rgba(255,255,255,.03);border-radius:12px"><div><div class="fw-bold">ولدات الأغنام</div><small class="text-gray">'+ar(sheepBirths)+'</small></div><div class="d-flex gap-3"><div class="text-center"><div class="fw-bold green-text">'+ar(alive.filter(a=>a.species==='sheep'&&a.purpose==='birth'&&a.gender==='male').length)+'</div><small class="text-gray">ذكور</small></div><div class="text-center"><div class="fw-bold accent-text">'+ar(alive.filter(a=>a.species==='sheep'&&a.purpose==='birth'&&a.gender==='female').length)+'</div><small class="text-gray">إناث</small></div></div></div></div>'+
-      '</div>'+
+      '<div class="col-md-7"><div class="wonder-card p-0"><div class="p-3 pb-2 fw-bold" style="font-size:.9rem"><a href="diary.html" style="text-decoration:none;color:var(--text)"><i class="bi bi-table accent-text me-2"></i>ملخص المزرعة</a></div><div class="table-responsive"><table style="width:100%;border-collapse:separate;border-spacing:0;font-size:.8rem"><thead><tr style="background:rgba(255,255,255,.03)"><th style="padding:8px;color:var(--text-gray);font-weight:700;border-bottom:1px solid var(--border)">القسم</th><th style="padding:8px;color:var(--text-gray);font-weight:700;border-bottom:1px solid var(--border)">السلالة</th><th style="padding:8px;color:var(--text-gray);font-weight:700;border-bottom:1px solid var(--border)">تربية</th><th style="padding:8px;color:var(--text-gray);font-weight:700;border-bottom:1px solid var(--border)">تسمين</th><th style="padding:8px;color:var(--text-gray);font-weight:700;border-bottom:1px solid var(--border)">ولدات</th><th style="padding:8px;color:var(--text-gray);font-weight:700;border-bottom:1px solid var(--border)">الإجمالي</th></tr></thead><tbody>'+tableRows+'</tbody></table></div></div></div>'+
     '</div>';
 
-  // Render Pie Chart
+  // Pie Chart
   if(breedData.length>0){
-    var size=220,cx=size/2,cy=size/2,r=85,ir=45;
-    var startAngle=0;
-    var svgPaths='';var legendItems='';
+    var size=200,cx=100,cy=100,r=80,ir=35;var sa=0;var paths='',legend='';
     breedData.forEach(function(b,i){
-      var angle=(b.total/totalAlive)*2*Math.PI;
-      if(angle>=2*Math.PI)angle=2*Math.PI-0.001;
-      var endAngle=startAngle+angle;
-      var x1=cx+r*Math.cos(startAngle-Math.PI/2),y1=cy+r*Math.sin(startAngle-Math.PI/2);
-      var x2=cx+r*Math.cos(endAngle-Math.PI/2),y2=cy+r*Math.sin(endAngle-Math.PI/2);
-      var xi=cx+ir*Math.cos(startAngle-Math.PI/2),yi=cy+ir*Math.sin(startAngle-Math.PI/2);
-      var xi2=cx+ir*Math.cos(endAngle-Math.PI/2),yi2=cy+ir*Math.sin(endAngle-Math.PI/2);
-      var large=angle>Math.PI?1:0;
-      var path='M '+xi+' '+yi+' A '+ir+' '+ir+' 0 '+large+' 1 '+xi2+' '+yi2+' L '+x2+' '+y2+' A '+r+' '+r+' 0 '+large+' 0 '+x1+' '+y1+' Z';
-      var color=PIE_COLORS[i%PIE_COLORS.length];
+      var angle=(b.total/totalAlive)*2*Math.PI;if(angle>=2*Math.PI-0.001){angle=2*Math.PI-0.001;}
+      var ea=sa+angle,lg=angle>Math.PI?1:0;
+      var x1=cx+r*Math.cos(sa-Math.PI/2),y1=cy+r*Math.sin(sa-Math.PI/2);
+      var x2=cx+r*Math.cos(ea-Math.PI/2),y2=cy+r*Math.sin(ea-Math.PI/2);
+      var xi=cx+ir*Math.cos(sa-Math.PI/2),yi=cy+ir*Math.sin(sa-Math.PI/2);
+      var xi2=cx+ir*Math.cos(ea-Math.PI/2),yi2=cy+ir*Math.sin(ea-Math.PI/2);
+      var color=PIE_COLORS[i];
       var pct=Math.round(b.total/totalAlive*100);
-      svgPaths+='<path d="'+path+'" fill="'+color+'" opacity=".85" stroke="#141414" stroke-width="2"><title>'+b.breed+': '+ar(b.total)+'</title></path>';
-      legendItems+='<span style="font-size:.72rem;display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:50%;background:'+color+';display:inline-block"></span>'+b.breed+' '+ar(pct)+'٪</span>';
-      startAngle=endAngle;
+      paths+='<path d="M '+xi+' '+yi+' A '+ir+' '+ir+' 0 '+lg+' 1 '+xi2+' '+yi2+' L '+x2+' '+y2+' A '+r+' '+r+' 0 '+lg+' 0 '+x1+' '+y1+' Z" fill="'+color+'" opacity=".85" stroke="var(--bg)" stroke-width="2"><title>'+b.breed+': '+ar(b.total)+'</title></path>';
+      legend+='<span style="font-size:.7rem;display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:'+color+';display:inline-block"></span>'+b.breed+' '+ar(pct)+'\u066a</span>';
+      sa=ea;
     });
-    var pieHtml='<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'" style="overflow:visible;max-width:100%">'+svgPaths+'<circle cx="'+cx+'" cy="'+cy+'" r="'+ir+'" fill="#141414"/><text x="'+cx+'" y="'+(cy-8)+'" text-anchor="middle" fill="#e8e8e8" font-size="22" font-weight="700" font-family="Lexend">'+ar(totalAlive)+'</text><text x="'+cx+'" y="'+(cy+12)+'" text-anchor="middle" fill="#888" font-size="11" font-family="Cairo">رأس حي</text></svg><div style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:8px">'+legendItems+'</div>';
     var pc=document.getElementById('pie-container');
-    if(pc)pc.innerHTML=pieHtml;
+    if(pc)pc.innerHTML='<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'" style="overflow:visible;max-width:100%">'+paths+'<circle cx="'+cx+'" cy="'+cy+'" r="'+ir+'" fill="var(--bg-2)"/><text x="'+cx+'" y="'+(cy-6)+'" text-anchor="middle" fill="var(--text)" font-size="20" font-weight="700" font-family="Lexend">'+ar(totalAlive)+'</text><text x="'+cx+'" y="'+(cy+12)+'" text-anchor="middle" fill="var(--text-gray)" font-size="10" font-family="Cairo">\u0631\u0623\u0633</text></svg><div style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:8px">'+legend+'</div>';
   }
 
-  // Weather Widget
+  // Weather
   getWeather().then(function(w){
-    if(!w||!w.main)return;
+    var wEl=document.getElementById('weather-widget');
+    if(!w||!w.main){if(wEl)wEl.innerHTML='<div class="text-gray" style="font-size:.82rem"><i class="bi bi-cloud-slash me-2"></i>حالة الطقس غير متاحة</div>';return;}
     var temp=Math.round(w.main.temp);
     var feels=Math.round(w.main.feels_like);
     var desc=w.weather&&w.weather[0]?w.weather[0].description:'';
     var humidity=w.main.humidity;
     var isHot=temp>=35,isCold=temp<=10;
-    var emoji=isHot?'🌡️':isCold?'🥶':temp>=25?'☀️':'🌤️';
-    var alertHtml='';
-    if(isHot)alertHtml='<div class="type-badge badge-danger" style="font-size:.7rem"><i class="bi bi-exclamation-triangle-fill me-1"></i>إجهاد حراري — زِد المياه وأخِّر الرعي</div>';
-    if(isCold)alertHtml='<div class="type-badge badge-blue" style="font-size:.7rem"><i class="bi bi-snow me-1"></i>برد شديد — تحقق من التدفئة</div>';
-    var wEl=document.getElementById('weather-widget');
-    if(wEl)wEl.innerHTML='<div class="d-flex align-items-center gap-3 flex-wrap"><div style="font-size:2rem">'+emoji+'</div><div><div style="font-size:1.4rem;font-weight:700;color:'+(isHot?'var(--red)':isCold?'var(--blue)':'var(--green)')+'">'+ar(temp)+'°م</div><div style="font-size:.78rem;color:var(--gray)">'+desc+' • رطوبة '+ar(humidity)+'٪ • يبدو كأنه '+ar(feels)+'°م</div></div>'+alertHtml+'</div>';
+    var emoji=isHot?'\u{1F321}':isCold?'\u{1F976}':temp>=25?'\u2600\uFE0F':'\u26C5';
+    var alertHtml=isHot?'<div class="type-badge badge-danger" style="font-size:.7rem"><i class="bi bi-exclamation-triangle-fill me-1"></i>\u0625\u062c\u0647\u0627\u062f \u062d\u0631\u0627\u0631\u064a</div>':isCold?'<div class="type-badge badge-blue" style="font-size:.7rem"><i class="bi bi-snow me-1"></i>\u0628\u0631\u062f \u0634\u062f\u064a\u062f</div>':'';
+    if(wEl)wEl.innerHTML='<div class="d-flex align-items-center gap-3 flex-wrap"><div style="font-size:2rem">'+emoji+'</div><div><div style="font-size:1.4rem;font-weight:700;color:'+(isHot?'var(--red)':isCold?'var(--blue)':'var(--green)')+'">'+ar(temp)+'\u00b0\u0645</div><div style="font-size:.78rem;color:var(--text-gray)">'+desc+' \u2022 \u0631\u0637\u0648\u0628\u0629 '+ar(humidity)+'\u066a \u2022 \u064a\u0628\u062f\u0648 \u0643\u0623\u0646\u0647 '+ar(feels)+'\u00b0\u0645</div></div>'+alertHtml+'</div>';
   }).catch(function(){});
 });
 
-// ── Dashboard Quick Actions ──────────────────────────────
 window.openAddAnimalDash=function(){
-  const s=getSettings();
+  var s=getSettings();
   showModal('<div class="farm-modal" onclick="event.stopPropagation()">'+
-    '<h4><i class="bi bi-plus-circle accent-text"></i> إضافة حيوان سريع</h4>'+
+    '<h4><i class="bi bi-plus-circle accent-text"></i> \u0625\u0636\u0627\u0641\u0629 \u062d\u064a\u0648\u0627\u0646 \u0633\u0631\u064a\u0639</h4>'+
     '<div class="row g-2">'+
-      '<div class="col-6"><label>النوع</label><select class="field" id="da-sp"><option value="goat">ماعز</option><option value="sheep">أغنام</option></select></div>'+
-      '<div class="col-6"><label>الغرض</label><select class="field" id="da-pur"><option value="tarbiya">تربية</option><option value="tasmeen">تسمين</option></select></div>'+
+      '<div class="col-6"><label>\u0627\u0644\u0646\u0648\u0639</label><select class="field" id="da-sp" onchange="window._daBreeds()"><option value="goat">\u0645\u0627\u0639\u0632</option><option value="sheep">\u0623\u063a\u0646\u0627\u0645</option></select></div>'+
+      '<div class="col-6"><label>\u0627\u0644\u063a\u0631\u0636</label><select class="field" id="da-pur"><option value="tarbiya">\u062a\u0631\u0628\u064a\u0629</option><option value="tasmeen">\u062a\u0633\u0645\u064a\u0646</option></select></div>'+
     '</div>'+
-    '<label>السلالة</label><select class="field" id="da-breed">'+s.goatBreeds.map(b=>'<option>'+b+'</option>').join('')+'</select>'+
+    '<label>\u0627\u0644\u0633\u0644\u0627\u0644\u0629</label><select class="field" id="da-breed">'+s.goatBreeds.map(function(b){return'<option>'+b+'</option>';}).join('')+'</select>'+
     '<div class="row g-2">'+
-      '<div class="col-6"><label>الجنس</label><select class="field" id="da-gender"><option value="female">أنثى</option><option value="male">ذكر</option></select></div>'+
-      '<div class="col-6"><label>رقم الترقيم</label><input class="field" id="da-tag" placeholder="A-001"></div>'+
+      '<div class="col-6"><label>\u0627\u0644\u062c\u0646\u0633</label><select class="field" id="da-g"><option value="female">\u0623\u0646\u062b\u0649</option><option value="male">\u0630\u0643\u0631</option></select></div>'+
+      '<div class="col-6"><label>\u0631\u0642\u0645 \u0627\u0644\u062a\u0631\u0642\u064a\u0645</label><input class="field" id="da-tag" placeholder="A-001"></div>'+
     '</div>'+
-    '<label>الجمالون</label><select class="field" id="da-barn"><option value="">— غير محدد —</option><option>ج١ع١</option><option>ج١ع٢</option><option>ج٢ع١</option><option>ج٢ع٢</option><option>ج٣ع١</option><option>ج٣ع٢</option><option>ج٤ع١</option><option>ج٤ع٢</option><option>ج٥ع١</option><option>ج٥ع٢</option></select>'+
+    '<label>\u0627\u0644\u062c\u0645\u0627\u0644\u0648\u0646</label><select class="field" id="da-barn"><option value="">\u2014 \u063a\u064a\u0631 \u0645\u062d\u062f\u062f \u2014</option><option>\u062c\u0661\u0639\u0661</option><option>\u062c\u0661\u0639\u0662</option><option>\u062c\u0662\u0639\u0661</option><option>\u062c\u0662\u0639\u0662</option><option>\u062c\u0663\u0639\u0661</option></select>'+
     '<div class="d-flex gap-2 justify-content-end mt-3">'+
-      '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
-      '<button class="action-btn primary" onclick="submitAddAnimalDash()">حفظ</button>'+
+      '<button class="action-btn" onclick="closeModal()">\u0625\u0644\u063a\u0627\u0621</button>'+
+      '<button class="action-btn primary" onclick="_daSubmit()">\u062d\u0641\u0638</button>'+
     '</div>'+
   '</div>');
 };
-
-function openAddBirths(){
-  const s=getSettings();
-  showModal(`<div class="farm-modal" onclick="event.stopPropagation()">
-    <h4><i class="bi bi-stars" style="color:var(--yellow)"></i> إضافة مواليد</h4>
-    
-    <div class="row g-2">
-      <div class="col-6"><label>النوع</label>
-        <select class="field" id="b-species" onchange="updateBirthBreeds()">
-          <option value="goat">ماعز</option>
-          <option value="sheep">أغنام</option>
-        </select>
-      </div>
-      <div class="col-6"><label>السلالة</label>
-        <select class="field" id="b-breed">
-          ${s.goatBreeds.map(b=>`<option>${b}</option>`).join('')}
-        </select>
-      </div>
-    </div>
-    
-    <div class="row g-2">
-      <div class="col-6"><label>الجنس</label>
-        <select class="field" id="b-gender">
-          <option value="female">أنثى</option>
-          <option value="male">ذكر</option>
-        </select>
-      </div>
-      <div class="col-6"><label>الكمية</label>
-        <input type="number" class="field" id="b-qty" value="1" min="1" max="100">
-      </div>
-    </div>
-    
-    <div class="row g-2">
-      <div class="col-6"><label>رقم الأم</label>
-        <input class="field" id="b-mother-tag" placeholder="F-101">
-      </div>
-      <div class="col-6"><label>رقم الأب</label>
-        <input class="field" id="b-father-tag" placeholder="M-001">
-      </div>
-    </div>
-    
-    <label>الجمالون/العنبر</label>
-    <select class="field" id="b-barn">
-      <option value="">— غير محدد —</option>
-      <option>ج١ع١</option>
-      <option>ج١ع٢</option>
-      <option>ج٢ع١</option>
-      <option>ج٢ع٢</option>
-      <option>ج٣ع١</option>
-      <option>ج٣ع٢</option>
-      <option>ج٤ع١</option>
-      <option>ج٤ع٢</option>
-      <option>ج٥ع١</option>
-      <option>ج٥ع٢</option>
-    </select>
-    
-    <label>تاريخ الميلاد</label>
-    <input type="date" class="field" id="b-bdate" value="${todayStr()}">
-    
-    <label>ملاحظات</label>
-    <textarea class="field" id="b-notes" rows="2"></textarea>
-    
-    <div class="d-flex gap-2 justify-content-end mt-3">
-      <button class="action-btn" onclick="closeModal()">إلغاء</button>
-      <button class="action-btn primary" onclick="submitBirths()">حفظ</button>
-    </div>
-  </div>`);
-  
-  // تحديث السلالات حسب النوع
-  window.updateBirthBreeds=function(){
-    const sp=document.getElementById('b-species').value;
-    document.getElementById('b-breed').innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(b=>`<option>${b}</option>`).join('');
-  };
-}
-
-window.submitBirths=async function(){
-  const species=document.getElementById('b-species').value;
-  const breed=document.getElementById('b-breed').value;
-  const gender=document.getElementById('b-gender').value;
-  const qty=parseInt(document.getElementById('b-qty').value)||1;
-  const motherTag=document.getElementById('b-mother-tag').value.trim()||null;
-  const fatherTag=document.getElementById('b-father-tag').value.trim()||null;
-  const barn=document.getElementById('b-barn').value||null;
-  const bdate=document.getElementById('b-bdate').value||null;
-  const notes=document.getElementById('b-notes').value.trim();
-  
-  closeModal();
-  toast('جاري الحفظ...','info');
-  
-  let ok=0;
-  for(let i=0;i<qty;i++){
-    try{
-      await fbPost('animals',{
-        species,
-        breed,
-        gender,
-        purpose:'birth',
-        status:'alive',
-        birth_date:bdate,
-        mother_tag:motherTag,
-        father_tag:fatherTag,
-        barn:barn,
-        notes:notes||null
-      });
-      ok++;
-    }catch(e){
-      console.error(e);
-    }
-  }
-  
-  if(ok>0){
-    await logActivity('add','animals',`أضاف ${ar(ok)} مواليد ${breed} (${species==='goat'?'ماعز':'أغنام'})`);
-    toast(`تمت إضافة ${ar(ok)} مواليد`);
-    animals=await fbGet('animals');
-    renderAnimals();
-  }else{
-    toast('فشل الحفظ','error');
-  }
+window._daBreeds=function(){var s=getSettings();var sp=document.getElementById('da-sp')?.value;var b=document.getElementById('da-breed');if(b)b.innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(function(x){return'<option>'+x+'</option>';}).join('');};
+window._daSubmit=async function(){
+  var sp=document.getElementById('da-sp').value;
+  var breed=document.getElementById('da-breed').value;
+  var gender=document.getElementById('da-g').value;
+  var purpose=document.getElementById('da-pur').value;
+  var tag=document.getElementById('da-tag').value.trim();
+  var barn=document.getElementById('da-barn').value;
+  closeModal();toast('\u062c\u0627\u0631\u064a \u0627\u0644\u062d\u0641\u0638...','info');
+  try{
+    await fbPost('animals',{species:sp,breed,gender,purpose,status:'alive',tag:tag||null,barn:barn||null,birth_date:todayStr()});
+    await logActivity('add','animals','\u0625\u0636\u0627\u0641\u0629 \u0633\u0631\u064a\u0639\u0629: '+breed+' '+gender);
+    toast('\u062a\u0645\u062a \u0627\u0644\u0625\u0636\u0627\u0641\u0629');
+    setTimeout(function(){location.reload();},1200);
+  }catch(e){toast('\u0641\u0634\u0644: '+e.message,'error');}
 };
-
 window.openMarkDeathDash=async function(){
-  const animals2=await fbGet('animals');
-  const alive=animals2.filter(a=>a.status==='alive');
+  var animals2=await fbGet('animals');
+  var alive2=animals2.filter(function(a){return a.status==='alive';}).slice(0,200);
   showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()">'+
-    '<h4 style="color:var(--red)"><i class="bi bi-x-octagon"></i> تسجيل نفوق</h4>'+
-    '<label>الحيوان</label><select class="field" id="dd-a"><option value="">— اختر —</option>'+
-    alive.slice(0,200).map(a=>'<option value="'+a._id+'">'+a.breed+(a.tag?' #'+a.tag:'')+(a.gender==='male'?' ذكر':' أنثى')+'</option>').join('')+
+    '<h4 style="color:var(--red)"><i class="bi bi-x-octagon"></i> \u062a\u0633\u062c\u064a\u0644 \u0646\u0641\u0648\u0642</h4>'+
+    '<label>\u0627\u0644\u062d\u064a\u0648\u0627\u0646</label><select class="field" id="dd-a"><option value="">\u2014 \u0627\u062e\u062a\u0631 \u2014</option>'+
+      alive2.map(function(a){return'<option value="'+a._id+'">'+a.breed+(a.tag?' #'+a.tag:'')+(a.gender==='male'?' \u0630\u0643\u0631':' \u0623\u0646\u062b\u0649')+'</option>';}).join('')+
     '</select>'+
-    '<label>التاريخ</label><input type="date" class="field" id="dd-d" value="'+todayStr()+'">'+
+    '<label>\u0627\u0644\u062a\u0627\u0631\u064a\u062e</label><input type="date" class="field" id="dd-d" value="'+todayStr()+'">'+
     '<div class="d-flex gap-2 justify-content-end mt-3">'+
-      '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
-      '<button class="action-btn danger" onclick="submitDeathDash()">تسجيل</button>'+
+      '<button class="action-btn" onclick="closeModal()">\u0625\u0644\u063a\u0627\u0621</button>'+
+      '<button class="action-btn danger" onclick="_ddSubmit()">\u062a\u0633\u062c\u064a\u0644</button>'+
     '</div>'+
   '</div>');
 };
-window.submitDeathDash=async function(){
-  const id=document.getElementById('dd-a').value;if(!id){toast('يرجى اختيار حيوان','error');return;}
+window._ddSubmit=async function(){
+  var id=document.getElementById('dd-a').value;if(!id){toast('\u064a\u0631\u062c\u0649 \u0627\u062e\u062a\u064a\u0627\u0631 \u062d\u064a\u0648\u0627\u0646','error');return;}
   closeModal();
-  try{await fbPatch('animals',id,{status:'dead',died_at:document.getElementById('dd-d').value});await logActivity('edit','animals','تسجيل نفوق من الداشبورد');toast('تم تسجيل النفوق');}
-  catch(e){toast('فشل: '+e.message,'error');}
+  try{
+    await fbPatch('animals',id,{status:'dead',died_at:document.getElementById('dd-d').value});
+    await logActivity('edit','animals','\u062a\u0633\u062c\u064a\u0644 \u0646\u0641\u0648\u0642');
+    toast('\u062a\u0645 \u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u0646\u0641\u0648\u0642');
+  }catch(e){toast('\u0641\u0634\u0644: '+e.message,'error');}
 };
 </script>
 </body>

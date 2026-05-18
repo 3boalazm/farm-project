@@ -56,13 +56,22 @@ function renderSettings(){
   <!-- Theme & Display -->
   <div class="settings-section">
     <h6 class="fw-bold mb-3"><i class="bi bi-palette-fill accent-text"></i> المظهر والعرض</h6>
-    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
       <div>
         <div class="fw-bold mb-1">الوضع اللوني</div>
         <small class="text-gray">تبديل بين الوضع الداكن والفاتح</small>
       </div>
       <button class="action-btn primary" onclick="toggleTheme()" id="settings-theme-btn">
         <i class="bi bi-circle-half"></i> <span id="settings-theme-label">تبديل الوضع</span>
+      </button>
+    </div>
+    <div class="d-flex align-items-center justify-content-between">
+      <div>
+        <div class="fw-bold mb-1">صوت الإشعارات</div>
+        <small class="text-gray">تفعيل صوت عند وصول أي تنبيه</small>
+      </div>
+      <button class="action-btn" id="sound-toggle-btn" onclick="toggleNotifSound()">
+        <i class="bi bi-volume-up-fill" id="sound-icon"></i> <span id="sound-label">مفعّل</span>
       </button>
     </div>
   </div>
@@ -176,6 +185,24 @@ function updateSettingsThemeLabel(){
 // Initialize
 renderBreedColors();
 updateSettingsThemeLabel();
+// Sound toggle
+function toggleNotifSound(){
+  const off=localStorage.getItem('farm_notif_sound')==='off';
+  localStorage.setItem('farm_notif_sound',off?'on':'off');
+  const icon=document.getElementById('sound-icon');
+  const lbl=document.getElementById('sound-label');
+  if(icon)icon.className=off?'bi bi-volume-up-fill':'bi bi-volume-mute-fill';
+  if(lbl)lbl.textContent=off?'مفعّل':'مكتوم';
+  toast(off?'تم تفعيل صوت الإشعارات':'تم كتم صوت الإشعارات');
+}
+// Init sound state
+(function(){
+  const off=localStorage.getItem('farm_notif_sound')==='off';
+  const icon=document.getElementById('sound-icon');
+  const lbl=document.getElementById('sound-label');
+  if(icon)icon.className=off?'bi bi-volume-mute-fill':'bi bi-volume-up-fill';
+  if(lbl)lbl.textContent=off?'مكتوم':'مفعّل';
+})();
 </script>
 </body>
 </html>

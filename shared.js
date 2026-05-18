@@ -42,6 +42,7 @@ const NAV_PAGES=[
   {href:'reports.html',   icon:'bi-graph-up',          label:'تقارير',      perm:'reports'},
   {href:'barns.html',      icon:'bi-grid-3x3-gap-fill', label:'الجمالونات',   perm:'animals'},
   {href:'diary.html',      icon:'bi-journal-text',      label:'يومية المزرعة',perm:'dash'},
+  {href:'cost.html',       icon:'bi-calculator-fill',   label:'حاسبة التكاليف', perm:'finance'},
 ];
 const SIDEBAR_EXTRA=[
   {href:'notifications.html', icon:'bi-bell-fill',     label:'الإشعارات'},
@@ -423,4 +424,122 @@ window.showInfoModal=function(el){
     '<div style="background:rgba(255,107,53,.06);border:1px solid rgba(255,107,53,.2);border-radius:12px;padding:14px;font-size:.88rem;line-height:1.7">'+text+'</div>'+
     '<div class="d-flex justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">حسناً</button></div>'+
   '</div>');
+};
+
+// ═══════════════════════════════════════════════════════
+//  UNIFIED BIRTH REGISTRATION MODAL (same everywhere)
+// ═══════════════════════════════════════════════════════
+window.openUnifiedBirthModal=function(defaultSpecies){
+  const s=getSettings();
+  const u=getUser();
+  const barns=['','ج١ع١','ج١ع٢','ج٢ع١','ج٢ع٢','ج٣ع١','ج٣ع٢','ج٤ع١','ج٤ع٢','ج٥ع١','ج٥ع٢'];
+  const allBreeds=[...s.goatBreeds,...s.sheepBreeds];
+
+  showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:560px;max-height:95vh;overflow-y:auto">'+
+    '<h4><i class="bi bi-stars" style="color:var(--yellow)"></i> تسجيل ولادة جديدة</h4>'+
+    '<div class="row g-2">'+
+      '<div class="col-6"><label>نوع المولود *</label><select class="field" id="ub-sp" onchange="_ubUpdateBreeds()"><option value="goat" '+(defaultSpecies==='goat'?'selected':'')+'>ماعز</option><option value="sheep" '+(defaultSpecies==='sheep'?'selected':'')+'>أغنام</option></select></div>'+
+      '<div class="col-6"><label>سلالة المولود *</label><select class="field" id="ub-breed">'+s.goatBreeds.map(b=>'<option>'+b+'</option>').join('')+'</select></div>'+
+    '</div>'+
+    '<div class="row g-2">'+
+      '<div class="col-6"><label>الغرض</label><select class="field" id="ub-purpose"><option value="birth">مواليد</option><option value="tarbiya">تربية</option><option value="tasmeen">تسمين</option></select></div>'+
+      '<div class="col-6"><label>الجنس *</label><select class="field" id="ub-gender"><option value="female">أنثى ♀</option><option value="male">ذكر ♂</option></select></div>'+
+    '</div>'+
+    '<div class="row g-2">'+
+      '<div class="col-6"><label>تاريخ الميلاد *</label><input type="date" class="field" id="ub-date" value="'+todayStr()+'"></div>'+
+      '<div class="col-6"><label>رقم الترقيم</label><input class="field" id="ub-tag" placeholder="A-001"></div>'+
+    '</div>'+
+    '<div style="background:rgba(255,193,7,.07);border:1px solid rgba(255,193,7,.3);border-radius:12px;padding:12px;margin:8px 0">'+
+      '<div class="fw-bold mb-2" style="font-size:.82rem;color:var(--yellow)"><i class="bi bi-person-heart me-1"></i>بيانات الأم (مطلوب)</div>'+
+      '<div class="row g-2">'+
+        '<div class="col-6"><label>رقم الأم *</label><input class="field" id="ub-mother-tag" placeholder="F-101"></div>'+
+        '<div class="col-6"><label>سلالة الأم *</label><select class="field" id="ub-mother-breed">'+allBreeds.map(b=>'<option>'+b+'</option>').join('')+'</select></div>'+
+      '</div>'+
+      '<div class="col-12"><label>رقم الأب</label><input class="field" id="ub-father-tag" placeholder="M-001"></div>'+
+    '</div>'+
+    '<div class="row g-2">'+
+      '<div class="col-6"><label>وزن الميلاد (كجم)</label><input type="number" class="field" id="ub-weight" step="0.1" placeholder="3.5" min="0"></div>'+
+      '<div class="col-6"><label>الجمالون/العنبر</label><select class="field" id="ub-barn">'+barns.map(b=>'<option value="'+b+'">'+( b||'— غير محدد —')+'</option>').join('')+'</select></div>'+
+    '</div>'+
+    '<div class="row g-2">'+
+      '<div class="col-6"><label>عدد المواليد</label><input type="number" class="field" id="ub-qty" value="1" min="1" max="10"></div>'+
+      '<div class="col-6">'+
+        '<label data-hint="المبلغ المرتبط بالولادة: تكلفة بيطري أو قيمة المولود المقدرة">'+
+          'المبلغ عند الولادة ('+s.currency+') <span class="info-tooltip" onclick="event.stopPropagation();showInfoModal(this)" data-tip="قيمة الولادة: ممكن يكون ثمن شراء الأم، تكلفة الطبيب، أو قيمة المولود المقدرة. يُستخدم في حساب تكلفة التربية.">!</span>'+
+        '</label>'+
+        '<input type="number" class="field" id="ub-amount" placeholder="0" min="0">'+
+      '</div>'+
+    '</div>'+
+    '<label>سُجِّل بواسطة</label><input class="field" id="ub-addedby" value="'+(u?.name||'')+'">'+
+    '<label>ملاحظات</label><textarea class="field" id="ub-notes" rows="2"></textarea>'+
+    '<div class="d-flex gap-2 justify-content-end mt-3">'+
+      '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
+      '<button class="action-btn primary" onclick="_ubSubmit()"><i class="bi bi-check-lg"></i> حفظ الولادة</button>'+
+    '</div>'+
+  '</div>');
+};
+
+window._ubUpdateBreeds=function(){
+  const s=getSettings();const sp=document.getElementById('ub-sp')?.value;
+  const breeds=sp==='goat'?s.goatBreeds:s.sheepBreeds;
+  const sel=document.getElementById('ub-breed');
+  if(sel)sel.innerHTML=breeds.map(b=>'<option>'+b+'</option>').join('');
+};
+
+window._ubSubmit=async function(){
+  const sp=document.getElementById('ub-sp').value;
+  const breed=document.getElementById('ub-breed').value;
+  const gender=document.getElementById('ub-gender').value;
+  const purpose=document.getElementById('ub-purpose').value;
+  const tag=document.getElementById('ub-tag').value.trim();
+  const bdate=document.getElementById('ub-date').value;
+  const motherTag=document.getElementById('ub-mother-tag').value.trim();
+  const motherBreed=document.getElementById('ub-mother-breed').value;
+  const fatherTag=document.getElementById('ub-father-tag').value.trim();
+  const weight=parseFloat(document.getElementById('ub-weight').value)||null;
+  const barn=document.getElementById('ub-barn').value||null;
+  const qty=parseInt(document.getElementById('ub-qty').value)||1;
+  const amount=parseFloat(document.getElementById('ub-amount').value)||null;
+  const addedBy=document.getElementById('ub-addedby').value.trim();
+  const notes=document.getElementById('ub-notes').value.trim();
+
+  if(!motherTag||!motherBreed){toast('رقم الأم وسلالتها مطلوبان','error');return;}
+  closeModal();toast('جاري الحفظ...','info');
+  let ok=0;
+  try{
+    // Save breeding record
+    await fbPost('breeding',{
+      female_tag:motherTag, mother_tag:motherTag,
+      female_breed:motherBreed, mother_breed:motherBreed,
+      female_species:sp,
+      male_tag:fatherTag||null,
+      mating_date:null, expected_birth:null,
+      actual_birth:bdate, status:'born',
+      offspring_count:qty,
+      male_offspring:gender==='male'?qty:0,
+      female_offspring:gender==='female'?qty:0,
+      birth_weights:weight?String(weight):null,
+      birth_amount:amount, barn,
+      added_by:addedBy,notes:notes||null
+    });
+    // Save each animal
+    for(let i=0;i<qty;i++){
+      const rec={species:sp,breed,gender,purpose,status:'alive',birth_date:bdate,
+        tag:qty===1?(tag||null):(tag?tag+'-'+(i+1):null),
+        mother_tag:motherTag,mother_breed:motherBreed,
+        father_tag:fatherTag||null,
+        birth_weight:weight,barn,notes:notes||null};
+      await fbPost('animals',rec);ok++;
+    }
+    // Save weight record if provided
+    if(weight&&ok>0){
+      await fbPost('weights',{date:bdate,weight,animal_tag:tag||motherTag+'-newborn',species:sp,breed,barn,notes:'وزن الميلاد'});
+    }
+    await logActivity('add','animals','تسجيل ولادة: '+motherTag+' — '+ar(qty)+' مولود ('+breed+' '+(gender==='male'?'ذكر':'أنثى')+')');
+    toast('✅ تم تسجيل الولادة و'+ar(qty)+' مولود في القطيع');
+    // Reload page data if function exists
+    if(typeof loadPageData==='function')await loadPageData();
+    else if(typeof renderBreedingPage==='function'){const d=await fbGet('breeding');window.breedingRecs=d;renderBreedingPage(getSettings());}
+    else setTimeout(()=>location.reload(),1200);
+  }catch(e){toast('خطأ: '+e.message,'error');console.error(e);}
 };

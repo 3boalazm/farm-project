@@ -14,6 +14,36 @@ const NS = {
   _sentIds: new Set(JSON.parse(localStorage.getItem('_sentNotifIds')||'[]').slice(-100)),
 
   // ── Init ──────────────────────────────────────────
+  // ── Notification Sound ──────────────────────────────
+  _sound: null,
+  initSound(){
+    // Create beep using Web Audio API (no external file needed)
+    try{
+      const AudioCtx=window.AudioContext||window.webkitAudioContext;
+      if(!AudioCtx){return;}
+      NS._audioCtx=new AudioCtx();
+    }catch(e){}
+  },
+  playSound(freq=880, dur=0.3, type='sine'){
+    try{
+      if(!NS._audioCtx){NS.initSound();}
+      if(!NS._audioCtx)return;
+      const osc=NS._audioCtx.createOscillator();
+      const gain=NS._audioCtx.createGain();
+      osc.connect(gain);gain.connect(NS._audioCtx.destination);
+      osc.type=type;osc.frequency.value=freq;
+      gain.gain.setValueAtTime(0.3,NS._audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001,NS._audioCtx.currentTime+dur);
+      osc.start();osc.stop(NS._audioCtx.currentTime+dur);
+    }catch(e){}
+  },
+  playAlert(type){
+    if(localStorage.getItem('farm_notif_sound')==='off')return;
+    if(type==='danger'){NS.playSound(440,0.2);setTimeout(()=>NS.playSound(440,0.2),300);}
+    else if(type==='warning'){NS.playSound(660,0.2);}
+    else{NS.playSound(880,0.15);}
+  },
+
   async init(){
     if(!initFirebase())return;
     await NS.requestPermission();
@@ -36,7 +66,8 @@ const NS = {
   },
 
   // ── Send browser push notification ────────────────
-  push(title, body, icon='🐐', tag, url){
+  push(title, body, icon='🐐', tag, url, soundType='info'){
+    NS.playAlert(soundType);
     if(Notification.permission!=='granted')return;
     const opts={body, icon:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"/>',tag:tag||title, requireInteraction:false};
     const n=new Notification('🐐 '+title, opts);
@@ -79,14 +110,14 @@ const NS = {
       vaccines.forEach(v=>{
         if(v.status==='overdue'){
           const n={type:'danger',cat:'التحصين',icon:'bi-bandaid-fill',title:'تحصين متأخر: '+v.name,msg:v.target_section||'—',href:'vaccine.html',id:'vacc-over-'+v._id};
-          NS.save(n); NS.push('تحصين متأخر: '+v.name, v.target_section||'—', '💉', n.id, 'vaccine.html');
+          NS.save(n); NS.push('تحصين متأخر: '+v.name, v.target_section||'—', '💉', n.id, 'vaccine.html','danger');
         }
         if(v.status==='pending'&&v.scheduled_date){
           const d=Math.ceil((new Date(v.scheduled_date)-t)/86400000);
           if(d>=0&&d<=7){
             const n={type:d<=2?'danger':'warning',cat:'التحصين',icon:'bi-bandaid-fill',title:'موعد تحصين قريب: '+v.name,msg:v.target_section+' — بعد '+ar(d)+' يوم',href:'vaccine.html',id:'vacc-up-'+v._id+'-'+today};
             NS.save(n);
-            if(d<=2)NS.push('موعد تحصين: '+v.name, 'بعد '+ar(d)+' يوم — '+v.target_section, '💉', n.id, 'vaccine.html');
+            if(d<=2)NS.push('موعد تحصين: '+v.name, 'بعد '+ar(d)+' يوم — '+v.target_section, '💉', n.id, 'vaccine.html','warning');
           }
         }
       });
@@ -97,7 +128,7 @@ const NS = {
         if(d>=0&&d<=15){
           const n={type:d<=3?'danger':'warning',cat:'التكاثر',icon:'bi-stars',title:'ولادة متوقعة: '+(r.female_tag||r.female_breed||'—'),msg:r.female_breed+' — '+r.expected_birth+(d===0?' (اليوم!)':' (بعد '+ar(d)+' يوم)'),href:'breeding.html',id:'birth-up-'+r._id+'-'+today};
           NS.save(n);
-          if(d<=3)NS.push('ولادة متوقعة: '+(r.female_tag||r.female_breed), 'بعد '+ar(d)+' يوم — '+r.female_breed, '🐑', n.id, 'breeding.html');
+          if(d<=3)NS.push('ولادة متوقعة: '+(r.female_tag||r.female_breed), 'بعد '+ar(d)+' يوم — '+r.female_breed, '🐑', n.id, 'breeding.html','warning');
         }
         if(d<0){
           const n={type:'danger',cat:'التكاثر',icon:'bi-exclamation-triangle-fill',title:'تأخر ولادة: '+(r.female_tag||r.female_breed||'—'),msg:'تأخرت '+ar(Math.abs(d))+' يوم',href:'breeding.html',id:'birth-late-'+r._id+'-'+today};

@@ -42,12 +42,36 @@
 </div>
 <div id="toast-wrap"></div>
 <div id="modal-root"></div>
+<!-- weight helper removed -->
+<script style="display:none">
+function _renderWeightTable_DISABLED(wts){
+  if(!wts||!wts.length)return'<div class="text-gray text-center py-3">لا توجد أوزان</div>';
+  var rows=wts.map(function(w,i){
+    var prev=wts[i+1];var diff=prev?((+w.weight||0)-(+prev.weight||0)):0;
+    return'<tr><td class="text-gray">'+(w.date||'—')+'</td>'+
+      '<td class="fw-bold green-text">'+ar(+w.weight||0)+' كجم</td>'+
+      '<td class="'+(diff>0?'green-text':diff<0?'red-text':'text-gray')+'">'+
+        (diff!==0?(diff>0?'+':'')+diff.toFixed(1):'-')+
+      '</td>'+
+      '<td class="text-gray">'+(w.notes||'—')+'</td>'+
+      '<td><button class="icon-btn del" onclick="delWeight('+JSON.stringify(w._id)+')"><i class="bi bi-trash"></i></button></td></tr>';
+  }).join('');
+  var last=+wts[0]?.weight||0,first=+wts[wts.length-1]?.weight||0,gain=Math.max(0,last-first);
+  return'<div class="row g-2 mb-3">'+
+    [['آخر وزن',ar(last)+' كجم','var(--green)'],['أول وزن',ar(first)+' كجم','var(--blue)'],
+     ['الزيادة',ar(+gain.toFixed(1))+' كجم','var(--orange)'],['قياسات',ar(wts.length),'var(--gray)']]
+    .map(function(x){return'<div class="col-6 col-md-3"><div class="stat-mini"><div class="num" style="color:'+x[2]+'">'+x[1]+'</div><div class="lbl">'+x[0]+'</div></div></div>';}).join('')+'</div>'+
+    '<div class="table-responsive"><table class="data-table"><thead><tr>'+
+      '<th>التاريخ</th><th>الوزن</th><th>الفارق</th><th>ملاحظات</th><th></th>'+
+    '</tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+</script>
 <script src="config.js"></script>
 <script src="firebase.js"></script>
 <script src="shared.js"></script>
 <script>
 'use strict';
-let animal={}, offspring=[], vaccinations=[], medications=[];
+let animal={}, offspring=[], vaccinations=[], medications=[], weights=[];
 const params=new URLSearchParams(location.search);
 const animalId=params.get('id');
 
@@ -74,12 +98,14 @@ document.addEventListener('DOMContentLoaded',async()=>{
       const found=allAnimals.find(a=>a._id===animalId);
       if(found){animal=found;}
     }
-    const [off,vacc,meds]=await Promise.all([
+    const [off,vacc,meds,wts]=await Promise.all([
       fbGet(`animals/${animalId}/offspring`),
       fbGet(`animals/${animalId}/vaccinations`),
-      fbGet(`animals/${animalId}/medications`)
+      fbGet(`animals/${animalId}/medications`),
+      fbGet(`animals/${animalId}/weights`)
     ]);
     offspring=off||[];vaccinations=vacc||[];medications=meds||[];
+    weights=(wts||[]).sort((a,b)=>b.date.localeCompare(a.date));
     renderDetail(s);
   }catch(e){
     renderEmpty(document.getElementById('content'),'bi-exclamation-triangle','خطأ في تحميل البيانات: '+e.message,`<a href="animals.html" class="action-btn primary">العودة للقائمة</a>`);
@@ -186,6 +212,9 @@ function renderDetail(s){
     </table></div>`}
   </div>
 
+  <!-- Weights -->
+  <div class="section-card mb-4" id="weights-section"></div>
+
   <!-- Medications -->
   <div class="section-card mb-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -198,6 +227,27 @@ function renderDetail(s){
       <tbody>${medications.map(m=>`<tr><td class="fw-bold">${m.name||'—'}</td><td class="text-gray">${m.start_date||'—'}</td><td class="text-gray">${m.end_date||'—'}</td><td>${m.dosage||'—'}</td><td class="text-gray">${m.notes||'—'}</td></tr>`).join('')}</tbody>
     </table></div>`}
   </div>`;
+  // Render weights section after innerHTML
+  var wSection=document.getElementById('weights-section');
+  if(wSection){
+    var wHtml='<div class="d-flex justify-content-between align-items-center mb-3">'+
+      '<h5 class="fw-bold mb-0"><i class="bi bi-speedometer2 me-2" style="color:var(--blue)"></i>متابعة الوزن ('+ar(weights.length)+')</h5>'+
+      (can('animals')?'<button class="action-btn primary sm" onclick="openAddWeight()"><i class="bi bi-plus-lg"></i> إضافة وزن</button>':'')+
+    '</div>';
+    if(!weights.length){
+      wHtml+='<div class="text-gray text-center py-3" style="font-size:.85rem">لا توجد أوزان مسجّلة</div>';
+    } else {
+      var last=+(weights[0].weight)||0,first=+(weights[weights.length-1].weight)||0,gain=parseFloat((Math.max(0,last-first)).toFixed(1));
+      wHtml+='<div class="row g-2 mb-3">'+
+        [['آخر وزن',ar(last)+' كجم','var(--green)'],['أول وزن',ar(first)+' كجم','var(--blue)'],
+         ['الزيادة',ar(gain)+' كجم','var(--orange)'],['قياسات',ar(weights.length),'var(--gray)']]
+        .map(function(x){return'<div class="col-6 col-md-3"><div class="stat-mini"><div class="num" style="color:'+x[2]+'">'+x[1]+'</div><div class="lbl">'+x[0]+'</div></div></div>';}).join('')+'</div>';
+      wHtml+='<div class="table-responsive"><table class="data-table"><thead><tr><th>التاريخ</th><th>الوزن</th><th>الفارق</th><th>ملاحظات</th><th></th></tr></thead><tbody>';
+      // weight rows rendered by for loop above
+      wHtml+='</tbody></table></div>';
+    }
+    wSection.innerHTML=wHtml;
+  }
 }
 
 function calcAge(birth_date){
@@ -308,15 +358,56 @@ window.submitAddVaccination=async function(){
   catch(e){toast('فشل: '+e.message,'error');}
 };
 
+function openAddWeight(){
+  showModal('<div class="farm-modal" onclick="event.stopPropagation()">'+
+    '<h4><i class="bi bi-speedometer2 accent-text"></i> تسجيل وزن</h4>'+
+    '<div class="row g-2">'+
+      '<div class="col-6"><label>تاريخ القياس</label><input type="date" class="field" id="w-date" value="'+todayStr()+'"></div>'+
+      '<div class="col-6"><label>الوزن (كجم) *</label><input type="number" class="field" id="w-kg" step="0.1" min="0" placeholder="45.5"></div>'+
+    '</div>'+
+    '<label>ملاحظات</label><input class="field" id="w-notes" placeholder="حالة الحيوان، بعد الأكل/قبله، إلخ">'+
+    '<div class="d-flex gap-2 justify-content-end mt-3">'+
+      '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
+      '<button class="action-btn primary" onclick="submitAddWeight()">حفظ</button>'+
+    '</div>'+
+  '</div>');
+}
+window.submitAddWeight=async function(){
+  const kg=parseFloat(document.getElementById('w-kg').value);
+  if(!kg||kg<=0){toast('يرجى إدخال الوزن','error');return;}
+  const data={weight:kg,date:document.getElementById('w-date').value,notes:document.getElementById('w-notes').value.trim()||null};
+  closeModal();toast('جاري الحفظ...','info');
+  try{
+    await fbPost('animals/'+animalId+'/weights',data);
+    await logActivity('add','animals','تسجيل وزن #'+(animal.tag||animalId)+': '+ar(kg)+' كجم');
+    toast('تم تسجيل الوزن');
+    weights=await fbGet('animals/'+animalId+'/weights')||[];
+    weights.sort(function(a,b){return b.date.localeCompare(a.date);});
+    renderDetail(getSettings());
+  }catch(e){toast('فشل: '+e.message,'error');}
+};
+window.delWeightByIdx=async function(idx){
+  var w=weights[idx];if(!w)return;
+  try{await fbDelete('animals/'+animalId+'/weights',w._id);toast('تم الحذف');weights=weights.filter(function(_,i){return i!==idx;});renderDetail(getSettings());}
+  catch(e){toast('فشل','error');}
+};
+window.delWeight=async function(id){
+  try{await fbDelete('animals/'+animalId+'/weights',id);toast('تم الحذف');weights=weights.filter(function(w){return w._id!==id;});renderDetail(getSettings());}
+  catch(e){toast('فشل','error');}
+};
+
 function openAddMedication(){
-  showModal(`<div class="farm-modal" onclick="event.stopPropagation()">
-    <h4><i class="bi bi-capsule" style="color:var(--yellow)"></i> إضافة دواء</h4>
-    <label>اسم الدواء *</label><input class="field" id="m-name" placeholder="مضاد حيوي">
-    <div class="row g-2"><div class="col-6"><label>تاريخ البدء</label><input type="date" class="field" id="m-start" value="${todayStr()}"></div><div class="col-6"><label>تاريخ الانتهاء</label><input type="date" class="field" id="m-end"></div></div>
-    <div class="row g-2"><div class="col-6"><label>الجرعة</label><input class="field" id="m-dosage" placeholder="5 مل"></div></div>
-    <label>ملاحظات</label><textarea class="field" id="m-notes" rows="2"></textarea>
-    <div class="d-flex gap-2 justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إلغاء</button><button class="action-btn primary" onclick="submitAddMedication()">حفظ</button></div>
-  </div>`);
+  showModal('<div class="farm-modal" onclick="event.stopPropagation()">'+
+    '<h4><i class="bi bi-capsule" style="color:var(--yellow)"></i> إضافة دواء</h4>'+
+    '<label>اسم الدواء *</label><input class="field" id="m-name" placeholder="مضاد حيوي">'+
+    '<div class="row g-2"><div class="col-6"><label>تاريخ البدء</label><input type="date" class="field" id="m-start" value="'+todayStr()+'"></div><div class="col-6"><label>تاريخ الانتهاء</label><input type="date" class="field" id="m-end"></div></div>'+
+    '<div class="row g-2"><div class="col-6"><label>الجرعة</label><input class="field" id="m-dosage" placeholder="5 مل"></div></div>'+
+    '<label>ملاحظات</label><textarea class="field" id="m-notes" rows="2"></textarea>'+
+    '<div class="d-flex gap-2 justify-content-end mt-3">'+
+      '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
+      '<button class="action-btn primary" onclick="submitAddMedication()">حفظ</button>'+
+    '</div>'+
+  '</div>');
 }
 window.submitAddMedication=async function(){
   const name=document.getElementById('m-name').value.trim();if(!name){toast('يرجى إدخال اسم الدواء','error');return;}

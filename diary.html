@@ -82,7 +82,122 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     '</div>';
   }
 
-  // Barn distribution with breed detail
+  // ── Build full breed×purpose×gender table (like the report image) ──
+  function buildFullTable(animals){
+    const alive=animals.filter(a=>a.status==='alive');
+    const goatBreeds2=[...s2.goatBreeds,'مواليد'];
+    const sheepBreeds2=[...s2.sheepBreeds,'مواليد'];
+    const purposes=['tarbiya','tasmeen'];
+    const purposeLabels={tarbiya:'تربية',tasmeen:'تسمين'};
+
+    function getCount(sp,breed,purpose,gender){
+      return alive.filter(a=>a.species===sp&&a.breed===breed&&a.purpose===purpose&&a.gender===gender).length;
+    }
+    function getBirths(sp,gender){
+      return alive.filter(a=>a.species===sp&&a.purpose==='birth'&&a.gender===gender).length;
+    }
+
+    // Build HTML table like the image
+    let tbl='<div class="table-responsive"><table style="width:100%;border-collapse:collapse;font-size:.78rem;direction:rtl;text-align:center">';
+    // Header
+    tbl+='<thead>';
+    tbl+='<tr style="background:var(--bg-3);border-bottom:2px solid var(--border)">';
+    tbl+='<th rowspan="2" style="padding:8px;border:1px solid var(--border);min-width:60px">النوع</th>';
+    // Sheep headers
+    sheepBreeds2.forEach(b=>{
+      if(b==='مواليد')tbl+='<th colspan="2" style="padding:8px;border:1px solid var(--border);color:var(--yellow)">ولدات</th>';
+      else tbl+='<th colspan="2" style="padding:8px;border:1px solid var(--border);color:var(--blue)">'+b+'</th>';
+    });
+    // Goat headers
+    goatBreeds2.forEach(b=>{
+      if(b==='مواليد')tbl+='<th colspan="2" style="padding:8px;border:1px solid var(--border);color:var(--yellow)">ولدات</th>';
+      else tbl+='<th colspan="2" style="padding:8px;border:1px solid var(--border);color:var(--green)">'+b+'</th>';
+    });
+    tbl+='<th rowspan="2" style="padding:8px;border:1px solid var(--border);background:rgba(255,107,53,.1);color:var(--orange)">الإجمالي</th>';
+    tbl+='</tr>';
+    // Subheader (ذكور/إناث for each breed)
+    tbl+='<tr style="background:var(--bg-hover)">';
+    [...sheepBreeds2,...goatBreeds2].forEach(()=>{
+      tbl+='<th style="padding:4px 6px;border:1px solid var(--border);font-size:.7rem;color:var(--text-gray)">ذكور</th>';
+      tbl+='<th style="padding:4px 6px;border:1px solid var(--border);font-size:.7rem;color:var(--text-gray)">إناث</th>';
+    });
+    tbl+='</tr>';
+    tbl+='</thead><tbody>';
+
+    let grandTotal=0;
+    [...purposes,'birth'].forEach(purpose=>{
+      if(purpose==='birth')return; // handled in totals
+      const label=purposeLabels[purpose];
+      let rowTotal=0;
+      tbl+='<tr style="border-bottom:1px solid var(--border)"><td style="padding:8px;border:1px solid var(--border);font-weight:700">'+(purpose==='tarbiya'?'تربية':'تسمين')+'</td>';
+      // Sheep
+      sheepBreeds2.forEach(breed=>{
+        let m=0,f=0;
+        if(breed==='مواليد'){m=getCount('sheep','مواليد',purpose,'male');f=getCount('sheep','مواليد',purpose,'female');}
+        else{m=getCount('sheep',breed,purpose,'male');f=getCount('sheep',breed,purpose,'female');}
+        rowTotal+=m+f;
+        tbl+='<td style="padding:6px;border:1px solid var(--border)">'+(m>0?ar(m):'-')+'</td>';
+        tbl+='<td style="padding:6px;border:1px solid var(--border)">'+(f>0?ar(f):'-')+'</td>';
+      });
+      // Goats
+      goatBreeds2.forEach(breed=>{
+        let m=0,f=0;
+        if(breed==='مواليد'){m=getCount('goat','مواليد',purpose,'male');f=getCount('goat','مواليد',purpose,'female');}
+        else{m=getCount('goat',breed,purpose,'male');f=getCount('goat',breed,purpose,'female');}
+        rowTotal+=m+f;
+        tbl+='<td style="padding:6px;border:1px solid var(--border)">'+(m>0?ar(m):'-')+'</td>';
+        tbl+='<td style="padding:6px;border:1px solid var(--border)">'+(f>0?ar(f):'-')+'</td>';
+      });
+      tbl+='<td style="padding:6px;border:1px solid var(--border);font-weight:700;color:var(--orange)">'+(rowTotal>0?ar(rowTotal):'-')+'</td>';
+      tbl+='</tr>';
+      grandTotal+=rowTotal;
+    });
+
+    // Births row
+    let birthTotal=0;
+    tbl+='<tr style="background:rgba(255,193,7,.04);border-bottom:1px solid var(--border)"><td style="padding:8px;border:1px solid var(--border);font-weight:700;color:var(--yellow)">مواليد</td>';
+    sheepBreeds2.forEach(breed=>{
+      const m=breed==='مواليد'?getBirths('sheep','male'):0;
+      const f=breed==='مواليد'?getBirths('sheep','female'):0;
+      birthTotal+=m+f;
+      tbl+='<td style="padding:6px;border:1px solid var(--border)">'+(m>0?ar(m):'-')+'</td>';
+      tbl+='<td style="padding:6px;border:1px solid var(--border)">'+(f>0?ar(f):'-')+'</td>';
+    });
+    goatBreeds2.forEach(breed=>{
+      const m=breed==='مواليد'?getBirths('goat','male'):0;
+      const f=breed==='مواليد'?getBirths('goat','female'):0;
+      birthTotal+=m+f;
+      tbl+='<td style="padding:6px;border:1px solid var(--border)">'+(m>0?ar(m):'-')+'</td>';
+      tbl+='<td style="padding:6px;border:1px solid var(--border)">'+(f>0?ar(f):'-')+'</td>';
+    });
+    tbl+='<td style="padding:6px;border:1px solid var(--border);font-weight:700;color:var(--yellow)">'+(birthTotal>0?ar(birthTotal):'-')+'</td></tr>';
+    grandTotal+=birthTotal;
+
+    // Total row
+    tbl+='<tr style="background:rgba(255,107,53,.07);font-weight:700"><td style="padding:8px;border:1px solid var(--border)">الإجمالي</td>';
+    const allCols=[...sheepBreeds2,...goatBreeds2];
+    allCols.forEach(breed=>{
+      const sp=sheepBreeds2.includes(breed)?'sheep':'goat';
+      const m=alive.filter(a=>a.species===sp&&a.breed===breed&&a.gender==='male').length;
+      const f=alive.filter(a=>a.species===sp&&a.breed===breed&&a.gender==='female').length;
+      tbl+='<td style="padding:6px;border:1px solid var(--border);color:var(--blue)">'+(m>0?ar(m):'-')+'</td>';
+      tbl+='<td style="padding:6px;border:1px solid var(--border);color:var(--orange)">'+(f>0?ar(f):'-')+'</td>';
+    });
+    tbl+='<td style="padding:8px;border:1px solid var(--border);font-size:1rem;color:var(--orange)">'+ar(grandTotal)+'</td></tr>';
+
+    // Summary footer
+    const totalSheep=alive.filter(a=>a.species==='sheep'&&a.purpose!=='birth').length;
+    const totalSheepBirth=alive.filter(a=>a.species==='sheep'&&a.purpose==='birth').length;
+    const totalGoat=alive.filter(a=>a.species==='goat'&&a.purpose!=='birth').length;
+    const totalGoatBirth=alive.filter(a=>a.species==='goat'&&a.purpose==='birth').length;
+    const totalCols=allCols.length*2+2;
+    tbl+='<tr style="background:rgba(0,230,118,.06)"><td colspan="'+(Math.floor(allCols.length/2)+1)+'" style="padding:8px;border:1px solid var(--border);text-align:center;color:var(--blue)">إجمالي الأغنام: <strong>'+ar(totalSheep)+'</strong> &nbsp;|&nbsp; الولدات: <strong style="color:var(--yellow)">'+ar(totalSheepBirth)+'</strong></td>';
+    tbl+='<td colspan="'+(Math.ceil(allCols.length/2)+1)+'" style="padding:8px;border:1px solid var(--border);text-align:center;color:var(--green)">إجمالي الماعز: <strong>'+ar(totalGoat)+'</strong> &nbsp;|&nbsp; الولدات: <strong style="color:var(--yellow)">'+ar(totalGoatBirth)+'</strong></td></tr>';
+    tbl+='</tbody></table></div>';
+    return tbl;
+  }
+
+  // ── Barn distribution with breed detail
   const BARNS=['ج١ع١','ج١ع٢','ج٢ع١','ج٢ع٢','ج٣ع١','ج٣ع٢','ج٤ع١','ج٤ع٢','ج٥ع١','ج٥ع٢'];
   function barnDetail(stall){
     const a=alive.filter(x=>x.barn===stall);
@@ -120,6 +235,14 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   function daysUntil(d){return Math.ceil((new Date(d)-new Date())/86400000);}
 
   el.innerHTML=
+  // Full breed table
+  '<div class="wonder-card mb-4">'+
+    '<div class="d-flex justify-content-between align-items-center mb-3">'+
+      '<div class="fw-bold"><i class="bi bi-table accent-text me-2"></i>بيان الماعز والأغنام — '+todayAr()+'</div>'+
+      '<button class="action-btn sm" onclick="window.print()"><i class="bi bi-printer"></i> طباعة</button>'+
+    '</div>'+
+    buildFullTable(animals)+
+  '</div>'+
   // HEADER STATS
   '<div class="row g-3 mb-4">'+
     '<div class="col-6 col-md-3"><a href="animals.html" style="text-decoration:none"><div class="summary-card"><div class="summary-number accent-text">'+ar(goats.length+sheep.length)+'</div><small class="text-gray">إجمالي القطيع</small></div></a></div>'+

@@ -78,7 +78,7 @@ function renderFilters(){
       </select></div>
     ${can('animals')?`<div class="col-md-3 d-flex gap-2 flex-wrap">
       <button class="action-btn primary flex-grow-1" onclick="openAddAnimal()"><i class="bi bi-plus-lg"></i> إضافة</button>
-      <button class="action-btn" onclick="openAddBirths()" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.35);color:var(--yellow)"><i class="bi bi-stars"></i></button>
+      <button class="action-btn" onclick="openUnifiedBirthModal('goat')" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.35);color:var(--yellow)"><i class="bi bi-stars"></i></button>
       <button class="action-btn danger" onclick="openMarkDeath()"><i class="bi bi-x-octagon"></i></button>
       ${can('admin')?`<button class="action-btn" onclick="openResetModal()" title="إعادة تعيين (مدير فقط)" style="background:rgba(156,39,176,.1);border-color:rgba(156,39,176,.35);color:var(--purple)"><i class="bi bi-arrow-counterclockwise"></i></button>`:''}
     </div>`:''}
