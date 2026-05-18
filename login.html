@@ -89,7 +89,26 @@
           });
         }catch(e){}
       }
-      window.location.href='dashboard.html';
+      // Log login notification to Firebase for admin
+    if(initFirebase()){
+      try{
+        await fbPost('login_notifications',{
+          userName:user.name, userRole:user.role,
+          roleLabel:ROLES[user.role]?.label||user.role,
+          timestamp:new Date().toISOString(),
+          date:new Date().toISOString().slice(0,10),
+          pushed:false
+        });
+        await fbPost('activity_log',{
+          userId:user.id, userName:user.name, userRole:user.role,
+          action:'login', resource:'system',
+          description:'تسجيل دخول — '+user.name+' ('+( ROLES[user.role]?.label||user.role)+')',
+          date:new Date().toISOString().slice(0,10),
+          timestamp:new Date().toISOString()
+        });
+      }catch(e){console.warn('login log:',e);}
+    }
+    window.location.href='dashboard.html';
     } else {
       const disp=document.getElementById('pin-display');
       disp.textContent='خطأ!';
