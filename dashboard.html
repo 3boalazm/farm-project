@@ -186,23 +186,7 @@ window.openAddAnimalDash=function(){
   '</div>');
 };
 
-window.submitAddAnimalDash=async function(){
-  const sp=document.getElementById('da-sp').value;
-  const breed=document.getElementById('da-breed').value;
-  const gender=document.getElementById('da-gender').value;
-  const purpose=document.getElementById('da-pur').value;
-  const tag=document.getElementById('da-tag').value.trim();
-  const barn=document.getElementById('da-barn').value;
-  closeModal();toast('جاري الحفظ...','info');
-  try{
-    await fbPost('animals',{species:sp,breed,gender,purpose,status:'alive',tag:tag||null,barn:barn||null,birth_date:todayStr()});
-    await logActivity('add','animals','إضافة سريعة من الداشبورد: '+breed+' '+gender);
-    toast('تمت الإضافة');
-    setTimeout(()=>location.reload(),1000);
-  }catch(e){toast('فشل: '+e.message,'error');}
-};
-
-window.function openAddBirths(){
+function openAddBirths(){
   const s=getSettings();
   showModal(`<div class="farm-modal" onclick="event.stopPropagation()">
     <h4><i class="bi bi-stars" style="color:var(--yellow)"></i> إضافة مواليد</h4>
@@ -320,6 +304,7 @@ window.submitBirths=async function(){
     toast('فشل الحفظ','error');
   }
 };
+
 window.openMarkDeathDash=async function(){
   const animals2=await fbGet('animals');
   const alive=animals2.filter(a=>a.status==='alive');
