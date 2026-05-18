@@ -107,12 +107,19 @@ function renderNavbar(activePage=''){
 // ── Theme Toggle ────────────────────────────────────────
 function initTheme(){
   const saved=localStorage.getItem('farm_theme')||'dark';
-  if(saved==='light'){document.body.classList.add('light-mode');}
+  if(saved==='light'){
+    document.body.classList.add('light-mode');
+    document.documentElement.classList.add('light-mode');
+  } else {
+    document.body.classList.remove('light-mode');
+    document.documentElement.classList.remove('light-mode');
+  }
   updateThemeIcon();
 }
 function toggleTheme(){
-  document.body.classList.toggle('light-mode');
-  localStorage.setItem('farm_theme',document.body.classList.contains('light-mode')?'light':'dark');
+  const isLight=document.body.classList.toggle('light-mode');
+  document.documentElement.classList.toggle('light-mode', isLight);
+  localStorage.setItem('farm_theme', isLight?'light':'dark');
   updateThemeIcon();
 }
 function updateThemeIcon(){
@@ -171,7 +178,7 @@ async function loadNotifDropdown(){
     const body=dd.querySelector('.notif-dropdown-body');
     if(body){
       body.innerHTML=notifs.length===0?'<div class="text-center py-4 text-gray" style="font-size:.85rem"><i class="bi bi-check-circle-fill green-text d-block mb-2" style="font-size:1.5rem"></i>لا توجد تنبيهات 🎉</div>':
-        notifs.slice(0,8).map(n=>'<div class="notif-item-sm n-'+n.type+'" onclick="if(''+n.href+'')window.location.href=''+n.href+''">'+
+        notifs.slice(0,8).map(n=>'<div class="notif-item-sm n-'+n.type+'"'+(n.href?' onclick="window.location.href=\''+(n.href||'#')+'\'">':'>') +
           '<div style="width:28px;height:28px;border-radius:50%;background:'+catC[n.type]+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="bi '+n.icon+'" style="font-size:.8rem;color:'+catC[n.type]+'"></i></div>'+
           '<div><div style="font-size:.82rem;font-weight:700">'+n.title+'</div><div style="font-size:.75rem;color:var(--gray)">'+n.msg+'</div></div>'+
         '</div>').join('');
