@@ -270,7 +270,6 @@ function renderBulkBar(){
       '<input type="checkbox" id="select-all-cb" style="accent-color:var(--blue);width:16px;height:16px" onchange="selectAll(this.checked)">'+
       '<span style="color:var(--blue)">'+ar(_selected.size)+' محدد</span>'+
     '</label>'+
-    '<button class="action-btn sm" style="background:rgba(33,150,243,.1);border-color:rgba(33,150,243,.3);color:var(--blue)" onclick="doBulk(\'edit\')" data-hint="تعديل بيانات الحيوانات المحددة"><i class="bi bi-pencil-square"></i> تعديل</button>'+
     '<button class="action-btn primary sm" onclick="doBulk(\'transfer\')" data-hint="نقل للجمالون"><i class="bi bi-arrow-left-right"></i> نقل</button>'+
     '<button class="action-btn sm" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.3);color:var(--yellow)" onclick="doBulk(\'sell\')" data-hint="تسجيل بيع"><i class="bi bi-currency-dollar"></i> بيع</button>'+
     '<button class="action-btn danger sm" onclick="doBulk(\'death\')" data-hint="تسجيل نفوق"><i class="bi bi-x-octagon-fill"></i> نفوق</button>'+
@@ -444,64 +443,51 @@ window.doBulk=function(action){
 
 window.execBulk=async function(action){
   var ids=[..._selected];
-  // ── اقرأ القيم من الـ modal قبل إغلاقه ──────────
-  var modalData={};
-  var gv=function(id){var el=document.getElementById(id);return el?el.value.trim():'';};
-  if(action==='edit'){
-    modalData={
-      species:gv('be-species'), purpose:gv('be-purpose'), breed:gv('be-breed'),
-      gender:gv('be-gender'),   bdate:gv('be-bdate'),     barn:gv('be-barn'),
-      mother:gv('be-mother'),   father:gv('be-father'),   status:gv('be-status'),
-      notes:gv('be-notes'),     reason:gv('be-reason')
-    };
-  } else if(action==='transfer'){
-    modalData={barn:document.getElementById('b-barn')?.value, reason:document.getElementById('b-reason')?.value};
-  } else if(action==='death'){
-    modalData={date:document.getElementById('b-date')?.value||todayStr(), reason:document.getElementById('b-reason')?.value};
-  } else if(action==='sell'){
-    modalData={
-      date:document.getElementById('b-date')?.value||todayStr(),
-      price:parseFloat(document.getElementById('b-price')?.value)||0,
-      buyer:document.getElementById('b-buyer')?.value||'—'
-    };
-  }
-  // ── الآن أغلق الـ modal وابدأ التنفيذ ──────────
   closeModal();
   toast('جاري التنفيذ على '+ar(ids.length)+' حيوان...','info');
   var ok=0;
   if(action==='edit'){
     var updates={};
-    if(modalData.species) updates.species    = modalData.species;
-    if(modalData.purpose) updates.purpose    = modalData.purpose;
-    if(modalData.breed)   updates.breed      = modalData.breed;
-    if(modalData.gender)  updates.gender     = modalData.gender;
-    if(modalData.bdate)   updates.birth_date = modalData.bdate;
-    if(modalData.barn)    updates.barn       = modalData.barn;
-    if(modalData.mother)  updates.mother_tag = modalData.mother;
-    if(modalData.father)  updates.father_tag = modalData.father;
-    if(modalData.status)  updates.status     = modalData.status;
-    if(modalData.notes)   updates.notes      = modalData.notes;
+    var gv=function(id){var el=document.getElementById(id);return el?el.value.trim():'';}
+    if(gv('be-species'))updates.species=gv('be-species');
+    if(gv('be-purpose'))updates.purpose=gv('be-purpose');
+    if(gv('be-breed'))updates.breed=gv('be-breed');
+    if(gv('be-gender'))updates.gender=gv('be-gender');
+    if(gv('be-bdate'))updates.birth_date=gv('be-bdate');
+    if(gv('be-barn'))updates.barn=gv('be-barn');
+    if(gv('be-mother'))updates.mother_tag=gv('be-mother');
+    if(gv('be-father'))updates.father_tag=gv('be-father');
+    if(gv('be-status'))updates.status=gv('be-status');
+    if(gv('be-notes'))updates.notes=gv('be-notes');
+    var reason=gv('be-reason');
     if(!Object.keys(updates).length){toast('لم تختر أي تغيير — اختر حقلاً واحداً على الأقل','error');return;}
     for(var i=0;i<ids.length;i++){try{await fbPatch('animals',ids[i],updates);ok++;}catch(e){}}
     var changed=Object.keys(updates).join(', ');
-    await logActivity('edit','animals','تعديل جماعي '+ar(ok)+' حيوان | '+changed+(modalData.reason?' | '+modalData.reason:''));
+    await logActivity('edit','animals','تعديل جماعي '+ar(ok)+' حيوان | '+changed+(reason?' | '+reason:''));
     toast('✅ تم تعديل '+ar(ok)+' حيوان ('+changed+')');
   }
   else if(action==='transfer'){
-    for(var i=0;i<ids.length;i++){try{await fbPatch('animals',ids[i],{barn:modalData.barn});ok++;}catch(e){}}
-    await logActivity('edit','animals','نقل جماعي '+ar(ok)+' حيوان إلى '+modalData.barn+' | '+modalData.reason);
-    toast('تم نقل '+ar(ok)+' حيوان إلى '+modalData.barn);
+    var barn=document.getElementById('b-barn')?.value;
+    var reason=document.getElementById('b-reason')?.value;
+    for(var i=0;i<ids.length;i++){try{await fbPatch('animals',ids[i],{barn:barn});ok++;}catch(e){}}
+    await logActivity('edit','animals','نقل جماعي '+ar(ok)+' حيوان إلى '+barn+' | '+reason);
+    toast('تم نقل '+ar(ok)+' حيوان إلى '+barn);
   }
   else if(action==='death'){
-    for(var i=0;i<ids.length;i++){try{await fbPatch('animals',ids[i],{status:'dead',died_at:modalData.date,death_reason:modalData.reason});ok++;}catch(e){}}
-    await logActivity('edit','animals','نفوق جماعي '+ar(ok)+' | '+modalData.reason);
+    var date=document.getElementById('b-date')?.value||todayStr();
+    var reason=document.getElementById('b-reason')?.value;
+    for(var i=0;i<ids.length;i++){try{await fbPatch('animals',ids[i],{status:'dead',died_at:date,death_reason:reason});ok++;}catch(e){}}
+    await logActivity('edit','animals','نفوق جماعي '+ar(ok)+' | '+reason);
     toast('تم تسجيل نفوق '+ar(ok)+' حيوان');
   }
   else if(action==='sell'){
-    for(var i=0;i<ids.length;i++){try{await fbPatch('animals',ids[i],{status:'dead',sold_at:modalData.date,removal_reason:'sale'});ok++;}catch(e){}}
-    if(modalData.price>0)await fbPost('finance',{date:modalData.date,type:'income',category:'بيع حيوانات',amount:modalData.price,description:'بيع '+ar(ok)+' حيوان | '+modalData.buyer,added_by:getUser()?.name});
-    await logActivity('edit','animals','بيع جماعي '+ar(ok)+' | '+modalData.buyer+(modalData.price>0?' | '+ar(modalData.price)+' '+getSettings().currency:''));
-    toast('تم بيع '+ar(ok)+' حيوان'+(modalData.price>0?' بمبلغ '+ar(modalData.price)+' '+getSettings().currency:''));
+    var date=document.getElementById('b-date')?.value||todayStr();
+    var price=parseFloat(document.getElementById('b-price')?.value)||0;
+    var buyer=document.getElementById('b-buyer')?.value||'—';
+    for(var i=0;i<ids.length;i++){try{await fbPatch('animals',ids[i],{status:'dead',sold_at:date,removal_reason:'sale'});ok++;}catch(e){}}
+    if(price>0)await fbPost('finance',{date:date,type:'income',category:'بيع حيوانات',amount:price,description:'بيع '+ar(ok)+' حيوان | '+buyer,added_by:getUser()?.name});
+    await logActivity('edit','animals','بيع جماعي '+ar(ok)+' | '+buyer+(price>0?' | '+ar(price)+' '+getSettings().currency:''));
+    toast('تم بيع '+ar(ok)+' حيوان'+(price>0?' بمبلغ '+ar(price)+' '+getSettings().currency:''));
   }
   _selected.clear();_selectMode=false;
   animals=await fbGet('animals');
@@ -565,29 +551,150 @@ window.submitAddAnimal=async function(){
 };
 
 // ── Mark Death ───────────────────────────────────────
+// ── Death ID generator ───────────────────────────────
+function genDeathId(){
+  var d=new Date();
+  var pad=function(n){return n<10?'0'+n:n;};
+  var datePart=d.getFullYear()+''+pad(d.getMonth()+1)+''+pad(d.getDate());
+  var rand=Math.random().toString(36).substring(2,6).toUpperCase();
+  return'DTH-'+datePart+'-'+rand;
+}
+function nowTimeStr(){
+  var d=new Date();
+  var pad=function(n){return n<10?'0'+n:n;};
+  return pad(d.getHours())+':'+pad(d.getMinutes());
+}
+// عند تغيير الحيوان — تعبئة الترقيم والسلالة تلقائياً
+window.onDeathAnimalChange=function(){
+  var sel=document.getElementById('d-id');
+  var id=sel.value;
+  var a=animals.find(function(x){return x._id===id;});
+  if(!a)return;
+  var tagEl=document.getElementById('d-tag');
+  var breedEl=document.getElementById('d-breed');
+  if(tagEl)tagEl.value=a.tag||'—';
+  if(breedEl)breedEl.value=a.breed||'—';
+};
+
 window.openMarkDeath=function(){
   var alive=animals.filter(function(a){return a.status==='alive';});
-  showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()">'+
+  var first=alive[0]||{};
+  var deathId=genDeathId();
+  showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:540px;max-height:92vh;overflow-y:auto">'+
     '<h4 style="color:var(--red)"><i class="bi bi-x-octagon-fill"></i> تسجيل نفوق</h4>'+
-    '<label>الحيوان</label>'+
-    '<select class="field" id="d-id">'+
-      alive.slice(0,300).map(function(a){return'<option value="'+a._id+'">'+(a.breed||'—')+(a.tag?' #'+a.tag:'')+' ('+(a.gender==='male'?'ذكر':'أنثى')+')</option>';}).join('')+
+
+    // ── الحيوان
+    '<label>الحيوان *</label>'+
+    '<select class="field" id="d-id" onchange="onDeathAnimalChange()">'+
+      alive.slice(0,300).map(function(a){
+        return'<option value="'+a._id+'">'+(a.breed||'—')+(a.tag?' #'+a.tag:'')+' ('+(a.gender==='male'?'ذكر':'أنثى')+')</option>';
+      }).join('')+
     '</select>'+
-    '<label>التاريخ</label><input type="date" class="field" id="d-date" value="'+todayStr()+'">'+
+
+    // ── الترقيم + السلالة (read-only auto-filled)
+    '<div class="row g-2">'+
+      '<div class="col-6">'+
+        '<label>الترقيم</label>'+
+        '<input class="field" id="d-tag" value="'+(first.tag||'—')+'" readonly style="background:var(--bg-3);opacity:.7">'+
+      '</div>'+
+      '<div class="col-6">'+
+        '<label>السلالة</label>'+
+        '<input class="field" id="d-breed" value="'+(first.breed||'—')+'" readonly style="background:var(--bg-3);opacity:.7">'+
+      '</div>'+
+    '</div>'+
+
+    // ── التاريخ + الوقت
+    '<div class="row g-2">'+
+      '<div class="col-6">'+
+        '<label>تاريخ النفوق *</label>'+
+        '<input type="date" class="field" id="d-date" value="'+todayStr()+'">'+
+      '</div>'+
+      '<div class="col-6">'+
+        '<label>الوقت <span class="text-gray" style="font-weight:400">(اختياري)</span></label>'+
+        '<input type="time" class="field" id="d-time" value="'+nowTimeStr()+'">'+
+      '</div>'+
+    '</div>'+
+
+    // ── سبب الوفاة
+    '<label>سبب الوفاة *</label>'+
+    '<select class="field" id="d-reason">'+
+      '<option value="مرض">مرض</option>'+
+      '<option value="حادث">حادث</option>'+
+      '<option value="إجهاد حراري">إجهاد حراري</option>'+
+      '<option value="مضاعفات ولادة">مضاعفات ولادة</option>'+
+      '<option value="سوء تغذية">سوء تغذية</option>'+
+      '<option value="غير معروف">غير معروف</option>'+
+      '<option value="أخرى">أخرى</option>'+
+    '</select>'+
+
+    // ── تم التشريح + قيمة الخسارة
+    '<div class="row g-2">'+
+      '<div class="col-6">'+
+        '<label>تم التشريح؟</label>'+
+        '<select class="field" id="d-autopsy">'+
+          '<option value="no">لا</option>'+
+          '<option value="yes">نعم</option>'+
+        '</select>'+
+      '</div>'+
+      '<div class="col-6">'+
+        '<label>قيمة الخسارة ('+getSettings().currency+')</label>'+
+        '<input type="number" class="field" id="d-loss" placeholder="0" min="0">'+
+      '</div>'+
+    '</div>'+
+
+    // ── معرف الوفاة
+    '<label>معرف الوفاة</label>'+
+    '<input class="field" id="d-death-id" value="'+deathId+'" placeholder="DTH-YYYYMMDD-XXXX">'+
+
+    // ── ملاحظات
+    '<label>ملاحظات <span class="text-gray" style="font-weight:400">(اختياري)</span></label>'+
+    '<textarea class="field" id="d-notes" rows="2" placeholder="أي تفاصيل إضافية..."></textarea>'+
+
     '<div class="d-flex gap-2 justify-content-end mt-3">'+
       '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
-      '<button class="action-btn danger" onclick="submitDeath()">تسجيل</button>'+
-    '</div></div>');
+      '<button class="action-btn danger" onclick="submitDeath()"><i class="bi bi-x-octagon-fill"></i> تسجيل النفوق</button>'+
+    '</div>'+
+  '</div>');
 };
+
 window.submitDeath=async function(){
   var id=document.getElementById('d-id').value;
   var date=document.getElementById('d-date').value;
+  var time=document.getElementById('d-time')?.value||'';
+  var reason=document.getElementById('d-reason')?.value||'غير معروف';
+  var autopsy=document.getElementById('d-autopsy')?.value==='yes';
+  var loss=parseFloat(document.getElementById('d-loss')?.value)||0;
+  var deathId=document.getElementById('d-death-id')?.value.trim()||genDeathId();
+  var notes=document.getElementById('d-notes')?.value.trim()||null;
+
   if(!id){toast('اختر حيواناً','error');return;}
+  if(!reason){toast('حدد سبب الوفاة','error');return;}
+
+  var patch={
+    status:'dead',
+    died_at:date,
+    death_time:time||null,
+    death_reason:reason,
+    death_autopsy:autopsy,
+    death_loss:loss||null,
+    death_id:deathId,
+    death_notes:notes
+  };
+
   closeModal();
+  toast('جاري التسجيل...','info');
   try{
-    await fbPatch('animals',id,{status:'dead',died_at:date});
-    await logActivity('edit','animals','نفوق: '+id);
-    toast('تم تسجيل النفوق');
+    await fbPatch('animals',id,patch);
+    if(loss>0){
+      await fbPost('finance',{
+        date:date,type:'loss',category:'نفوق حيوانات',
+        amount:loss,
+        description:'نفوق — '+deathId+(reason?' | '+reason:''),
+        added_by:getUser()?.name
+      });
+    }
+    await logActivity('edit','animals','نفوق: '+deathId+' | '+reason+(autopsy?' | تشريح':''));
+    toast('✅ تم تسجيل النفوق — '+deathId);
     animals=await fbGet('animals');renderFilters();renderAnimals();
   }catch(e){toast('فشل: '+e.message,'error');}
 };
@@ -609,21 +716,106 @@ window.openAnimalMenu=function(id,breed,tag,status){
 };
 window.openMarkDeathSingle=function(id,labelEnc){
   var lbl=decodeURIComponent(labelEnc);
-  showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()">'+
-    '<h4 style="color:var(--red)">تسجيل نفوق: '+lbl+'</h4>'+
-    '<label>التاريخ</label><input type="date" class="field" id="ds-date" value="'+todayStr()+'">'+
+  var a=animals.find(function(x){return x._id===id;})||{};
+  var deathId=genDeathId();
+  showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:540px;max-height:92vh;overflow-y:auto">'+
+    '<h4 style="color:var(--red)"><i class="bi bi-x-octagon-fill"></i> تسجيل نفوق: '+lbl+'</h4>'+
+
+    // ── الترقيم + السلالة (read-only)
+    '<div class="row g-2">'+
+      '<div class="col-6">'+
+        '<label>الترقيم</label>'+
+        '<input class="field" value="'+(a.tag||'—')+'" readonly style="background:var(--bg-3);opacity:.7">'+
+      '</div>'+
+      '<div class="col-6">'+
+        '<label>السلالة</label>'+
+        '<input class="field" value="'+(a.breed||'—')+'" readonly style="background:var(--bg-3);opacity:.7">'+
+      '</div>'+
+    '</div>'+
+
+    // ── التاريخ + الوقت
+    '<div class="row g-2">'+
+      '<div class="col-6">'+
+        '<label>تاريخ النفوق *</label>'+
+        '<input type="date" class="field" id="ds-date" value="'+todayStr()+'">'+
+      '</div>'+
+      '<div class="col-6">'+
+        '<label>الوقت <span class="text-gray" style="font-weight:400">(اختياري)</span></label>'+
+        '<input type="time" class="field" id="ds-time" value="'+nowTimeStr()+'">'+
+      '</div>'+
+    '</div>'+
+
+    // ── سبب الوفاة
+    '<label>سبب الوفاة *</label>'+
+    '<select class="field" id="ds-reason">'+
+      '<option value="مرض">مرض</option>'+
+      '<option value="حادث">حادث</option>'+
+      '<option value="إجهاد حراري">إجهاد حراري</option>'+
+      '<option value="مضاعفات ولادة">مضاعفات ولادة</option>'+
+      '<option value="سوء تغذية">سوء تغذية</option>'+
+      '<option value="غير معروف">غير معروف</option>'+
+      '<option value="أخرى">أخرى</option>'+
+    '</select>'+
+
+    // ── تشريح + خسارة
+    '<div class="row g-2">'+
+      '<div class="col-6">'+
+        '<label>تم التشريح؟</label>'+
+        '<select class="field" id="ds-autopsy">'+
+          '<option value="no">لا</option>'+
+          '<option value="yes">نعم</option>'+
+        '</select>'+
+      '</div>'+
+      '<div class="col-6">'+
+        '<label>قيمة الخسارة ('+getSettings().currency+')</label>'+
+        '<input type="number" class="field" id="ds-loss" placeholder="0" min="0">'+
+      '</div>'+
+    '</div>'+
+
+    // ── معرف الوفاة
+    '<label>معرف الوفاة</label>'+
+    '<input class="field" id="ds-death-id" value="'+deathId+'">'+
+
+    // ── ملاحظات
+    '<label>ملاحظات <span class="text-gray" style="font-weight:400">(اختياري)</span></label>'+
+    '<textarea class="field" id="ds-notes" rows="2" placeholder="أي تفاصيل إضافية..."></textarea>'+
+
     '<div class="d-flex gap-2 justify-content-end mt-3">'+
       '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
-      '<button class="action-btn danger" onclick="submitDeathSingle(\''+id+'\')">تأكيد</button>'+
-    '</div></div>');
+      '<button class="action-btn danger" onclick="submitDeathSingle(\''+id+'\')">' +
+        '<i class="bi bi-x-octagon-fill"></i> تسجيل النفوق'+
+      '</button>'+
+    '</div>'+
+  '</div>');
 };
 window.submitDeathSingle=async function(id){
   var date=document.getElementById('ds-date').value;
+  var time=document.getElementById('ds-time')?.value||'';
+  var reason=document.getElementById('ds-reason')?.value||'غير معروف';
+  var autopsy=document.getElementById('ds-autopsy')?.value==='yes';
+  var loss=parseFloat(document.getElementById('ds-loss')?.value)||0;
+  var deathId=document.getElementById('ds-death-id')?.value.trim()||genDeathId();
+  var notes=document.getElementById('ds-notes')?.value.trim()||null;
+
+  var patch={
+    status:'dead',died_at:date,death_time:time||null,
+    death_reason:reason,death_autopsy:autopsy,
+    death_loss:loss||null,death_id:deathId,death_notes:notes
+  };
   closeModal();
+  toast('جاري التسجيل...','info');
   try{
-    await fbPatch('animals',id,{status:'dead',died_at:date});
-    await logActivity('edit','animals','نفوق: '+id);
-    toast('تم تسجيل النفوق');
+    await fbPatch('animals',id,patch);
+    if(loss>0){
+      await fbPost('finance',{
+        date:date,type:'loss',category:'نفوق حيوانات',
+        amount:loss,
+        description:'نفوق — '+deathId+(reason?' | '+reason:''),
+        added_by:getUser()?.name
+      });
+    }
+    await logActivity('edit','animals','نفوق: '+deathId+' | '+reason+(autopsy?' | تشريح':''));
+    toast('✅ تم تسجيل النفوق — '+deathId);
     animals=await fbGet('animals');renderFilters();renderAnimals();
   }catch(e){toast('فشل: '+e.message,'error');}
 };
