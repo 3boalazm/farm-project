@@ -171,28 +171,139 @@ window.submitAddGoat=async function(){
 };
 
 // ── Mark Death ───────────────────────────────────────
+
+// ── Death helpers ────────────────────────────────────
+function genDeathId(){
+  var d=new Date();
+  var pad=function(n){return n<10?'0'+n:n;};
+  var datePart=d.getFullYear()+''+pad(d.getMonth()+1)+''+pad(d.getDate());
+  var rand=Math.random().toString(36).substring(2,6).toUpperCase();
+  return'DTH-'+datePart+'-'+rand;
+}
+function nowTimeStr(){
+  var d=new Date();
+  var pad=function(n){return n<10?'0'+n:n;};
+  return pad(d.getHours())+':'+pad(d.getMinutes());
+}
+window.onDeathAnimalChangeGoat=function(){
+  var sel=document.getElementById('d-id');
+  if(!sel)return;
+  var id=sel.value;
+  var a=_animals.find(function(x){return x._id===id;});
+  if(!a)return;
+  var tagEl=document.getElementById('d-tag');
+  var breedEl=document.getElementById('d-breed');
+  if(tagEl)tagEl.value=a.tag||'—';
+  if(breedEl)breedEl.value=a.breed||'—';
+};
+
 window.openMarkDeathGoat=function(){
   var alive=_animals.filter(function(a){return a.status==='alive'&&a.species==='sheep';});
-  showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()">'+
-    '<h4 style="color:var(--red)"><i class="bi bi-x-octagon-fill"></i> تسجيل نفوق</h4>'+
-    '<label>الحيوان</label>'+
-    '<select class="field" id="d-id">'+
+  if(!alive.length){toast('لا توجد أغنام حية','error');return;}
+  var first=alive[0]||{};
+  var deathId=genDeathId();
+  showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:540px;max-height:92vh;overflow-y:auto">'+
+    '<h4 style="color:var(--red)"><i class="bi bi-x-octagon-fill"></i> تسجيل نفوق أغنام</h4>'+
+
+    '<label>الحيوان *</label>'+
+    '<select class="field" id="d-id" onchange="onDeathAnimalChangeGoat()">'+
       alive.slice(0,300).map(function(a){return'<option value="'+a._id+'">'+(a.breed||'—')+(a.tag?' #'+a.tag:'')+' ('+(a.gender==='male'?'ذكر':'أنثى')+')</option>';}).join('')+
     '</select>'+
-    '<label>التاريخ</label><input type="date" class="field" id="d-date" value="'+todayStr()+'">'+
+
+    '<div class="row g-2">'+
+      '<div class="col-6">'+
+        '<label>الترقيم</label>'+
+        '<input class="field" id="d-tag" value="'+(first.tag||'—')+'" readonly style="background:var(--bg-3);opacity:.7">'+
+      '</div>'+
+      '<div class="col-6">'+
+        '<label>السلالة</label>'+
+        '<input class="field" id="d-breed" value="'+(first.breed||'—')+'" readonly style="background:var(--bg-3);opacity:.7">'+
+      '</div>'+
+    '</div>'+
+
+    '<div class="row g-2">'+
+      '<div class="col-6">'+
+        '<label>تاريخ النفوق *</label>'+
+        '<input type="date" class="field" id="d-date" value="'+todayStr()+'">'+
+      '</div>'+
+      '<div class="col-6">'+
+        '<label>الوقت <span class="text-gray" style="font-weight:400">(اختياري)</span></label>'+
+        '<input type="time" class="field" id="d-time" value="'+nowTimeStr()+'">'+
+      '</div>'+
+    '</div>'+
+
+    '<label>سبب الوفاة *</label>'+
+    '<select class="field" id="d-reason">'+
+      '<option value="مرض">مرض</option>'+
+      '<option value="حادث">حادث</option>'+
+      '<option value="إجهاد حراري">إجهاد حراري</option>'+
+      '<option value="مضاعفات ولادة">مضاعفات ولادة</option>'+
+      '<option value="سوء تغذية">سوء تغذية</option>'+
+      '<option value="غير معروف">غير معروف</option>'+
+      '<option value="أخرى">أخرى</option>'+
+    '</select>'+
+
+    '<div class="row g-2">'+
+      '<div class="col-6">'+
+        '<label>تم التشريح؟</label>'+
+        '<select class="field" id="d-autopsy">'+
+          '<option value="no">لا</option>'+
+          '<option value="yes">نعم</option>'+
+        '</select>'+
+      '</div>'+
+      '<div class="col-6">'+
+        '<label>قيمة الخسارة ('+getSettings().currency+')</label>'+
+        '<input type="number" class="field" id="d-loss" placeholder="0" min="0">'+
+      '</div>'+
+    '</div>'+
+
+    '<label>معرف الوفاة</label>'+
+    '<input class="field" id="d-death-id" value="'+deathId+'" placeholder="DTH-YYYYMMDD-XXXX">'+
+
+    '<label>ملاحظات <span class="text-gray" style="font-weight:400">(اختياري)</span></label>'+
+    '<textarea class="field" id="d-notes" rows="2" placeholder="أي تفاصيل إضافية..."></textarea>'+
+
     '<div class="d-flex gap-2 justify-content-end mt-3">'+
       '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
-      '<button class="action-btn danger" onclick="submitDeathGoat()">تسجيل</button>'+
-    '</div></div>');
+      '<button class="action-btn danger" onclick="submitDeathGoat()"><i class="bi bi-x-octagon-fill"></i> تسجيل النفوق</button>'+
+    '</div>'+
+  '</div>');
 };
 window.submitDeathGoat=async function(){
   var id=document.getElementById('d-id').value;
   var date=document.getElementById('d-date').value;
+  var time=document.getElementById('d-time')?.value||'';
+  var reason=document.getElementById('d-reason')?.value||'غير معروف';
+  var autopsy=document.getElementById('d-autopsy')?.value==='yes';
+  var loss=parseFloat(document.getElementById('d-loss')?.value)||0;
+  var deathId=document.getElementById('d-death-id')?.value.trim()||genDeathId();
+  var notes=document.getElementById('d-notes')?.value.trim()||null;
+
+  if(!id){toast('اختر حيواناً','error');return;}
+  if(!date){toast('حدد تاريخ النفوق','error');return;}
+
+  var patch={
+    status:'dead',died_at:date,death_time:time||null,
+    death_reason:reason,death_autopsy:autopsy,
+    death_loss:loss||null,death_id:deathId,death_notes:notes
+  };
   closeModal();
-  await fbPatch('animals',id,{status:'dead',died_at:date});
-  await logActivity('edit','animals','نفوق أغنام');
-  toast('تم تسجيل النفوق');
-  _animals=await fbGet('animals');renderPage();
+  toast('جاري التسجيل...','info');
+  try{
+    await fbPatch('animals',id,patch);
+    if(loss>0){
+      await fbPost('finance',{
+        date:date,type:'loss',category:'نفوق حيوانات',
+        amount:loss,
+        description:'نفوق — '+deathId+(reason?' | '+reason:''),
+        added_by:getUser()?.name
+      });
+    }
+    await logActivity('edit','animals','نفوق: '+deathId+' | '+reason+(autopsy?' | تشريح':''));
+    toast('✅ تم تسجيل النفوق — '+deathId);
+    fbCacheInvalidate('animals');
+    _animals=await fbGet('animals');renderPage();
+  }catch(e){toast('فشل: '+e.message,'error');}
 };
 
 // ── Breed Edit ───────────────────────────────────────
