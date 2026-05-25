@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<script>(function(){var t=localStorage.getItem('farm_theme');if(t==='light')document.documentElement.classList.add('light-mode');}());</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>تصحيح بيانات المواليد</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="page-wrap" style="max-width:620px;margin:auto;padding:24px 16px">
+
+  <div class="wonder-card mb-4" style="background:rgba(255,193,7,.06);border-color:rgba(255,193,7,.3)">
+    <h5 class="fw-bold mb-2"><i class="bi bi-stars" style="color:var(--yellow)"></i> تصحيح بيانات المواليد</h5>
+    <p class="text-gray" style="font-size:.85rem;margin:0">
+      هذا السكريبت يصحح المواليد المسجلة كـ <strong>تسمين</strong> إلى <strong>مواليد</strong> في Firebase<br>
+      النتيجة: <strong style="color:var(--blue)">مواليد الأغنام = ٥٢</strong> &nbsp;|&nbsp; <strong style="color:var(--green)">مواليد الماعز = ١١٤</strong>
+    </p>
+  </div>
+
+  <!-- Summary before -->
+  <div class="wonder-card mb-4">
+    <div class="fw-bold mb-3"><i class="bi bi-table accent-text me-2"></i>ملخص التصحيح المطلوب</div>
+    <table class="tbl" style="font-size:.84rem;text-align:center">
+      <thead><tr>
+        <th style="text-align:right">النوع</th>
+        <th style="color:var(--red)">الحالي (خطأ)</th>
+        <th style="color:var(--green)">بعد التصحيح</th>
+        <th>التغيير</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td style="text-align:right">مواليد الأغنام</td>
+          <td style="color:var(--red)">٤٠</td>
+          <td style="color:var(--green)">٥٢</td>
+          <td class="text-gray">+١٢ أنثى من تسمين → مواليد</td>
+        </tr>
+        <tr>
+          <td style="text-align:right">مواليد الماعز</td>
+          <td style="color:var(--red)">١٠٠</td>
+          <td style="color:var(--green)">١١٤</td>
+          <td class="text-gray">+١٤ ذكر من تسمين → مواليد</td>
+        </tr>
+        <tr style="font-weight:700;background:rgba(255,107,53,.05)">
+          <td style="text-align:right">الإجمالي الكلي</td>
+          <td colspan="3" style="color:var(--orange)">٤٦٢ حيوان — لا يتغير</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Progress -->
+  <div class="wonder-card mb-4" id="progress-card" style="display:none">
+    <div class="d-flex justify-content-between mb-2">
+      <span class="text-gray" style="font-size:.85rem" id="status-txt">جاري التحميل...</span>
+      <span class="fw-bold" id="pct-txt">٠٪</span>
+    </div>
+    <div class="progress-wonder"><div class="progress-bar-wonder" id="pbar" style="width:0%;transition:width .4s"></div></div>
+    <div id="log" style="font-size:.78rem;color:var(--text-gray);margin-top:10px;max-height:180px;overflow-y:auto"></div>
+  </div>
+
+  <!-- Result -->
+  <div id="result" style="display:none" class="wonder-card mb-4"></div>
+
+  <!-- Action buttons -->
+  <div id="actions" class="d-flex gap-2 flex-wrap">
+    <button class="action-btn primary" onclick="startFix()" id="fix-btn">
+      <i class="bi bi-wrench-adjustable"></i> تصحيح البيانات الآن
+    </button>
+    <a href="dashboard.html" class="action-btn">
+      <i class="bi bi-grid-1x2-fill"></i> العودة للرئيسية
+    </a>
+  </div>
+
+</div>
+
+<div id="toast-wrap"></div>
+<div id="modal-root"></div>
+
+<script src="config.js"></script>
+<script src="firebase.js"></script>
+<script src="shared.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  if (!requireAuth()) return;
+  initFirebase();
+});
+
+function log(msg, color) {
+  var d = document.getElementById('log');
+  d.innerHTML += '<div style="color:' + (color||'var(--text-gray)') + '">' + msg + '</div>';
+  d.scrollTop = d.scrollHeight;
+}
+
+function setProgress(pct, status) {
+  document.getElementById('pbar').style.width = pct + '%';
+  document.getElementById('pct-txt').textContent = ar(pct) + '٪';
+  document.getElementById('status-txt').textContent = status;
+}
+
+async function startFix() {
+  var btn = document.getElementById('fix-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;margin-left:6px"></div> جاري التصحيح...';
+
+  document.getElementById('progress-card').style.display = 'block';
+  var resultDiv = document.getElementById('result');
+  resultDiv.style.display = 'none';
+
+  log('📥 جاري تحميل بيانات الحيوانات من Firebase...');
+  setProgress(5, 'تحميل البيانات...');
+
+  try {
+    var animals = await fbGet('animals');
+    log('✅ تم تحميل ' + ar(animals.length) + ' حيوان', 'var(--green)');
+    setProgress(20, 'تحليل البيانات...');
+
+    // Find animals that need fixing:
+    // breed='مواليد' AND purpose='tasmeen' → should be 'birth'
+    var toFix = animals.filter(function(a) {
+      return a.breed === 'مواليد' && a.purpose === 'tasmeen' && a.status === 'alive';
+    });
+
+    var sheepToFix = toFix.filter(function(a) { return a.species === 'sheep'; });
+    var goatToFix  = toFix.filter(function(a) { return a.species === 'goat'; });
+
+    log('🔍 وُجد ' + ar(toFix.length) + ' حيوان يحتاج تصحيح:', 'var(--yellow)');
+    log('   أغنام: ' + ar(sheepToFix.length) + ' (كلهن إناث)');
+    log('   ماعز:  ' + ar(goatToFix.length) + ' (كلهم ذكور)');
+
+    if (toFix.length === 0) {
+      log('ℹ️ البيانات محدّثة بالفعل — لا حاجة لتصحيح', 'var(--blue)');
+      setProgress(100, 'البيانات صحيحة');
+      showResult(true, 0, animals);
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-check-circle-fill"></i> البيانات سليمة';
+      return;
+    }
+
+    // Patch each animal
+    var fixed = 0;
+    var errors = 0;
+    for (var i = 0; i < toFix.length; i++) {
+      var a = toFix[i];
+      var pct = 20 + Math.round((i / toFix.length) * 70);
+      setProgress(pct, 'تصحيح ' + ar(i + 1) + ' من ' + ar(toFix.length) + '...');
+      try {
+        await fbPatch('animals', a._id, { purpose: 'birth' });
+        fixed++;
+        if (i < 5 || i === toFix.length - 1) {
+          log('   ✔ ' + (a.species === 'sheep' ? 'أغنام' : 'ماعز') + ' — ' + (a.gender === 'male' ? 'ذكر' : 'أنثى') + (a.tag ? ' #' + a.tag : ''), 'var(--green)');
+        }
+      } catch(e) {
+        errors++;
+        log('   ✘ خطأ: ' + e.message, 'var(--red)');
+      }
+    }
+
+    setProgress(100, 'اكتمل التصحيح');
+    log('');
+    log('✅ اكتمل! تم تصحيح ' + ar(fixed) + ' حيوان' + (errors ? ' — ' + ar(errors) + ' أخطاء' : ''), 'var(--green)');
+
+    // Reload and verify
+    await new Promise(function(r){ setTimeout(r, 600); });
+    var updated = await fbGet('animals');
+    showResult(errors === 0, fixed, updated);
+
+    await logActivity('edit', 'animals', 'تصحيح مواليد: ' + ar(fixed) + ' حيوان تم تحويله من تسمين → مواليد');
+    btn.innerHTML = '<i class="bi bi-check-circle-fill"></i> اكتمل التصحيح';
+
+  } catch(e) {
+    log('❌ خطأ: ' + e.message, 'var(--red)');
+    setProgress(0, 'فشل');
+    toast('خطأ: ' + e.message, 'error');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-wrench-adjustable"></i> إعادة المحاولة';
+  }
+}
+
+function showResult(success, fixedCount, animals) {
+  var alive = animals.filter(function(a){ return a.status === 'alive'; });
+  var sheepBirths = alive.filter(function(a){ return a.species === 'sheep' && a.purpose === 'birth'; }).length;
+  var goatBirths  = alive.filter(function(a){ return a.species === 'goat'  && a.purpose === 'birth'; }).length;
+  var sheepOther  = alive.filter(function(a){ return a.species === 'sheep' && a.purpose !== 'birth'; }).length;
+  var goatOther   = alive.filter(function(a){ return a.species === 'goat'  && a.purpose !== 'birth'; }).length;
+
+  var r = document.getElementById('result');
+  r.style.display = 'block';
+  r.innerHTML =
+    '<div class="fw-bold mb-3" style="color:var(--green)"><i class="bi bi-check-circle-fill me-2"></i>نتائج بعد التصحيح</div>' +
+    '<div class="row g-3">' +
+      '<div class="col-6"><div class="summary-card">' +
+        '<i class="bi bi-stars d-block mb-1" style="color:var(--yellow);font-size:1.3rem"></i>' +
+        '<div class="summary-number" style="color:var(--blue)">' + ar(sheepBirths) + '</div>' +
+        '<small class="text-gray">مواليد الأغنام</small>' +
+        (sheepBirths === 52 ? '<div style="font-size:.72rem;color:var(--green);margin-top:4px">✅ صحيح</div>' : '<div style="font-size:.72rem;color:var(--red)">⚠️ ' + ar(sheepBirths) + ' (المطلوب ٥٢)</div>') +
+      '</div></div>' +
+      '<div class="col-6"><div class="summary-card">' +
+        '<i class="bi bi-stars d-block mb-1" style="color:var(--yellow);font-size:1.3rem"></i>' +
+        '<div class="summary-number" style="color:var(--green)">' + ar(goatBirths) + '</div>' +
+        '<small class="text-gray">مواليد الماعز</small>' +
+        (goatBirths === 114 ? '<div style="font-size:.72rem;color:var(--green);margin-top:4px">✅ صحيح</div>' : '<div style="font-size:.72rem;color:var(--red)">⚠️ ' + ar(goatBirths) + ' (المطلوب ١١٤)</div>') +
+      '</div></div>' +
+      '<div class="col-6"><div class="summary-card">' +
+        '<div class="summary-number" style="color:var(--blue)">' + ar(sheepOther) + '</div>' +
+        '<small class="text-gray">أغنام (تربية+تسمين)</small>' +
+      '</div></div>' +
+      '<div class="col-6"><div class="summary-card">' +
+        '<div class="summary-number" style="color:var(--green)">' + ar(goatOther) + '</div>' +
+        '<small class="text-gray">ماعز (تربية+تسمين)</small>' +
+      '</div></div>' +
+      '<div class="col-12"><div class="summary-card" style="background:rgba(255,107,53,.05)">' +
+        '<div class="summary-number accent-text">' + ar(alive.length) + '</div>' +
+        '<small class="text-gray">إجمالي القطيع الحي</small>' +
+      '</div></div>' +
+    '</div>' +
+    '<div class="d-flex gap-2 mt-3 flex-wrap">' +
+      '<a href="dashboard.html" class="action-btn primary"><i class="bi bi-grid-1x2-fill"></i> الرئيسية</a>' +
+      '<a href="sheep.html" class="action-btn"><i class="bi bi-cloud-fill"></i> قسم الأغنام</a>' +
+      '<a href="goats.html" class="action-btn"><i class="bi bi-tropical-storm"></i> قسم الماعز</a>' +
+    '</div>';
+}
+</script>
+</body>
+</html>

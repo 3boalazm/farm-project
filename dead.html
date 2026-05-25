@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<script>(function(){var t=localStorage.getItem('farm_theme');if(t==='light')document.documentElement.classList.add('light-mode');}());</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>النافق — بيان المزرعة</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="page-wrap">
+  <div id="page-header"></div>
+  <div id="content"><div class="text-center py-5"><div class="spinner"></div></div></div>
+  <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
+    <span id="footer-year"></span> &copy; <span id="footer-farm"></span><br>
+    <small style="font-size:.72rem;color:var(--text-muted)">إشراف: لواء أحمد رجب نوح | تطوير: جندي مصطفى محمد إبراهيم</small>
+  </footer>
+</div>
+<script src="config.js"></script>
+<script src="firebase.js"></script>
+<script src="nav.js"></script>
+<script src="shared.js"></script>
+<script>
+'use strict';
+var _animals=[];
+
+document.addEventListener('DOMContentLoaded', async function(){
+  if(!requireAuth())return;
+  initFirebase();
+  var s=getSettings();
+  document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
+  document.getElementById('footer-farm').textContent=s.farmName;
+  renderNavbar('dead.html');
+  renderPageHeader(
+    '<i class="bi bi-x-octagon-fill" style="color:var(--red)"></i> النافق',
+    'سجل حيوانات المزرعة النافقة',
+    (can('animals')?'<button class="action-btn danger" onclick="openMarkDead()"><i class="bi bi-x-octagon"></i> تسجيل نفوق</button>':'')+
+    (can('admin')?'<button class="action-btn" onclick="openResetDead()" style="background:rgba(156,39,176,.1);border-color:rgba(156,39,176,.35);color:var(--purple)"><i class="bi bi-arrow-counterclockwise"></i> تصفير سجلات النافق</button>':'')
+  );
+  try{ _animals=await fbGet('animals'); }
+  catch(e){ document.getElementById('content').innerHTML='<div class="empty-state"><i class="bi bi-wifi-off"></i><p>'+e.message+'</p></div>'; return; }
+  renderPage();
+});
+
+function renderPage(){
+  var s=getSettings();
+  var el=document.getElementById('content');
+  var alive=_animals.filter(function(a){return a.status==='alive';});
+  var dead=_animals.filter(function(a){return a.status==='dead';});
+  var goatDead=dead.filter(function(a){return a.species==='goat';});
+  var sheepDead=dead.filter(function(a){return a.species==='sheep';});
+  var aliveCount=alive.length;
+  var deadCount=dead.length;
+  var total=aliveCount+deadCount;
+  var deathRate=total>0?Math.round(deadCount/total*100):0;
+  var birthCount=_animals.filter(function(a){return a.purpose==='birth'||a.breed==='مواليد';}).length;
+
+  if(!dead.length){
+    el.innerHTML='<div class="empty-state"><i class="bi bi-check-circle-fill" style="color:var(--green)"></i>'+
+      '<p style="color:var(--green)">لا توجد حيوانات نافقة مسجّلة</p>'+
+      '<small class="text-gray">سيتم عرض تفاصيل النافق هنا عند تسجيل أي نفوق</small></div>';
+    return;
+  }
+
+  // ── Summary cards ────────────────────────────────
+  var html='<div class="row g-3 mb-4">';
+  html+='<div class="col-6 col-md-3"><div class="summary-card" style="border-color:rgba(244,67,54,.3)">'+
+    '<div class="summary-number red-text">'+ar(deadCount)+'</div>'+
+    '<small class="text-gray">إجمالي النافق</small></div></div>';
+  html+='<div class="col-6 col-md-3"><div class="summary-card">'+
+    '<div class="summary-number" style="color:var(--orange)">'+ar(deathRate)+'٪</div>'+
+    '<small class="text-gray">نسبة النفوق</small></div></div>';
+  html+='<div class="col-6 col-md-3"><div class="summary-card">'+
+    '<div class="summary-number red-text">'+ar(goatDead.length)+'</div>'+
+    '<small class="text-gray">نافق الماعز</small></div></div>';
+  html+='<div class="col-6 col-md-3"><div class="summary-card">'+
+    '<div class="summary-number" style="color:var(--blue)">'+ar(sheepDead.length)+'</div>'+
+    '<small class="text-gray">نافق الأغنام</small></div></div>';
+  html+='</div>';
+
+  // ── Pie chart: حي vs نافق vs مواليد ─────────────
+  html+='<div class="row g-3 mb-4">';
+  html+='<div class="col-lg-5">';
+  html+='<div class="wonder-card h-100">';
+  html+='<h6 class="fw-bold mb-3"><i class="bi bi-pie-chart-fill accent-text me-2"></i>نسبة الحي والنافق والمواليد</h6>';
+  html+='<div id="dead-pie" class="text-center"></div>';
+  html+='</div></div>';
+  // Recent deaths list
+  html+='<div class="col-lg-7">';
+  html+='<div class="wonder-card h-100">';
+  html+='<h6 class="fw-bold mb-3"><i class="bi bi-clock-history accent-text me-2"></i>آخر النافق المسجّل</h6>';
+  var recent=dead.sort(function(a,b){return (b.died_at||b.sold_at||'').localeCompare(a.died_at||a.sold_at||'');}).slice(0,8);
+  html+=recent.map(function(a){
+    return '<div class="d-flex align-items-center gap-3 py-2" style="border-bottom:1px solid var(--border-3)">'+
+      '<span style="font-size:1.2rem">'+(a.species==='goat'?'🐐':'🐑')+'</span>'+
+      '<div class="flex-grow-1">'+
+        '<span class="fw-bold">'+(a.breed||'—')+'</span>'+
+        (a.tag?' <span class="type-badge badge-gray" style="font-size:.68rem">#'+a.tag+'</span>':'')+
+        '<span class="type-badge ms-1 '+(a.gender==='male'?'badge-blue':'badge-tasmeen')+'" style="font-size:.68rem">'+(a.gender==='male'?'ذكر':'أنثى')+'</span>'+
+        '<div class="text-gray" style="font-size:.75rem">'+(a.death_reason||a.removal_reason||'—')+' | '+(a.died_at||a.sold_at||'غير محدد')+'</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+  html+='</div></div>';
+  html+='</div>';
+
+  // ── Breed cards: Goats ───────────────────────────
+  if(goatDead.length>0){ html+=renderDeadSection('goat','🐐','نافق الماعز','var(--green)',goatDead,s.goatBreeds); }
+
+  // ── Breed cards: Sheep ───────────────────────────
+  if(sheepDead.length>0){ html+=renderDeadSection('sheep','🐑','نافق الأغنام','var(--blue)',sheepDead,s.sheepBreeds); }
+
+  el.innerHTML=html;
+
+  // Draw pie chart
+  drawDeadPie(aliveCount-birthCount, deadCount, birthCount);
+}
+
+function renderDeadSection(sp, icon, title, color, dead, breedList){
+  var html='<div class="mb-4">';
+  html+='<h5 class="fw-bold mb-3">'+icon+' '+title+
+    ' <span class="type-badge badge-danger" style="font-size:.8rem">'+ar(dead.length)+' رأس</span></h5>';
+  html+='<div class="row g-3">';
+
+  var allBreeds=breedList.slice();
+  dead.forEach(function(a){if(a.breed&&allBreeds.indexOf(a.breed)<0)allBreeds.push(a.breed);});
+
+  allBreeds.forEach(function(breed){
+    var ba=dead.filter(function(a){return a.breed===breed;});
+    if(!ba.length)return;
+    var m=ba.filter(function(a){return a.gender==='male';}).length;
+    var f=ba.filter(function(a){return a.gender==='female';}).length;
+    // Reasons breakdown
+    var reasons={};
+    ba.forEach(function(a){var r=a.death_reason||a.removal_reason||'غير محدد';reasons[r]=(reasons[r]||0)+1;});
+    var topReason=Object.keys(reasons).sort(function(a,b){return reasons[b]-reasons[a];})[0]||'—';
+
+    html+='<div class="col-lg-4 col-md-6"><div class="breed-card" style="border-color:rgba(244,67,54,.3)">';
+    html+='<div class="breed-header">';
+    html+='<div class="breed-icon">'+icon+'</div>';
+    html+='<div><div class="fw-bold">'+breed+'</div><small class="text-gray">'+ar(ba.length)+' نافق</small></div>';
+    html+='</div>';
+    html+='<div class="row g-2 mb-3">';
+    html+='<div class="col-6"><div class="gender-box"><span class="gender-count" style="color:var(--blue)">'+ar(m)+'</span><small class="text-gray">ذكور</small></div></div>';
+    html+='<div class="col-6"><div class="gender-box"><span class="gender-count" style="color:var(--orange)">'+ar(f)+'</span><small class="text-gray">إناث</small></div></div>';
+    html+='</div>';
+    html+='<div class="mb-2 text-gray" style="font-size:.78rem"><i class="bi bi-info-circle me-1"></i>أكثر سبب: '+topReason+'</div>';
+    html+='<a href="animals.html?species='+sp+'&breed='+encodeURIComponent(breed)+'&status=dead" class="action-btn sm w-100 mt-2" style="justify-content:center"><i class="bi bi-list-ul"></i> عرض القائمة</a>';
+    html+='</div></div>';
+  });
+  html+='</div></div>';
+  return html;
+}
+
+function drawDeadPie(aliveN, deadN, birthN){
+  var total=aliveN+deadN+birthN;
+  if(!total)return;
+  var pEl=document.getElementById('dead-pie');
+  if(!pEl)return;
+  var segments=[
+    {label:'حي (تربية/تسمين)',n:aliveN,color:'#00e676'},
+    {label:'مواليد',n:birthN,color:'#ffc107'},
+    {label:'نافق',n:deadN,color:'#f44336'},
+  ].filter(function(s){return s.n>0;});
+
+  var size=180,cx=90,cy=90,r=70,ir=30;
+  var sa=0;var paths='',legend='';
+  segments.forEach(function(seg){
+    var angle=(seg.n/total)*2*Math.PI;
+    if(angle>=2*Math.PI-0.001)angle=2*Math.PI-0.001;
+    var ea=sa+angle,lg=angle>Math.PI?1:0;
+    var x1=cx+r*Math.cos(sa-Math.PI/2),y1=cy+r*Math.sin(sa-Math.PI/2);
+    var x2=cx+r*Math.cos(ea-Math.PI/2),y2=cy+r*Math.sin(ea-Math.PI/2);
+    var xi=cx+ir*Math.cos(sa-Math.PI/2),yi=cy+ir*Math.sin(sa-Math.PI/2);
+    var xi2=cx+ir*Math.cos(ea-Math.PI/2),yi2=cy+ir*Math.sin(ea-Math.PI/2);
+    var pct=Math.round(seg.n/total*100);
+    paths+='<path d="M '+xi+' '+yi+' A '+ir+' '+ir+' 0 '+lg+' 1 '+xi2+' '+yi2+' L '+x2+' '+y2+' A '+r+' '+r+' 0 '+lg+' 0 '+x1+' '+y1+' Z" fill="'+seg.color+'" opacity=".85" stroke="var(--bg)" stroke-width="2"><title>'+seg.label+': '+ar(seg.n)+'</title></path>';
+    legend+='<div style="display:flex;align-items:center;gap:6px;font-size:.75rem"><span style="width:10px;height:10px;border-radius:50%;background:'+seg.color+';display:inline-block;flex-shrink:0"></span><span>'+seg.label+' — '+ar(pct)+'٪</span></div>';
+    sa=ea;
+  });
+
+  pEl.innerHTML='<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'">'+paths+
+    '<circle cx="'+cx+'" cy="'+cy+'" r="'+ir+'" fill="var(--bg-2)"/>'+
+    '<text x="'+cx+'" y="'+(cy-5)+'" text-anchor="middle" fill="var(--text)" font-size="14" font-weight="700" font-family="Lexend">'+ar(total)+'</text>'+
+    '<text x="'+cx+'" y="'+(cy+12)+'" text-anchor="middle" fill="var(--text-gray)" font-size="9" font-family="Cairo">إجمالي</text>'+
+  '</svg><div style="display:flex;flex-direction:column;gap:6px;margin-top:10px">'+legend+'</div>';
+}
+
+window.openMarkDead=async function(){
+  // Reload fresh data
+  toast('جاري التحميل...','info');
+  try{ _animals=await fbGet('animals'); }catch(e){}
+  var alive=_animals.filter(function(a){return a.status==='alive';});
+
+  if(!alive.length){
+    toast('لا توجد حيوانات حية مسجّلة','error');
+    return;
+  }
+
+  showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:480px">'+
+    '<h4 style="color:var(--red)"><i class="bi bi-x-octagon-fill"></i> تسجيل نفوق</h4>'+
+    // Search/filter
+    '<label>البحث عن الحيوان</label>'+
+    '<input class="field mb-2" id="dd-search" placeholder="ابحث بالسلالة أو رقم الترقيم..." oninput="filterDeadSelect(this.value)">'+
+    '<label>اختر الحيوان <span class="text-gray" style="font-size:.75rem">('+ar(alive.length)+' حيوان حي)</span></label>'+
+    '<select class="field" id="dd-id" size="6" style="height:auto">'+
+      alive.map(function(a){
+        return'<option value="'+a._id+'">'+(a.species==='goat'?'🐐':'🐑')+' '+(a.breed||'—')+
+          (a.tag?' #'+a.tag:'')+' — '+(a.gender==='male'?'ذكر ♂':'أنثى ♀')+
+          ' ('+(a.purpose==='tarbiya'?'تربية':a.purpose==='tasmeen'?'تسمين':'مواليد')+')</option>';
+      }).join('')+
+    '</select>'+
+    '<div class="row g-2 mt-2">'+
+      '<div class="col-6"><label>تاريخ النفوق</label>'+
+        '<input type="date" class="field" id="dd-date" value="'+todayStr()+'"></div>'+
+      '<div class="col-6"><label>السبب</label>'+
+        '<select class="field" id="dd-reason">'+
+          '<option value="مرض">مرض</option>'+
+          '<option value="حادث">حادث</option>'+
+          '<option value="إجهاد حراري">إجهاد حراري</option>'+
+          '<option value="ولادة">مشكلة ولادة</option>'+
+          '<option value="سبب غير معروف">غير معروف</option>'+
+          '<option value="أخرى">أخرى</option>'+
+        '</select></div>'+
+    '</div>'+
+    '<label class="mt-1">ملاحظات إضافية (اختياري)</label>'+
+    '<input class="field" id="dd-notes" placeholder="مثال: وجد ميتاً صباحاً">'+
+    '<div class="d-flex gap-2 justify-content-end mt-3">'+
+      '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
+      '<button class="action-btn danger" onclick="submitDead()">'+
+        '<i class="bi bi-x-octagon-fill me-1"></i>تأكيد تسجيل النفوق</button>'+
+    '</div></div>');
+};
+
+// Filter the select list
+window.filterDeadSelect=function(q){
+  var sel=document.getElementById('dd-id');
+  if(!sel)return;
+  var opts=sel.options;
+  q=q.toLowerCase();
+  for(var i=0;i<opts.length;i++){
+    var show=!q||opts[i].text.toLowerCase().indexOf(q)>=0;
+    opts[i].style.display=show?'':'none';
+    opts[i].hidden=!show;
+  }
+};
+
+window.submitDead=async function(){
+  var sel=document.getElementById('dd-id');
+  var id=sel?sel.value:'';
+  var date=document.getElementById('dd-date').value;
+  var reason=document.getElementById('dd-reason').value;
+  var notes=document.getElementById('dd-notes').value.trim();
+
+  if(!id){toast('يرجى اختيار الحيوان من القائمة','error');return;}
+  if(!date){toast('يرجى تحديد تاريخ النفوق','error');return;}
+
+  // Confirm
+  var animal=_animals.find(function(a){return a._id===id;});
+  var label=animal?(animal.breed||'—')+(animal.tag?' #'+animal.tag:''):'الحيوان المحدد';
+
+  if(!confirm('تأكيد تسجيل نفوق: '+label+' | السبب: '+reason+' | التاريخ: '+date))return;
+
+  closeModal();
+  toast('جاري تسجيل النفوق...','info');
+
+  try{
+    var updates={
+      status:'dead',
+      died_at:date,
+      death_reason:reason
+    };
+    if(notes)updates.notes=notes;
+
+    await fbPatch('animals',id,updates);
+    fbCacheInvalidate('animals');
+    await logActivity('edit','animals','نفوق: '+(animal?label:id)+' | '+reason);
+    toast('✅ تم تسجيل نفوق: '+label);
+    _animals=await fbGet('animals');
+    renderPage();
+  }catch(e){
+    toast('❌ فشل التسجيل: '+e.message,'error');
+    console.error('submitDead error:',e);
+  }
+};
+
+window.openResetDead=function(){
+  var dead=_animals.filter(function(a){return a.status==='dead';});
+  if(!dead.length){toast('لا توجد سجلات نافق','info');return;}
+  showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()">'+
+    '<h4 style="color:var(--purple)"><i class="bi bi-arrow-counterclockwise"></i> تصفير سجلات النافق</h4>'+
+    '<p class="text-gray" style="font-size:.85rem">يوجد <strong style="color:var(--red)">'+ar(dead.length)+'</strong> سجل نافق. اختر العملية المطلوبة:</p>'+
+    '<div class="d-flex flex-column gap-2">'+
+      '<label style="display:flex;align-items:flex-start;gap:10px;padding:12px;background:rgba(244,67,54,.06);border:1px solid rgba(244,67,54,.2);border-radius:10px;cursor:pointer">'+
+        '<input type="radio" name="reset-opt" value="delete" style="margin-top:3px;accent-color:var(--red)">'+
+        '<div><div class="fw-bold red-text">حذف سجلات النافق نهائياً</div>'+
+          '<small class="text-gray">يحذف الحيوانات النافقة من قاعدة البيانات بالكامل — لا يمكن التراجع</small></div>'+
+      '</label>'+
+      '<label style="display:flex;align-items:flex-start;gap:10px;padding:12px;background:rgba(0,230,118,.06);border:1px solid rgba(0,230,118,.2);border-radius:10px;cursor:pointer">'+
+        '<input type="radio" name="reset-opt" value="restore" style="margin-top:3px;accent-color:var(--green)">'+
+        '<div><div class="fw-bold green-text">إعادة النافق للقطيع الحي</div>'+
+          '<small class="text-gray">يغير status من dead إلى alive — مفيد لتصحيح الأخطاء</small></div>'+
+      '</label>'+
+    '</div>'+
+    '<div class="d-flex gap-2 justify-content-end mt-3">'+
+      '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
+      '<button class="action-btn" style="background:rgba(156,39,176,.15);border-color:rgba(156,39,176,.4);color:var(--purple)" onclick="submitResetDead()">تنفيذ</button>'+
+    '</div></div>');
+};
+
+window.submitResetDead=async function(){
+  var opt=document.querySelector('input[name="reset-opt"]:checked');
+  if(!opt){toast('اختر عملية أولاً','error');return;}
+  var action=opt.value;
+  var dead=_animals.filter(function(a){return a.status==='dead';});
+  if(!dead.length){toast('لا توجد سجلات نافق','info');closeModal();return;}
+
+  var confirmMsg=action==='delete'?
+    'حذف نهائي لـ '+ar(dead.length)+' سجل نافق؟ لا يمكن التراجع!':
+    'إعادة '+ar(dead.length)+' حيوان للقطيع الحي؟';
+
+  if(!confirm(confirmMsg)){return;}
+  closeModal();
+  toast('جاري التنفيذ على '+ar(dead.length)+' سجل...','info');
+
+  var ok=0;
+  if(action==='delete'){
+    for(var i=0;i<dead.length;i++){
+      try{await fbDelete('animals',dead[i]._id);ok++;}catch(e){}
+    }
+    await logActivity('delete','animals','حذف '+ar(ok)+' سجل نافق');
+    toast('تم حذف '+ar(ok)+' سجل نافق نهائياً');
+  } else {
+    for(var i=0;i<dead.length;i++){
+      try{
+        await fbPatch('animals',dead[i]._id,{status:'alive',died_at:null,death_reason:null});
+        ok++;
+      }catch(e){}
+    }
+    await logActivity('edit','animals','إعادة '+ar(ok)+' نافق للقطيع');
+    toast('تم إعادة '+ar(ok)+' حيوان للقطيع الحي');
+  }
+
+  fbCacheInvalidate('animals');
+  _animals=await fbGet('animals');
+  renderPage();
+};
+</script>
+</body>
+</html>

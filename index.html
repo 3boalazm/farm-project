@@ -1,0 +1,8 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<script>
+try{const u=JSON.parse(localStorage.getItem('farm_user')||'null');
+window.location.href=u?'dashboard.html':'login.html';}
+catch(e){window.location.href='login.html';}
+</script>
+</head><body></body></html>
