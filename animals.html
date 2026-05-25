@@ -412,14 +412,66 @@ window.doBulk=function(action){
       '</div></div>');
   }
   else if(action==='death'){
-    showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()">'+
-      '<h4 style="color:var(--red)"><i class="bi bi-x-octagon-fill"></i> نفوق '+cnt+' حيوان</h4>'+
-      '<label>تاريخ النفوق</label><input type="date" class="field" id="b-date" value="'+todayStr()+'">'+
-      '<label>السبب</label>'+
-      '<select class="field" id="b-reason"><option>مرض</option><option>حادث</option><option>إجهاد حراري</option><option>غير معروف</option></select>'+
+    var bDeathId=genDeathId();
+    showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:520px;max-height:92vh;overflow-y:auto">'+
+      '<h4 style="color:var(--red)"><i class="bi bi-x-octagon-fill"></i> نفوق جماعي — '+cnt+' حيوان</h4>'+
+
+      // ── ملاحظة
+      '<div class="mb-3 p-3" style="background:rgba(244,67,54,.06);border:1px solid rgba(244,67,54,.2);border-radius:10px;font-size:.82rem">'+
+        '<i class="bi bi-info-circle-fill me-1" style="color:var(--red)"></i>'+
+        'سيتم تطبيق هذه البيانات على <strong style="color:var(--red)">'+cnt+'</strong> حيوان محدد.'+
+      '</div>'+
+
+      // ── التاريخ + الوقت
+      '<div class="row g-2">'+
+        '<div class="col-6">'+
+          '<label>تاريخ النفوق *</label>'+
+          '<input type="date" class="field" id="b-date" value="'+todayStr()+'">'+
+        '</div>'+
+        '<div class="col-6">'+
+          '<label>الوقت <span class="text-gray" style="font-weight:400">(اختياري)</span></label>'+
+          '<input type="time" class="field" id="b-time" value="'+nowTimeStr()+'">'+
+        '</div>'+
+      '</div>'+
+
+      // ── سبب الوفاة
+      '<label>سبب الوفاة *</label>'+
+      '<select class="field" id="b-reason">'+
+        '<option value="مرض">مرض</option>'+
+        '<option value="حادث">حادث</option>'+
+        '<option value="إجهاد حراري">إجهاد حراري</option>'+
+        '<option value="مضاعفات ولادة">مضاعفات ولادة</option>'+
+        '<option value="سوء تغذية">سوء تغذية</option>'+
+        '<option value="غير معروف">غير معروف</option>'+
+        '<option value="أخرى">أخرى</option>'+
+      '</select>'+
+
+      // ── تشريح + خسارة
+      '<div class="row g-2">'+
+        '<div class="col-6">'+
+          '<label>تم التشريح؟</label>'+
+          '<select class="field" id="b-autopsy">'+
+            '<option value="no">لا</option>'+
+            '<option value="yes">نعم</option>'+
+          '</select>'+
+        '</div>'+
+        '<div class="col-6">'+
+          '<label>قيمة الخسارة الإجمالية ('+s.currency+')</label>'+
+          '<input type="number" class="field" id="b-loss" placeholder="0" min="0">'+
+        '</div>'+
+      '</div>'+
+
+      // ── معرف الوفاة (مرجعي للدفعة)
+      '<label>معرف دفعة الوفاة</label>'+
+      '<input class="field" id="b-death-id" value="'+bDeathId+'" placeholder="DTH-YYYYMMDD-XXXX">'+
+
+      // ── ملاحظات
+      '<label>ملاحظات <span class="text-gray" style="font-weight:400">(اختياري)</span></label>'+
+      '<textarea class="field" id="b-notes" rows="2" placeholder="أي تفاصيل إضافية..."></textarea>'+
+
       '<div class="d-flex gap-2 justify-content-end mt-3">'+
         '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
-        '<button class="action-btn danger" onclick="execBulk(\'death\')">تأكيد النفوق</button>'+
+        '<button class="action-btn danger" onclick="execBulk(\'death\')"><i class="bi bi-x-octagon-fill"></i> تسجيل نفوق '+cnt+' حيوان</button>'+
       '</div></div>');
   }
   else if(action==='sell'){
@@ -475,10 +527,42 @@ window.execBulk=async function(action){
   }
   else if(action==='death'){
     var date=document.getElementById('b-date')?.value||todayStr();
-    var reason=document.getElementById('b-reason')?.value;
-    for(var i=0;i<ids.length;i++){try{await fbPatch('animals',ids[i],{status:'dead',died_at:date,death_reason:reason});ok++;}catch(e){}}
-    await logActivity('edit','animals','نفوق جماعي '+ar(ok)+' | '+reason);
-    toast('تم تسجيل نفوق '+ar(ok)+' حيوان');
+    var time=document.getElementById('b-time')?.value||'';
+    var reason=document.getElementById('b-reason')?.value||'غير معروف';
+    var autopsy=document.getElementById('b-autopsy')?.value==='yes';
+    var totalLoss=parseFloat(document.getElementById('b-loss')?.value)||0;
+    var batchDeathId=document.getElementById('b-death-id')?.value.trim()||genDeathId();
+    var notes=document.getElementById('b-notes')?.value.trim()||null;
+    var perAnimalLoss=totalLoss>0?Math.round((totalLoss/ids.length)*100)/100:null;
+    for(var i=0;i<ids.length;i++){
+      var animalDeathId=batchDeathId+'-'+(i+1);
+      try{
+        await fbPatch('animals',ids[i],{
+          status:'dead',
+          died_at:date,
+          death_time:time||null,
+          death_reason:reason,
+          death_autopsy:autopsy,
+          death_loss:perAnimalLoss||null,
+          death_id:animalDeathId,
+          death_notes:notes,
+          death_batch_id:batchDeathId
+        });
+        ok++;
+      }catch(e){}
+    }
+    if(totalLoss>0){
+      try{
+        await fbPost('finance',{
+          date:date,type:'loss',category:'نفوق حيوانات',
+          amount:totalLoss,
+          description:'نفوق جماعي — '+batchDeathId+(reason?' | '+reason:'')+' ('+ar(ok)+' حيوان)',
+          added_by:getUser()?.name
+        });
+      }catch(e){}
+    }
+    await logActivity('edit','animals','نفوق جماعي '+ar(ok)+' | '+reason+(autopsy?' | تشريح':'')+' | '+batchDeathId);
+    toast('✅ تم تسجيل نفوق '+ar(ok)+' حيوان — '+batchDeathId);
   }
   else if(action==='sell'){
     var date=document.getElementById('b-date')?.value||todayStr();
