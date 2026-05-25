@@ -66,10 +66,8 @@ function renderFilters(){
   var s=getSettings();
   var fb=document.getElementById('filters-bar');
   if(!fb)return;
-  var breeds=[...new Set(animals.map(function(a){return a.breed;}))].filter(Boolean).sort();
   // Breed list from loaded animals
   var breedList=[...new Set(animals.map(function(a){return a.breed;}).filter(Boolean))].sort();
-  var genderOptions=['all','male','female'];
 
   fb.innerHTML=
     '<div class="row g-2 align-items-end">'+
@@ -321,7 +319,6 @@ window.doBulk=function(action){
     var barns=['ج١ع١','ج١ع٢','ج٢ع١','ج٢ع٢','ج٣ع١','ج٣ع٢','ج٤ع١','ج٤ع٢','ج٥ع١','ج٥ع٢'];
     var allBreeds=s.goatBreeds.concat(s.sheepBreeds);
     window._doBulkEdit=function(){execBulk('edit');};
-    window._doBulkEdit=function(){execBulk('edit');};
     showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:560px;max-height:90vh;overflow-y:auto">'+
       '<h4><i class="bi bi-pencil-square" style="color:var(--blue)"></i> تعديل بيانات الحيوان — '+cnt+' حيوان</h4>'+
       '<div class="mb-3 p-3" style="background:rgba(33,150,243,.06);border:1px solid rgba(33,150,243,.2);border-radius:10px;font-size:.82rem">'+
@@ -551,7 +548,7 @@ window.execBulk=async function(action){
         ok++;
       }catch(e){}
     }
-    if(totalLoss>0){
+    if(ok>0 && totalLoss>0){
       try{
         await fbPost('finance',{
           date:date,type:'loss',category:'نفوق حيوانات',
@@ -752,7 +749,7 @@ window.submitDeath=async function(){
   var notes=document.getElementById('d-notes')?.value.trim()||null;
 
   if(!id){toast('اختر حيواناً','error');return;}
-  if(!reason){toast('حدد سبب الوفاة','error');return;}
+  if(!date){toast('حدد تاريخ النفوق','error');return;}
 
   var patch={
     status:'dead',
@@ -874,6 +871,7 @@ window.openMarkDeathSingle=function(id,labelEnc){
 };
 window.submitDeathSingle=async function(id){
   var date=document.getElementById('ds-date').value;
+  if(!date){toast('حدد تاريخ النفوق','error');return;}
   var time=document.getElementById('ds-time')?.value||'';
   var reason=document.getElementById('ds-reason')?.value||'غير معروف';
   var autopsy=document.getElementById('ds-autopsy')?.value==='yes';
