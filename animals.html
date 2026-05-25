@@ -129,8 +129,7 @@ function renderFilters(){
       '<div class="col-md-2 d-flex gap-2 flex-wrap">'+
         (can('animals')?
           '<button class="action-btn primary flex-grow-1" onclick="openAddAnimal()"><i class="bi bi-plus-lg"></i> إضافة</button>'+
-          '<button class="action-btn" onclick="openUnifiedBirthModal(\'goat\')" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.3);color:var(--yellow)" data-hint="تسجيل مواليد"><i class="bi bi-stars"></i></button>'+
-          '<button class="action-btn danger" onclick="openMarkDeath()" data-hint="تسجيل نفوق"><i class="bi bi-x-octagon"></i></button>':'')+
+          '<button class="action-btn" onclick="openUnifiedBirthModal(\'goat\')" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.3);color:var(--yellow)" data-hint="تسجيل مواليد"><i class="bi bi-stars"></i></button>'+ '<button class="action-btn danger" onclick="openMarkDeath()" data-hint="تسجيل نفوق"><i class="bi bi-x-octagon"></i></button>':'')+
         (can('admin')?'<button class="action-btn" onclick="openResetModal()" style="background:rgba(156,39,176,.1);border-color:rgba(156,39,176,.3);color:var(--purple)" data-hint="إعادة تعيين"><i class="bi bi-arrow-counterclockwise"></i></button>':'')+
       '</div>'+
     '</div>';
