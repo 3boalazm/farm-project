@@ -20,6 +20,7 @@
     <small style="font-size:.72rem;color:var(--text-muted)">إشراف: لواء أحمد رجب نوح | تطوير: جندي مصطفى محمد إبراهيم</small>
   </footer>
 </div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="config.js"></script>
 <script src="firebase.js"></script>
 <script src="nav.js"></script>
@@ -214,7 +215,7 @@ function renderAnimals(){
     '<small class="text-gray">يُعرض '+ar(shown.length)+(list.length>shown.length?' من '+ar(list.length):'')+' حيوان (إجمالي: '+ar(animals.filter(function(a){return a.status==='alive';}).length)+')</small>'+
     '<div class="d-flex gap-2">'+
       '<button class="action-btn sm" onclick="toggleSelectMode()" style="'+(  _selectMode?'background:rgba(33,150,243,.1);border-color:rgba(33,150,243,.4);color:var(--blue)':'')+'" data-hint="تحديد متعدد للعمليات الجماعية"><i class="bi bi-check2-square"></i> '+(_selectMode?ar(_selected.size)+' محدد':'تحديد')+'</button>'+
-      '<button class="action-btn sm" onclick="exportCSV()" data-hint="تصدير CSV"><i class="bi bi-filetype-csv"></i></button>'+
+      '<div class="position-relative" id="data-menu-wrap"><button class="action-btn sm" onclick="toggleDataMenu()" data-hint="استيراد وتصدير البيانات"><i class="bi bi-database-fill-gear"></i> بيانات <i class="bi bi-chevron-down" style="font-size:.6rem"></i></button><div id="data-menu" style="display:none;position:absolute;left:0;top:110%;background:var(--bg-2);border:1px solid var(--border-2);border-radius:12px;padding:6px;min-width:200px;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,.35)"><button class="action-btn sm" style="width:100%;justify-content:flex-start;margin-bottom:4px" onclick="exportExcel()"><i class="bi bi-file-earmark-excel-fill" style="color:#4caf50"></i> تصدير Excel (.xlsx)</button><button class="action-btn sm" style="width:100%;justify-content:flex-start;margin-bottom:4px" onclick="exportCSV()"><i class="bi bi-filetype-csv"></i> تصدير CSV</button><hr style="border-color:var(--border-3);margin:4px 0"><button class="action-btn sm" style="width:100%;justify-content:flex-start;margin-bottom:4px" onclick="openImportDialog()"><i class="bi bi-cloud-arrow-up-fill" style="color:var(--blue)"></i> استيراد من Excel</button><a href="import.html" class="action-btn sm" style="width:100%;justify-content:flex-start"><i class="bi bi-database-fill-add" style="color:var(--orange)"></i> محرك البيانات الكامل</a></div></div>'+
     '</div>'+
   '</div>';
 
@@ -954,14 +955,267 @@ window.submitReset=async function(){
   animals=await fbGet('animals');renderFilters();renderAnimals();
 };
 
+// ── Data Menu Toggle ────────────────────────────────
+window.toggleDataMenu=function(){
+  var m=document.getElementById('data-menu');
+  if(!m)return;
+  var open=m.style.display==='block';
+  m.style.display=open?'none':'block';
+  if(!open){
+    // Close on outside click
+    setTimeout(function(){
+      document.addEventListener('click',function handler(e){
+        if(!document.getElementById('data-menu-wrap').contains(e.target)){
+          m.style.display='none';
+          document.removeEventListener('click',handler);
+        }
+      });
+    },10);
+  }
+};
+
+// ── Export Excel (.xlsx) ─────────────────────────────
+window.exportExcel=function(){
+  document.getElementById('data-menu').style.display='none';
+  if(typeof XLSX==='undefined'){toast('مكتبة Excel غير متاحة','error');return;}
+  var list=animals;
+  var s=getSettings();
+  var wb=XLSX.utils.book_new();
+
+  // Sheet 1: All Animals
+  var rows=[
+    ['النوع','السلالة','الجنس','الغرض','الحالة','رقم الترقيم','الجمالون/العنبر',
+     'تاريخ الميلاد','الوزن (كجم)','ملاحظات','تاريخ الإضافة'],
+    ...list.map(function(a){
+      return [
+        a.species==='goat'?'ماعز':'أغنام',
+        a.breed||'',
+        a.gender==='male'?'ذكر':'أنثى',
+        {tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[a.purpose]||a.purpose||'',
+        a.status==='alive'?'حي':'نافق',
+        a.tag||'',
+        a.barn||'',
+        a.birth_date||'',
+        a.current_weight||a.weight||'',
+        a.notes||'',
+        (a.created_at||a.imported_at||'').slice(0,10),
+      ];
+    })
+  ];
+  var ws=XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=[{wch:8},{wch:12},{wch:8},{wch:10},{wch:8},{wch:12},{wch:10},{wch:14},{wch:10},{wch:20},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,ws,'القطيع الكامل');
+
+  // Sheet 2: Alive only breakdown
+  var alive=list.filter(function(a){return a.status==='alive';});
+  var goats=alive.filter(function(a){return a.species==='goat'&&a.purpose!=='birth';});
+  var sheep=alive.filter(function(a){return a.species==='sheep'&&a.purpose!=='birth';});
+  var births=alive.filter(function(a){return a.purpose==='birth';});
+  var allBreeds=[...s.goatBreeds,...s.sheepBreeds];
+  var summary=[
+    ['الفئة','الإجمالي','ذكور','إناث'],
+    ['ماعز (تربية وتسمين)',goats.length,goats.filter(function(a){return a.gender==='male';}).length,goats.filter(function(a){return a.gender==='female';}).length],
+    ['أغنام (تربية وتسمين)',sheep.length,sheep.filter(function(a){return a.gender==='male';}).length,sheep.filter(function(a){return a.gender==='female';}).length],
+    ['مواليد',births.length,births.filter(function(a){return a.gender==='male';}).length,births.filter(function(a){return a.gender==='female';}).length],
+    ['','','',''],
+    ['السلالة','الإجمالي','ذكور','إناث'],
+  ];
+  allBreeds.forEach(function(b){
+    var br=alive.filter(function(a){return a.breed===b;});
+    if(br.length)summary.push([b,br.length,br.filter(function(a){return a.gender==='male';}).length,br.filter(function(a){return a.gender==='female';}).length]);
+  });
+  var ws2=XLSX.utils.aoa_to_sheet(summary);
+  ws2['!cols']=[{wch:20},{wch:10},{wch:10},{wch:10}];
+  XLSX.utils.book_append_sheet(wb,ws2,'ملخص القطيع');
+
+  // Sheet 3: Barn distribution
+  var barnNames=['ج١ع١','ج١ع٢','ج٢ع١','ج٢ع٢','ج٣ع١','ج٣ع٢','ج٤ع١','ج٤ع٢','ج٥ع١','ج٥ع٢'];
+  var barnRows=[['الجمالون/العنبر','الإجمالي','ذكور','إناث','تربية','تسمين','مواليد','السلالات']];
+  barnNames.forEach(function(barn){
+    var ba=alive.filter(function(a){return a.barn===barn;});
+    if(ba.length||true)barnRows.push([
+      barn,ba.length,
+      ba.filter(function(a){return a.gender==='male';}).length,
+      ba.filter(function(a){return a.gender==='female';}).length,
+      ba.filter(function(a){return a.purpose==='tarbiya';}).length,
+      ba.filter(function(a){return a.purpose==='tasmeen';}).length,
+      ba.filter(function(a){return a.purpose==='birth';}).length,
+      [...new Set(ba.map(function(a){return a.breed;}))].join('، '),
+    ]);
+  });
+  var ws3=XLSX.utils.aoa_to_sheet(barnRows);
+  ws3['!cols']=[{wch:12},{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:25}];
+  XLSX.utils.book_append_sheet(wb,ws3,'توزيع الجمالونات');
+
+  XLSX.writeFile(wb,'animals-'+todayStr()+'.xlsx');
+  logActivity('export','animals','تصدير Excel القطيع: '+ar(list.length)+' حيوان');
+  toast('تم تصدير '+ar(list.length)+' حيوان إلى Excel ✓');
+};
+
 // ── Export CSV ───────────────────────────────────────
 window.exportCSV=function(){
+  document.getElementById('data-menu').style.display='none';
   var list=animals;
-  var rows=[['الرقم','النوع','السلالة','الجنس','الغرض','الحالة','الترقيم','الجمالون','تاريخ الميلاد']];
-  list.forEach(function(a,i){rows.push([ar(i+1),a.species==='goat'?'ماعز':'أغنام',a.breed||'',a.gender==='male'?'ذكر':'أنثى',{tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[a.purpose]||a.purpose,a.status==='alive'?'حي':'نافق',a.tag||'',a.barn||'',a.birth_date||'']);});
+  var rows=[['النوع','السلالة','الجنس','الغرض','الحالة','الترقيم','الجمالون','تاريخ الميلاد','الوزن','ملاحظات']];
+  list.forEach(function(a){rows.push([
+    a.species==='goat'?'ماعز':'أغنام',a.breed||'',
+    a.gender==='male'?'ذكر':'أنثى',
+    {tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[a.purpose]||a.purpose,
+    a.status==='alive'?'حي':'نافق',
+    a.tag||'',a.barn||'',a.birth_date||'',a.current_weight||'',a.notes||'',
+  ]);});
   var csv=rows.map(function(r){return r.map(function(v){return'"'+v+'"';}).join(',');}).join('\n');
-  var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download='animals-'+todayStr()+'.csv';a.click();
-  toast('تم التصدير ('+ar(list.length)+' حيوان)');
+  var el=document.createElement('a');
+  el.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
+  el.download='animals-'+todayStr()+'.csv';el.click();
+  toast('تم تصدير CSV ('+ar(list.length)+' حيوان)');
+};
+
+// ── Import Dialog ─────────────────────────────────────
+window.openImportDialog=function(){
+  document.getElementById('data-menu').style.display='none';
+  if(typeof XLSX==='undefined'){toast('جاري تحميل مكتبة Excel...','info');setTimeout(openImportDialog,1500);return;}
+  showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:500px">'+
+    '<h4><i class="bi bi-cloud-arrow-up-fill accent-text"></i> استيراد بيانات القطيع من Excel</h4>'+
+    '<div class="mb-3 p-3" style="background:rgba(0,230,118,.06);border:1px solid rgba(0,230,118,.2);border-radius:10px;font-size:.82rem">'+
+      '<div class="fw-bold green-text mb-2"><i class="bi bi-info-circle-fill me-1"></i>تعليمات الاستيراد</div>'+
+      '<div>أعمدة مدعومة: <strong>النوع، السلالة، الجنس، الغرض، الحالة، رقم الترقيم، الجمالون، تاريخ الميلاد، الوزن، ملاحظات</strong></div>'+
+      '<div class="mt-1 text-gray">الأعمدة الإلزامية: النوع (goat/ماعز — sheep/أغنام)، السلالة، الجنس (male/female أو ذكر/أنثى)، الغرض (tarbiya/birth/tasmeen)</div>'+
+    '</div>'+
+    '<div id="imp-drop" style="border:2px dashed var(--border-2);border-radius:12px;padding:28px;text-align:center;cursor:pointer;transition:.2s" '+
+      'onclick="document.getElementById('imp-file').click()" '+
+      'ondragover="event.preventDefault();this.style.borderColor='var(--orange)'" '+
+      'ondragleave="this.style.borderColor='var(--border-2)'" '+
+      'ondrop="event.preventDefault();this.style.borderColor='var(--border-2)';_handleImpDrop(event)">'+
+      '<i class="bi bi-file-earmark-excel-fill" style="font-size:2.2rem;color:#4caf50;display:block;margin-bottom:10px"></i>'+
+      '<div class="fw-bold">اسحب ملف Excel هنا أو اضغط للاختيار</div>'+
+      '<small class="text-gray">.xlsx / .xls فقط</small>'+
+    '</div>'+
+    '<input type="file" id="imp-file" accept=".xlsx,.xls" style="display:none" onchange="_handleImpFile(this)">'+
+    '<div id="imp-preview" class="mt-3"></div>'+
+    '<div class="d-flex gap-2 justify-content-end mt-3">'+
+      '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
+      '<a href="import.html" class="action-btn"><i class="bi bi-database-fill-gear me-1"></i>محرك البيانات الكامل</a>'+
+    '</div>'+
+  '</div>');
+};
+
+window._handleImpDrop=function(e){var f=e.dataTransfer.files[0];if(f)_parseImpFile(f);};
+window._handleImpFile=function(inp){if(inp.files[0])_parseImpFile(inp.files[0]);};
+
+var _NORM={
+  species:  {goat:'goat',sheep:'sheep','ماعز':'goat','أغنام':'sheep'},
+  gender:   {male:'male',female:'female','ذكر':'male','أنثى':'female'},
+  purpose:  {tarbiya:'tarbiya',tasmeen:'tasmeen',birth:'birth','تربية':'tarbiya','تسمين':'tasmeen','مواليد':'birth'},
+  status:   {alive:'alive',dead:'dead','حي':'alive','نافق':'dead','':'alive'},
+};
+var _impRows=[];
+
+window._parseImpFile=function(file){
+  var prev=document.getElementById('imp-preview');
+  prev.innerHTML='<div class="text-center py-2"><div class="spinner"></div><p class="text-gray mt-1">جاري القراءة...</p></div>';
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    try{
+      var wb=XLSX.read(ev.target.result,{type:'binary',cellDates:true});
+      var ws=wb.Sheets[wb.SheetNames[0]];
+      var rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      if(!rows||rows.length<2){prev.innerHTML='<div class="red-text">الملف فارغ</div>';return;}
+      var headers=rows[0].map(function(h){return String(h||'').trim();});
+      // Auto-map
+      var ALIASES={
+        species:['النوع','species','type'],gender:['الجنس','gender','sex'],
+        breed:['السلالة','breed'],purpose:['الغرض','purpose'],
+        status:['الحالة','status'],tag:['الترقيم','رقم الترقيم','tag'],
+        barn:['الجمالون','العنبر','barn','section'],
+        birth_date:['تاريخ الميلاد','birth_date','dob'],
+        current_weight:['الوزن','weight','current_weight'],
+        notes:['ملاحظات','notes'],
+      };
+      var colMap={};
+      headers.forEach(function(h,i){
+        var hn=h.toLowerCase();
+        Object.keys(ALIASES).forEach(function(field){
+          ALIASES[field].forEach(function(alias){
+            if(hn===alias.toLowerCase()&&colMap[field]===undefined)colMap[field]=i;
+          });
+        });
+      });
+      // Parse rows
+      _impRows=[];
+      var errs=0;
+      rows.slice(1).forEach(function(row,ri){
+        if(!row.some(function(c){return c!=='';}))return;
+        var d={};var rowErr=[];
+        Object.keys(colMap).forEach(function(field){
+          var val=String(row[colMap[field]]||'').trim();
+          if(_NORM[field]){var n=_NORM[field][val]||_NORM[field][val.toLowerCase()];if(n!==undefined)val=n;}
+          if(field==='birth_date'&&val instanceof Date)val=val.toISOString().slice(0,10);
+          if(field==='current_weight'&&val){var w=parseFloat(val);val=(isNaN(w)||w<=0||w>500)?'':w;}
+          if(val!==''&&val!==undefined)d[field]=val;
+        });
+        if(!d.species)rowErr.push('النوع');
+        if(!d.breed)rowErr.push('السلالة');
+        if(!d.gender)rowErr.push('الجنس');
+        if(!d.purpose)rowErr.push('الغرض');
+        if(!d.status)d.status='alive';
+        _impRows.push({data:d,errors:rowErr,row:ri+2});
+        if(rowErr.length)errs++;
+      });
+      var ok=_impRows.filter(function(r){return!r.errors.length;}).length;
+      prev.innerHTML=
+        '<div class="d-flex gap-2 mb-2 flex-wrap">'+
+          '<span class="type-badge badge-tarbiya"><i class="bi bi-check-circle-fill me-1"></i>صالح: '+ar(ok)+'</span>'+
+          (errs?'<span class="type-badge badge-danger"><i class="bi bi-x-circle-fill me-1"></i>أخطاء: '+ar(errs)+'</span>':'')+
+          '<span class="type-badge badge-gray">الإجمالي: '+ar(_impRows.length)+'</span>'+
+        '</div>'+
+        (errs?'<div class="text-gray mb-2" style="font-size:.78rem">الصفوف ذات الأخطاء ستُتجاهل (أعمدة ناقصة: '+['النوع','السلالة','الجنس','الغرض'].join('، ')+')</div>':'')+
+        '<div class="table-responsive" style="max-height:160px;overflow-y:auto">'+
+          '<table class="tbl" style="font-size:.74rem"><thead><tr>'+
+            '<th>صف</th><th>النوع</th><th>السلالة</th><th>الجنس</th><th>الغرض</th><th>الترقيم</th><th>الجمالون</th><th>حالة</th>'+
+          '</tr></thead><tbody>'+
+          _impRows.slice(0,8).map(function(r){
+            return '<tr style="'+(r.errors.length?'background:rgba(244,67,54,.05)':'')+'">'+
+              '<td class="text-gray">'+ar(r.row)+'</td>'+
+              '<td>'+({goat:'🐐ماعز',sheep:'🐑أغنام'}[r.data.species]||r.data.species||'—')+'</td>'+
+              '<td>'+(r.data.breed||'—')+'</td>'+
+              '<td>'+({male:'ذكر',female:'أنثى'}[r.data.gender]||r.data.gender||'—')+'</td>'+
+              '<td>'+({tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[r.data.purpose]||r.data.purpose||'—')+'</td>'+
+              '<td class="text-gray">'+(r.data.tag||'—')+'</td>'+
+              '<td class="text-gray">'+(r.data.barn||'—')+'</td>'+
+              '<td>'+(r.errors.length?'<span class="red-text">❌</span>':'<span class="green-text">✅</span>')+'</td>'+
+            '</tr>';
+          }).join('')+
+          (_impRows.length>8?'<tr><td colspan="8" class="text-center text-gray">+ '+ar(_impRows.length-8)+' صف...</td></tr>':'')+
+        '</tbody></table></div>'+
+        (ok>0?
+          '<button class="action-btn primary mt-2" style="width:100%" onclick="_doImport()">'+
+            '<i class="bi bi-cloud-arrow-up-fill me-1"></i>رفع '+ar(ok)+' حيوان للنظام'+
+          '</button>':'<div class="text-gray text-center mt-2">لا توجد صفوف صالحة للرفع</div>');
+    }catch(e){prev.innerHTML='<div class="red-text"><i class="bi bi-exclamation-triangle-fill me-1"></i>خطأ في قراءة الملف: '+e.message+'</div>';}
+  };
+  reader.readAsBinaryString(file);
+};
+
+window._doImport=async function(){
+  var valid=_impRows.filter(function(r){return!r.errors.length;});
+  if(!valid.length){toast('لا توجد بيانات صالحة','error');return;}
+  if(!confirm('رفع '+ar(valid.length)+' حيوان لقاعدة البيانات؟'))return;
+  var prev=document.getElementById('imp-preview');
+  prev.innerHTML='<div class="text-center py-2"><div class="spinner"></div><p class="text-gray mt-1">جاري الرفع...</p></div>';
+  var ok=0,failed=0;
+  for(var i=0;i<valid.length;i++){
+    try{
+      await fbPost('animals',Object.assign({},valid[i].data,{status:valid[i].data.status||'alive',created_at:todayStr(),imported_at:todayStr()}));
+      ok++;
+    }catch(e){failed++;}
+  }
+  await logActivity('add','animals','استيراد Excel من صفحة القطيع: '+ar(ok)+' حيوان');
+  fbCacheInvalidate('animals');
+  prev.innerHTML='<div style="background:rgba(0,230,118,.08);border:1px solid rgba(0,230,118,.3);border-radius:10px;padding:12px;text-align:center">'+
+    '<div class="fw-bold green-text">✅ تم رفع '+ar(ok)+' حيوان بنجاح'+(failed?' (فشل: '+ar(failed)+')':'')+'</div>'+
+    '<button class="action-btn primary mt-2" onclick="closeModal();location.reload()"><i class="bi bi-arrow-repeat me-1"></i>تحديث القائمة</button>'+
+  '</div>';
 };
 </script>
 </body>
