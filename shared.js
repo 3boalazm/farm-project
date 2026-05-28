@@ -262,8 +262,14 @@ function renderPageHeader(title, subtitle='', actions=''){
 }
 
 // ── LOADING / EMPTY ───────────────────────────────────────
-function renderLoading(el){
-  el.innerHTML=`<div class="text-center py-5"><div class="spinner mb-3"></div><div class="text-gray">جاري التحميل...</div></div>`;
+function renderLoading(el, rows) {
+  if (!el) return;
+  rows = rows || 4;
+  var skRow = '<div class="skeleton" style="height:52px;margin-bottom:10px"></div>';
+  el.innerHTML = '<div style="padding:16px">' +
+    '<div class="skeleton" style="height:28px;width:35%;margin-bottom:20px"></div>' +
+    skRow.repeat(rows) +
+  '</div>';
 }
 function renderEmpty(el, icon, msg, btnHtml=''){
   el.innerHTML=`<div class="empty-state"><i class="bi ${icon}"></i><p>${msg}</p>${btnHtml}</div>`;
@@ -601,6 +607,57 @@ window._ubSubmit=async function(){
 };
 
 
+
+// ── M3 Progress Indicators ────────────────────────────
+// renderM3Progress(value 0-100, label, color, size='')
+window.renderM3Progress = function(value, label, color, size) {
+  color = color || 'var(--color-interactive)';
+  size  = size  || '';
+  value = Math.max(0, Math.min(100, value || 0));
+  return (
+    '<div style="--progress-fill:' + color + '">' +
+      (label ? '<div class="d-flex justify-content-between mb-1"><small class="text-gray">' + label + '</small><small style="color:' + color + ';font-weight:700">' + ar(Math.round(value)) + '٪</small></div>' : '') +
+      '<div class="m3-progress ' + size + '" role="progressbar" aria-valuenow="' + Math.round(value) + '" aria-valuemin="0" aria-valuemax="100" aria-label="' + (label||'تقدم') + '">' +
+        '<div class="m3-progress-fill" style="width:' + value + '%"></div>' +
+      '</div>' +
+    '</div>'
+  );
+};
+
+// renderM3Circular(value 0-100, size=48, color, label)
+window.renderM3Circular = function(value, size, color, label) {
+  size  = size  || 48;
+  color = color || 'var(--color-interactive)';
+  value = Math.max(0, Math.min(100, value || 0));
+  var r   = (size - 6) / 2;
+  var circ = 2 * Math.PI * r;
+  var offset = circ - (value / 100) * circ;
+  return (
+    '<div class="m3-circular" style="width:' + size + 'px;height:' + size + 'px" role="img" aria-label="' + (label||'تقدم') + ' ' + Math.round(value) + '٪">' +
+      '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">' +
+        '<circle class="m3-circular-track" cx="' + (size/2) + '" cy="' + (size/2) + '" r="' + r + '" stroke-width="5"/>' +
+        '<circle class="m3-circular-fill" cx="' + (size/2) + '" cy="' + (size/2) + '" r="' + r + '" stroke="' + color + '" stroke-width="5" ' +
+          'stroke-dasharray="' + circ.toFixed(1) + '" stroke-dashoffset="' + offset.toFixed(1) + '"/>' +
+      '</svg>' +
+      '<div style="position:absolute;font-size:' + Math.round(size/4) + 'px;font-weight:800;color:' + color + '">' + ar(Math.round(value)) + '</div>' +
+    '</div>'
+  );
+};
+
+// renderM3Steps(current, total, labels[])
+window.renderM3Steps = function(current, total, labels) {
+  var html = '<div class="m3-steps mb-1">';
+  for (var i = 0; i < total; i++) {
+    var cls = i < current ? 'done' : i === current ? 'active' : '';
+    html += '<div class="m3-step ' + cls + '" title="' + (labels && labels[i] ? labels[i] : (i+1)) + '"></div>';
+  }
+  html += '</div>';
+  if (labels) {
+    html += '<small class="text-gray">' + (labels[Math.min(current, total-1)] || ('الخطوة ' + ar(current+1))) + '</small>';
+  }
+  return html;
+};
+
 // ── FAB Helper — Floating Action Button ───────────────
 function addFAB(label, actionFn, iconClass) {
   iconClass = iconClass || 'bi-plus-lg';
@@ -681,7 +738,7 @@ window.runGlobalSearch = function(q){
   _gsTimer = setTimeout(function(){ _execSearch(q.trim().toLowerCase()); }, 250);
 };
 
-function _execSearch(q){
+var _execSearch = function(q){
   var res = document.getElementById('gs-results');
   if(!res) return;
   if(!_gsCache){

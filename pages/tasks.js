@@ -542,4 +542,143 @@ window.useTemplate = function(idx) {
     title: tpl.title, category: tpl.category, priority: tpl.priority,
     recurring: tpl.recurring, recurring_days: tpl.recurring_days, date: todayStr(),
   });
+};(typeof renderM3Progress === 'function' ? renderM3Progress(stats.completion, null, stats.completion>=70?'var(--color-success)':stats.completion>=40?'var(--color-warning)':'var(--color-danger)', 'lg') : '') +
+        '<div class="col-6">' +
+          '<label for="t-pri">الأولوية</label>' +
+          '<select class="field" id="t-pri">' +
+            '<option value="high"' +   (d.priority === 'high'   ? ' selected' : '') + '>🔴 عالية</option>' +
+            '<option value="medium"' + ((d.priority||'medium') === 'medium' ? ' selected' : '') + '>🟡 متوسطة</option>' +
+            '<option value="low"' +    (d.priority === 'low'    ? ' selected' : '') + '>⚪ منخفضة</option>' +
+          '</select>' +
+        '</div>' +
+      '</div>' +
+
+      '<div class="row g-2">' +
+        '<div class="col-6">' +
+          '<label for="t-assign">المُكلَّف</label>' +
+          '<select class="field" id="t-assign" aria-label="الشخص المُكلَّف">' +
+            '<option value="">— غير محدد —</option>' +
+            workers.map(w => '<option value="' + w._id + '" data-name="' + (w.name||'') + '"' + (d.assigned_to === w._id ? ' selected' : '') + '>' + (w.name || w.email) + ' (' + (ROLES[w.role]?.label || w.role) + ')</option>').join('') +
+          '</select>' +
+        '</div>' +
+        '<div class="col-6">' +
+          '<label for="t-barn">الجمالون</label>' +
+          '<select class="field" id="t-barn">' +
+            '<option value="">— غير محدد —</option>' +
+            ['ج١ع١','ج١ع٢','ج٢ع١','ج٢ع٢','ج٣ع١','ج٣ع٢','ج٤ع١','ج٤ع٢','ج٥ع١','ج٥ع٢'].map(b => '<option value="' + b + '"' + (d.barn === b ? ' selected' : '') + '>' + b + '</option>').join('') +
+          '</select>' +
+        '</div>' +
+      '</div>' +
+
+      '<div class="row g-2">' +
+        '<div class="col-6">' +
+          '<label for="t-date">التاريخ *</label>' +
+          '<input type="date" class="field" id="t-date" value="' + (d.date || todayStr()) + '" aria-required="true">' +
+        '</div>' +
+        '<div class="col-6 d-flex align-items-center" style="padding-top:22px">' +
+          '<label class="d-flex align-items-center gap-2" style="cursor:pointer">' +
+            '<input type="checkbox" id="t-recurring"' + (d.recurring ? ' checked' : '') + ' style="width:18px;height:18px;accent-color:var(--orange)" onchange="document.getElementById(\'recur-row\').style.display=this.checked?\'block\':\'none\'">' +
+            '<span class="fw-bold">مهمة متكررة</span>' +
+          '</label>' +
+        '</div>' +
+      '</div>' +
+
+      '<div id="recur-row" style="display:' + (d.recurring ? 'block' : 'none') + ';background:rgba(255,193,7,.06);border:1px solid rgba(255,193,7,.2);border-radius:10px;padding:10px 12px;margin-top:8px">' +
+        '<label for="t-recur-days" style="font-size:.78rem">تكرار كل (أيام)</label>' +
+        '<input type="number" class="field" id="t-recur-days" value="' + (d.recurring_days || 1) + '" min="1" max="90" style="margin:0">' +
+      '</div>' +
+
+      '<label for="t-notes">ملاحظات</label>' +
+      '<textarea class="field" id="t-notes" rows="2" placeholder="تفاصيل إضافية...">' + (d.notes || '') + '</textarea>' +
+
+      '<div class="d-flex gap-2 justify-content-end mt-3">' +
+        '<button class="action-btn" onclick="closeModal()" aria-label="إلغاء">إلغاء</button>' +
+        '<button class="action-btn primary" onclick="submitTask(' + (d._id ? '\'' + d._id + '\'' : 'null') + ')" aria-label="حفظ المهمة"><i class="bi bi-check-lg" aria-hidden="true"></i> ' + (d._id ? 'حفظ التعديلات' : 'إضافة المهمة') + '</button>' +
+      '</div>' +
+    '</div>'
+  );
+};
+
+window.openEditTask = function(id) {
+  const t = _tasks.find(x => x._id === id);
+  if (t) openTaskModal(t);
+};
+
+window.submitTask = async function(editId) {
+  const title    = document.getElementById('t-title').value.trim();
+  const cat      = document.getElementById('t-cat').value;
+  const pri      = document.getElementById('t-pri').value;
+  const date     = document.getElementById('t-date').value;
+  const assignedTo = document.getElementById('t-assign').value;
+  const barn     = document.getElementById('t-barn').value;
+  const recurring = document.getElementById('t-recurring').checked;
+  const recurDays = parseInt(document.getElementById('t-recur-days')?.value) || 1;
+  const notes    = document.getElementById('t-notes').value.trim();
+
+  if (!title || !date || !cat) { toast('يرجى تعبئة الحقول الإلزامية', 'error'); return; }
+
+  const assignedName = assignedTo ? (_users.find(u => u._id === assignedTo)?.name || '') : '';
+  const data = {
+    title: title, category: cat, priority: pri, date: date,
+    assigned_to: assignedTo || null, assigned_to_name: assignedName,
+    barn: barn || null, notes: notes || null,
+    recurring: recurring, recurring_days: recurring ? recurDays : null,
+    is_template: recurring,  // recurring tasks act as templates
+    status: editId ? undefined : 'pending',
+  };
+
+  closeModal();
+  try {
+    if (editId) {
+      await fbPatch('daily_tasks', editId, data);
+      await logActivity('edit', 'daily_tasks', 'تعديل مهمة: ' + title);
+      toast('✅ تم التحديث');
+    } else {
+      data.created_at = new Date().toISOString();
+      data.created_by = getUser()?.name || getUser()?.email || '—';
+      await fbPost('daily_tasks', data);
+      await logActivity('add', 'daily_tasks', 'إضافة مهمة: ' + title + (recurring ? ' (متكررة)' : ''));
+      toast('✅ تمت الإضافة' + (recurring ? ' كمهمة متكررة' : ''));
+    }
+    await loadData();
+    render();
+  } catch(e) { toast('خطأ: ' + e.message, 'error'); }
+};
+
+// ══════════════════════════════════════════
+//  Templates Panel
+// ══════════════════════════════════════════
+window.openTemplatesPanel = function() {
+  showModal(
+    '<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:560px;max-height:88vh;overflow-y:auto">' +
+      '<h4><i class="bi bi-bookmark-fill accent-text" aria-hidden="true"></i> القوالب الجاهزة</h4>' +
+      '<p class="text-gray mb-3" style="font-size:.82rem">اختر قالباً لإنشاء مهمة بسرعة — يمكنك تعديل التفاصيل بعد ذلك</p>' +
+      TASK_TEMPLATES.map((tpl, i) => {
+        const cat = TASK_CATEGORIES[tpl.category] || TASK_CATEGORIES.other;
+        const pri = PRIORITY_LABELS[tpl.priority];
+        return '<div class="task-card" role="button" tabindex="0" onclick="useTemplate(' + i + ')" onkeydown="if(event.key===\'Enter\')useTemplate(' + i + ')" style="cursor:pointer" aria-label="استخدام قالب: ' + tpl.title + '">' +
+          '<div class="d-flex justify-content-between align-items-center gap-2">' +
+            '<div>' +
+              '<div class="fw-bold">' + cat.icon + ' ' + tpl.title + '</div>' +
+              '<small class="text-gray">أولوية ' + pri.label + ' | كل ' + tpl.recurring_days + ' يوم</small>' +
+            '</div>' +
+            '<span class="task-cat" style="background:' + cat.color + '22;color:' + cat.color + '">' + cat.label + '</span>' +
+          '</div>' +
+        '</div>';
+      }).join('') +
+      '<div class="d-flex justify-content-end mt-3">' +
+        '<button class="action-btn" onclick="closeModal()" aria-label="إغلاق">إغلاق</button>' +
+      '</div>' +
+    '</div>'
+  );
+};
+
+window.useTemplate = function(idx) {
+  const tpl = TASK_TEMPLATES[idx];
+  if (!tpl) return;
+  closeModal();
+  openTaskModal({
+    title: tpl.title, category: tpl.category, priority: tpl.priority,
+    recurring: tpl.recurring, recurring_days: tpl.recurring_days, date: todayStr(),
+  });
 };

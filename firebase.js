@@ -121,14 +121,17 @@ function fbUrl(path,id=''){
 }
 
 // SessionStorage cache for fbGet (TTL: 45s, persists across page navigations)
-const _fbCacheTTL=45000;
+const _fbCacheTTL=180000; // 3 min — stable data like animals/breeds
 function _fbCacheKey(p){return '_fbc_'+p;}
 function _fbCacheGet(p){
   try{
     const raw=sessionStorage.getItem(_fbCacheKey(p));
     if(!raw)return null;
     const e=JSON.parse(raw);
-    if(Date.now()-e.ts>_fbCacheTTL){sessionStorage.removeItem(_fbCacheKey(p));return null;}
+    // Volatile collections get shorter TTL
+  const _volatileTTL = ['notifications','activity_log','daily_tasks'];
+  const _ttl = _volatileTTL.some(function(v){return p.startsWith(v);}) ? 30000 : _fbCacheTTL;
+  if(Date.now()-e.ts>_ttl){sessionStorage.removeItem(_fbCacheKey(p));return null;}
     return e.data;
   }catch(e){return null;}
 }

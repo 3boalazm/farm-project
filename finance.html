@@ -1,6 +1,15 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
+  <!-- Performance hints -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://farm-mz99-default-rtdb.europe-west1.firebasedatabase.app" crossorigin>
+  <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+  <link rel="dns-prefetch" href="https://aistudio.googleapis.com">
+  <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
+
 <script>
 (function(){
   var t=localStorage.getItem('farm_theme');
@@ -27,6 +36,8 @@
 <script src="firebase.js"></script>
 <script src="nav.js"></script>
 <script src="shared.js"></script>
+<script src="pages/datepicker.js" defer></script>
+<script src="pages/tour.js" defer></script>
 <script src="pages/finance.js"></script>
 </body>
 </html>

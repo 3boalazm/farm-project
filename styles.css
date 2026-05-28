@@ -1,4 +1,74 @@
 /* ══════════════════════════════════════════════════════
+   SEMANTIC DESIGN TOKENS — Three-Tier System
+   Tier 1: Global (raw values, in :root above)
+   Tier 2: Semantic (meaningful role → global value)
+   Tier 3: Component (specific use → semantic value)
+══════════════════════════════════════════════════════ */
+:root {
+  /* ── Tier 2: Semantic Tokens ─────────────────────── */
+  /* Status */
+  --color-success:         var(--green);
+  --color-warning:         var(--yellow);
+  --color-danger:          var(--red);
+  --color-info:            var(--blue);
+  --color-neutral:         var(--gray);
+  /* Interactive */
+  --color-interactive:     var(--orange);
+  --color-interactive-hover: color-mix(in srgb, var(--orange) 85%, white);
+  /* Text roles */
+  --color-text-primary:    var(--text);
+  --color-text-secondary:  var(--text-sub);
+  --color-text-tertiary:   var(--text-gray);
+  --color-text-disabled:   var(--text-muted);
+  /* Surface roles */
+  --surface-base:          var(--bg);
+  --surface-raised:        var(--bg-2);
+  --surface-overlay:       var(--bg-3);
+  --surface-sunken:        var(--bg-4);
+  /* Border roles */
+  --border-subtle:         var(--border-3);
+  --border-default:        var(--border);
+  --border-strong:         var(--border-2);
+  --border-interactive:    var(--color-interactive);
+  /* ── Tier 3: Component Tokens ────────────────────── */
+  /* Button */
+  --btn-primary-bg:        var(--color-interactive);
+  --btn-primary-text:      #ffffff;
+  --btn-primary-hover:     color-mix(in srgb, var(--color-interactive) 82%, white);
+  --btn-secondary-bg:      var(--surface-raised);
+  --btn-secondary-border:  var(--border-default);
+  /* Card */
+  --card-surface:          var(--surface-raised);
+  --card-border:           var(--border-default);
+  --card-radius:           14px;
+  --card-shadow-token:     var(--card-shadow);
+  /* Input */
+  --input-surface:         var(--input-bg);
+  --input-border-default:  var(--input-border);
+  --input-border-focus:    var(--color-interactive);
+  --input-radius:          10px;
+  --input-padding:         10px 14px;
+  /* Badge */
+  --badge-success-bg:      color-mix(in srgb, var(--color-success) 12%, transparent);
+  --badge-warning-bg:      color-mix(in srgb, var(--color-warning) 12%, transparent);
+  --badge-danger-bg:       color-mix(in srgb, var(--color-danger)  12%, transparent);
+  --badge-info-bg:         color-mix(in srgb, var(--color-info)    12%, transparent);
+  /* Progress */
+  --progress-track:        var(--surface-overlay);
+  --progress-fill:         var(--color-interactive);
+  --progress-height:       8px;
+  --progress-radius:       999px;
+  /* Motion (M3-inspired tokens) */
+  --motion-duration-fast:  150ms;
+  --motion-duration-base:  250ms;
+  --motion-duration-slow:  400ms;
+  --motion-easing-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --motion-easing-decel:    cubic-bezier(0, 0, 0.2, 1);
+  --motion-easing-accel:    cubic-bezier(0.4, 0, 1, 1);
+  --motion-easing-spring:   cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ══════════════════════════════════════════════════════
    THEME VARIABLES — DARK (DEFAULT)
 ══════════════════════════════════════════════════════ */
 :root {
@@ -252,6 +322,80 @@ html.light-mode, body.light-mode .farm-toast{box-shadow:0 6px 28px rgba(0,0,0,.1
 .notif-sound-dot{width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block;animation:pulse 1.5s infinite}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
 
+
+/* ══════════════════════════════════════════════════════
+   M3 PROGRESS INDICATORS — Material Design 3 Style
+══════════════════════════════════════════════════════ */
+/* Linear determinate */
+.m3-progress{
+  position:relative;height:var(--progress-height);border-radius:var(--progress-radius);
+  background:var(--progress-track);overflow:hidden;
+}
+.m3-progress-fill{
+  height:100%;border-radius:var(--progress-radius);
+  background:var(--progress-fill);
+  transition:width var(--motion-duration-slow) var(--motion-easing-standard);
+  position:relative;overflow:hidden;
+}
+/* M3 waveform shimmer on fill */
+.m3-progress-fill::after{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(90deg,
+    transparent 0%,
+    rgba(255,255,255,.28) 40%,
+    rgba(255,255,255,.45) 50%,
+    rgba(255,255,255,.28) 60%,
+    transparent 100%
+  );
+  animation:m3-wave-shimmer 1.8s var(--motion-easing-standard) infinite;
+  border-radius:inherit;
+}
+@keyframes m3-wave-shimmer{
+  0%  { transform:translateX(-100%); }
+  100%{ transform:translateX(300%); }
+}
+/* Thicker variant (M3 large) */
+.m3-progress.lg{ height:14px; }
+.m3-progress.sm{ height:4px;  }
+/* Indeterminate (loading) */
+.m3-progress.indeterminate .m3-progress-fill{
+  width:40%!important;
+  animation:m3-indeterminate 1.5s var(--motion-easing-standard) infinite;
+}
+@keyframes m3-indeterminate{
+  0%  { left:-40%;  right:100%; }
+  50% { left:40%;   right:20%;  }
+  100%{ left:100%;  right:-40%; }
+}
+/* Circular */
+.m3-circular{
+  position:relative;display:inline-flex;align-items:center;justify-content:center;
+}
+.m3-circular svg{transform:rotate(-90deg);}
+.m3-circular-track{ fill:none; stroke:var(--progress-track); }
+.m3-circular-fill{
+  fill:none;stroke:var(--progress-fill);
+  stroke-linecap:round;
+  transition:stroke-dashoffset var(--motion-duration-slow) var(--motion-easing-standard);
+}
+/* Step-based progress (Chakra-style) */
+.m3-steps{display:flex;gap:4px;align-items:center;}
+.m3-step{flex:1;height:6px;border-radius:var(--progress-radius);background:var(--progress-track);transition:.3s;}
+.m3-step.done{background:var(--color-success);}
+.m3-step.active{background:var(--color-interactive);
+  animation:m3-wave-shimmer 1.8s var(--motion-easing-standard) infinite;}
+/* Waveform SVG animation (M3 expressive) */
+.m3-waveform{width:100%;height:24px;overflow:hidden;}
+.m3-waveform path{
+  fill:none;stroke:var(--progress-fill);stroke-width:2.5;stroke-linecap:round;
+  animation:m3-wave-path 1.2s var(--motion-easing-standard) infinite;
+}
+@keyframes m3-wave-path{
+  0%  { d:path("M0,12 Q15,4 30,12 Q45,20 60,12 Q75,4 90,12 Q105,20 120,12"); }
+  50% { d:path("M0,12 Q15,20 30,12 Q45,4  60,12 Q75,20 90,12 Q105,4  120,12"); }
+  100%{ d:path("M0,12 Q15,4 30,12 Q45,20 60,12 Q75,4 90,12 Q105,20 120,12"); }
+}
+
 /* ── Accessibility Utilities ────────────────────── */
 .visually-hidden,
 .sr-only {
@@ -286,3 +430,15 @@ button:not([aria-label]):not([aria-labelledby]) > i:only-child::after {
   clip: rect(0,0,0,0);
   position: absolute;
 }
+
+/* ── Skeleton Loading ─────────────────────────────────── */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: .4; }
+  50%       { opacity: .9; }
+}
+.skeleton {
+  background: var(--surface-overlay);
+  border-radius: 8px;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
