@@ -143,6 +143,57 @@ function renderSettings(){
     </div>
   </div>
 
+  <!-- Alert Thresholds -->
+  <div class="settings-section">
+    <h6 class="fw-bold mb-3"><i class="bi bi-bell-fill accent-text"></i> حدود التنبيهات</h6>
+    <p class="text-gray mb-3" style="font-size:.82rem">تحكم في متى تظهر التنبيهات — الأرقام بالأيام ما لم يُذكر غير ذلك</p>
+    <div class="row g-3">
+      <div class="col-md-4">
+        <label class="text-gray" style="font-size:.72rem;font-weight:600">تنبيه الولادة قبل (أيام)</label>
+        <input type="number" class="field" id="set-birthAlertDays" value="${s.birthAlertDays||7}" min="1" max="21">
+        <small class="text-gray" style="font-size:.68rem">الافتراضي: 7 أيام</small>
+      </div>
+      <div class="col-md-4">
+        <label class="text-gray" style="font-size:.72rem;font-weight:600">تنبيه انتهاء الدواء قبل (أيام)</label>
+        <input type="number" class="field" id="set-medExpiryAlertDays" value="${s.medExpiryAlertDays||30}" min="7" max="90">
+        <small class="text-gray" style="font-size:.68rem">الافتراضي: 30 يوم</small>
+      </div>
+      <div class="col-md-4">
+        <label class="text-gray" style="font-size:.72rem;font-weight:600">درجة حرارة التنبيه (°م)</label>
+        <input type="number" class="field" id="set-heatAlertTemp" value="${s.heatAlertTemp||35}" min="25" max="50">
+        <small class="text-gray" style="font-size:.68rem">الافتراضي: 35°م</small>
+      </div>
+      <div class="col-md-4">
+        <label class="text-gray" style="font-size:.72rem;font-weight:600">تنبيه المخزون المنخفض (%)</label>
+        <input type="number" class="field" id="set-lowStockPct" value="${s.lowStockPct||20}" min="5" max="50">
+        <small class="text-gray" style="font-size:.68rem">تنبيه عند الوصول لـ X% من الحد الأدنى</small>
+      </div>
+      <div class="col-md-4">
+        <label class="text-gray" style="font-size:.72rem;font-weight:600">تنبيه رجوع الشياع (أيام)</label>
+        <input type="number" class="field" id="set-heatReturnDays" value="${s.heatReturnDays||18}" min="14" max="25">
+        <small class="text-gray" style="font-size:.68rem">الافتراضي: 18 يوم بعد التقريع</small>
+      </div>
+      <div class="col-md-4">
+        <label class="text-gray" style="font-size:.72rem;font-weight:600">تنبيه البرودة (°م)</label>
+        <input type="number" class="field" id="set-coldAlertTemp" value="${s.coldAlertTemp||10}" min="0" max="20">
+        <small class="text-gray" style="font-size:.68rem">الافتراضي: 10°م</small>
+      </div>
+    </div>
+  </div>
+
+  <!-- Barn Capacity -->
+  <div class="settings-section">
+    <h6 class="fw-bold mb-3"><i class="bi bi-building accent-text"></i> سعة الجمالونات</h6>
+    <p class="text-gray mb-3" style="font-size:.82rem">حدد الطاقة الاستيعابية القصوى لكل جمالون — تُستخدم لحساب نسبة الإشغال في التقارير</p>
+    <div class="row g-3" id="barn-capacity-grid">
+      ${['ج١ع١','ج١ع٢','ج٢ع١','ج٢ع٢','ج٣ع١','ج٣ع٢','ج٤ع١','ج٤ع٢','ج٥ع١','ج٥ع٢'].map(function(barn){
+        var cap=(s.barnCapacity||{})[barn]||200;
+        return '<div class="col-6 col-md-3 col-lg-2"><label class="text-gray" style="font-size:.72rem;font-weight:600">'+barn+'</label>'+
+               '<input type="number" class="field" id="barn-cap-'+barn+'" value="'+cap+'" min="10" max="2000"></div>';
+      }).join('')}
+    </div>
+  </div>
+
   <div class="d-flex justify-content-end mt-3">
     <button class="action-btn primary" onclick="saveAll()" style="padding:10px 26px"><i class="bi bi-floppy-fill"></i> حفظ جميع الإعدادات</button>
   </div>`;
@@ -158,6 +209,20 @@ function saveAll(){
   s.pregnancyDays=parseInt(document.getElementById('set-pregnancyDays').value)||150;
   s.vaccinationAlertDays=parseInt(document.getElementById('set-vaccinationAlertDays').value)||7;
   s.weaningDays=parseInt(document.getElementById('set-weaningDays').value)||60;
+  // Alert thresholds
+  s.birthAlertDays=parseInt(document.getElementById('set-birthAlertDays')?.value)||7;
+  s.medExpiryAlertDays=parseInt(document.getElementById('set-medExpiryAlertDays')?.value)||30;
+  s.heatAlertTemp=parseInt(document.getElementById('set-heatAlertTemp')?.value)||35;
+  s.coldAlertTemp=parseInt(document.getElementById('set-coldAlertTemp')?.value)||10;
+  s.lowStockPct=parseInt(document.getElementById('set-lowStockPct')?.value)||20;
+  s.heatReturnDays=parseInt(document.getElementById('set-heatReturnDays')?.value)||18;
+  // Barn capacity
+  const barnCap={};
+  ['ج١ع١','ج١ع٢','ج٢ع١','ج٢ع٢','ج٣ع١','ج٣ع٢','ج٤ع١','ج٤ع٢','ج٥ع١','ج٥ع٢'].forEach(function(barn){
+    const el=document.getElementById('barn-cap-'+barn);
+    if(el)barnCap[barn]=parseInt(el.value)||200;
+  });
+  s.barnCapacity=barnCap;
   saveSettings(s);
   logActivity('edit','settings','تعديل إعدادات المزرعة');
   toast('تم حفظ الإعدادات');

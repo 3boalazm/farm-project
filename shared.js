@@ -74,6 +74,9 @@ function renderNavbar(activePage=''){
         <button class="theme-btn d-none d-md-flex" onclick="toggleTheme()" id="theme-toggle-btn" title="تبديل المظهر">
           <i class="bi bi-circle-half" id="theme-icon"></i>
         </button>
+        <button class="menu-btn" onclick="openGlobalSearch()" title="بحث شامل (Ctrl+K)" style="color:var(--text-gray)">
+          <i class="bi bi-search"></i>
+        </button>
         <div style="position:relative">
           <a href="notifications.html" class="bell-btn" id="bell-btn" style="text-decoration:none" title="الإشعارات">
             <i class="bi bi-bell-fill"></i><span class="bell-badge" id="bell-badge" style="display:none">0</span>
@@ -87,8 +90,38 @@ function renderNavbar(activePage=''){
     </div>
   </nav>
   <div id="toast-wrap"></div>
-  <div id="modal-root"></div>`;
+  <div id="modal-root"></div>
+  <div id="offline-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9000;
+    background:rgba(244,67,54,.95);color:#fff;padding:10px 16px;text-align:center;
+    font-size:.82rem;font-weight:600;font-family:'Cairo',sans-serif;backdrop-filter:blur(4px);
+    border-top:1px solid rgba(255,255,255,.2)">
+    <i class="bi bi-wifi-off me-2"></i>أنت غير متصل بالإنترنت — البيانات محفوظة محلياً وستُزامَن عند الاتصال
+    <button onclick="document.getElementById('offline-banner').style.display='none'"
+      style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:6px;padding:2px 10px;margin-right:12px;cursor:pointer;font-family:'Cairo',sans-serif;font-size:.78rem">✕</button>
+  </div>
+  <!-- Global Search Overlay -->
+  <div id="gs-overlay" style="display:none;position:fixed;inset:0;z-index:8000;background:rgba(0,0,0,.75);
+    backdrop-filter:blur(6px)" onclick="closeGlobalSearch()">
+    <div onclick="event.stopPropagation()" style="max-width:600px;margin:80px auto 0;padding:0 16px">
+      <div style="background:var(--bg-2);border:1px solid var(--border-2);border-radius:18px;overflow:hidden;
+        box-shadow:0 24px 64px rgba(0,0,0,.5)">
+        <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border)">
+          <i class="bi bi-search" style="color:var(--orange);font-size:1.1rem;flex-shrink:0"></i>
+          <input id="gs-input" placeholder="ابحث في القطيع، السجلات الصحية، التكاثر..."
+            style="flex:1;background:none;border:none;outline:none;font-family:'Cairo',sans-serif;
+            font-size:.95rem;color:var(--text)" oninput="runGlobalSearch(this.value)" autocomplete="off">
+          <small style="color:var(--text-muted);flex-shrink:0">Esc للإغلاق</small>
+        </div>
+        <div id="gs-results" style="max-height:420px;overflow-y:auto;padding:8px"></div>
+      </div>
+    </div>
+  </div>\`;
   document.body.insertAdjacentHTML('afterbegin', html);
+  initOfflineDetection();
+  document.addEventListener('keydown', function(e){
+    if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();openGlobalSearch();}
+    if(e.key==='Escape'){closeGlobalSearch();}
+  });
 }
 
 // ── Theme Toggle ────────────────────────────────────────
@@ -556,3 +589,138 @@ window._ubSubmit=async function(){
     else setTimeout(()=>location.reload(),1200);
   }catch(e){toast('خطأ: '+e.message,'error');console.error(e);}
 };
+
+// ── Offline Detection ──────────────────────────────────
+function initOfflineDetection(){
+  function update(){
+    var banner=document.getElementById('offline-banner');
+    if(!banner)return;
+    banner.style.display=navigator.onLine?'none':'flex';
+    banner.style.justifyContent='center';
+    banner.style.alignItems='center';
+  }
+  window.addEventListener('online',  function(){ update(); toast('✅ عاد الاتصال بالإنترنت'); });
+  window.addEventListener('offline', function(){ update(); toast('⚠️ انقطع الاتصال — البيانات تُحفظ محلياً','error'); });
+  update();
+}
+
+// ── Global Search ──────────────────────────────────────
+var _gsCache = null;
+var _gsTimer = null;
+
+window.openGlobalSearch = function(){
+  var overlay = document.getElementById('gs-overlay');
+  if(!overlay) return;
+  overlay.style.display = 'block';
+  var inp = document.getElementById('gs-input');
+  if(inp){ inp.value = ''; inp.focus(); }
+  document.getElementById('gs-results').innerHTML =
+    '<div class="text-center py-4 text-gray" style="font-size:.82rem">' +
+    '<i class="bi bi-search d-block mb-2" style="font-size:1.5rem;opacity:.3"></i>' +
+    'ابحث عن حيوان بالترقيم أو السلالة أو الجمالون...' +
+    '</div>';
+  // Pre-load cache
+  if(!_gsCache && typeof fbGet === 'function'){
+    Promise.all([fbGet('animals'), fbGet('health'), fbGet('breeding')]).then(function(res){
+      _gsCache = { animals: res[0]||[], health: res[1]||[], breeding: res[2]||[] };
+    }).catch(function(){});
+  }
+};
+
+window.closeGlobalSearch = function(){
+  var overlay = document.getElementById('gs-overlay');
+  if(overlay) overlay.style.display = 'none';
+};
+
+window.runGlobalSearch = function(q){
+  clearTimeout(_gsTimer);
+  if(!q || q.length < 2){
+    document.getElementById('gs-results').innerHTML =
+      '<div class="text-center py-3 text-gray" style="font-size:.8rem">اكتب حرفين على الأقل للبحث</div>';
+    return;
+  }
+  _gsTimer = setTimeout(function(){ _execSearch(q.trim().toLowerCase()); }, 250);
+};
+
+function _execSearch(q){
+  var res = document.getElementById('gs-results');
+  if(!res) return;
+  if(!_gsCache){
+    res.innerHTML = '<div class="text-center py-3 text-gray"><div class="spinner" style="width:20px;height:20px;border-width:2px;margin:0 auto"></div><p class="mt-2">جاري التحميل...</p></div>';
+    Promise.all([fbGet('animals'), fbGet('health'), fbGet('breeding')]).then(function(data){
+      _gsCache = { animals: data[0]||[], health: data[1]||[], breeding: data[2]||[] };
+      _execSearch(q);
+    });
+    return;
+  }
+
+  var results = [];
+
+  // Search animals
+  (_gsCache.animals||[]).forEach(function(a){
+    var haystack = [a.tag, a.breed, a.barn, a.notes, a.species==='goat'?'ماعز':'أغنام',
+                    a.gender==='male'?'ذكر':'أنثى', a.purpose].filter(Boolean).join(' ').toLowerCase();
+    if(haystack.includes(q)){
+      var icon = a.species==='goat'?'🐐':'🐑';
+      var purposeL = {tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[a.purpose]||a.purpose||'';
+      results.push({
+        type:'animal', icon:icon,
+        title: a.breed + (a.tag?' #'+a.tag:''),
+        sub:  (a.gender==='male'?'ذكر':'أنثى') + ' | ' + purposeL + (a.barn?' | '+a.barn:'') + ' | ' + (a.status==='alive'?'حي':'نافق'),
+        color: a.status==='alive'?'var(--green)':'var(--red)',
+        href: 'animal-detail.html?id=' + a._id,
+      });
+    }
+  });
+
+  // Search health
+  (_gsCache.health||[]).forEach(function(r){
+    var haystack = [r.animal_tag, r.animal_breed, r.diagnosis, r.medication].filter(Boolean).join(' ').toLowerCase();
+    if(haystack.includes(q)){
+      results.push({
+        type:'health', icon:'💊',
+        title: (r.animal_tag||r.animal_breed||'—') + ': ' + (r.diagnosis||'—'),
+        sub:  r.medication + (r.date?' | '+r.date:''),
+        color: r.status==='active'?'var(--orange)':'var(--green)',
+        href: 'health.html',
+      });
+    }
+  });
+
+  // Search breeding
+  (_gsCache.breeding||[]).forEach(function(r){
+    var haystack = [r.female_tag, r.female_breed, r.male_tag].filter(Boolean).join(' ').toLowerCase();
+    if(haystack.includes(q)){
+      var statusL = {pregnant:'حامل',born:'ولدت',failed:'فشل',pending:'انتظار'}[r.status]||r.status||'';
+      results.push({
+        type:'breeding', icon:'🐣',
+        title: 'تكاثر: ' + (r.female_tag||r.female_breed||'—'),
+        sub:  statusL + (r.expected_birth?' | موعد: '+r.expected_birth:'') + (r.mating_date?' | تقريع: '+r.mating_date:''),
+        color:'var(--purple)',
+        href: 'breeding.html',
+      });
+    }
+  });
+
+  if(!results.length){
+    res.innerHTML = '<div class="text-center py-4 text-gray" style="font-size:.82rem"><i class="bi bi-search d-block mb-2" style="font-size:1.5rem;opacity:.3"></i>لا توجد نتائج لـ "' + q + '"</div>';
+    return;
+  }
+
+  var catLabels = { animal:'القطيع', health:'السجل الصحي', breeding:'التكاثر' };
+  var cats = [...new Set(results.map(function(r){return r.type;}))];
+  res.innerHTML = cats.map(function(cat){
+    var items = results.filter(function(r){return r.type===cat;}).slice(0,5);
+    return '<div style="padding:6px 8px"><div style="font-size:.72rem;font-weight:700;color:var(--text-muted);padding:4px 8px 6px">' + (catLabels[cat]||cat) + ' (' + ar(items.length) + ')</div>' +
+      items.map(function(item){
+        return '<a href="' + item.href + '" onclick="closeGlobalSearch()" style="text-decoration:none;display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;transition:.15s;margin-bottom:2px;color:var(--text)" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background=''">'+
+          '<span style="font-size:1.2rem;flex-shrink:0">' + item.icon + '</span>'+
+          '<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:.85rem">' + item.title + '</div>'+
+          '<small style="color:var(--text-muted)">' + item.sub + '</small></div>'+
+          '<i class="bi bi-chevron-left" style="color:var(--text-muted);font-size:.7rem;flex-shrink:0"></i>'+
+        '</a>';
+      }).join('') +
+    '</div>';
+  }).join('<div style="height:1px;background:var(--border-3);margin:4px 8px"></div>') +
+  '<div class="text-center" style="padding:8px;font-size:.72rem;color:var(--text-muted)">' + ar(results.length) + ' نتيجة</div>';
+}

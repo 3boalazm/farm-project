@@ -129,7 +129,8 @@ function renderFilters(){
       '</div>'+
       '<div class="col-md-2 d-flex gap-2 flex-wrap">'+
         (can('animals')?
-          '<button class="action-btn primary flex-grow-1" onclick="openAddAnimal()"><i class="bi bi-plus-lg"></i> إضافة</button>'+'<button class="action-btn" onclick="openUnifiedBirthModal(\'goat\')" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.3);color:var(--yellow)" data-hint="تسجيل مواليد"><i class="bi bi-stars"></i></button>'+'<button class="action-btn danger" onclick="openMarkDeath()" data-hint="تسجيل نفوق"><i class="bi bi-x-octagon"></i></button>':'')+
+          '<button class="action-btn primary" onclick="openAddAnimal()"><i class="bi bi-plus-lg"></i> إضافة</button>'+
+      '<button class="action-btn" onclick="openBatchEntry()" style="background:rgba(33,150,243,.1);border-color:rgba(33,150,243,.35);color:var(--blue)" data-hint="إضافة بالجملة"><i class="bi bi-stack"></i></button>'+'<button class="action-btn" onclick="openUnifiedBirthModal(\'goat\')" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.3);color:var(--yellow)" data-hint="تسجيل مواليد"><i class="bi bi-stars"></i></button>'+'<button class="action-btn danger" onclick="openMarkDeath()" data-hint="تسجيل نفوق"><i class="bi bi-x-octagon"></i></button>':'')+
         (can('admin')?'<button class="action-btn" onclick="openResetModal()" style="background:rgba(156,39,176,.1);border-color:rgba(156,39,176,.3);color:var(--purple)" data-hint="إعادة تعيين"><i class="bi bi-arrow-counterclockwise"></i></button>':'')+
       '</div>'+
     '</div>';
@@ -597,7 +598,14 @@ window.openAddAnimal=function(){
     '<label>السلالة</label><select class="field" id="m-breed">'+s.goatBreeds.map(function(b){return'<option>'+b+'</option>';}).join('')+'</select>'+
     '<div class="row g-2">'+
       '<div class="col-6"><label>الجنس</label><select class="field" id="m-gender"><option value="female">أنثى ♀</option><option value="male">ذكر ♂</option></select></div>'+
-      '<div class="col-6"><label>رقم الترقيم</label><input class="field" id="m-tag" placeholder="A-001"></div>'+
+      '<div class="col-6">'+
+      '<label>رقم الترقيم '+
+        '<button type="button" onclick="suggestTag()" class="action-btn sm" style="padding:1px 6px;font-size:.62rem;margin-right:4px">'+
+          '<i class="bi bi-magic"></i> تلقائي'+
+        '</button>'+
+      '</label>'+
+      '<input class="field" id="m-tag" placeholder="A-001" dir="ltr">'+
+    '</div>'+
     '</div>'+
     '<div class="row g-2">'+
       '<div class="col-6"><label>تاريخ الميلاد</label><input type="date" class="field" id="m-bdate" value="'+todayStr()+'"></div>'+
@@ -953,6 +961,141 @@ window.submitReset=async function(){
   }
   if(done)toast('تم تنفيذ العملية على '+ar(done)+' سجل');
   animals=await fbGet('animals');renderFilters();renderAnimals();
+};
+
+// ── Auto Tag Generation ───────────────────────────────
+window.suggestTag=function(){
+  var breed=document.getElementById('m-breed')?.value||'';
+  var gender=document.getElementById('m-gender')?.value||'male';
+  var species=document.getElementById('m-species')?.value||'goat';
+  if(!breed){toast('اختر السلالة أولاً','error');return;}
+  // Build prefix: first 2 chars of breed + gender initial
+  var prefix=breed.slice(0,2)+(gender==='male'?'-ذ-':'-إ-');
+  // Find max existing tag with this prefix
+  var existing=animals.filter(function(a){return a.tag&&a.tag.startsWith(prefix);})
+    .map(function(a){return parseInt((a.tag||'').replace(prefix,''))||0;})
+    .filter(function(n){return!isNaN(n);});
+  var nextNum=(existing.length?Math.max.apply(null,existing):0)+1;
+  var suggested=prefix+String(nextNum).padStart(3,'0');
+  var inp=document.getElementById('m-tag');
+  if(inp){inp.value=suggested;inp.style.borderColor='rgba(0,230,118,.5)';}
+  toast('ترقيم مقترح: '+suggested);
+};
+
+// ── Batch Entry Modal ──────────────────────────────────
+window.openBatchEntry=function(){
+  var s=getSettings();
+  var allBreeds=[...s.goatBreeds,...s.sheepBreeds];
+  var barns=['','ج١ع١','ج١ع٢','ج٢ع١','ج٢ع٢','ج٣ع١','ج٣ع٢','ج٤ع١','ج٤ع٢','ج٥ع١','ج٥ع٢'];
+  showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:520px">'+
+    '<h4><i class="bi bi-stack accent-text"></i> إضافة بالجملة</h4>'+
+    '<p class="text-gray mb-3" style="font-size:.82rem">أضف مجموعة حيوانات بنفس الصفات دفعة واحدة</p>'+
+    '<div class="row g-2">'+
+      '<div class="col-6">'+
+        '<label>النوع *</label>'+
+        '<select class="field" id="be-sp" onchange="_beUpdateBreeds()">'+
+          '<option value="goat">ماعز</option><option value="sheep">أغنام</option>'+
+        '</select>'+
+      '</div>'+
+      '<div class="col-6">'+
+        '<label>السلالة *</label>'+
+        '<select class="field" id="be-breed">'+
+          s.goatBreeds.map(function(b){return'<option>'+b+'</option>';}).join('')+
+        '</select>'+
+      '</div>'+
+    '</div>'+
+    '<div class="row g-2">'+
+      '<div class="col-6"><label>الجنس *</label><select class="field" id="be-gender"><option value="female">أنثى ♀</option><option value="male">ذكر ♂</option></select></div>'+
+      '<div class="col-6"><label>الغرض *</label><select class="field" id="be-purpose"><option value="tarbiya">تربية</option><option value="tasmeen">تسمين</option><option value="birth">مواليد</option></select></div>'+
+    '</div>'+
+    '<div class="row g-2">'+
+      '<div class="col-6"><label>الجمالون / العنبر</label><select class="field" id="be-barn">'+barns.map(function(b){return'<option value="'+b+'">'+( b||'— غير محدد —')+'</option>';}).join('')+'</select></div>'+
+      '<div class="col-6"><label>تاريخ الميلاد</label><input type="date" class="field" id="be-date" value=""></div>'+
+    '</div>'+
+    '<div class="row g-2">'+
+      '<div class="col-6"><label>الوزن (كجم) — اختياري</label><input type="number" class="field" id="be-weight" step="0.1" min="0" placeholder="45.0"></div>'+
+      '<div class="col-6"><label>ملاحظات</label><input class="field" id="be-notes" placeholder="اختياري"></div>'+
+    '</div>'+
+    '<div class="row g-2 mt-1" style="background:rgba(0,230,118,.06);border:1px solid rgba(0,230,118,.2);border-radius:10px;padding:10px;margin:0">'+
+      '<div class="col-6">'+
+        '<label>بادئة الترقيم (اختياري)</label>'+
+        '<input class="field" id="be-prefix" placeholder="SH-F-" dir="ltr" oninput="_bePreview()">'+
+      '</div>'+
+      '<div class="col-3">'+
+        '<label>يبدأ من رقم</label>'+
+        '<input type="number" class="field" id="be-start" value="1" min="1" oninput="_bePreview()">'+
+      '</div>'+
+      '<div class="col-3">'+
+        '<label class="fw-bold accent-text">العدد الإجمالي *</label>'+
+        '<input type="number" class="field" id="be-count" value="10" min="1" max="999" oninput="_bePreview()">'+
+      '</div>'+
+    '</div>'+
+    '<div id="be-preview" class="mt-2" style="font-size:.78rem;color:var(--text-gray);padding:6px 10px;background:var(--bg-hover);border-radius:8px;min-height:28px"></div>'+
+    '<div class="d-flex gap-2 justify-content-end mt-3">'+
+      '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
+      '<button class="action-btn primary" onclick="_beSubmit()" id="be-submit-btn">'+
+        '<i class="bi bi-cloud-arrow-up-fill me-1"></i>حفظ'+
+      '</button>'+
+    '</div>'+
+  '</div>');
+  _bePreview();
+};
+
+window._beUpdateBreeds=function(){
+  var s=getSettings();var sp=document.getElementById('be-sp')?.value;
+  var sel=document.getElementById('be-breed');
+  if(sel)sel.innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(function(b){return'<option>'+b+'</option>';}).join('');
+};
+
+window._bePreview=function(){
+  var prefix=document.getElementById('be-prefix')?.value||'';
+  var start=parseInt(document.getElementById('be-start')?.value)||1;
+  var count=parseInt(document.getElementById('be-count')?.value)||0;
+  var div=document.getElementById('be-preview');
+  if(!div)return;
+  if(!count){div.innerHTML='أدخل العدد';return;}
+  var examples=[];
+  for(var i=0;i<Math.min(3,count);i++)examples.push(prefix?(prefix+String(start+i).padStart(3,'0')):'بدون ترقيم');
+  if(count>3)examples.push('...');
+  div.innerHTML='<i class="bi bi-info-circle me-1"></i>سيتم إضافة <strong>'+ar(count)+'</strong> حيوان'+
+    (prefix?' | ترقيم: '+examples.join('، '):'');
+};
+
+window._beSubmit=async function(){
+  var sp=document.getElementById('be-sp').value;
+  var breed=document.getElementById('be-breed').value;
+  var gender=document.getElementById('be-gender').value;
+  var purpose=document.getElementById('be-purpose').value;
+  var barn=document.getElementById('be-barn').value||null;
+  var date=document.getElementById('be-date').value||null;
+  var weight=parseFloat(document.getElementById('be-weight').value)||null;
+  var notes=document.getElementById('be-notes').value.trim()||null;
+  var prefix=document.getElementById('be-prefix').value.trim();
+  var start=parseInt(document.getElementById('be-start').value)||1;
+  var count=parseInt(document.getElementById('be-count').value)||0;
+  if(!count||count<1){toast('أدخل عدداً صحيحاً','error');return;}
+  if(count>500&&!confirm('إضافة '+ar(count)+' حيوان دفعة واحدة؟ قد يستغرق وقتاً.')){return;}
+
+  var btn=document.getElementById('be-submit-btn');
+  if(btn){btn.disabled=true;btn.innerHTML='<div class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;margin-left:6px"></div> جاري الحفظ...';}
+
+  var ok=0,failed=0;
+  for(var i=0;i<count;i++){
+    var tag=prefix?(prefix+String(start+i).padStart(3,'0')):null;
+    try{
+      await fbPost('animals',{
+        species:sp,breed:breed,gender:gender,purpose:purpose,status:'alive',
+        tag:tag,barn:barn,birth_date:date,current_weight:weight,notes:notes,
+        created_at:todayStr(),batch_entry:true
+      });
+      ok++;
+    }catch(e){failed++;}
+  }
+  await logActivity('add','animals','إضافة بالجملة: '+ar(ok)+' '+breed+' ('+(gender==='male'?'ذكور':'إناث')+')');
+  fbCacheInvalidate('animals');
+  closeModal();
+  toast('✅ تم إضافة '+ar(ok)+' حيوان'+(failed?' (فشل: '+ar(failed)+')':''));
+  setTimeout(function(){location.reload();},1200);
 };
 
 // ── Data Menu Toggle ────────────────────────────────

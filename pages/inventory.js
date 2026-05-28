@@ -46,6 +46,7 @@ function renderInventoryPage(s){
       <button class="filter-btn${invTab==='meds'?' active':''}" onclick="invTab='meds';renderInventoryPage(getSettings())"><i class="bi bi-capsule"></i> الصيدلية (${meds.length})</button>
       <button class="filter-btn${invTab==='feeds'?' active':''}" onclick="invTab='feeds';renderInventoryPage(getSettings())"><i class="bi bi-bag-fill"></i> الأعلاف (${feeds.length})</button>
       <button class="filter-btn${invTab==='equip'?' active':''}" onclick="invTab='equip';renderInventoryPage(getSettings())"><i class="bi bi-tools"></i> المعدات (${equipment.length})</button>
+      <button class="filter-btn${invTab==='consumption'?' active':''}" onclick="invTab='consumption';renderInventoryPage(getSettings())" style="${invTab==='consumption'?'':''}"><i class="bi bi-bar-chart-fill"></i> استهلاك الأعلاف</button>
     </div>
     <div class="d-flex gap-2">
       ${invTab==='feeds'?`<button class="action-btn sm" onclick="showFCR()"><i class="bi bi-calculator"></i> FCR</button>`:''}
@@ -55,7 +56,8 @@ function renderInventoryPage(s){
 
   ${invTab==='meds'?renderMedsTable():''}
   ${invTab==='feeds'?renderFeedsTable(s):''}
-  ${invTab==='equip'?renderEquipTable():''}`;
+  ${invTab==='equip'?renderEquipTable():''}
+  ${invTab==='consumption'?renderConsumptionTab():''}`;
 }
 
 function renderMedsTable(){
@@ -263,4 +265,159 @@ window.exportInvCSV=function(){
   const csv=rows.map(r=>r.map(x=>`"${x}"`).join(',')).join('\n');
   const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download=`inventory-${invTab}-${todayStr()}.csv`;a.click();
   toast('تم التصدير');
+};
+
+// ══════════════════════════════════════════
+//  FEED INTAKE PER BARN (استهلاك الأعلاف)
+// ══════════════════════════════════════════
+var _consumption = [];
+
+function renderConsumptionTab() {
+  return `
+  <div class="wonder-card mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h6 class="fw-bold mb-0"><i class="bi bi-bar-chart-fill accent-text me-2"></i>تسجيل استهلاك الأعلاف اليومي</h6>
+      <button class="action-btn primary" onclick="openLogConsumption()">
+        <i class="bi bi-plus-lg"></i> تسجيل استهلاك
+      </button>
+    </div>
+    <p class="text-gray mb-3" style="font-size:.82rem">سجّل كمية العلف المستهلكة يومياً لكل جمالون — يساعد في حساب تكلفة التغذية ومعدل الاستهلاك</p>
+    <div id="consumption-records"><div class="text-center py-3"><div class="spinner"></div></div></div>
+  </div>`;
+}
+
+window.loadConsumptionRecords = async function() {
+  var el = document.getElementById('consumption-records');
+  if (!el) return;
+  try {
+    _consumption = await fbGet('feed_consumption');
+    _consumption.sort(function(a,b){return (b.date||'').localeCompare(a.date||'');});
+    if (!_consumption.length) {
+      el.innerHTML = '<div class="empty-state" style="padding:20px 0"><i class="bi bi-bar-chart" style="font-size:1.5rem;opacity:.3;display:block;margin-bottom:8px"></i><p style="font-size:.82rem">لا توجد سجلات استهلاك بعد<br>اضغط "تسجيل استهلاك" للبدء</p></div>';
+      return;
+    }
+
+    // Summary by barn (last 7 days)
+    var d7ago = new Date(); d7ago.setDate(d7ago.getDate()-7);
+    var recent = _consumption.filter(function(r){ return r.date >= d7ago.toISOString().slice(0,10); });
+    var barnTotals = {};
+    recent.forEach(function(r){
+      if(!barnTotals[r.barn]) barnTotals[r.barn] = 0;
+      barnTotals[r.barn] += +r.quantity_kg||0;
+    });
+
+    var summaryHTML = Object.keys(barnTotals).length ?
+      '<div class="mb-3"><h6 class="text-gray mb-2" style="font-size:.78rem">ملخص آخر 7 أيام:</h6>'+
+      '<div class="d-flex flex-wrap gap-2">' +
+      Object.keys(barnTotals).map(function(barn){
+        return '<span class="type-badge badge-gray"><i class="bi bi-building me-1"></i>'+barn+': <strong>'+barnTotals[barn].toFixed(1)+'</strong> كجم</span>';
+      }).join('') +
+      '</div></div>' : '';
+
+    el.innerHTML = summaryHTML +
+      '<div class="table-responsive"><table class="tbl" style="font-size:.8rem">'+
+        '<thead><tr><th>التاريخ</th><th>الجمالون</th><th>نوع العلف</th><th>الكمية (كجم)</th><th>مسجّل بواسطة</th><th>ملاحظات</th><th></th></tr></thead>'+
+        '<tbody>'+
+        _consumption.slice(0,30).map(function(r){
+          return '<tr>'+
+            '<td class="text-gray">'+( r.date||'—')+'</td>'+
+            '<td><span class="type-badge badge-gray">'+( r.barn||'—')+'</span></td>'+
+            '<td class="fw-bold">'+( r.feed_name||'—')+'</td>'+
+            '<td class="fw-bold green-text">'+ar(+(+r.quantity_kg||0).toFixed(1))+' كجم</td>'+
+            '<td class="text-gray">'+( r.recorded_by||'—')+'</td>'+
+            '<td class="text-gray" style="font-size:.75rem">'+( r.notes||'')+'</td>'+
+            '<td><button class="action-btn sm danger" onclick="delConsumption(\'' + r._id + '\')"><i class="bi bi-trash"></i></button></td>'+
+          '</tr>';
+        }).join('')+
+        '</tbody></table></div>';
+  } catch(e) {
+    el.innerHTML = '<div class="red-text">خطأ في تحميل البيانات: '+e.message+'</div>';
+  }
+};
+
+// Auto-load when consumption tab is active
+var _oldRenderInventoryPage = renderInventoryPage;
+
+// Hook into tab switch
+var _origRender = window.renderInventoryPage;
+setTimeout(function(){
+  var orig = window.renderInventoryPage;
+  if(orig) {
+    window.renderInventoryPage = function(s) {
+      orig(s);
+      if(invTab === 'consumption') {
+        setTimeout(function(){ window.loadConsumptionRecords && window.loadConsumptionRecords(); }, 100);
+      }
+    };
+  }
+}, 500);
+
+window.openLogConsumption = function() {
+  var s = getSettings();
+  var barnNames = ['ج١ع١','ج١ع٢','ج٢ع١','ج٢ع٢','ج٣ع١','ج٣ع٢','ج٤ع١','ج٤ع٢','ج٥ع١','ج٥ع٢'];
+  var feedNames = feeds.map(function(f){return f.name;});
+  var user = getUser();
+
+  showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:480px">'+
+    '<h4><i class="bi bi-bar-chart-fill accent-text me-2"></i>تسجيل استهلاك الأعلاف</h4>'+
+    '<div class="row g-2">'+
+      '<div class="col-6"><label>التاريخ *</label><input type="date" class="field" id="fc-date" value="'+todayStr()+'"></div>'+
+      '<div class="col-6"><label>الجمالون / العنبر *</label>'+
+        '<select class="field" id="fc-barn">'+
+          barnNames.map(function(b){return '<option value="'+b+'">'+b+'</option>';}).join('')+
+        '</select>'+
+      '</div>'+
+    '</div>'+
+    '<label>نوع العلف *</label>'+
+    '<select class="field" id="fc-feed">'+
+      (feedNames.length
+        ? feedNames.map(function(f){return '<option>'+f+'</option>';}).join('')
+        : '<option value="">أضف أعلافاً في تبويب الأعلاف أولاً</option>')+
+    '</select>'+
+    '<div class="row g-2">'+
+      '<div class="col-6"><label>الكمية (كجم) *</label><input type="number" class="field" id="fc-qty" step="0.5" min="0" placeholder="50"></div>'+
+      '<div class="col-6"><label>مسجّل بواسطة</label><input class="field" id="fc-by" value="'+(user?.name||'')+'"></div>'+
+    '</div>'+
+    '<label>ملاحظات</label><input class="field" id="fc-notes" placeholder="اختياري">'+
+    '<div class="d-flex gap-2 justify-content-end mt-3">'+
+      '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
+      '<button class="action-btn primary" onclick="logConsumption()"><i class="bi bi-check-lg"></i> حفظ</button>'+
+    '</div>'+
+  '</div>');
+};
+
+window.logConsumption = async function() {
+  var date      = document.getElementById('fc-date').value;
+  var barn      = document.getElementById('fc-barn').value;
+  var feed_name = document.getElementById('fc-feed').value;
+  var qty       = parseFloat(document.getElementById('fc-qty').value);
+  var by        = document.getElementById('fc-by').value.trim();
+  var notes     = document.getElementById('fc-notes').value.trim();
+
+  if (!date || !barn || !feed_name || isNaN(qty) || qty <= 0) {
+    toast('يرجى تعبئة جميع الحقول الإلزامية','error'); return;
+  }
+
+  closeModal();
+  try {
+    await fbPost('feed_consumption', {
+      date: date, barn: barn, feed_name: feed_name,
+      quantity_kg: qty, recorded_by: by||null, notes: notes||null,
+      created_at: new Date().toISOString(),
+    });
+    await logActivity('add','feed_consumption','تسجيل استهلاك: '+feed_name+' — '+barn+' — '+qty+'كجم');
+    toast('✅ تم تسجيل استهلاك '+ar(qty)+' كجم من '+feed_name);
+    setTimeout(function(){ loadConsumptionRecords(); }, 500);
+  } catch(e) {
+    toast('خطأ: '+e.message,'error');
+  }
+};
+
+window.delConsumption = async function(id) {
+  if (!id || !confirm('حذف هذا السجل؟')) return;
+  try {
+    await fbDelete('feed_consumption', id);
+    toast('تم الحذف');
+    loadConsumptionRecords();
+  } catch(e) { toast('خطأ في الحذف','error'); }
 };

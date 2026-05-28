@@ -35,7 +35,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderRelatedLinks('reports.js');
   renderPageHeader(
     '<i class="bi bi-graph-up accent-text"></i> التقارير والإحصائيات', '',
-    `<button class="action-btn" onclick="exportAllExcel()"><i class="bi bi-file-earmark-excel-fill" style="color:#4caf50"></i> تصدير Excel</button>`
+    `<button class="action-btn" onclick="shareWhatsApp()" style="background:rgba(37,211,102,.1);border-color:rgba(37,211,102,.35);color:#25d366">
+       <i class="bi bi-whatsapp"></i> واتساب
+     </button>
+     <button class="action-btn" onclick="exportAllExcel()"><i class="bi bi-file-earmark-excel-fill" style="color:#4caf50"></i> Excel</button>`
   );
   const el = document.getElementById('content');
   renderLoading(el);
@@ -275,6 +278,51 @@ function renderBreedingTab(el, m) {
 }
 
 // ════════════════ EXCEL EXPORT ════════════════════════════
+window.shareWhatsApp = function() {
+  var d = _data;
+  if (!d || !d.animals) { toast('البيانات لم تُحمَّل بعد','error'); return; }
+  var s = d.s || getSettings();
+  var alive = (d.animals||[]).filter(function(a){return a.status==='alive';});
+  var preg  = (d.breeding||[]).filter(function(r){return r.status==='pregnant';});
+  var active= (d.health||[]).filter(function(r){return r.status==='active';});
+  var inc   = (d.finance||[]).filter(function(r){return r.type==='income';}).reduce(function(t,r){return t+(+r.amount||0);},0);
+  var exp   = (d.finance||[]).filter(function(r){return r.type==='expense';}).reduce(function(t,r){return t+(+r.amount||0);},0);
+
+  // Breed breakdown
+  var allBreeds = [...(s.goatBreeds||[]),...(s.sheepBreeds||[])];
+  var breedLines = allBreeds.map(function(b){
+    var cnt = alive.filter(function(a){return a.breed===b;}).length;
+    return cnt > 0 ? '  • '+b+': '+cnt+' رأس' : null;
+  }).filter(Boolean).join('
+');
+
+  var text = [
+    '🐐 *تقرير مزرعة '+s.farmName+'*',
+    '📅 '+todayAr(),
+    '',
+    '📊 *إجمالي القطيع:* '+ar(alive.length)+' رأس',
+    '  🐐 ماعز: '+ar(alive.filter(function(a){return a.species==='goat';}).length),
+    '  🐑 أغنام: '+ar(alive.filter(function(a){return a.species==='sheep';}).length),
+    '',
+    '*توزيع السلالات:*',
+    breedLines,
+    '',
+    '🤰 *حوامل حالياً:* '+ar(preg.length)+' رأس',
+    (active.length ? '💊 *قيد العلاج:* '+ar(active.length)+' رأس' : '✅ لا توجد حالات علاج نشطة'),
+    '',
+    '💰 *الإيرادات:* '+inc.toLocaleString('ar-EG')+' '+s.currency,
+    '💸 *المصروفات:* '+exp.toLocaleString('ar-EG')+' '+s.currency,
+    '📈 *صافي الربح:* '+((inc-exp)>=0?'+':'')+(inc-exp).toLocaleString('ar-EG')+' '+s.currency,
+    '',
+    '_تم إنشاء هذا التقرير تلقائياً من نظام بيان المزرعة_',
+  ].join('
+');
+
+  var encoded = encodeURIComponent(text);
+  window.open('https://wa.me/?text=' + encoded, '_blank');
+  logActivity('export','reports','مشاركة تقرير عبر واتساب');
+};
+
 window.exportAllExcel = async function() {
   const d=_data;
   if(!d||!d.animals){toast('البيانات لم تُحمَّل بعد','error');return;}

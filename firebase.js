@@ -456,7 +456,13 @@ function getSettings(){
     pregnancyDays:        cfg.pregnancyDays||saved.pregnancyDays||150,
     vaccinationAlertDays: cfg.vaccinationAlertDays||saved.vaccinationAlertDays||7,
     weaningDays:          cfg.weaningDays||saved.weaningDays||60,
-
+    birthAlertDays:       saved.birthAlertDays||7,
+    medExpiryAlertDays:   saved.medExpiryAlertDays||30,
+    heatAlertTemp:        saved.heatAlertTemp||35,
+    coldAlertTemp:        saved.coldAlertTemp||10,
+    lowStockPct:          saved.lowStockPct||20,
+    heatReturnDays:       saved.heatReturnDays||18,
+    barnCapacity:         saved.barnCapacity||{},
     logoUrl:              saved.logoUrl||'',
     farmAddress:          saved.farmAddress||'',
   };
