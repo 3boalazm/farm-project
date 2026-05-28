@@ -13,11 +13,20 @@ function toast(msg,type='success'){
 
 // ── MODAL ─────────────────────────────────────────────────
 function showModal(html){
-  let root=document.getElementById('modal-root');
+  var root=document.getElementById('modal-root');
   if(!root){root=document.createElement('div');root.id='modal-root';document.body.appendChild(root);}
-  root.innerHTML=`<div class="farm-modal-backdrop" onclick="if(event.target===this)closeModal()">${html}</div>`;
+  root.innerHTML='<div class="farm-modal-backdrop" role="dialog" aria-modal="true" aria-label="نافذة منبثقة" onclick="if(event.target===this)closeModal()">'+html+'</div>';
+  document.body.style.overflow='hidden';
+  setTimeout(function(){
+    var first=root.querySelector('input:not([type=hidden]),select,textarea,button:not([onclick*="closeModal"]),[tabindex]');
+    if(first)first.focus();
+  },80);
 }
-function closeModal(){const r=document.getElementById('modal-root');if(r)r.innerHTML='';}
+function closeModal(){
+  var r=document.getElementById('modal-root');
+  if(r)r.innerHTML='';
+  document.body.style.overflow='';
+}
 
 // ── ARABIC UTILS ──────────────────────────────────────────
 const pad2=n=>ar(String(n).padStart(2,'0').replace(/0/g,'٠'));
@@ -35,6 +44,7 @@ function renderNavbar(activePage=''){
   const s=getSettings();const u=getUser();
   const visibleTabs=NAV_PAGES.filter(p=>!p.perm||can(p.perm)).slice(0,7);
   const html=`
+  <a href="#main-content" class="skip-to-content" style="position:fixed;top:-40px;left:50%;transform:translateX(-50%);background:var(--orange);color:#fff;padding:8px 18px;border-radius:0 0 10px 10px;z-index:99999;font-weight:700;transition:.2s;font-family:Cairo,sans-serif" onfocus="this.style.top='0'" onblur="this.style.top='-40px'">انتقل للمحتوى الرئيسي</a>
   <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
   <aside class="sidebar-menu" id="sidebarMenu">
     <div class="sidebar-header">
@@ -115,7 +125,7 @@ function renderNavbar(activePage=''){
         <div id="gs-results" style="max-height:420px;overflow-y:auto;padding:8px"></div>
       </div>
     </div>
-  </div>\`;
+  </div>`;
   document.body.insertAdjacentHTML('afterbegin', html);
   initOfflineDetection();
   document.addEventListener('keydown', function(e){
@@ -589,6 +599,35 @@ window._ubSubmit=async function(){
     else setTimeout(()=>location.reload(),1200);
   }catch(e){toast('خطأ: '+e.message,'error');console.error(e);}
 };
+
+
+// ── FAB Helper — Floating Action Button ───────────────
+function addFAB(label, actionFn, iconClass) {
+  iconClass = iconClass || 'bi-plus-lg';
+  var existing = document.getElementById('global-fab');
+  if (existing) existing.remove();
+  var btn = document.createElement('button');
+  btn.id = 'global-fab';
+  btn.setAttribute('aria-label', label);
+  btn.setAttribute('title', label);
+  btn.innerHTML = '<i class="bi ' + iconClass + '"></i>';
+  btn.setAttribute('style', [
+    'position:fixed','bottom:80px','left:20px','width:56px','height:56px',
+    'border-radius:50%','background:var(--orange)','color:#fff','border:none',
+    'box-shadow:0 8px 24px rgba(255,107,53,.5)','font-size:1.3rem',
+    'cursor:pointer','z-index:1000','display:none','align-items:center',
+    'justify-content:center','transition:.2s','font-family:Cairo,sans-serif',
+  ].join(';'));
+  btn.onclick = actionFn;
+  btn.onmouseover = function(){ this.style.transform='scale(1.08)'; };
+  btn.onmouseout  = function(){ this.style.transform='scale(1)'; };
+  document.body.appendChild(btn);
+  // Show only on mobile
+  var mq = window.matchMedia('(max-width:768px)');
+  function applyMQ(e){ btn.style.display = e.matches ? 'flex' : 'none'; }
+  applyMQ(mq);
+  if (mq.addEventListener) mq.addEventListener('change', applyMQ);
+}
 
 // ── Offline Detection ──────────────────────────────────
 function initOfflineDetection(){

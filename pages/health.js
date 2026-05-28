@@ -7,6 +7,9 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
   renderNavbar('health.html');
+
+  // FAB for mobile
+  addFAB('تسجيل سجل صحي جديد', function(){ openAddHealth(); });
   renderRelatedLinks('health.js');
   healthRecs=await fbGet('health');
   renderHealthPage(s);
@@ -68,8 +71,8 @@ function renderHealthPage(s){
         </div>
         <div class="d-flex gap-2 flex-shrink-0">
           ${r.status==='active'&&can('health')?`<button class="action-btn primary sm" onclick="event.stopPropagation();completeHealth('${r._id}')"><i class="bi bi-check-lg"></i></button>`:''}
-          ${can('health')?`<button class="action-btn sm" onclick="event.stopPropagation();openHealthModal('${r._id}')"><i class="bi bi-pencil"></i></button>`:''}
-          ${can('admin')?`<button class="action-btn danger sm" onclick="event.stopPropagation();delHealth('${r._id}')"><i class="bi bi-trash"></i></button>`:''}
+          ${can('health')?`<button class="action-btn sm" onclick="event.stopPropagation();openHealthModal('${r._id}')"><i class="bi bi-pencil" aria-hidden="true"></i><span class="visually-hidden">تعديل</span></button>`:''}
+          ${can('admin')?`<button class="action-btn danger sm" onclick="event.stopPropagation();delHealth('${r._id}')"><i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">حذف</span></button>`:''}
         </div>
       </div>
     </div>`;

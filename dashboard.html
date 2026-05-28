@@ -36,7 +36,7 @@
 <body>
 <div class="page-wrap">
   <div id="page-header"></div>
-  <div id="content"><div class="text-center py-5"><div class="spinner"></div></div></div>
+  <div id="content" role="main" aria-label="لوحة التحكم الرئيسية"><div class="text-center py-5"><div class="spinner"></div></div></div>
   <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
     <span id="footer-year"></span> &copy; <span id="footer-farm"></span><br>
     <small style="font-size:.72rem;color:var(--text-muted)">إشراف: لواء أحمد رجب نوح | تطوير: جندي مصطفى محمد إبراهيم</small>
@@ -56,6 +56,11 @@ document.addEventListener('DOMContentLoaded', async function() {
   document.getElementById('footer-year').textContent = ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent  = s.farmName;
   renderNavbar('dashboard.html');
+  addFAB('إجراء سريع', function(){
+    var el = document.getElementById('quick-actions-section');
+    if (el) { el.scrollIntoView({behavior:'smooth'}); }
+    else { location.href='animals.html'; }
+  }, 'bi-lightning-fill');
 
   var el = document.getElementById('content');
   renderLoading(el);

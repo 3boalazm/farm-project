@@ -7,6 +7,12 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
   renderNavbar('breeding.html');
+
+  // FAB for mobile
+  addFAB('تسجيل تقريع جديد', function(){
+    var btn=document.querySelector('.action-btn.primary[onclick*="Breed"],button[onclick*="breed"]');
+    if(btn)btn.click(); else toast('افتح نموذج التقريع من الأزرار', 'info');
+  }, 'bi-diagram-2-fill');
   renderLoading(document.getElementById('content'));
   try{ breedingRecs=await fbGet('breeding'); }catch(e){ toast('خطأ: '+e.message,'error'); }
   renderBreedingPage(s);

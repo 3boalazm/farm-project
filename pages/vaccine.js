@@ -7,6 +7,9 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
   renderNavbar('vaccine.html');
+
+  // FAB for mobile
+  addFAB('تحصين جديد', function(){ openVaccModal(); }, 'bi-bandaid-fill');
   renderRelatedLinks('vaccine.js');
   vaccines=await fbGet('vaccinations');
   renderVaccPage(s);
@@ -50,7 +53,7 @@ function renderVaccPage(s){
     ${upcoming.map(v=>`<div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
       <span class="type-badge badge-yellow">${v.name}</span>
       <small class="text-gray">${v.target_section||'—'} • ${ar(+v.count||0)} رأس • بعد ${ar(daysUntil(v.scheduled_date))} يوم (${v.scheduled_date})</small>
-      ${can('health')?`<button class="action-btn primary sm" onclick="markDone('${v._id}')"><i class="bi bi-check-lg"></i> تنفيذ الآن</button>`:''}
+      ${can('health')?`<button class="action-btn primary sm" aria-label="تعليم كمنجز" onclick="markDone('${v._id}')"><i class="bi bi-check-lg"></i> تنفيذ الآن</button>`:''}
     </div>`).join('')}
   </div>`:''}
 
@@ -84,7 +87,7 @@ function renderVaccPage(s){
           ${v.notes?`<div class="text-gray mt-1" style="font-size:.78rem"><i class="bi bi-chat-left-text me-1"></i>${v.notes}</div>`:''}
         </div>
         <div class="d-flex gap-2 flex-wrap flex-shrink-0">
-          ${v.status!=='done'&&can('health')?`<button class="action-btn primary sm" onclick="markDone('${v._id}')"><i class="bi bi-check-lg"></i> تنفيذ</button>`:''}
+          ${v.status!=='done'&&can('health')?`<button class="action-btn primary sm" aria-label="تعليم كمنجز" onclick="markDone('${v._id}')"><i class="bi bi-check-lg"></i> تنفيذ</button>`:''}
           ${can('health')?`<button class="action-btn sm" onclick="openVaccModal('${v._id}')"><i class="bi bi-pencil"></i></button>`:''}
           ${can('admin')?`<button class="action-btn danger sm" onclick="delVacc('${v._id}')"><i class="bi bi-trash"></i></button>`:''}
         </div>

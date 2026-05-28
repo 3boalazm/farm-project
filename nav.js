@@ -20,10 +20,13 @@ var FARM_NAV = [
   ]},
   // ── الصحة والإنتاج ──
   {section: 'الصحة والإنتاج', items: [
-    {href:'health.html',    icon:'bi-heart-pulse-fill',    label:'الصحة',                 perm:'health'},
-    {href:'vaccine.html',   icon:'bi-bandaid-fill',        label:'التحصين',               perm:'health'},
-    {href:'breeding.html',  icon:'bi-diagram-2-fill',      label:'التكاثر',               perm:'breeding'},
-    {href:'inventory.html', icon:'bi-boxes',               label:'المخزن',                perm:'inventory'},
+    {href:'health.html',     icon:'bi-heart-pulse-fill',    label:'الصحة',                 perm:'health'},
+    {href:'vaccine.html',    icon:'bi-bandaid-fill',        label:'التحصين',               perm:'health'},
+    {href:'breeding.html',   icon:'bi-diagram-2-fill',      label:'التكاثر',               perm:'breeding'},
+    {href:'production.html', icon:'bi-droplet-fill',        label:'الإنتاج',               perm:'animals'},
+    {href:'tasks.html',      icon:'bi-list-check',          label:'المهام اليومية',        perm:'animals'},
+    {href:'pedigree.html',   icon:'bi-diagram-3-fill',      label:'شجرة النسب',            perm:'animals'},
+    {href:'inventory.html',  icon:'bi-boxes',               label:'المخزن',                perm:'inventory'},
   ]},
   // ── المالية والتقارير ──
   {section: 'المالية', items: [
