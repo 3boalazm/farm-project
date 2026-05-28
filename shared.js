@@ -262,14 +262,8 @@ function renderPageHeader(title, subtitle='', actions=''){
 }
 
 // ── LOADING / EMPTY ───────────────────────────────────────
-function renderLoading(el, rows) {
-  if (!el) return;
-  rows = rows || 4;
-  var skRow = '<div class="skeleton" style="height:52px;margin-bottom:10px"></div>';
-  el.innerHTML = '<div style="padding:16px">' +
-    '<div class="skeleton" style="height:28px;width:35%;margin-bottom:20px"></div>' +
-    skRow.repeat(rows) +
-  '</div>';
+function renderLoading(el){
+  el.innerHTML=`<div class="text-center py-5"><div class="spinner mb-3"></div><div class="text-gray">جاري التحميل...</div></div>`;
 }
 function renderEmpty(el, icon, msg, btnHtml=''){
   el.innerHTML=`<div class="empty-state"><i class="bi ${icon}"></i><p>${msg}</p>${btnHtml}</div>`;
@@ -277,24 +271,12 @@ function renderEmpty(el, icon, msg, btnHtml=''){
 
 // ── BREED STATS ───────────────────────────────────────────
 function breedStats(animals, breed){
-  // Only alive, non-birth animals of this breed (births go to مواليد section)
-  const all=animals.filter(a=>a.status==='alive'&&a.breed===breed);
-  const alive=all.filter(a=>a.purpose!=='birth'); // exclude births for breed card display
-  const births=all.filter(a=>a.purpose==='birth');
+  const alive=animals.filter(a=>a.status==='alive'&&a.breed===breed);
   const c=(g,p)=>alive.filter(a=>a.gender===g&&a.purpose===p).length;
-  const mT=c('male','tarbiya'),fT=c('female','tarbiya'),mS=c('male','tasmeen'),fS=c('female','tasmeen');
-  return{
-    total:alive.length,    // non-birth total (matches displayed boxes)
-    totalAll:all.length,   // including births  
-    birthCount:births.length,
-    tarbiyaMale:mT,tarbiyaFemale:fT,
-    tasmeenMale:mS,tasmeenFemale:fS,
-    tarbiya:mT+fT,tasmeen:mS+fS
-  };
+  return{total:alive.length,tarbiyaMale:c('male','tarbiya'),tarbiyaFemale:c('female','tarbiya'),tasmeenMale:c('male','tasmeen'),tasmeenFemale:c('female','tasmeen'),tarbiya:c('male','tarbiya')+c('female','tarbiya'),tasmeen:c('male','tasmeen')+c('female','tasmeen')};
 }
 
 // ── PAGE TEMPLATE ─────────────────────────────────────────
-// كل HTML صفحة تستدعي initPage() في أول السكريبت
 async function initPage(pageFile, permCheck=''){
   if(!requireAuth())return false;
   if(permCheck&&!can(permCheck)){
@@ -312,447 +294,60 @@ async function initPage(pageFile, permCheck=''){
   return true;
 }
 
-// Cross-page contextual links
-function renderRelatedLinks(current){
-  const links={
-    'animals.html':     [{href:'goats.html',icon:'bi-tropical-storm',l:'الماعز',c:'var(--green)'},{href:'sheep.html',icon:'bi-cloud-fill',l:'الأغنام',c:'var(--blue)'},{href:'barns.html',icon:'bi-grid-3x3-gap-fill',l:'الجمالونات',c:'var(--orange)'},{href:'breeding.html',icon:'bi-diagram-2-fill',l:'التكاثر',c:'var(--purple)'}],
-    'vaccine.html':     [{href:'health.html',icon:'bi-heart-pulse-fill',l:'السجل الصحي',c:'var(--red)'},{href:'notifications.html',icon:'bi-bell-fill',l:'الإشعارات',c:'var(--orange)'}],
-    'health.html':      [{href:'vaccine.html',icon:'bi-bandaid-fill',l:'التحصين',c:'var(--green)'},{href:'inventory.html',icon:'bi-capsule',l:'الصيدلية',c:'var(--yellow)'},{href:'breeding.html',icon:'bi-diagram-2-fill',l:'التكاثر',c:'var(--purple)'}],
-    'breeding.html':    [{href:'animals.html',icon:'bi-list-ul',l:'القطيع',c:'var(--green)'},{href:'health.html',icon:'bi-heart-pulse-fill',l:'الصحة',c:'var(--red)'}],
-    'inventory.html':   [{href:'health.html',icon:'bi-heart-pulse-fill',l:'السجل الصحي',c:'var(--red)'},{href:'finance.html',icon:'bi-wallet2',l:'المالية',c:'var(--orange)'}],
-    'finance.html':     [{href:'reports.html',icon:'bi-graph-up',l:'التقارير',c:'var(--blue)'},{href:'inventory.html',icon:'bi-boxes',l:'المخزن',c:'var(--orange)'}],
-    'barns.html':       [{href:'animals.html',icon:'bi-list-ul',l:'القطيع',c:'var(--green)'},{href:'reports.html',icon:'bi-graph-up',l:'التقارير',c:'var(--blue)'}],
-    'goats.html':       [{href:'sheep.html',icon:'bi-cloud-fill',l:'الأغنام',c:'var(--blue)'},{href:'breeding.html',icon:'bi-diagram-2-fill',l:'التكاثر',c:'var(--purple)'},{href:'barns.html',icon:'bi-building',l:'الجمالونات',c:'var(--orange)'}],
-    'sheep.html':       [{href:'goats.html',icon:'bi-tropical-storm',l:'الماعز',c:'var(--green)'},{href:'breeding.html',icon:'bi-diagram-2-fill',l:'التكاثر',c:'var(--purple)'},{href:'barns.html',icon:'bi-building',l:'الجمالونات',c:'var(--orange)'}],
-    'reports.html':     [{href:'finance.html',icon:'bi-wallet2',l:'المالية',c:'var(--green)'},{href:'activity.html',icon:'bi-clock-history',l:'سجل الأنشطة',c:'var(--gray)'}],
-  };
-  const rel=links[current];
-  if(!rel||!rel.length)return;
-  const div=document.createElement('div');
-  div.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;';
-  div.innerHTML=rel.map(r=>`<a href="${r.href}" style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;font-size:.78rem;font-weight:600;text-decoration:none;background:${r.c}18;border:1px solid ${r.c}44;color:${r.c};transition:.2s" onmouseover="this.style.background='${r.c}30'" onmouseout="this.style.background='${r.c}18'"><i class="bi ${r.icon}" style="font-size:.8rem"></i>${r.l}</a>`).join('');
-  const hdr=document.getElementById('page-header');
-  if(hdr)hdr.insertAdjacentElement('afterend',div);
-}
-
-// ════════════════════════════════════════════
-// NOTIFICATIONS POPUP — يُفتح من أي صفحة
-// ════════════════════════════════════════════
-window.openNotificationsPopup = async function(){
-  // Show loading modal immediately
-  showModal(
-    '<div class="farm-modal wide" onclick="event.stopPropagation()" style="max-width:560px;max-height:88vh;overflow-y:auto">'+
-      '<div class="d-flex justify-content-between align-items-center mb-3">'+
-        '<h4 class="mb-0"><i class="bi bi-bell-fill accent-text me-2"></i>الإشعارات الذكية</h4>'+
-        '<button class="action-btn sm" onclick="closeModal()"><i class="bi bi-x-lg"></i></button>'+
-      '</div>'+
-      '<div id="notif-modal-body" class="text-center py-4"><div class="spinner"></div></div>'+
-    '</div>'
-  );
-
-  // Load data
-  try{
-    const t=new Date();
-    const today=t.toISOString().slice(0,10);
-    const u=getUser();
-    const isAdmin=u&&u.role==='admin';
-    const [animals,vaccines,breeding,health,meds,feeds,loginNotifs]=await Promise.all([
-      fbGet('animals'),fbGet('vaccinations'),fbGet('breeding'),
-      fbGet('health'),fbGet('inventory_meds'),fbGet('inventory_feeds'),
-      isAdmin?fbGet('login_notifications'):Promise.resolve([])
-    ]);
-
-    const notifs=[];
-
-    // 1. Upcoming births
-    breeding.filter(r=>r.status==='pregnant'&&r.expected_birth).forEach(r=>{
-      const d=Math.ceil((new Date(r.expected_birth)-t)/86400000);
-      if(d>=0&&d<=15) notifs.push({type:d<=3?'danger':'warning',cat:'التكاثر',icon:'bi-diagram-2-fill',title:'ولادة متوقعة: '+(r.female_tag||r.female_breed),msg:r.female_breed+' — '+r.expected_birth+(d===0?' (اليوم!)':' (بعد '+ar(d)+' يوم)'),href:'breeding.html'});
-      if(d<0) notifs.push({type:'danger',cat:'التكاثر',icon:'bi-exclamation-triangle-fill',title:'تأخر في الولادة: '+(r.female_tag||r.female_breed),msg:'كان موعدها '+r.expected_birth+' — تأخرت '+ar(Math.abs(d))+' يوم',href:'breeding.html'});
-    });
-
-    // 2. Return to heat
-    breeding.filter(r=>r.status==='failed'&&r.mating_date).forEach(r=>{
-      const d=Math.floor((t-new Date(r.mating_date))/86400000);
-      if(d>=18&&d<=25) notifs.push({type:'warning',cat:'التكاثر',icon:'bi-arrow-repeat',title:'رجوع شياع: '+(r.female_tag||r.female_breed),msg:'آخر تقريع '+r.mating_date+' — '+ar(d)+' يوم',href:'breeding.html'});
-    });
-
-    // 3. Overdue vaccinations
-    vaccines.filter(v=>v.status==='overdue').forEach(v=>{
-      notifs.push({type:'danger',cat:'التحصين',icon:'bi-bandaid-fill',title:'تحصين متأخر: '+v.name,msg:(v.target_section||'—')+' — '+ar(+v.count||0)+' رأس',href:'vaccine.html'});
-    });
-
-    // 4. Upcoming vaccinations
-    vaccines.filter(v=>v.status==='pending'&&v.scheduled_date).forEach(v=>{
-      const d=Math.ceil((new Date(v.scheduled_date)-t)/86400000);
-      if(d>=0&&d<=7) notifs.push({type:d<=2?'danger':'warning',cat:'التحصين',icon:'bi-bandaid-fill',title:'موعد تحصين: '+v.name,msg:(v.target_section||'—')+' — بعد '+ar(d)+' يوم ('+v.scheduled_date+')',href:'vaccine.html'});
-    });
-
-    // 5. Withdrawal periods
-    health.filter(r=>r.status==='active'&&r.withdrawal_end&&r.withdrawal_end>=today).forEach(r=>{
-      const d=Math.ceil((new Date(r.withdrawal_end)-t)/86400000);
-      notifs.push({type:'danger',cat:'الصحة',icon:'bi-exclamation-triangle-fill',title:'فترة سحب: '+(r.animal_tag||r.animal_breed),msg:r.medication+' — لا يُنصح بالبيع حتى انتهاء تأثير العلاج في '+r.withdrawal_end+' ('+ar(d)+' يوم)',href:'health.html'});
-    });
-
-    // 6. Expiring medicines
-    meds.filter(m=>m.expiry).forEach(m=>{
-      const d=Math.ceil((new Date(m.expiry)-t)/86400000);
-      if(d>=0&&d<=30) notifs.push({type:d<=7?'danger':'warning',cat:'المخزن',icon:'bi-capsule',title:'دواء قارب على الانتهاء: '+m.name,msg:'ينتهي '+m.expiry+' (بعد '+ar(d)+' يوم) — المتبقي: '+m.quantity+' '+(m.unit||''),href:'inventory.html'});
-    });
-
-    // 7. Low stock feeds
-    feeds.filter(f=>+f.quantity<=+f.min_quantity&&+f.min_quantity>0).forEach(f=>{
-      notifs.push({type:'warning',cat:'المخزن',icon:'bi-bag-fill',title:'مخزون علف منخفض: '+f.name,msg:'المتبقي '+f.quantity+' '+(f.unit||'')+' — الحد الأدنى '+f.min_quantity,href:'inventory.html'});
-    });
-
-    // 8. Low stock meds
-    meds.filter(m=>+m.quantity<=+m.min_quantity&&+m.min_quantity>0).forEach(m=>{
-      notifs.push({type:'warning',cat:'المخزن',icon:'bi-capsule',title:'مخزون دواء منخفض: '+m.name,msg:'المتبقي '+m.quantity+' '+(m.unit||'')+' — الحد الأدنى '+m.min_quantity,href:'inventory.html'});
-    });
-
-    // 0. Login notifications for admin
-    if(isAdmin&&loginNotifs.length>0){
-      const today=new Date().toISOString().slice(0,10);
-      loginNotifs.filter(n=>n.date===today).slice(0,5).forEach(function(n){
-        notifs.push({type:'info',cat:'تسجيلات الدخول',icon:'bi-box-arrow-in-right',title:'دخل: '+n.userName,msg:n.roleLabel+' — '+n.timestamp?.slice(11,16)||'',href:'activity.html'});
-      });
-    }
-
-    // 9. Recent deaths
-    const recentDead=animals.filter(a=>a.status==='dead'&&a.died_at&&Math.floor((t-new Date(a.died_at))/86400000)<=3);
-    if(recentDead.length>0) notifs.push({type:'info',cat:'القطيع',icon:'bi-x-octagon-fill',title:'نفق '+ar(recentDead.length)+' '+(recentDead.length===1?'رأس':'رؤوس')+' مؤخراً',msg:recentDead.map(a=>a.breed+(a.tag?' #'+a.tag:'')).join('، '),href:'animals.html'});
-
-    // Update badge
-    var badgeEl=document.getElementById('bell-badge');
-    if(badgeEl){
-      var cnt=notifs.filter(n=>n.type==='danger').length;
-      if(cnt>0){badgeEl.style.display='flex';badgeEl.textContent=cnt>9?'9+':cnt;}
-    }
-
-    // Sort: danger first
-    const order={danger:0,warning:1,info:2};
-    notifs.sort((a,b)=>order[a.type]-order[b.type]);
-
-    // Render
-    const catCfg={danger:{c:'var(--red)',label:'عاجل'},warning:{c:'var(--orange)',label:'تنبيه'},info:{c:'var(--blue)',label:'معلومة'}};
-    const cats=[...new Set(notifs.map(n=>n.cat))];
-
-    var html='';
-    if(notifs.length===0){
-      html='<div class="empty-state"><i class="bi bi-bell-slash"></i><p>لا توجد تنبيهات الآن 🎉</p><small class="text-gray">الولادات، التحصينات، المخزون، وفترات السحب ستظهر هنا تلقائياً</small></div>';
-    }else{
-      html+='<div class="d-flex justify-content-between align-items-center mb-3"><small class="text-gray">'+ar(notifs.length)+' تنبيه نشط</small></div>';
-      cats.forEach(function(cat){
-        var catNotifs=notifs.filter(n=>n.cat===cat);
-        var cfg0=catCfg[catNotifs[0].type]||catCfg.info;
-        html+='<div style="margin-bottom:16px"><div class="fw-bold mb-2" style="font-size:.82rem;color:var(--gray)"><i class="bi bi-tag-fill me-2" style="color:'+cfg0.c+'"></i>'+cat+' <span class="type-badge badge-gray" style="font-size:.65rem">'+ar(catNotifs.length)+'</span></div>';
-        catNotifs.forEach(function(n){
-          var cfg=catCfg[n.type]||catCfg.info;
-          html+='<div style="display:flex;align-items:flex-start;gap:12px;padding:12px;border-radius:12px;margin-bottom:8px;background:'+cfg.c+'0d;border:1px solid '+cfg.c+'33;cursor:'+(n.href?'pointer':'default')+'" '+(n.href?'onclick="closeModal();window.location.href=\''+n.href+'\'"':'')+'>'+
-            '<div style="width:34px;height:34px;border-radius:50%;background:'+cfg.c+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="bi '+n.icon+'" style="color:'+cfg.c+'"></i></div>'+
-            '<div style="flex:1;min-width:0">'+
-              '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'+
-                '<div class="fw-bold" style="font-size:.85rem;color:'+cfg.c+'">'+n.title+'</div>'+
-                '<span class="type-badge" style="background:'+cfg.c+'22;color:'+cfg.c+';border:1px solid '+cfg.c+'44;font-size:.62rem;flex-shrink:0">'+cfg.label+'</span>'+
-              '</div>'+
-              '<div class="text-gray" style="font-size:.8rem;margin-top:2px">'+n.msg+'</div>'+
-              (n.href?'<div style="font-size:.72rem;color:'+cfg.c+';margin-top:4px">اضغط للانتقال ←</div>':'')+
-            '</div>'+
-          '</div>';
-        });
-        html+='</div>';
-      });
-    }
-
-    var body=document.getElementById('notif-modal-body');
-    if(body)body.innerHTML=html;
-
-  }catch(e){
-    var body=document.getElementById('notif-modal-body');
-    if(body)body.innerHTML='<div class="empty-state"><i class="bi bi-exclamation-triangle"></i><p>خطأ في تحميل الإشعارات: '+e.message+'</p></div>';
-  }
-};
-// ── INFO TOOLTIPS (!) for calculations ──────────────────
-function infoTip(text){
-  return '<span class="info-tooltip" onclick="showInfoModal(this)" data-tip="'+encodeURIComponent(text)+'">!</span>';
-}
-window.showInfoModal=function(el){
-  const text=decodeURIComponent(el.getAttribute('data-tip'));
-  showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()" style="max-width:420px">'+
-    '<div class="d-flex align-items-center gap-2 mb-3">'+
-      '<div class="info-tooltip" style="width:28px;height:28px;font-size:.9rem">!</div>'+
-      '<h5 class="fw-bold mb-0">شرح العملية الحسابية</h5>'+
-    '</div>'+
-    '<div style="background:rgba(255,107,53,.06);border:1px solid rgba(255,107,53,.2);border-radius:12px;padding:14px;font-size:.88rem;line-height:1.7">'+text+'</div>'+
-    '<div class="d-flex justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">حسناً</button></div>'+
-  '</div>');
-};
-
-// ═══════════════════════════════════════════════════════
-//  UNIFIED BIRTH REGISTRATION MODAL (same everywhere)
-// ═══════════════════════════════════════════════════════
-window.openUnifiedBirthModal=function(defaultSpecies){
-  const s=getSettings();
-  const u=getUser();
-  const barns=['','ج١ع١','ج١ع٢','ج٢ع١','ج٢ع٢','ج٣ع١','ج٣ع٢','ج٤ع١','ج٤ع٢','ج٥ع١','ج٥ع٢'];
-  const allBreeds=[...s.goatBreeds,...s.sheepBreeds];
-
-  showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:560px;max-height:95vh;overflow-y:auto">'+
-    '<h4><i class="bi bi-stars" style="color:var(--yellow)"></i> تسجيل ولادة جديدة</h4>'+
-    '<div class="row g-2">'+
-      '<div class="col-6"><label>نوع المولود *</label><select class="field" id="ub-sp" onchange="_ubUpdateBreeds()"><option value="goat" '+(defaultSpecies==='goat'?'selected':'')+'>ماعز</option><option value="sheep" '+(defaultSpecies==='sheep'?'selected':'')+'>أغنام</option></select></div>'+
-      '<div class="col-6"><label>سلالة المولود *</label><select class="field" id="ub-breed">'+s.goatBreeds.map(b=>'<option>'+b+'</option>').join('')+'</select></div>'+
-    '</div>'+
-    '<div class="row g-2">'+
-      '<div class="col-6"><label>الغرض</label><select class="field" id="ub-purpose"><option value="birth">مواليد</option><option value="tarbiya">تربية</option><option value="tasmeen">تسمين</option></select></div>'+
-      '<div class="col-6"><label>الجنس *</label><select class="field" id="ub-gender"><option value="female">أنثى ♀</option><option value="male">ذكر ♂</option></select></div>'+
-    '</div>'+
-    '<div class="row g-2">'+
-      '<div class="col-6"><label>تاريخ الميلاد *</label><input type="date" class="field" id="ub-date" value="'+todayStr()+'"></div>'+
-      '<div class="col-6"><label>رقم الترقيم</label><input class="field" id="ub-tag" placeholder="A-001"></div>'+
-    '</div>'+
-    '<div style="background:rgba(255,193,7,.07);border:1px solid rgba(255,193,7,.3);border-radius:12px;padding:12px;margin:8px 0">'+
-      '<div class="fw-bold mb-2" style="font-size:.82rem;color:var(--yellow)"><i class="bi bi-person-heart me-1"></i>بيانات الأم (مطلوب)</div>'+
-      '<div class="row g-2">'+
-        '<div class="col-6"><label>رقم الأم *</label><input class="field" id="ub-mother-tag" placeholder="F-101"></div>'+
-        '<div class="col-6"><label>سلالة الأم *</label><select class="field" id="ub-mother-breed">'+allBreeds.map(b=>'<option>'+b+'</option>').join('')+'</select></div>'+
-      '</div>'+
-      '<div class="col-12"><label>رقم الأب</label><input class="field" id="ub-father-tag" placeholder="M-001"></div>'+
-    '</div>'+
-    '<div class="row g-2">'+
-      '<div class="col-6"><label>وزن الميلاد (كجم)</label><input type="number" class="field" id="ub-weight" step="0.1" placeholder="3.5" min="0"></div>'+
-      '<div class="col-6"><label>الجمالون/العنبر</label><select class="field" id="ub-barn">'+barns.map(b=>'<option value="'+b+'">'+( b||'— غير محدد —')+'</option>').join('')+'</select></div>'+
-    '</div>'+
-    '<div class="row g-2">'+
-      '<div class="col-6"><label>عدد المواليد</label><input type="number" class="field" id="ub-qty" value="1" min="1" max="10"></div>'+
-      '<div class="col-6">'+
-        '<label data-hint="المبلغ المرتبط بالولادة: تكلفة بيطري أو قيمة المولود المقدرة">'+
-          'المبلغ عند الولادة ('+s.currency+') <span class="info-tooltip" onclick="event.stopPropagation();showInfoModal(this)" data-tip="قيمة الولادة: ممكن يكون ثمن شراء الأم، تكلفة الطبيب، أو قيمة المولود المقدرة. يُستخدم في حساب تكلفة التربية.">!</span>'+
-        '</label>'+
-        '<input type="number" class="field" id="ub-amount" placeholder="0" min="0">'+
-      '</div>'+
-    '</div>'+
-    '<label>سُجِّل بواسطة</label><input class="field" id="ub-addedby" value="'+(u?.name||'')+'">'+
-    '<label>ملاحظات</label><textarea class="field" id="ub-notes" rows="2"></textarea>'+
-    '<div class="d-flex gap-2 justify-content-end mt-3">'+
-      '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
-      '<button class="action-btn primary" onclick="_ubSubmit()"><i class="bi bi-check-lg"></i> حفظ الولادة</button>'+
-    '</div>'+
-  '</div>');
-};
-
-window._ubUpdateBreeds=function(){
-  const s=getSettings();const sp=document.getElementById('ub-sp')?.value;
-  const breeds=sp==='goat'?s.goatBreeds:s.sheepBreeds;
-  const sel=document.getElementById('ub-breed');
-  if(sel)sel.innerHTML=breeds.map(b=>'<option>'+b+'</option>').join('');
-};
-
-window._ubSubmit=async function(){
-  const sp=document.getElementById('ub-sp').value;
-  const breed=document.getElementById('ub-breed').value;
-  const gender=document.getElementById('ub-gender').value;
-  const purpose=document.getElementById('ub-purpose').value;
-  const tag=document.getElementById('ub-tag').value.trim();
-  const bdate=document.getElementById('ub-date').value;
-  const motherTag=document.getElementById('ub-mother-tag').value.trim();
-  const motherBreed=document.getElementById('ub-mother-breed').value;
-  const fatherTag=document.getElementById('ub-father-tag').value.trim();
-  const weight=parseFloat(document.getElementById('ub-weight').value)||null;
-  const barn=document.getElementById('ub-barn').value||null;
-  const qty=parseInt(document.getElementById('ub-qty').value)||1;
-  const amount=parseFloat(document.getElementById('ub-amount').value)||null;
-  const addedBy=document.getElementById('ub-addedby').value.trim();
-  const notes=document.getElementById('ub-notes').value.trim();
-
-  if(!motherTag||!motherBreed){toast('رقم الأم وسلالتها مطلوبان','error');return;}
-  closeModal();toast('جاري الحفظ...','info');
-  let ok=0;
-  try{
-    // Save breeding record
-    await fbPost('breeding',{
-      female_tag:motherTag, mother_tag:motherTag,
-      female_breed:motherBreed, mother_breed:motherBreed,
-      female_species:sp,
-      male_tag:fatherTag||null,
-      mating_date:null, expected_birth:null,
-      actual_birth:bdate, status:'born',
-      offspring_count:qty,
-      male_offspring:gender==='male'?qty:0,
-      female_offspring:gender==='female'?qty:0,
-      birth_weights:weight?String(weight):null,
-      birth_amount:amount, barn,
-      added_by:addedBy,notes:notes||null
-    });
-    // Save each animal
-    for(let i=0;i<qty;i++){
-      const rec={species:sp,breed,gender,purpose,status:'alive',birth_date:bdate,
-        tag:qty===1?(tag||null):(tag?tag+'-'+(i+1):null),
-        mother_tag:motherTag,mother_breed:motherBreed,
-        father_tag:fatherTag||null,
-        birth_weight:weight,barn,notes:notes||null};
-      await fbPost('animals',rec);ok++;
-    }
-    // Save weight record if provided
-    if(weight&&ok>0){
-      await fbPost('weights',{date:bdate,weight,animal_tag:tag||motherTag+'-newborn',species:sp,breed,barn,notes:'وزن الميلاد'});
-    }
-    await logActivity('add','animals','تسجيل ولادة: '+motherTag+' — '+ar(qty)+' مولود ('+breed+' '+(gender==='male'?'ذكر':'أنثى')+')');
-    toast('✅ تم تسجيل الولادة و'+ar(qty)+' مولود في القطيع');
-    // Reload page data if function exists
-    if(typeof loadPageData==='function')await loadPageData();
-    else if(typeof renderBreedingPage==='function'){const d=await fbGet('breeding');window.breedingRecs=d;renderBreedingPage(getSettings());}
-    else setTimeout(()=>location.reload(),1200);
-  }catch(e){toast('خطأ: '+e.message,'error');console.error(e);}
-};
-
-
-
-// ── M3 Progress Indicators ────────────────────────────
-// renderM3Progress(value 0-100, label, color, size='')
-window.renderM3Progress = function(value, label, color, size) {
-  color = color || 'var(--color-interactive)';
-  size  = size  || '';
-  value = Math.max(0, Math.min(100, value || 0));
-  return (
-    '<div style="--progress-fill:' + color + '">' +
-      (label ? '<div class="d-flex justify-content-between mb-1"><small class="text-gray">' + label + '</small><small style="color:' + color + ';font-weight:700">' + ar(Math.round(value)) + '٪</small></div>' : '') +
-      '<div class="m3-progress ' + size + '" role="progressbar" aria-valuenow="' + Math.round(value) + '" aria-valuemin="0" aria-valuemax="100" aria-label="' + (label||'تقدم') + '">' +
-        '<div class="m3-progress-fill" style="width:' + value + '%"></div>' +
-      '</div>' +
-    '</div>'
-  );
-};
-
-// renderM3Circular(value 0-100, size=48, color, label)
-window.renderM3Circular = function(value, size, color, label) {
-  size  = size  || 48;
-  color = color || 'var(--color-interactive)';
-  value = Math.max(0, Math.min(100, value || 0));
-  var r   = (size - 6) / 2;
-  var circ = 2 * Math.PI * r;
-  var offset = circ - (value / 100) * circ;
-  return (
-    '<div class="m3-circular" style="width:' + size + 'px;height:' + size + 'px" role="img" aria-label="' + (label||'تقدم') + ' ' + Math.round(value) + '٪">' +
-      '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">' +
-        '<circle class="m3-circular-track" cx="' + (size/2) + '" cy="' + (size/2) + '" r="' + r + '" stroke-width="5"/>' +
-        '<circle class="m3-circular-fill" cx="' + (size/2) + '" cy="' + (size/2) + '" r="' + r + '" stroke="' + color + '" stroke-width="5" ' +
-          'stroke-dasharray="' + circ.toFixed(1) + '" stroke-dashoffset="' + offset.toFixed(1) + '"/>' +
-      '</svg>' +
-      '<div style="position:absolute;font-size:' + Math.round(size/4) + 'px;font-weight:800;color:' + color + '">' + ar(Math.round(value)) + '</div>' +
-    '</div>'
-  );
-};
-
-// renderM3Steps(current, total, labels[])
-window.renderM3Steps = function(current, total, labels) {
-  var html = '<div class="m3-steps mb-1">';
-  for (var i = 0; i < total; i++) {
-    var cls = i < current ? 'done' : i === current ? 'active' : '';
-    html += '<div class="m3-step ' + cls + '" title="' + (labels && labels[i] ? labels[i] : (i+1)) + '"></div>';
-  }
-  html += '</div>';
-  if (labels) {
-    html += '<small class="text-gray">' + (labels[Math.min(current, total-1)] || ('الخطوة ' + ar(current+1))) + '</small>';
-  }
-  return html;
-};
-
-// ── FAB Helper — Floating Action Button ───────────────
-function addFAB(label, actionFn, iconClass) {
-  iconClass = iconClass || 'bi-plus-lg';
-  var existing = document.getElementById('global-fab');
-  if (existing) existing.remove();
-  var btn = document.createElement('button');
-  btn.id = 'global-fab';
-  btn.setAttribute('aria-label', label);
-  btn.setAttribute('title', label);
-  btn.innerHTML = '<i class="bi ' + iconClass + '"></i>';
-  btn.setAttribute('style', [
-    'position:fixed','bottom:80px','left:20px','width:56px','height:56px',
-    'border-radius:50%','background:var(--orange)','color:#fff','border:none',
-    'box-shadow:0 8px 24px rgba(255,107,53,.5)','font-size:1.3rem',
-    'cursor:pointer','z-index:1000','display:none','align-items:center',
-    'justify-content:center','transition:.2s','font-family:Cairo,sans-serif',
-  ].join(';'));
-  btn.onclick = actionFn;
-  btn.onmouseover = function(){ this.style.transform='scale(1.08)'; };
-  btn.onmouseout  = function(){ this.style.transform='scale(1)'; };
-  document.body.appendChild(btn);
-  // Show only on mobile
-  var mq = window.matchMedia('(max-width:768px)');
-  function applyMQ(e){ btn.style.display = e.matches ? 'flex' : 'none'; }
-  applyMQ(mq);
-  if (mq.addEventListener) mq.addEventListener('change', applyMQ);
-}
-
-// ── Offline Detection ──────────────────────────────────
+// ── OFFLINE DETECTION ──────────────────────────────────────
 function initOfflineDetection(){
-  function update(){
-    var banner=document.getElementById('offline-banner');
-    if(!banner)return;
-    banner.style.display=navigator.onLine?'none':'flex';
-    banner.style.justifyContent='center';
-    banner.style.alignItems='center';
-  }
-  window.addEventListener('online',  function(){ update(); toast('✅ عاد الاتصال بالإنترنت'); });
-  window.addEventListener('offline', function(){ update(); toast('⚠️ انقطع الاتصال — البيانات تُحفظ محلياً','error'); });
-  update();
+  window.addEventListener('online', ()=>{
+    document.getElementById('offline-banner').style.display='none';
+    toast('تم استعادة الاتصال بالإنترنت','success');
+  });
+  window.addEventListener('offline', ()=>{
+    document.getElementById('offline-banner').style.display='block';
+  });
+  if(!navigator.onLine) document.getElementById('offline-banner').style.display='block';
 }
 
-// ── Global Search ──────────────────────────────────────
-var _gsCache = null;
-var _gsTimer = null;
+// ── UNDO SYSTEM ───────────────────────────────────────────
+let _lastAction=null;
+function trackAction(type, collection, id, oldData){
+  _lastAction={type,collection,id,oldData,time:Date.now()};
+  const btn=document.getElementById('undo-btn');
+  if(btn){btn.style.opacity='1';btn.classList.add('pulse-orange');}
+}
+async function undoLast(){
+  if(!_lastAction)return;
+  if(Date.now()-_lastAction.time>60000){toast('انتهت صلاحية التراجع (60 ثانية)','error');return;}
+  try{
+    if(_lastAction.type==='edit') await fbPatch(_lastAction.collection,_lastAction.id,_lastAction.oldData);
+    else if(_lastAction.type==='add') await fbDelete(_lastAction.collection,_lastAction.id);
+    toast('تم التراجع بنجاح');
+    _lastAction=null;
+    const btn=document.getElementById('undo-btn');
+    if(btn)btn.style.opacity='0.5';
+    setTimeout(()=>location.reload(),800);
+  }catch(e){toast('فشل التراجع: '+e.message,'error');}
+}
 
-window.openGlobalSearch = function(){
-  var overlay = document.getElementById('gs-overlay');
-  if(!overlay) return;
-  overlay.style.display = 'block';
-  var inp = document.getElementById('gs-input');
-  if(inp){ inp.value = ''; inp.focus(); }
-  document.getElementById('gs-results').innerHTML =
-    '<div class="text-center py-4 text-gray" style="font-size:.82rem">' +
-    '<i class="bi bi-search d-block mb-2" style="font-size:1.5rem;opacity:.3"></i>' +
-    'ابحث عن حيوان بالترقيم أو السلالة أو الجمالون...' +
-    '</div>';
-  // Pre-load cache
-  if(!_gsCache && typeof fbGet === 'function'){
-    Promise.all([fbGet('animals'), fbGet('health'), fbGet('breeding')]).then(function(res){
-      _gsCache = { animals: res[0]||[], health: res[1]||[], breeding: res[2]||[] };
-    }).catch(function(){});
-  }
-};
-
-window.closeGlobalSearch = function(){
-  var overlay = document.getElementById('gs-overlay');
-  if(overlay) overlay.style.display = 'none';
-};
-
-window.runGlobalSearch = function(q){
-  clearTimeout(_gsTimer);
-  if(!q || q.length < 2){
-    document.getElementById('gs-results').innerHTML =
-      '<div class="text-center py-3 text-gray" style="font-size:.8rem">اكتب حرفين على الأقل للبحث</div>';
-    return;
-  }
-  _gsTimer = setTimeout(function(){ _execSearch(q.trim().toLowerCase()); }, 250);
-};
-
-var _execSearch = function(q){
-  var res = document.getElementById('gs-results');
-  if(!res) return;
-  if(!_gsCache){
-    res.innerHTML = '<div class="text-center py-3 text-gray"><div class="spinner" style="width:20px;height:20px;border-width:2px;margin:0 auto"></div><p class="mt-2">جاري التحميل...</p></div>';
-    Promise.all([fbGet('animals'), fbGet('health'), fbGet('breeding')]).then(function(data){
-      _gsCache = { animals: data[0]||[], health: data[1]||[], breeding: data[2]||[] };
-      _execSearch(q);
-    });
-    return;
-  }
+// ── GLOBAL SEARCH ─────────────────────────────────────────
+let _gsCache={};
+function openGlobalSearch(){
+  document.getElementById('gs-overlay').style.display='block';
+  document.getElementById('gs-input').focus();
+  // Pre-fetch search data
+  Promise.all([fbGet('animals'),fbGet('health'),fbGet('breeding')]).then(res=>{
+    _gsCache={animals:res[0],health:res[1],breeding:res[2]};
+  });
+}
+function closeGlobalSearch(){
+  document.getElementById('gs-overlay').style.display='none';
+  document.getElementById('gs-input').value='';
+  document.getElementById('gs-results').innerHTML='';
+}
+function runGlobalSearch(q){
+  q=q.trim().toLowerCase();
+  const res=document.getElementById('gs-results');
+  if(q.length<2){res.innerHTML='';return;}
 
   var results = [];
-
-  // Search animals
   (_gsCache.animals||[]).forEach(function(a){
     var haystack = [a.tag, a.breed, a.barn, a.notes, a.species==='goat'?'ماعز':'أغنام',
                     a.gender==='male'?'ذكر':'أنثى', a.purpose].filter(Boolean).join(' ').toLowerCase();
@@ -769,7 +364,6 @@ var _execSearch = function(q){
     }
   });
 
-  // Search health
   (_gsCache.health||[]).forEach(function(r){
     var haystack = [r.animal_tag, r.animal_breed, r.diagnosis, r.medication].filter(Boolean).join(' ').toLowerCase();
     if(haystack.includes(q)){
@@ -783,7 +377,6 @@ var _execSearch = function(q){
     }
   });
 
-  // Search breeding
   (_gsCache.breeding||[]).forEach(function(r){
     var haystack = [r.female_tag, r.female_breed, r.male_tag].filter(Boolean).join(' ').toLowerCase();
     if(haystack.includes(q)){
@@ -809,12 +402,12 @@ var _execSearch = function(q){
     var items = results.filter(function(r){return r.type===cat;}).slice(0,5);
     return '<div style="padding:6px 8px"><div style="font-size:.72rem;font-weight:700;color:var(--text-muted);padding:4px 8px 6px">' + (catLabels[cat]||cat) + ' (' + ar(items.length) + ')</div>' +
       items.map(function(item){
-        return '<a href="' + item.href + '" onclick="closeGlobalSearch()" style="text-decoration:none;display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;transition:.15s;margin-bottom:2px;color:var(--text)" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background=''">'+
-          '<span style="font-size:1.2rem;flex-shrink:0">' + item.icon + '</span>'+
-          '<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:.85rem">' + item.title + '</div>'+
-          '<small style="color:var(--text-muted)">' + item.sub + '</small></div>'+
-          '<i class="bi bi-chevron-left" style="color:var(--text-muted);font-size:.7rem;flex-shrink:0"></i>'+
-        '</a>';
+        return `<a href="${item.href}" onclick="closeGlobalSearch()" style="text-decoration:none;display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;transition:.15s;margin-bottom:2px;color:var(--text)" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background=''">
+          <span style="font-size:1.2rem;flex-shrink:0">${item.icon}</span>
+          <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:.85rem">${item.title}</div>
+          <small style="color:var(--text-muted)">${item.sub}</small></div>
+          <i class="bi bi-chevron-left" style="color:var(--text-muted);font-size:.7rem;flex-shrink:0"></i>
+        </a>`;
       }).join('') +
     '</div>';
   }).join('<div style="height:1px;background:var(--border-3);margin:4px 8px"></div>') +
