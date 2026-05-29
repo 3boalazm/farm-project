@@ -98,16 +98,22 @@
           });
         }catch(e){}
       }
-      // Log login notification to Firebase for admin
+      // Log login notification — throttled (max once per 5 min per user)
     if(initFirebase()){
       try{
-        await fbPost('login_notifications',{
+        const _lastLoginKey='_last_login_log_'+user.id;
+        const _lastT=+localStorage.getItem(_lastLoginKey)||0;
+        const _now=Date.now();
+        if(_now-_lastT>300000){  // 5 minutes
+          localStorage.setItem(_lastLoginKey,_now);
+          await fbPost('login_notifications',{
           userName:user.name, userRole:user.role,
           roleLabel:ROLES[user.role]?.label||user.role,
           timestamp:new Date().toISOString(),
           date:new Date().toISOString().slice(0,10),
           pushed:false
         });
+        }  // end throttle check
         await fbPost('activity_log',{
           userId:user.id, userName:user.name, userRole:user.role,
           action:'login', resource:'system',
@@ -143,7 +149,7 @@
     const u=getUser();
     if(u&&initFirebase()){
       const data={userId:u.id,userName:u.name,userRole:u.role,action:'logout',resource:'system',description:'تسجيل خروج',date:new Date().toISOString().slice(0,10),timestamp:new Date().toISOString(),created_at:new Date().toISOString()};
-      navigator.sendBeacon(`${FB_URL}/activity_log.json${FB_SECRET?'?auth='+FB_SECRET:''}`,JSON.stringify(data));
+      navigator.sendBeacon(`${FB_URL}/activity_log.json`,JSON.stringify(data));
     }
   });
 })();

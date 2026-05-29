@@ -13,10 +13,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   const el = document.getElementById('content');
   renderLoading(el);
 
-  const [animals, vaccines, breeding, health, meds, feeds, storedNotifs] = await Promise.all([
+  const [animals, vaccines, breeding, health, meds, feeds, storedNotifs, loginNotifs] = await Promise.all([
     fbGet('animals'), fbGet('vaccinations'), fbGet('breeding'),
     fbGet('health'), fbGet('inventory_meds'), fbGet('inventory_feeds'),
-    fbGet('notifications').catch(() => []),
+    fbGet('notifications').catch(function() { return []; }),
+    getUser()?.role === 'admin' ? fbGet('login_notifications').catch(function(){return[];}) : Promise.resolve([]),
   ]);
 
   // ── Generate live notifications ─────────────────────
@@ -71,11 +72,10 @@ function renderNotifPage(el) {
   renderPageHeader(
     '<i class="bi bi-bell-fill accent-text"></i> الإشعارات الذكية',
     `${ar(_allNotifs.length)} تنبيه — ${ar(unread)} غير مقروء`,
-    `<div class="d-flex gap-2">
-       ${unread ? `<button class="action-btn sm" onclick="markAllRead()"><i class="bi bi-check-all"></i> قراءة الكل</button>` : ''}
-       <button class="action-btn sm" onclick="toggleRead()">
-         <i class="bi bi-eye${_showRead ? '-slash' : ''}-fill"></i> ${_showRead ? 'إخفاء المقروء' : 'عرض المقروء'}
-       </button>
+    `<div class="d-flex gap-2 flex-wrap">
+       ${unread ? '<button class="action-btn sm" onclick="markAllRead()"><i class="bi bi-check-all"></i> قراءة الكل</button>' : ''}
+       <button class="action-btn sm" onclick="toggleRead()"><i class="bi bi-eye${_showRead ? '-slash' : ''}-fill"></i> ${_showRead ? 'إخفاء المقروء' : 'عرض المقروء'}</button>
+       <button class="action-btn sm danger" onclick="clearAllNotifs()"><i class="bi bi-trash"></i> مسح الكل</button>
      </div>`
   );
 
@@ -172,7 +172,7 @@ function renderList() {
                     </span>
                   </div>
                   <div class="text-gray" style="font-size:.81rem;margin-top:3px;line-height:1.5">${n.msg || ''}</div>
-                  <div class="d-flex align-items-center gap-3 mt-2">
+                  <div class="d-flex align-items-center gap-3 mt-2 flex-wrap">
                     <small class="text-gray">${n.date || ''}</small>
                     ${n._src === 'stored' && !n.read
                       ? '<span style="width:7px;height:7px;border-radius:50%;background:var(--orange);display:inline-block"></span>'
@@ -180,6 +180,8 @@ function renderList() {
                     <a href="${href}" class="action-btn sm" style="padding:2px 8px;font-size:.7rem" onclick="event.stopPropagation()">
                       <i class="bi bi-arrow-left"></i> عرض
                     </a>
+                    ${(n._src === 'stored' || n._src === 'login') && !n.read ? `<button class="action-btn sm" style="padding:2px 8px;font-size:.7rem" onclick="event.stopPropagation();markOneRead('${n._id}')" aria-label="تعليم كمقروء"><i class="bi bi-check"></i></button>` : ''}
+                    ${n._src === 'stored' || n._src === 'login' ? `<button class="action-btn sm danger" style="padding:2px 8px;font-size:.7rem" onclick="event.stopPropagation();deleteOneNotif('${n._id}')" aria-label="حذف"><i class="bi bi-trash"></i></button>` : ''}
                   </div>
                 </div>
               </div>
@@ -227,6 +229,53 @@ window.markAllRead = async function() {
 window.goTo = function(href) {
   if (href) window.location.href = href;
 };
+
+window.clearAllNotifs = async function() {
+  if (!confirm('هل تريد حذف كل الإشعارات المخزنة؟ (الإشعارات الحية لن تُحذف)')) return;
+  try {
+    const stored = await fbGet('notifications');
+    const loginN = await fbGet('login_notifications').catch(function(){return[];});
+    await Promise.all([
+      ...(stored||[]).map(function(n){ return fbDelete('notifications', n._id).catch(function(){}); }),
+      ...(loginN||[]).map(function(n){ return fbDelete('login_notifications', n._id).catch(function(){}); }),
+    ]);
+    _allNotifs = _allNotifs.filter(function(n){ return n._src === 'live'; });
+    toast('تم حذف الإشعارات المخزنة');
+    const el = document.getElementById('content');
+    renderNotifPage(el);
+  } catch(e) { toast('خطأ: ' + e.message, 'error'); }
+};
+
+window.markOneRead = async function(id) {
+  const n = _allNotifs.find(function(x){ return x._id === id || x.id === id; });
+  if (!n) return;
+  n.read = true;
+  if (n._src === 'stored' && n._id) {
+    await fbPatch('notifications', n._id, { read: true }).catch(function(){});
+  }
+  const el = document.getElementById('content');
+  renderNotifPage(el);
+};
+
+window.deleteOneNotif = async function(id) {
+  const idx = _allNotifs.findIndex(function(x){ return x._id === id || x.id === id; });
+  if (idx < 0) return;
+  const n = _allNotifs[idx];
+  _allNotifs.splice(idx, 1);
+  if (n._src === 'stored' && n._id) {
+    await fbDelete('notifications', n._id).catch(function(){});
+  }
+  const el = document.getElementById('content');
+  renderNotifPage(el);
+};
+
+window.filterBy = function(cat) {
+  _activeFilter = cat;
+  const el = document.getElementById('content');
+  renderNotifPage(el);
+};
+
+
 
 // ── Generate live notifications ───────────────────────────
 function generateNotifs({ animals, vaccines, breeding, health, meds, feeds }) {
