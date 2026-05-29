@@ -30,7 +30,37 @@
 
   <!-- ── RESET SECTION (Admin Only) ── -->
     
-  <!-- Tour Reset -->
+  
+  <!-- React-powered Features -->
+  <div class="settings-section" style="border-color:rgba(33,150,243,.3)">
+    <h6 class="fw-bold mb-3"><i class="bi bi-lightning-fill accent-text"></i> ميزات React المتقدمة</h6>
+    <p class="text-gray mb-3" style="font-size:.82rem">مكونات React مدمجة مع التطبيق — تعمل دون الحاجة لإعادة تحميل الصفحة</p>
+    <div class="row g-3">
+      <div class="col-md-4">
+        <div class="wonder-card text-center p-3" style="cursor:pointer;border-color:rgba(255,107,53,.3)" onclick="FarmReact?.openThemeGenerator()">
+          <div style="font-size:2rem;margin-bottom:8px">🎨</div>
+          <div class="fw-bold mb-1" style="font-size:.88rem">مولّد الثيمات بالذكاء الاصطناعي</div>
+          <small class="text-gray">صف الثيم الذي تريده بالعربي وسيولّده AI</small>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="wonder-card text-center p-3" style="cursor:pointer;border-color:rgba(33,150,243,.3)" onclick="loadM3Demo()">
+          <div style="font-size:2rem;margin-bottom:8px">⚡</div>
+          <div class="fw-bold mb-1" style="font-size:.88rem">مكونات M3 التفاعلية</div>
+          <small class="text-gray">Button Groups، Split Buttons، Shape Morph Cards</small>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="wonder-card text-center p-3" style="cursor:pointer;border-color:rgba(0,230,118,.3)" onclick="loadG2Charts()">
+          <div style="font-size:2rem;margin-bottom:8px">📊</div>
+          <div class="fw-bold mb-1" style="font-size:.88rem">AntV G2 — رسوم تفاعلية</div>
+          <small class="text-gray">مخططات متحركة بالذكاء من AntV G2</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<!-- Tour Reset -->
   <div class="settings-section">
     <h6 class="fw-bold mb-3"><i class="bi bi-signpost-fill accent-text"></i> الجولة التعريفية</h6>
     <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
@@ -401,6 +431,28 @@ window.resetEverything=async function(){
   });
   toast('✅ تم مسح كل البيانات — يمكنك إعادة استيراد البيانات من صفحة الاستيراد');
   setTimeout(function(){location.href='dashboard.html';},2000);
+};
+</script>
+<script src="farm-react.js" defer>
+window.loadM3Demo = async function() {
+  if (!window.FarmReact) { toast('جاري التحميل...','info'); return; }
+  var animals = [];
+  try { animals = await fbGet('animals'); } catch(e) {}
+  var data = {
+    total: animals.filter(function(a){return a.status==='alive';}).length,
+    births: animals.filter(function(a){return a.purpose==='birth'&&a.status==='alive';}).length,
+    sick: 0, health: '—',
+  };
+  window.FarmReact.openM3Demo(data);
+};
+
+window.loadG2Charts = async function() {
+  if (!window.FarmReact) { toast('جاري التحميل...','info'); return; }
+  var animals = [], production = [];
+  try {
+    [animals, production] = await Promise.all([fbGet('animals'), fbGet('production_log').catch(()=>[])]);
+  } catch(e) {}
+  window.FarmReact.openG2Charts(animals, production);
 };
 </script>
 </body>

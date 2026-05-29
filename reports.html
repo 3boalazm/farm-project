@@ -40,5 +40,14 @@
 <script src="pages/tour.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="pages/reports.js"></script>
+<script src="farm-react.js" defer></script>
+<script>
+window.loadG2Charts = async function() {
+  if (!window.FarmReact) { if(window.toast)toast('جاري تحميل مكونات React...','info'); setTimeout(loadG2Charts,1000); return; }
+  var animals=[], production=[];
+  try { [animals, production] = await Promise.all([fbGet('animals'), fbGet('production_log').catch(()=>[])]); } catch(e) {}
+  window.FarmReact.openG2Charts(animals, production);
+};
+</script>
 </body>
 </html>
