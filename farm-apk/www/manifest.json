@@ -1,0 +1,28 @@
+{
+  "name": "بيان المزرعة",
+  "short_name": "المزرعة",
+  "description": "نظام إدارة المزرعة المتكامل - بيان",
+  "start_url": "./dashboard.html",
+  "display": "standalone",
+  "background_color": "#141414",
+  "theme_color": "#00e676",
+  "orientation": "portrait-primary",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAxOTIgMTkyJz48cmVjdCB3aWR0aD0nMTkyJyBoZWlnaHQ9JzE5Micgcng9JzMyJyBmaWxsPScjMDBlNjc2Jy8+PHRleHQgeT0nMTQwJyB4PScyOCcgZm9udC1zaXplPScxMzAnPvCfkKE8L3RleHQ+PC9zdmc+",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA1MTIgNTEyJz48cmVjdCB3aWR0aD0nNTEyJyBoZWlnaHQ9JzUxMicgcng9JzgwJyBmaWxsPScjMDBlNjc2Jy8+PHRleHQgeT0nMzgwJyB4PSc1MCcgZm9udC1zaXplPSczMzAnPvCfkKE8L3RleHQ+PC9zdmc+",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "screenshots": []
+}
