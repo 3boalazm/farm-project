@@ -58,11 +58,21 @@ function renderPage(){
   var regular=sheeps.filter(function(a){return a.purpose!=='birth'&&a.breed!=='مواليد';});
 
   // Summary stats
+  // Compute total from configured breeds only — matches exactly what breed cards show.
+  // Previously used sheeps.length (all alive sheep) which diverged from breed card sums
+  // after the species filter fix; now both numbers come from the same source.
+  var breedTotal=0, breedBirthTotal=0;
+  s.sheepBreeds.forEach(function(b){
+    var bs=breedStats(_animals,'sheep',b);
+    breedTotal+=bs.totalAll;
+    breedBirthTotal+=bs.birthCount;
+  });
+  var breedRegularTotal=breedTotal-breedBirthTotal;
+
   var html='<div class="row g-3 mb-4">';
-  var regularCount=sheeps.filter(function(a){return a.purpose!=='birth'&&a.breed!=='مواليد';}).length;
-  html+='<div class="col-6 col-md-3"><div class="summary-card"><div class="summary-number green-text">'+ar(sheeps.length)+'</div>';
+  html+='<div class="col-6 col-md-3"><div class="summary-card"><div class="summary-number green-text">'+ar(breedTotal)+'</div>';
   html+='<small class="text-gray">إجمالي الأغنام</small>';
-  html+='<div style="font-size:.7rem;color:var(--text-muted);margin-top:2px">'+ar(regularCount)+' سلالات + '+ar(births.length)+' مواليد</div>';
+  html+='<div style="font-size:.7rem;color:var(--text-muted);margin-top:2px">'+ar(breedRegularTotal)+' سلالات + '+ar(breedBirthTotal)+' مواليد</div>';
   html+='</div></div>';
   html+='<div class="col-6 col-md-3"><div class="summary-card"><div class="summary-number" style="color:var(--yellow)">'+ar(births.length)+'</div><small class="text-gray">المواليد</small></div></div>';
   html+='<div class="col-6 col-md-3"><div class="summary-card"><div class="summary-number accent-text">'+ar(regular.filter(function(a){return a.purpose==='tasmeen';}).length)+'</div><small class="text-gray">تسمين</small></div></div>';
