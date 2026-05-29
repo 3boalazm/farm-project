@@ -37,7 +37,7 @@
     <p class="text-gray mb-3" style="font-size:.82rem">مكونات React مدمجة مع التطبيق — تعمل دون الحاجة لإعادة تحميل الصفحة</p>
     <div class="row g-3">
       <div class="col-md-4">
-        <div class="wonder-card text-center p-3" style="cursor:pointer;border-color:rgba(255,107,53,.3)" onclick="FarmReact?.openThemeGenerator()">
+        <div class="wonder-card text-center p-3" style="cursor:pointer;border-color:rgba(255,107,53,.3)" onclick="if(window.FarmReact){FarmReact.openThemeGenerator();}else{toast('جاري تحميل React...','info');setTimeout(function(){if(window.FarmReact)FarmReact.openThemeGenerator();},1500);}">
           <div style="font-size:2rem;margin-bottom:8px">🎨</div>
           <div class="fw-bold mb-1" style="font-size:.88rem">مولّد الثيمات بالذكاء الاصطناعي</div>
           <small class="text-gray">صف الثيم الذي تريده بالعربي وسيولّده AI</small>
@@ -433,9 +433,10 @@ window.resetEverything=async function(){
   setTimeout(function(){location.href='dashboard.html';},2000);
 };
 </script>
-<script src="farm-react.js" defer>
+<script src="farm-react.js" defer></script>
+<script>
 window.loadM3Demo = async function() {
-  if (!window.FarmReact) { toast('جاري التحميل...','info'); return; }
+  if (!window.FarmReact) { toast('جاري التحميل...','info'); setTimeout(loadM3Demo, 800); return; }
   var animals = [];
   try { animals = await fbGet('animals'); } catch(e) {}
   var data = {
@@ -447,10 +448,10 @@ window.loadM3Demo = async function() {
 };
 
 window.loadG2Charts = async function() {
-  if (!window.FarmReact) { toast('جاري التحميل...','info'); return; }
+  if (!window.FarmReact) { toast('جاري التحميل...','info'); setTimeout(loadG2Charts, 800); return; }
   var animals = [], production = [];
   try {
-    [animals, production] = await Promise.all([fbGet('animals'), fbGet('production_log').catch(()=>[])]);
+    [animals, production] = await Promise.all([fbGet('animals'), fbGet('production_log').catch(function(){return[];})]);
   } catch(e) {}
   window.FarmReact.openG2Charts(animals, production);
 };
