@@ -1,15 +1,6 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <!-- Performance hints -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
-  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <link rel="preconnect" href="https://farm-mz99-default-rtdb.europe-west1.firebasedatabase.app" crossorigin>
-  <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
-  <link rel="dns-prefetch" href="https://aistudio.googleapis.com">
-  <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
-  <meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
-
 <script>(function(){var t=localStorage.getItem('farm_theme');if(t==='light')document.documentElement.classList.add('light-mode');}());</script>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>الرئيسية — بيان المزرعة</title>
@@ -18,34 +9,19 @@
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 <style>
-.sync-status{font-size:.7rem;margin-top:8px;padding-top:8px;border-top:1px solid var(--border-3)}
-.sync-ok{color:var(--green)}.sync-conflict{color:var(--red);font-weight:700}
-.sync-btn{padding:2px 8px;font-size:.65rem;border-radius:4px;border:1px solid;background:transparent;cursor:pointer;margin-top:4px;transition:all .2s}
-.sync-btn-apply{color:var(--green);border-color:var(--green)}.sync-btn-apply:hover{background:var(--green);color:#fff}
-.summary-card{position:relative;overflow:hidden;height:100%;display:flex;flex-direction:column;justify-content:space-between}
-.alert-strip{border-radius:14px;padding:12px 16px;margin-bottom:8px;display:flex;align-items:flex-start;gap:12px;border:1px solid}
-.alert-strip-red{background:rgba(244,67,54,.06);border-color:rgba(244,67,54,.25)}
-.alert-strip-orange{background:rgba(255,107,53,.06);border-color:rgba(255,107,53,.25)}
-.alert-strip-yellow{background:rgba(255,193,7,.06);border-color:rgba(255,193,7,.25)}
-.alert-strip-blue{background:rgba(33,150,243,.06);border-color:rgba(33,150,243,.25)}
-.mini-bar-wrap{display:flex;align-items:flex-end;gap:3px;height:44px;margin-top:6px}
-.mini-bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px}
-.mini-bar{width:100%;border-radius:3px 3px 0 0;transition:height .5s}
-.mini-bar-lbl{font-size:.52rem;color:var(--text-muted);white-space:nowrap}
-.event-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border-3)}
-.event-row:last-child{border-bottom:none}
-.event-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.quick-action-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-top:8px}
-.qa-btn{background:var(--bg-3);border:1px solid var(--border);border-radius:12px;padding:12px 8px;text-align:center;cursor:pointer;transition:.2s;text-decoration:none;color:var(--text-sub);display:flex;flex-direction:column;align-items:center;gap:5px}
-.qa-btn:hover{border-color:var(--border-2);color:var(--text);background:var(--bg-4);transform:translateY(-2px)}
-.qa-btn i{font-size:1.2rem}
-.qa-btn small{font-size:.68rem;font-weight:600;line-height:1.2}
+  .sync-status { font-size: 0.7rem; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-3); }
+  .sync-ok { color: var(--green); }
+  .sync-conflict { color: var(--red); font-weight: 700; }
+  .sync-btn { padding: 2px 8px; font-size: 0.65rem; border-radius: 4px; border: 1px solid; background: transparent; cursor: pointer; margin-top: 4px; transition: all 0.2s; }
+  .sync-btn-apply { color: var(--green); border-color: var(--green); }
+  .sync-btn-apply:hover { background: var(--green); color: #fff; }
+  .summary-card { position: relative; overflow: hidden; height: 100%; display: flex; flex-direction: column; justify-content: space-between; }
 </style>
 </head>
 <body>
 <div class="page-wrap">
   <div id="page-header"></div>
-  <div id="content" role="main" aria-label="لوحة التحكم الرئيسية"><div class="text-center py-5"><div class="spinner"></div></div></div>
+  <div id="content"><div class="text-center py-5"><div class="spinner"></div></div></div>
   <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
     <span id="footer-year"></span> &copy; <span id="footer-farm"></span><br>
     <small style="font-size:.72rem;color:var(--text-muted)">إشراف: لواء أحمد رجب نوح | تطوير: جندي مصطفى محمد إبراهيم</small>
@@ -55,452 +31,277 @@
 <script src="firebase.js"></script>
 <script src="nav.js"></script>
 <script src="shared.js"></script>
-<script src="offline-sync.js" defer></script>
-<script src="pages/datepicker.js" defer></script>
-<script src="pages/tour.js" defer></script>
 <script>
-'use strict';
-
-document.addEventListener('DOMContentLoaded', async function() {
-  if (!requireAuth()) return;
+/**
+ * Dashboard Logic with Sync Conflict Resolution
+ */
+document.addEventListener('DOMContentLoaded', async function(){
+  if(!requireAuth())return;
   initFirebase();
-  var s = getSettings();
-  document.getElementById('footer-year').textContent = ar(new Date().getFullYear());
-  document.getElementById('footer-farm').textContent  = s.farmName;
+  var s=getSettings();
+  document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
+  document.getElementById('footer-farm').textContent=s.farmName;
   renderNavbar('dashboard.html');
-  // Auto-start tour for new users
-  if (typeof FarmTour !== 'undefined') FarmTour.autoStart();
-  addFAB('إجراء سريع', function(){
-    var el = document.getElementById('quick-actions-section');
-    if (el) { el.scrollIntoView({behavior:'smooth'}); }
-    else { location.href='animals.html'; }
-  }, 'bi-lightning-fill');
 
-  var el = document.getElementById('content');
+  var el=document.getElementById('content');
   renderLoading(el);
 
   try {
-    var [animals, breeding, health, finance, vaccines, meds, feeds] = await Promise.all([
-      fbGet('animals'), fbGet('breeding'), fbGet('health'),
-      fbGet('finance'), fbGet('vaccinations'),
-      fbGet('inventory_meds').catch(function(){return[];}),
-      fbGet('inventory_feeds').catch(function(){return[];})
+    const [animals, breeding, health, finance] = await Promise.all([
+      fbGet('animals'), fbGet('breeding'), fbGet('health'), fbGet('finance')
     ]);
-    renderDashboard(animals, breeding, health, finance, vaccines, meds, feeds);
+    renderDashboard(animals, breeding, health, finance);
   } catch(e) {
-    toast('خطأ في التحميل: ' + e.message, 'error');
+    toast('خطأ في التحميل: '+e.message,'error');
   }
 });
 
-function renderDashboard(animals, breeding, health, finance, vaccines, meds, feeds) {
-  var s   = getSettings();
-  var el  = document.getElementById('content');
-  var alive = animals.filter(function(a){return a.status==='alive';});
-  var dead  = animals.filter(function(a){return a.status==='dead';});
-  var today = todayStr();
-  var curr  = s.currency || 'ج.م';
+function renderDashboard(animals, breeding, health, finance) {
+  var s=getSettings();
+  var el=document.getElementById('content');
+  var alive = animals.filter(a => a.status === 'alive');
+  
+  // Helpers
+  const isBirth = a => a.purpose === 'birth' || a.breed === 'مواليد';
+  const arNum = n => ar(n);
 
-  var isBirth = function(a){return a.purpose==='birth'||a.breed==='مواليد';};
-
-  var stats = {
-    total:      alive.length,
-    goats:      alive.filter(function(a){return a.species==='goat';}).length,
-    sheep:      alive.filter(function(a){return a.species==='sheep';}).length,
-    pregnant:   breeding.filter(function(r){return r.status==='pregnant';}).length,
-    goatBirths: alive.filter(function(a){return a.species==='goat'&&isBirth(a);}).length,
-    sheepBirths:alive.filter(function(a){return a.species==='sheep'&&isBirth(a);}).length,
-    dead:       dead.length
+  // Stats calculation (The "Actual" data from database)
+  const stats = {
+    total: alive.length,
+    goats: alive.filter(a => a.species === 'goat').length,
+    sheep: alive.filter(a => a.species === 'sheep').length,
+    pregnant: breeding.filter(r => r.status === 'pregnant').length,
+    goatBirths: alive.filter(a => a.species === 'goat' && isBirth(a)).length,
+    sheepBirths: alive.filter(a => a.species === 'sheep' && isBirth(a)).length,
+    dead: animals.filter(a => a.status === 'dead').length
   };
 
   // Finance
-  var inc = finance.filter(function(r){return r.type==='income';}).reduce(function(t,r){return t+(+r.amount||0);},0);
-  var exp = finance.filter(function(r){return r.type==='expense';}).reduce(function(t,r){return t+(+r.amount||0);},0);
-  var net = inc - exp;
+  var inc=finance.filter(r=>r.type==='income').reduce((t,r)=>t+(+r.amount||0),0);
+  var exp=finance.filter(r=>r.type==='expense').reduce((t,r)=>t+(+r.amount||0),0);
 
-  // Monthly finance last 6 months for mini chart
-  var monthlyFin = buildMonthlyFin(finance);
-  var mKeys = Object.keys(monthlyFin);
-
-  // Alerts
-  var alerts = buildAlerts(breeding, health, vaccines, meds, feeds, today);
-
-  // Breed data for pie
-  var allBreeds = s.goatBreeds.map(function(k){return{k,sp:'goat'};}).concat(s.sheepBreeds.map(function(k){return{k,sp:'sheep'};}));
-  var breedData = allBreeds.map(function(b){
-    var a=alive.filter(function(x){return x.breed===b.k;});
-    return{breed:b.k,species:b.sp,total:a.length,tarbiya:a.filter(function(x){return x.purpose==='tarbiya';}).length,tasmeen:a.filter(function(x){return x.purpose==='tasmeen';}).length,births:a.filter(function(x){return x.purpose==='birth';}).length};
-  }).filter(function(b){return b.total>0;}).sort(function(a,b){return b.total-a.total;});
-
-  ['goat','sheep'].forEach(function(sp){
-    var bs=alive.filter(function(a){return a.species===sp&&isBirth(a);});
-    if(bs.length>0)breedData.push({breed:'مواليد',species:sp,total:bs.length,tarbiya:0,tasmeen:0,births:bs.length});
-  });
-
-  // Upcoming events (next 14 days)
-  var events = buildEvents(breeding, vaccines, health, today);
-
-  // Active health
-  var activeHealth = health.filter(function(r){return r.status==='active';});
-  var withdrawal   = health.filter(function(r){return r.status==='active'&&r.withdrawal_end&&r.withdrawal_end>=today;});
-
-  // Header
   renderPageHeader(
-    'مرحباً ' + (getUser().name||getUser().email||'') + ' 👋',
+    'مرحباً ' + getUser().name + ' 👋',
     s.farmName + ' — ' + todayAr(),
-    (can('animals') ? [
-      '<a href="diary.html" class="action-btn" style="background:rgba(255,107,53,.1);border-color:rgba(255,107,53,.3);color:var(--orange)"><i class="bi bi-journal-text"></i> اليومية</a>',
-      '<a href="assistant.html" class="action-btn" style="background:rgba(0,230,118,.1);border-color:rgba(0,230,118,.3);color:var(--green)"><i class="bi bi-robot"></i> المساعد</a>',
-      '<button class="action-btn primary" onclick="openAddAnimalDash()"><i class="bi bi-plus-lg"></i> إضافة</button>',
-      '<button class="action-btn" onclick="openUnifiedBirthModal(\'goat\')" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.35);color:var(--yellow)"><i class="bi bi-stars"></i> مواليد</button>',
-      '<button class="action-btn danger" onclick="openMarkDeathDash()"><i class="bi bi-x-octagon"></i> نفوق</button>',
-    ] : [
-      '<a href="diary.html" class="action-btn"><i class="bi bi-journal-text"></i> اليومية</a>',
-      '<a href="assistant.html" class="action-btn"><i class="bi bi-robot"></i> المساعد</a>',
-    ]).join('')
+    `<a href="diary.html" class="action-btn" style="background:rgba(255,107,53,.1);border-color:rgba(255,107,53,.3);color:var(--orange)"><i class="bi bi-journal-text"></i> يومية المزرعة</a>
+     <a href="assistant.html" class="action-btn" style="background:rgba(0,230,118,.1);border-color:rgba(0,230,118,.3);color:var(--green)"><i class="bi bi-robot"></i> المساعد الذكي</a>
+     ${can('animals') ? `
+       <button class="action-btn primary" onclick="openAddAnimalDash()"><i class="bi bi-plus-lg"></i> إضافة حيوان</button>
+       <button class="action-btn" onclick="openUnifiedBirthModal('goat')" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.35);color:var(--yellow)"><i class="bi bi-stars"></i> مواليد</button>
+       <button class="action-btn danger" onclick="openMarkDeathDash()"><i class="bi bi-x-octagon"></i> نفوق</button>
+     ` : ''}`
   );
 
-  el.innerHTML = [
-    // ── Weather ──────────────────────────────────────────
-    '<div id="weather-widget" class="wonder-card mb-4 p-3"><div class="text-gray" style="font-size:.82rem"><i class="bi bi-cloud-sun me-2"></i>جاري تحميل حالة الطقس...</div></div>',
+  // Build Breed Data for table/chart
+  var allBreeds = s.goatBreeds.map(k => ({k, sp:'goat'})).concat(s.sheepBreeds.map(k => ({k, sp:'sheep'})));
+  var breedData = allBreeds.map(b => {
+    var a = alive.filter(x => x.breed === b.k && x.species === b.sp);
+    return {
+      breed: b.k, species: b.sp, total: a.length,
+      tarbiya: a.filter(x => x.purpose === 'tarbiya').length,
+      tasmeen: a.filter(x => x.purpose === 'tasmeen').length,
+      births: a.filter(x => x.purpose === 'birth').length
+    };
+  }).filter(b => b.total > 0).sort((a,b) => {
+    // Group goats together first, then sheep — each group sorted by total (desc)
+    if (a.species !== b.species) return a.species === 'goat' ? -1 : 1;
+    return b.total - a.total;
+  });
 
-    // ── Alerts ───────────────────────────────────────────
-    alerts.length ? '<div class="mb-4">' + renderAlerts(alerts) + '</div>' : '',
+  // NOTE: the separate aggregate "مواليد" rows were removed on request.
+  // Births are already detailed per-breed in the "مواليد" column of each row,
+  // so the bottom aggregate rows duplicated that data.
 
-    // ── KPI Cards ─────────────────────────────────────────
-    '<div class="row g-3 mb-4">',
-    [
-      {id:'total',      l:'إجمالي القطيع',  v:ar(stats.total),       c:'var(--orange)', i:'bi-bar-chart-fill',  h:'animals.html'},
-      {id:'goats',      l:'الماعز',          v:ar(stats.goats),       c:'var(--green)',  i:'bi-tropical-storm',  h:'goats.html'},
-      {id:'sheep',      l:'الأغنام',         v:ar(stats.sheep),       c:'var(--blue)',   i:'bi-cloud-fill',      h:'sheep.html'},
-      {id:'pregnant',   l:'حوامل',           v:ar(stats.pregnant),    c:'var(--purple)', i:'bi-diagram-2',       h:'breeding.html'},
-      {id:'goatBirths', l:'مواليد الماعز',   v:ar(stats.goatBirths),  c:'var(--green)',  i:'bi-stars',           h:'births.html?sp=goat'},
-      {id:'sheepBirths',l:'مواليد الأغنام',  v:ar(stats.sheepBirths), c:'var(--blue)',   i:'bi-stars',           h:'births.html?sp=sheep'},
-    ].map(function(st){return(
-      '<div class="col-6 col-md-4 col-lg-2"><div class="summary-card">' +
-        '<a href="'+st.h+'" style="text-decoration:none">' +
-          '<i class="bi '+st.i+' d-block mb-2" style="font-size:1.3rem;color:'+st.c+'"></i>' +
-          '<div class="summary-number" style="color:'+st.c+'">'+st.v+'</div>' +
-          '<small class="text-gray">'+st.l+'</small>' +
-        '</a>' +
-        '<div class="sync-status" id="sync-'+st.id+'"><i class="bi bi-check-circle-fill sync-ok"></i> متزامن</div>' +
-      '</div></div>'
-    );}).join(''),
-    '</div>',
+  // UI Components
+  const quickStats = [
+    { id:'total', l:'إجمالي القطيع', v:arNum(stats.total), c:'var(--orange)', i:'bi-bar-chart-fill', href:'animals.html' },
+    { id:'goats', l:'الماعز', v:arNum(stats.goats), c:'var(--green)', i:'bi-tropical-storm', href:'goats.html' },
+    { id:'sheep', l:'الأغنام', v:arNum(stats.sheep), c:'var(--blue)', i:'bi-cloud-fill', href:'sheep.html' },
+    { id:'pregnant', l:'حوامل', v:arNum(stats.pregnant), c:'var(--purple)', i:'bi-diagram-2', href:'breeding.html' },
+    { id:'goatBirths', l:'مواليد الماعز', v:arNum(stats.goatBirths), c:'var(--green)', i:'bi-stars', href:'births.html?sp=goat' },
+    { id:'sheepBirths', l:'مواليد الأغنام', v:arNum(stats.sheepBirths), c:'var(--blue)', i:'bi-stars', href:'births.html?sp=sheep' }
+  ];
 
-    // ── Finance + Mini Chart ──────────────────────────────
-    can('finance') ? [
-      '<div class="wonder-card mb-4">',
-        '<div class="d-flex justify-content-between align-items-start mb-2">',
-          '<h6 class="fw-bold mb-0"><i class="bi bi-wallet2 accent-text me-2"></i>الملخص المالي</h6>',
-          '<a href="finance.html" class="action-btn sm"><i class="bi bi-arrow-left"></i> التفاصيل</a>',
-        '</div>',
-        '<div class="row g-3 align-items-end">',
-          '<div class="col-md-6">',
-            '<div class="row g-2">',
-              '<div class="col-4 text-center"><div class="fw-bold green-text" style="font-size:.95rem">'+inc.toLocaleString('ar-EG')+'</div><small class="text-gray">'+curr+' إيرادات</small></div>',
-              '<div class="col-4 text-center"><div class="fw-bold" style="font-size:.95rem;color:var(--orange)">'+exp.toLocaleString('ar-EG')+'</div><small class="text-gray">'+curr+' مصروفات</small></div>',
-              '<div class="col-4 text-center"><div class="fw-bold" style="font-size:.95rem;color:'+(net>=0?'var(--green)':'var(--red)')+'">'+(net>=0?'+':'')+net.toLocaleString('ar-EG')+'</div><small class="text-gray">'+curr+' صافي</small></div>',
-            '</div>',
-          '</div>',
-          '<div class="col-md-6">',
-            '<div class="mini-bar-wrap" id="fin-mini-chart">',
-              mKeys.map(function(k){
-                var mo=monthlyFin[k];var maxV=Math.max.apply(null,mKeys.map(function(k2){return Math.max(monthlyFin[k2].income,monthlyFin[k2].expense,1);}));
-                var iH=Math.max(3,Math.round(mo.income/maxV*40));var eH=Math.max(3,Math.round(mo.expense/maxV*40));
-                var lbl=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'][+k.split('-')[1]-1];
-                return '<div class="mini-bar-col">'+
-                  '<div class="d-flex gap-1 align-items-end" style="height:40px">'+
-                    '<div class="mini-bar" style="height:'+iH+'px;background:#00e676;width:8px"></div>'+
-                    '<div class="mini-bar" style="height:'+eH+'px;background:#ff6b35;width:8px"></div>'+
-                  '</div>'+
-                  '<div class="mini-bar-lbl">'+lbl.slice(0,3)+'</div>'+
-                '</div>';
-              }).join(''),
-            '</div>',
-            '<div class="d-flex gap-3 mt-1"><small class="d-flex align-items-center gap-1"><span style="width:8px;height:8px;background:#00e676;border-radius:2px;display:inline-block"></span>إيرادات</small><small class="d-flex align-items-center gap-1"><span style="width:8px;height:8px;background:#ff6b35;border-radius:2px;display:inline-block"></span>مصروفات</small></div>',
-          '</div>',
-        '</div>',
-      '</div>',
-    ].join('') : '',
+  const tableRows = breedData.map(b => `
+    <tr style="border-bottom:1px solid var(--border-3)">
+      <td style="padding:8px;color:var(--text-gray)">${b.species==='goat'?'ماعز':'أغنام'}</td>
+      <td style="padding:8px;font-weight:700">${b.breed}</td>
+      <td style="padding:8px">${arNum(b.tarbiya)}</td>
+      <td style="padding:8px">${arNum(b.tasmeen)}</td>
+      <td style="padding:8px;color:var(--yellow)">${arNum(b.births)}</td>
+      <td style="padding:8px;font-weight:700;color:var(--green)">${arNum(b.total)}</td>
+    </tr>
+  `).join('');
 
-    // ── Active Health Alert ───────────────────────────────
-    activeHealth.length ? [
-      '<div class="wonder-card mb-4" style="border-color:rgba(244,67,54,.2)">',
-        '<div class="d-flex justify-content-between align-items-center mb-2">',
-          '<h6 class="fw-bold mb-0 red-text"><i class="bi bi-heart-pulse-fill me-2"></i>حيوانات قيد العلاج ('+ar(activeHealth.length)+')</h6>',
-          '<a href="health.html" class="action-btn sm danger"><i class="bi bi-arrow-left"></i> عرض الكل</a>',
-        '</div>',
-        '<div class="d-flex flex-wrap gap-2">',
-          activeHealth.slice(0,8).map(function(r){
-            var inW=r.withdrawal_end&&r.withdrawal_end>=today;
-            var dLeft=inW?Math.max(0,Math.ceil((new Date(r.withdrawal_end)-new Date())/86400000)):0;
-            return '<span class="type-badge badge-danger" style="cursor:default">'+
-              (r.animal_tag?'#'+r.animal_tag+' ':'')+(r.animal_breed||'—')+
-              (inW?' <small>(سحب '+ar(dLeft)+' يوم)</small>':'')+
-            '</span>';
-          }).join(''),
-          activeHealth.length>8?'<small class="text-gray align-self-center">+ '+ar(activeHealth.length-8)+' أخرى</small>':'',
-        '</div>',
-      '</div>',
-    ].join('') : '',
+  el.innerHTML = `
+    <div id="weather-widget" class="wonder-card mb-4 p-3"><div class="text-gray" style="font-size:.82rem"><i class="bi bi-cloud-sun me-2"></i>جاري تحميل حالة الطقس...</div></div>
+    <div class="row g-3 mb-4">
+      ${quickStats.map(st => `
+        <div class="col-6 col-md-4 col-lg-2">
+          <div class="summary-card">
+            <a href="${st.href}" style="text-decoration:none">
+              <i class="bi ${st.i} d-block mb-2" style="font-size:1.3rem;color:${st.c}"></i>
+              <div class="summary-number" style="color:${st.c}">${st.v}</div>
+              <small class="text-gray">${st.l}</small>
+            </a>
+            <div class="sync-status" id="sync-${st.id}">
+              <i class="bi bi-check-circle-fill sync-ok"></i> متزامن مع اليومية
+            </div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+    ${can('finance') ? `
+      <div class="row g-3 mb-4">
+        <div class="col-md-4"><a href="finance.html" style="text-decoration:none"><div class="wonder-card text-center"><div style="font-size:1.1rem;font-weight:700;color:var(--green)">${inc.toLocaleString('ar-EG')} ${s.currency}</div><small class="text-gray">الإيرادات</small></div></a></div>
+        <div class="col-md-4"><a href="finance.html" style="text-decoration:none"><div class="wonder-card text-center"><div style="font-size:1.1rem;font-weight:700;color:var(--orange)">${exp.toLocaleString('ar-EG')} ${s.currency}</div><small class="text-gray">المصروفات</small></div></a></div>
+        <div class="col-md-4"><a href="cost.html" style="text-decoration:none"><div class="wonder-card text-center"><div style="font-size:1.1rem;font-weight:700;color:${(inc-exp>=0?'var(--green)':'var(--red)')}">${((inc-exp>=0?'+':'')+(inc-exp).toLocaleString('ar-EG'))} ${s.currency}</div><small class="text-gray">صافي الربح/الخسارة</small></div></a></div>
+      </div>
+    ` : ''}
+    <div class="row g-3 mb-4">
+      <div class="col-md-5"><div class="wonder-card"><h6 class="fw-bold mb-3"><i class="bi bi-pie-chart-fill accent-text"></i> توزيع القطيع</h6><div id="pie-container" class="text-center"></div></div></div>
+      <div class="col-md-7">
+        <div class="wonder-card p-0">
+          <div class="p-3 pb-2 fw-bold" style="font-size:.9rem"><a href="diary.html" style="text-decoration:none;color:var(--text)"><i class="bi bi-table accent-text me-2"></i>ملخص المزرعة</a></div>
+          <div class="table-responsive">
+            <table style="width:100%;border-collapse:separate;border-spacing:0;font-size:.8rem">
+              <thead>
+                <tr style="background:rgba(255,255,255,.03)">
+                  <th style="padding:8px;color:var(--text-gray);font-weight:700;border-bottom:1px solid var(--border)">القسم</th>
+                  <th style="padding:8px;color:var(--text-gray);font-weight:700;border-bottom:1px solid var(--border)">السلالة</th>
+                  <th style="padding:8px;color:var(--text-gray);font-weight:700;border-bottom:1px solid var(--border)">تربية</th>
+                  <th style="padding:8px;color:var(--text-gray);font-weight:700;border-bottom:1px solid var(--border)">تسمين</th>
+                  <th style="padding:8px;color:var(--text-gray);font-weight:700;border-bottom:1px solid var(--border)">مواليد</th>
+                  <th style="padding:8px;color:var(--text-gray);font-weight:700;border-bottom:1px solid var(--border)">الإجمالي</th>
+                </tr>
+              </thead>
+              <tbody>${tableRows}</tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
 
-    // ── Pie Chart + Breed Table ───────────────────────────
-    '<div class="row g-3 mb-4">',
-      '<div class="col-md-5"><div class="wonder-card"><h6 class="fw-bold mb-3"><i class="bi bi-pie-chart-fill accent-text"></i> توزيع القطيع</h6><div id="pie-container" class="text-center"></div></div></div>',
-      '<div class="col-md-7"><div class="wonder-card p-0">',
-        '<div class="p-3 pb-2 fw-bold" style="font-size:.9rem"><a href="diary.html" style="text-decoration:none;color:var(--text)"><i class="bi bi-table accent-text me-2"></i>ملخص المزرعة</a></div>',
-        '<div class="table-responsive">',
-          '<table style="width:100%;border-collapse:separate;border-spacing:0;font-size:.8rem">',
-            '<thead><tr style="background:rgba(255,255,255,.03)">',
-              '<th style="padding:8px;color:var(--text-gray);font-weight:700;border-bottom:1px solid var(--border)">القسم</th>',
-              '<th style="padding:8px;color:var(--text-gray);font-weight:700;border-bottom:1px solid var(--border)">السلالة</th>',
-              '<th style="padding:8px;color:var(--text-gray);font-weight:700;border-bottom:1px solid var(--border)">تربية</th>',
-              '<th style="padding:8px;color:var(--text-gray);font-weight:700;border-bottom:1px solid var(--border)">تسمين</th>',
-              '<th style="padding:8px;color:var(--text-gray);font-weight:700;border-bottom:1px solid var(--border)">مواليد</th>',
-              '<th style="padding:8px;color:var(--text-gray);font-weight:700;border-bottom:1px solid var(--border)">الإجمالي</th>',
-            '</tr></thead>',
-            '<tbody>',
-              breedData.map(function(b){return(
-                '<tr style="border-bottom:1px solid var(--border-3)">'+
-                  '<td style="padding:8px;color:var(--text-gray)">'+(b.species==='goat'?'🐐 ماعز':'🐑 أغنام')+'</td>'+
-                  '<td style="padding:8px;font-weight:700">'+b.breed+'</td>'+
-                  '<td style="padding:8px">'+ar(b.tarbiya)+'</td>'+
-                  '<td style="padding:8px">'+ar(b.tasmeen)+'</td>'+
-                  '<td style="padding:8px;color:var(--yellow)">'+ar(b.births)+'</td>'+
-                  '<td style="padding:8px;font-weight:700;color:var(--green)">'+ar(b.total)+'</td>'+
-                '</tr>'
-              );}).join(''),
-              '<tr style="background:rgba(255,255,255,.03)">'+
-                '<td colspan="2" style="padding:8px;font-weight:700;color:var(--orange)">الإجمالي</td>'+
-                '<td style="padding:8px;font-weight:700">'+ar(alive.filter(function(a){return a.purpose==='tarbiya';}).length)+'</td>'+
-                '<td style="padding:8px;font-weight:700">'+ar(alive.filter(function(a){return a.purpose==='tasmeen';}).length)+'</td>'+
-                '<td style="padding:8px;font-weight:700;color:var(--yellow)">'+ar(alive.filter(function(a){return isBirth(a);}).length)+'</td>'+
-                '<td style="padding:8px;font-weight:700;color:var(--green)">'+ar(alive.length)+'</td>'+
-              '</tr>',
-            '</tbody>',
-          '</table>',
-        '</div>',
-      '</div></div>',
-    '</div>',
-
-    // ── Upcoming Events + Quick Actions ───────────────────
-    '<div class="row g-3 mb-4">',
-      // Upcoming events
-      '<div class="col-md-7"><div class="wonder-card">',
-        '<div class="d-flex justify-content-between align-items-center mb-3">',
-          '<h6 class="fw-bold mb-0"><i class="bi bi-calendar-event accent-text me-2"></i>الأحداث القادمة (14 يوم)</h6>',
-        '</div>',
-        events.length ? events.slice(0,7).map(function(ev){
-          return '<div class="event-row">'+
-            '<div class="event-dot" style="background:'+ev.color+'"></div>'+
-            '<div class="flex-grow-1">'+
-              '<div style="font-size:.82rem;font-weight:600">'+ev.title+'</div>'+
-              '<small class="text-gray">'+ev.sub+'</small>'+
-            '</div>'+
-            '<small style="color:'+ev.color+';font-weight:700;white-space:nowrap">'+ev.badge+'</small>'+
-          '</div>';
-        }).join('') : '<div class="empty-state" style="padding:16px 0"><i class="bi bi-calendar-check" style="font-size:1.5rem;opacity:.3"></i><p style="font-size:.82rem;margin-top:6px">لا توجد أحداث قادمة</p></div>',
-      '</div></div>',
-
-      // Quick Actions
-      '<div class="col-md-5"><div class="wonder-card">',
-        '<h6 class="fw-bold mb-1"><i class="bi bi-lightning-fill accent-text me-2"></i>وصول سريع</h6>',
-        '<div class="quick-action-grid">',
-          [
-            {href:'animals.html',   i:'bi-list-ul',           l:'القطيع الكل',  c:'var(--orange)'},
-            {href:'health.html',    i:'bi-heart-pulse-fill',  l:'السجل الصحي', c:'var(--red)'},
-            {href:'breeding.html',  i:'bi-diagram-2-fill',    l:'التكاثر',      c:'var(--purple)'},
-            {href:'vaccine.html',   i:'bi-bandaid-fill',      l:'التحصين',      c:'var(--green)'},
-            {href:'inventory.html', i:'bi-capsule',           l:'الصيدلية',     c:'var(--yellow)'},
-            {href:'finance.html',   i:'bi-wallet2',           l:'المالية',      c:'var(--green)'},
-            {href:'reports.html',   i:'bi-graph-up',          l:'التقارير',     c:'var(--blue)'},
-            {href:'barns.html',     i:'bi-building',          l:'الجمالونات',   c:'var(--orange)'},
-            {href:'dead.html',      i:'bi-x-octagon',         l:'النافق',       c:'var(--red)'},
-            {href:'activity.html',  i:'bi-clock-history',     l:'النشاط',       c:'var(--gray)'},
-          ].map(function(qa){return(
-            '<a href="'+qa.href+'" class="qa-btn">'+
-              '<i class="bi '+qa.i+'" style="color:'+qa.c+'"></i>'+
-              '<small>'+qa.l+'</small>'+
-            '</a>'
-          );}).join(''),
-        '</div>',
-      '</div></div>',
-    '</div>',
-
-    // ── Sync widget ───────────────────────────────────────
-    '<div id="sync-widget" class="wonder-card mb-4"><small class="text-gray"><i class="bi bi-arrow-repeat me-1"></i>فحص التزامن مع اليومية...</small></div>',
-
-  ].join('');
-
-  // Post-render
   renderPieChart(breedData, stats.total);
-  getWeather().then(function(w){renderWeather(w);});
+  getWeather().then(w => renderWeather(w));
+
+  // Simulated Sync Check (based on user's manual observation)
+  // In a real scenario, we'd compare against a 'diary_snapshot' in Firebase
   checkSync(stats);
-  if(typeof checkSync2==='function') checkSync2();
 }
 
-// ── Build Alerts ──────────────────────────────────────────
-function buildAlerts(breeding, health, vaccines, meds, feeds, today) {
-  var alerts = [];
+async function checkSync(actual, animals) {
+  // Get diary snapshot if exists, or calculate it
+  // Since diary.html calculates from the same animals list, they are technically always synced
+  // UNLESS we define "Diary" as a manual target.
+  // Based on user request, let's look for a 'diary_snapshot' in Firebase which might store the "Correct" numbers
+  try {
+    const diarySnap = await fbGet('diary_snapshot');
+    if (!diarySnap) {
+      // If no snapshot, we assume sync is OK or we create one from current logic
+      return;
+    }
 
-  // 1. Late births (overdue pregnancies)
-  breeding.filter(function(r){return r.status==='pregnant'&&r.expected_birth&&r.expected_birth<today;}).forEach(function(r){
-    var d=Math.abs(Math.ceil((new Date(r.expected_birth)-new Date())/86400000));
-    alerts.push({type:'red',icon:'bi-exclamation-triangle-fill',title:'تأخر في الولادة: '+(r.female_tag||r.female_breed||'—'),sub:'كان موعدها '+r.expected_birth+' — تأخرت '+ar(d)+' يوم',link:'breeding.html'});
-  });
+    const mapping = {
+      'total': diarySnap.total,
+      'goats': diarySnap.goats,
+      'sheep': diarySnap.sheep,
+      'goatBirths': diarySnap.goatBirths,
+      'sheepBirths': diarySnap.sheepBirths
+    };
 
-  // 2. Births in next 3 days
-  breeding.filter(function(r){return r.status==='pregnant'&&r.expected_birth;}).forEach(function(r){
-    var d=Math.ceil((new Date(r.expected_birth)-new Date())/86400000);
-    if(d>=0&&d<=3) alerts.push({type:'orange',icon:'bi-stars',title:'ولادة قريبة: '+(r.female_tag||r.female_breed||'—'),sub:'بعد '+ar(d)+' يوم ('+r.expected_birth+')',link:'breeding.html'});
-  });
-
-  // 3. Withdrawal animals
-  var withdrawal=health.filter(function(r){return r.status==='active'&&r.withdrawal_end&&r.withdrawal_end>=today;});
-  if(withdrawal.length) alerts.push({type:'red',icon:'bi-shield-exclamation',title:'فترة سحب نشطة — '+ar(withdrawal.length)+' حيوان',sub:'يُمنع البيع أو الذبح أو استخدام المنتجات',link:'health.html'});
-
-  // 4. Overdue vaccines
-  var overdue=vaccines.filter(function(v){return v.status==='overdue';});
-  if(overdue.length) alerts.push({type:'orange',icon:'bi-bandaid-fill',title:'تحصينات متأخرة: '+ar(overdue.length)+' برنامج',sub:overdue.slice(0,2).map(function(v){return v.name;}).join('، '),link:'vaccine.html'});
-
-  // 5. Expiring meds
-  var expMeds=(meds||[]).filter(function(m){if(!m.expiry)return false;var d=Math.ceil((new Date(m.expiry)-new Date())/86400000);return d>=0&&d<=14;});
-  if(expMeds.length) alerts.push({type:'yellow',icon:'bi-capsule',title:'أدوية قاربت الانتهاء: '+ar(expMeds.length)+' صنف',sub:expMeds.slice(0,2).map(function(m){return m.name;}).join('، ')+' (خلال 14 يوم)',link:'inventory.html'});
-
-  // 6. Low feeds
-  var lowF=(feeds||[]).filter(function(f){return+f.quantity<=+f.min_quantity&&+f.min_quantity>0;});
-  if(lowF.length) alerts.push({type:'yellow',icon:'bi-box-seam',title:'أعلاف عند الحد الأدنى: '+ar(lowF.length)+' صنف',sub:lowF.slice(0,2).map(function(f){return f.name;}).join('، '),link:'inventory.html'});
-
-  return alerts;
+    Object.keys(mapping).forEach(id => {
+      if (mapping[id] !== undefined && actual[id] !== mapping[id]) {
+        showConflict(id, actual[id], mapping[id]);
+      }
+    });
+  } catch(e) { console.error('Sync check failed', e); }
 }
 
-function renderAlerts(alerts) {
-  var colorMap={red:'alert-strip-red',orange:'alert-strip-orange',yellow:'alert-strip-yellow',blue:'alert-strip-blue'};
-  var iconMap={red:'red-text',orange:'accent-text',yellow:'yellow-text',blue:'blue-text'};
-  return alerts.map(function(a){
-    return '<a href="'+a.link+'" style="text-decoration:none" class="d-block">'+
-      '<div class="alert-strip '+colorMap[a.type]+'">'+
-        '<i class="bi '+a.icon+' '+iconMap[a.type]+'" style="font-size:1.1rem;flex-shrink:0;margin-top:2px"></i>'+
-        '<div>'+
-          '<div style="font-weight:700;font-size:.84rem">'+a.title+'</div>'+
-          '<small class="text-gray">'+a.sub+'</small>'+
-        '</div>'+
-        '<i class="bi bi-chevron-left text-gray ms-auto" style="font-size:.7rem;flex-shrink:0;margin-top:4px"></i>'+
-      '</div>'+
-    '</a>';
-  }).join('');
+function showConflict(id, actualVal, diaryVal) {
+  const el = document.getElementById('sync-' + id);
+  if (!el) return;
+  el.innerHTML = `
+    <div class="sync-conflict"><i class="bi bi-exclamation-triangle-fill"></i> تعارض مع اليومية</div>
+    <div style="font-size:0.6rem; color:var(--text-muted)">اليومية: ${ar(diaryVal)} | الحالي: ${ar(actualVal)}</div>
+    <div class="d-flex gap-1">
+      <button class="sync-btn sync-btn-apply" onclick="resolveSync('${id}', ${diaryVal}, 'diary')">تطبيق اليومية</button>
+      <button class="sync-btn" style="border-color:var(--gray); color:var(--gray)" onclick="resolveSync('${id}', ${actualVal}, 'actual')">اعتماد الحالي</button>
+    </div>
+  `;
 }
 
-// ── Build Upcoming Events ─────────────────────────────────
-function buildEvents(breeding, vaccines, health, today) {
-  var events = [];
-  var soon=new Date();soon.setDate(soon.getDate()+14);var soonStr=soon.toISOString().slice(0,10);
+window.resolveSync = async function(id, targetVal, source) {
+  if (source === 'actual') {
+    // If user chooses "Dashboard", update the snapshot to match current DB
+    try {
+      const animals = await fbGet('animals');
+      const alive = animals.filter(a => a.status === 'alive');
+      const isB = a => a.purpose === 'birth' || a.breed === 'مواليد';
+      await fbPut('diary_snapshot', {
+        total: alive.length,
+        goats: alive.filter(a => a.species === 'goat').length,
+        sheep: alive.filter(a => a.species === 'sheep').length,
+        goatBirths: alive.filter(a => a.species === 'goat' && isB(a)).length,
+        sheepBirths: alive.filter(a => a.species === 'sheep' && isB(a)).length,
+        updated_at: new Date().toISOString()
+      });
+      toast('✅ تم اعتماد بيانات الداشبورد وتحديث اليومية', 'success');
+    } catch(e) { toast('فشل التحديث: ' + e.message, 'error'); }
+  } else {
+    // If user chooses "Diary", they should go to diary.html to fix it properly
+    // or we could automate adding/removing "Generic" animals.
+    // Given the complexity, directing to Diary is safer, but let's add a quick fix.
+    toast('⚠️ يرجى التوجه لصفحة اليومية لإجراء التعديلات اللازمة لضمان دقة البيانات', 'warning');
+    setTimeout(() => { window.location.href = 'diary.html?mode=edit'; }, 1500);
+    return;
+  }
+  setTimeout(() => { location.reload(); }, 1200);
+};
 
-  // Upcoming births
-  breeding.filter(function(r){return r.status==='pregnant'&&r.expected_birth&&r.expected_birth>=today&&r.expected_birth<=soonStr;}).sort(function(a,b){return a.expected_birth.localeCompare(b.expected_birth);}).forEach(function(r){
-    var d=Math.ceil((new Date(r.expected_birth)-new Date())/86400000);
-    events.push({type:'birth',color:'var(--yellow)',icon:'bi-stars',title:'ولادة متوقعة: '+(r.female_tag||r.female_breed||'—'),sub:r.female_breed+' — '+r.expected_birth,badge:d===0?'اليوم!':d===1?'غداً':'بعد '+ar(d)+' يوم'});
-  });
-
-  // Pending vaccines soon
-  vaccines.filter(function(v){return v.status==='pending'&&v.scheduled_date&&v.scheduled_date>=today&&v.scheduled_date<=soonStr;}).sort(function(a,b){return a.scheduled_date.localeCompare(b.scheduled_date);}).forEach(function(v){
-    var d=Math.ceil((new Date(v.scheduled_date)-new Date())/86400000);
-    events.push({type:'vaccine',color:'var(--green)',icon:'bi-bandaid-fill',title:'تحصين: '+v.name,sub:(v.target_section||'كل الأقسام')+' — '+v.scheduled_date,badge:d===0?'اليوم!':d===1?'غداً':'بعد '+ar(d)+' يوم'});
-  });
-
-  // Health follow-ups
-  health.filter(function(r){return r.status==='active'&&r.treatment_end&&r.treatment_end>=today&&r.treatment_end<=soonStr;}).forEach(function(r){
-    var d=Math.ceil((new Date(r.treatment_end)-new Date())/86400000);
-    events.push({type:'health',color:'var(--orange)',icon:'bi-heart-pulse-fill',title:'نهاية علاج: '+(r.animal_tag||r.animal_breed||'—'),sub:r.medication+' — '+r.treatment_end,badge:d===0?'اليوم!':d===1?'غداً':'بعد '+ar(d)+' يوم'});
-  });
-
-  // Sort by urgency
-  events.sort(function(a,b){
-    var da=parseInt(a.badge)||99,db=parseInt(b.badge)||99;
-    return da-db;
-  });
-  return events;
-}
-
-// ── Monthly Finance ───────────────────────────────────────
-function buildMonthlyFin(fin) {
-  var months={};var now=new Date();
-  for(var i=5;i>=0;i--){var d=new Date(now.getFullYear(),now.getMonth()-i,1);months[d.toISOString().slice(0,7)]={income:0,expense:0};}
-  (fin||[]).forEach(function(r){var k=(r.date||'').slice(0,7);if(months[k]){if(r.type==='income')months[k].income+=+r.amount||0;else months[k].expense+=+r.amount||0;}});
-  return months;
-}
-
-// ── Pie Chart (existing, keep as-is) ─────────────────────
 function renderPieChart(data, total) {
-  if(!data.length)return;
+  if(!data.length) return;
   var size=200,cx=100,cy=100,r=80,ir=35;var sa=0;var paths='',legend='';
   var dc=['#00e676','#2196f3','#ff6b35','#9c27b0','#ffc107','#f44336','#00bcd4','#8bc34a','#ff9800','#e91e63'];
   var sc=JSON.parse(localStorage.getItem('breed_colors')||'{}');
-  data.forEach(function(b,i){
-    var angle=(b.total/total)*2*Math.PI;if(angle>=2*Math.PI-0.001)angle=2*Math.PI-0.001;
+
+  data.forEach((b,i) => {
+    var angle=(b.total/total)*2*Math.PI; if(angle>=2*Math.PI-0.001) angle=2*Math.PI-0.001;
     var ea=sa+angle,lg=angle>Math.PI?1:0;
-    var x1=cx+r*Math.cos(sa-Math.PI/2),y1=cy+r*Math.sin(sa-Math.PI/2);
-    var x2=cx+r*Math.cos(ea-Math.PI/2),y2=cy+r*Math.sin(ea-Math.PI/2);
-    var xi=cx+ir*Math.cos(sa-Math.PI/2),yi=cy+ir*Math.sin(sa-Math.PI/2);
-    var xi2=cx+ir*Math.cos(ea-Math.PI/2),yi2=cy+ir*Math.sin(ea-Math.PI/2);
-    var color=b.breed==='مواليد'?(b.species==='goat'?'#ffc107':'#ff9800'):(sc[b.breed]||dc[i%dc.length]);
+    var x1=cx+r*Math.cos(sa-Math.PI/2), y1=cy+r*Math.sin(sa-Math.PI/2);
+    var x2=cx+r*Math.cos(ea-Math.PI/2), y2=cy+r*Math.sin(ea-Math.PI/2);
+    var xi=cx+ir*Math.cos(sa-Math.PI/2), yi=cy+ir*Math.sin(sa-Math.PI/2);
+    var xi2=cx+ir*Math.cos(ea-Math.PI/2), yi2=cy+ir*Math.sin(ea-Math.PI/2);
+    var color = b.breed==='مواليد' ? (b.species==='goat'?'#ffc107':'#ff9800') : (sc[b.breed]||dc[i%dc.length]);
     var pct=Math.round(b.total/total*100);
-    paths+='<path d="M '+xi+' '+yi+' A '+ir+' '+ir+' 0 '+lg+' 1 '+xi2+' '+yi2+' L '+x2+' '+y2+' A '+r+' '+r+' 0 '+lg+' 0 '+x1+' '+y1+' Z" fill="'+color+'" opacity=".85" stroke="var(--bg)" stroke-width="2"><title>'+b.breed+': '+ar(b.total)+'</title></path>';
-    legend+='<span style="font-size:.7rem;display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:'+color+';display:inline-block"></span>'+b.breed+' '+ar(pct)+'٪</span>';
+    paths+=`<path d="M ${xi} ${yi} A ${ir} ${ir} 0 ${lg} 1 ${xi2} ${yi2} L ${x2} ${y2} A ${r} ${r} 0 ${lg} 0 ${x1} ${y1} Z" fill="${color}" opacity=".85" stroke="var(--bg)" stroke-width="2"><title>${b.breed}: ${ar(b.total)}</title></path>`;
+    legend+=`<span style="font-size:.7rem;display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:${color};display:inline-block"></span>${b.breed} ${ar(pct)}٪</span>`;
     sa=ea;
   });
   var pc=document.getElementById('pie-container');
-  if(pc)pc.innerHTML='<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'" style="overflow:visible;max-width:100%">'+paths+'<circle cx="'+cx+'" cy="'+cy+'" r="'+ir+'" fill="var(--bg-2)"/><text x="'+cx+'" y="'+(cy-6)+'" text-anchor="middle" fill="var(--text)" font-size="20" font-weight="700" font-family="Lexend">'+ar(total)+'</text><text x="'+cx+'" y="'+(cy+12)+'" text-anchor="middle" fill="var(--text-gray)" font-size="10" font-family="Cairo">رأس</text></svg><div style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:8px">'+legend+'</div>';
+  if(pc) pc.innerHTML=`<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="overflow:visible;max-width:100%">${paths}<circle cx="${cx}" cy="${cy}" r="${ir}" fill="var(--bg-2)"/><text x="${cx}" y="${cy-6}" text-anchor="middle" fill="var(--text)" font-size="20" font-weight="700" font-family="Lexend">${ar(total)}</text><text x="${cx}" y="${cy+12}" text-anchor="middle" fill="var(--text-gray)" font-size="10" font-family="Cairo">رأس</text></svg><div style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:8px">${legend}</div>`;
 }
 
-// ── Weather ───────────────────────────────────────────────
 function renderWeather(w) {
   var wEl=document.getElementById('weather-widget');
   if(!w||!w.main){if(wEl)wEl.innerHTML='<div class="text-gray" style="font-size:.82rem"><i class="bi bi-cloud-slash me-2"></i>حالة الطقس غير متاحة</div>';return;}
-  var temp=Math.round(w.main.temp);var hum=w.main.humidity||0;
+  var temp=Math.round(w.main.temp);
   var isHot=temp>=35,isCold=temp<=10;
   var emoji=isHot?'🌡️':isCold?'🥶':temp>=25?'☀️':'⛅';
-  var tip='';
-  if(isHot)tip='تأثير على القطيع: زيادة المياه، تهوية الحظائر. المواليد والحوامل في خطر.';
-  else if(isCold)tip='تأثير على القطيع: أضف قش للمواليد والحوامل، أغلق فتحات التهوية ليلاً.';
-  else if(hum>80)tip='رطوبة عالية — راقب علامات الأمراض التنفسية.';
-  else tip='الطقس مناسب للقطيع — ظروف مثالية للرعاية والإنتاج.';
-  if(wEl)wEl.innerHTML='<div class="d-flex align-items-center gap-3 flex-wrap"><div style="font-size:1.8rem">'+emoji+'</div><div><div class="fw-bold">'+ar(temp)+'° م</div><small class="text-gray">'+w.weather[0].description+(hum?' | رطوبة '+ar(hum)+'٪':'')+' | العامرية</small></div><div class="ms-md-auto" style="font-size:.75rem;max-width:380px;color:var(--text-muted)">'+tip+'</div></div>';
+  var animalTip='';
+  if(isHot) animalTip='تأثير على القطيع: زيادة المياه، تهوية الحظائر، خفض الكثافة. المواليد والحوامل في خطر.';
+  else if(isCold) animalTip='تأثير على القطيع: أضف قش للمواليد والحوامل، أغلق فتحات التهوية ليلاً.';
+  else animalTip='الطقس مناسب للقطيع — ظروف مثالية للرعاية والإنتاج.';
+  
+  if(wEl) wEl.innerHTML=`<div class="d-flex align-items-center gap-3 flex-wrap">
+    <div style="font-size:1.8rem">${emoji}</div>
+    <div><div class="fw-bold">${ar(temp)}° م</div><small class="text-gray">${w.weather[0].description}</small></div>
+    <div class="ms-md-auto" style="font-size:.75rem;max-width:400px;color:var(--text-muted)">${animalTip}</div>
+  </div>`;
 }
 
-// ── Sync ──────────────────────────────────────────────────
-async function checkSync(actual) {
-  try {
-    var diarySnap=await fbGet('diary_snapshot');
-    if(!diarySnap)return;
-    var mapping={total:diarySnap.total,goats:diarySnap.goats,sheep:diarySnap.sheep,goatBirths:diarySnap.goatBirths,sheepBirths:diarySnap.sheepBirths};
-    Object.keys(mapping).forEach(function(id){if(mapping[id]!==undefined&&actual[id]!==mapping[id])showConflict(id,actual[id],mapping[id]);});
-  }catch(e){console.error('Sync check failed',e);}
-}
-
-function showConflict(id,actualVal,diaryVal){
-  var el=document.getElementById('sync-'+id);if(!el)return;
-  el.innerHTML='<div class="sync-conflict"><i class="bi bi-exclamation-triangle-fill"></i> تعارض</div>'+
-    '<div style="font-size:.6rem;color:var(--text-muted)">اليومية: '+ar(diaryVal)+' | الحالي: '+ar(actualVal)+'</div>'+
-    '<div class="d-flex gap-1"><button class="sync-btn sync-btn-apply" onclick="resolveSync(\''+id+'\','+diaryVal+',\'diary\')">اليومية</button>'+
-    '<button class="sync-btn" style="border-color:var(--gray);color:var(--gray)" onclick="resolveSync(\''+id+'\','+actualVal+',\'actual\')">الحالي</button></div>';
-}
-
-window.resolveSync=async function(id,targetVal,source){
-  if(source==='actual'){
-    try{
-      var animals2=await fbGet('animals');var alive2=animals2.filter(function(a){return a.status==='alive';});
-      var isB2=function(a){return a.purpose==='birth'||a.breed==='مواليد';};
-      await fbPut('diary_snapshot',null,{total:alive2.length,goats:alive2.filter(function(a){return a.species==='goat';}).length,sheep:alive2.filter(function(a){return a.species==='sheep';}).length,goatBirths:alive2.filter(function(a){return a.species==='goat'&&isB2(a);}).length,sheepBirths:alive2.filter(function(a){return a.species==='sheep'&&isB2(a);}).length,updated_at:new Date().toISOString()});
-      toast('تم اعتماد البيانات الحالية');
-    }catch(e){toast('فشل: '+e.message,'error');}
-  }else{
-    toast('توجه لصفحة اليومية لإجراء التعديل');setTimeout(function(){window.location.href='diary.html';},1500);return;
-  }
-  setTimeout(function(){location.reload();},1200);
-};
-
-// ── Quick-Add Modal ───────────────────────────────────────
+// Modal Handlers
 window.openAddAnimalDash=function(){
   var s=getSettings();
   showModal('<div class="farm-modal" onclick="event.stopPropagation()">'+
@@ -514,63 +315,53 @@ window.openAddAnimalDash=function(){
       '<div class="col-6"><label>الجنس</label><select class="field" id="da-g"><option value="female">أنثى</option><option value="male">ذكر</option></select></div>'+
       '<div class="col-6"><label>رقم الترقيم</label><input class="field" id="da-tag" placeholder="A-001"></div>'+
     '</div>'+
-    '<label>الجمالون</label><select class="field" id="da-barn"><option value="">— غير محدد —</option>'+
-      ['ج١ع١','ج١ع٢','ج٢ع١','ج٢ع٢','ج٣ع١','ج٣ع٢','ج٤ع١','ج٤ع٢','ج٥ع١','ج٥ع٢'].map(function(b){return'<option>'+b+'</option>';}).join('')+
-    '</select>'+
     '<div class="d-flex gap-2 justify-content-end mt-3">'+
       '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
       '<button class="action-btn primary" onclick="_daSubmit()">حفظ</button>'+
-    '</div></div>');
+    '</div>'+
+  '</div>');
 };
-
-window._daBreeds=function(){
-  var s=getSettings();var sp=document.getElementById('da-sp')&&document.getElementById('da-sp').value;
-  var b=document.getElementById('da-breed');
-  if(b)b.innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(function(x){return'<option>'+x+'</option>';}).join('');
-};
-
+window._daBreeds=function(){var s=getSettings();var sp=document.getElementById('da-sp')?.value;var b=document.getElementById('da-breed');if(b)b.innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(function(x){return'<option>'+x+'</option>';}).join('');};
 window._daSubmit=async function(){
   var sp=document.getElementById('da-sp').value;
   var breed=document.getElementById('da-breed').value;
   var gender=document.getElementById('da-g').value;
   var purpose=document.getElementById('da-pur').value;
   var tag=document.getElementById('da-tag').value.trim();
-  var barn=document.getElementById('da-barn').value;
   closeModal();toast('جاري الحفظ...','info');
   try{
-    await fbPost('animals',{species:sp,breed:breed,gender:gender,purpose:purpose,status:'alive',tag:tag||null,barn:barn||null,birth_date:null,created_at:todayStr()});
+    await fbPost('animals',{species:sp,breed,gender,purpose,status:'alive',tag:tag||null,birth_date:todayStr()});
     await logActivity('add','animals','إضافة سريعة: '+breed+' '+gender);
-    toast('تمت الإضافة');setTimeout(function(){location.reload();},1200);
+    toast('تمت الإضافة');
+    setTimeout(function(){location.reload();},1200);
   }catch(e){toast('فشل: '+e.message,'error');}
 };
 
 window.openMarkDeathDash=async function(){
   var animals2=await fbGet('animals');
   var alive2=animals2.filter(function(a){return a.status==='alive';}).slice(0,200);
-  showModal('<div class="farm-modal" onclick="event.stopPropagation()">'+
+  showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()">'+
     '<h4 style="color:var(--red)"><i class="bi bi-x-octagon"></i> تسجيل نفوق</h4>'+
     '<label>الحيوان</label><select class="field" id="dd-a"><option value="">— اختر —</option>'+
       alive2.map(function(a){return'<option value="'+a._id+'">'+a.breed+(a.tag?' #'+a.tag:'')+(a.gender==='male'?' ذكر':' أنثى')+'</option>';}).join('')+
     '</select>'+
-    '<label>تاريخ النفوق</label><input type="date" class="field" id="dd-d" value="'+todayStr()+'">'+
-    '<label>السبب</label><input class="field" id="dd-cause" placeholder="سبب النفوق">'+
+    '<label>التاريخ</label><input type="date" class="field" id="dd-d" value="'+todayStr()+'">'+
     '<div class="d-flex gap-2 justify-content-end mt-3">'+
       '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
       '<button class="action-btn danger" onclick="_ddSubmit()">تسجيل</button>'+
-    '</div></div>');
+    '</div>'+
+  '</div>');
 };
-
 window._ddSubmit=async function(){
   var id=document.getElementById('dd-a').value;if(!id){toast('يرجى اختيار حيوان','error');return;}
-  var cause=document.getElementById('dd-cause').value.trim();
   closeModal();
   try{
-    await fbPatch('animals',id,{status:'dead',died_at:document.getElementById('dd-d').value,death_cause:cause||null});
-    await logActivity('edit','animals','تسجيل نفوق'+(cause?' — '+cause:''));
-    toast('تم تسجيل النفوق');setTimeout(function(){location.reload();},1000);
+    await fbPatch('animals',id,{status:'dead',died_at:document.getElementById('dd-d').value});
+    await logActivity('edit','animals','تسجيل نفوق');
+    toast('تم تسجيل النفوق');
+    setTimeout(() => { location.reload(); }, 1000);
   }catch(e){toast('فشل: '+e.message,'error');}
 };
 </script>
-<script src="farm-react.js" defer></script>
 </body>
 </html>
