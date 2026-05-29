@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <!-- Performance hints -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://farm-mz99-default-rtdb.europe-west1.firebasedatabase.app" crossorigin>
+  <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+  <link rel="dns-prefetch" href="https://aistudio.googleapis.com">
+  <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
+
+<script>(function(){var t=localStorage.getItem('farm_theme');if(t==='light')document.documentElement.classList.add('light-mode');}());</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>مساعد المزرعة — بيان المزرعة</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+.chat-wrap{max-width:760px;margin:0 auto;display:flex;flex-direction:column;height:calc(100vh - 210px)}
+.chat-messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+.msg{max-width:82%;padding:12px 16px;border-radius:16px;font-size:.88rem;line-height:1.65;word-break:break-word}
+.msg-user{align-self:flex-start;background:rgba(33,150,243,.12);border:1px solid rgba(33,150,243,.25);border-bottom-right-radius:4px}
+.msg-bot{align-self:flex-end;background:var(--bg-3);border:1px solid var(--border);border-bottom-left-radius:4px}
+.msg-system{align-self:center;background:rgba(0,230,118,.07);border:1px solid rgba(0,230,118,.2);border-radius:10px;font-size:.78rem;color:var(--text-gray);text-align:center;max-width:90%;padding:8px 16px}
+.chat-input-bar{padding:12px;background:var(--bg-2);border-top:1px solid var(--border)}
+.voice-btn{width:48px;height:48px;border-radius:50%;background:rgba(33,150,243,.12);border:2px solid rgba(33,150,243,.4);color:var(--blue);font-size:1.1rem;cursor:pointer;transition:.2s;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.voice-btn.recording{background:rgba(244,67,54,.15);border-color:rgba(244,67,54,.5);color:var(--red);animation:pulse 1s infinite}
+.voice-btn:hover{background:rgba(33,150,243,.2)}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+.confirm-card{background:rgba(0,230,118,.06);border:1px solid rgba(0,230,118,.3);border-radius:14px;padding:14px;margin-top:8px}
+.confirm-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border-3);font-size:.83rem}
+.confirm-row:last-child{border-bottom:none}
+.typing{display:flex;gap:4px;align-items:center;padding:8px 12px}
+.typing span{width:8px;height:8px;border-radius:50%;background:var(--text-gray);animation:typing 1.2s infinite}
+.typing span:nth-child(2){animation-delay:.2s}.typing span:nth-child(3){animation-delay:.4s}
+@keyframes typing{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
+.ctx-stat{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border-3);font-size:.78rem}
+.ctx-stat:last-child{border-bottom:none}
+.shortcut-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
+.shortcut-btn{background:var(--bg-3);border:1px solid var(--border);border-radius:8px;padding:7px 10px;cursor:pointer;font-family:'Cairo',sans-serif;font-size:.75rem;font-weight:600;color:var(--text-sub);transition:.15s;text-align:right;line-height:1.3}
+.shortcut-btn:hover{border-color:var(--orange);color:var(--orange);background:rgba(255,107,53,.05)}
+</style>
+</head>
+<body>
+<div class="page-wrap" style="padding-bottom:0">
+  <div id="page-header"></div>
+
+  <div style="max-width:760px;margin:0 auto">
+    <!-- Context strip -->
+    <div id="farm-ctx-bar" class="wonder-card mb-2 p-2" style="font-size:.75rem;display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+      <span class="text-gray"><i class="bi bi-arrow-repeat"></i> جاري تحميل بيانات المزرعة...</span>
+    </div>
+
+    <div class="chat-wrap wonder-card p-0" style="border-radius:16px">
+      <!-- Header -->
+      <div class="p-3 d-flex align-items-center gap-3" style="border-bottom:1px solid var(--border);background:rgba(0,230,118,.04)">
+        <div style="width:42px;height:42px;border-radius:50%;background:rgba(0,230,118,.15);border:1px solid rgba(0,230,118,.3);display:flex;align-items:center;justify-content:center;font-size:1.3rem">🤖</div>
+        <div>
+          <div class="fw-bold">مساعد المزرعة الذكي</div>
+          <small class="text-gray">يعرف بيانات مزرعتك الحقيقية — تحدث بالعربي أو اكتب</small>
+        </div>
+        <div class="ms-auto d-flex gap-2">
+          <button class="action-btn sm" onclick="toggleShortcuts()" title="اختصارات"><i class="bi bi-lightning-fill"></i></button>
+          <button class="action-btn sm" onclick="showFarmContext()" title="ملخص المزرعة"><i class="bi bi-bar-chart-fill"></i></button>
+          <button class="action-btn sm" onclick="clearChat()" title="مسح"><i class="bi bi-trash"></i></button>
+          <button class="action-btn sm" onclick="showExamples()" title="أمثلة"><i class="bi bi-lightbulb"></i></button>
+          <button class="action-btn sm" id="api-btn" onclick="openApiSettings()" title="API Key" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.3);color:var(--yellow)"><i class="bi bi-key-fill"></i></button>
+        </div>
+      </div>
+
+      <!-- Shortcuts panel (hidden by default) -->
+      <div id="shortcuts-panel" style="display:none;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--bg-2)">
+        <div class="shortcut-grid" id="shortcuts-grid"></div>
+      </div>
+
+      <!-- Messages -->
+      <div class="chat-messages" id="chat-messages">
+        <div class="msg msg-system">
+          مرحباً! أنا مساعدك الذكي 🐐 — أعرف بيانات مزرعتك الحقيقية وأستطيع الإجابة عليها.<br>
+          <span style="color:var(--yellow)">أضف مفتاح Gemini المجاني أولاً 🔑 ثم تحدث أو اكتب.</span>
+        </div>
+      </div>
+
+      <!-- Input -->
+      <div class="chat-input-bar">
+        <div class="d-flex gap-2 align-items-end">
+          <textarea class="field flex-grow-1" id="chat-input" rows="2" placeholder="اكتب أمرك... مثال: عندي 3 مواليد شامي ذكور" style="resize:none;padding:10px 14px" onkeydown="handleKey(event)"></textarea>
+          <div class="d-flex flex-column gap-2">
+            <button class="voice-btn" id="voice-btn" onclick="toggleVoice()" title="تحدث بالعربي">
+              <i class="bi bi-mic-fill" id="voice-icon"></i>
+            </button>
+            <button class="action-btn primary" onclick="sendMessage()" style="padding:10px 14px"><i class="bi bi-send-fill"></i></button>
+          </div>
+        </div>
+        <small class="text-gray d-block mt-1" style="font-size:.72rem"><i class="bi bi-info-circle me-1"></i>Ctrl+Enter للإرسال | اضغط ⚡ للاختصارات</small>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="firebase.js"></script>
+<script src="nav.js"></script>
+<script src="shared.js"></script>
+<script src="pages/datepicker.js" defer></script>
+<script src="pages/tour.js" defer></script>
+<script>
+'use strict';
+
+var _history      = [];
+var _isRecording  = false;
+var _recognition  = null;
+var _pendingAction= null;
+var _farmData     = { animals:[], breeding:[], health:[], vaccines:[], finance:[], meds:[], feeds:[] };
+var _farmContext  = '';  // built once, sent with every message
+var _shortcutsOpen = false;
+
+// ── Boot ─────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async function() {
+  if (!requireAuth()) return;
+  initFirebase();
+  var s = getSettings();
+  document.getElementById('footer-year') && (document.getElementById('footer-year').textContent = ar(new Date().getFullYear()));
+  document.getElementById('footer-farm') && (document.getElementById('footer-farm').textContent = s.farmName);
+  renderNavbar('assistant.html');
+  renderPageHeader('<i class="bi bi-robot accent-text"></i> مساعد المزرعة الذكي', 'يقرأ بيانات مزرعتك ويساعدك في إدارتها', '');
+
+  // Load farm data
+  try {
+    var [animals, breeding, health, vaccines, meds, feeds] = await Promise.all([
+      fbGet('animals'), fbGet('breeding'), fbGet('health'),
+      fbGet('vaccinations'), fbGet('inventory_meds').catch(function(){return[];}),
+      fbGet('inventory_feeds').catch(function(){return[];})
+    ]);
+    _farmData = { animals:animals||[], breeding:breeding||[], health:health||[], vaccines:vaccines||[], meds:meds||[], feeds:feeds||[] };
+    _farmContext = buildFarmContext(s);
+    renderContextBar(s);
+  } catch(e) {
+    console.warn('Farm data load:', e.message);
+  }
+
+  // API key check
+  var savedKey = localStorage.getItem('farm_gemini_key');
+  var btn = document.getElementById('api-btn');
+  if (savedKey && btn) { btn.style.background='rgba(0,230,118,.1)'; btn.style.borderColor='rgba(0,230,118,.3)'; btn.style.color='var(--green)'; }
+  if (!savedKey) setTimeout(function(){ addMsg('system','⚙️ أضف مفتاح Gemini API بالضغط على 🔑 أعلاه للبدء.'); }, 800);
+
+  buildShortcuts(s);
+});
+
+// ── Build farm context for AI ─────────────────────────────
+function buildFarmContext(s) {
+  var d = _farmData;
+  var alive   = d.animals.filter(function(a){ return a.status === 'alive'; });
+  var dead    = d.animals.filter(function(a){ return a.status === 'dead'; });
+  var today   = todayStr();
+
+  // Species breakdown
+  var goats  = alive.filter(function(a){ return a.species === 'goat';  });
+  var sheep  = alive.filter(function(a){ return a.species === 'sheep'; });
+  var births = alive.filter(function(a){ return a.purpose === 'birth'; });
+
+  // Breed counts
+  var allBreeds = [...(s.goatBreeds||[]), ...(s.sheepBreeds||[])];
+  var breedSummary = allBreeds.map(function(b){
+    var cnt = alive.filter(function(a){ return a.breed === b; }).length;
+    return cnt > 0 ? b + ':' + cnt : null;
+  }).filter(Boolean).join('، ');
+
+  // Breeding
+  var pregnant  = d.breeding.filter(function(r){ return r.status === 'pregnant'; });
+  var bornRecs  = d.breeding.filter(function(r){ return r.status === 'born'; });
+  var upcomingBirths = pregnant.filter(function(r){
+    if (!r.expected_birth) return false;
+    var d2 = Math.ceil((new Date(r.expected_birth) - new Date()) / 86400000);
+    return d2 >= 0 && d2 <= 14;
+  });
+
+  // Health
+  var activeHealth = d.health.filter(function(r){ return r.status === 'active'; });
+  var withdrawal   = d.health.filter(function(r){ return r.status === 'active' && r.withdrawal_end && r.withdrawal_end >= today; });
+
+  // Vaccines overdue/pending
+  var vaccOverdue  = d.vaccines.filter(function(v){ return v.status === 'overdue'; });
+  var vaccPending  = d.vaccines.filter(function(v){ return v.status === 'pending' && v.scheduled_date && Math.ceil((new Date(v.scheduled_date)-new Date())/86400000) <= 7; });
+
+  // Low inventory
+  var lowMeds  = d.meds.filter(function(m){ return +m.quantity <= +m.min_quantity && +m.min_quantity > 0; });
+  var lowFeeds = d.feeds.filter(function(f){ return +f.quantity <= +f.min_quantity && +f.min_quantity > 0; });
+
+  // Finance
+  var inc = 0, exp = 0;
+  // (skip for brevity — not critical for chat)
+
+  var ctx = [
+    '=== بيانات المزرعة الحقيقية (محدّثة) ===',
+    'اسم المزرعة: ' + s.farmName,
+    'المالك: ' + (s.ownerName || '—'),
+    'العملة: ' + s.currency,
+    '',
+    '--- القطيع الحالي ---',
+    'الإجمالي الأحياء: ' + alive.length + ' رأس',
+    'الماعز: ' + goats.length + ' | الأغنام: ' + sheep.length + ' | المواليد: ' + births.length,
+    'النافق حتى الآن: ' + dead.length + ' رأس',
+    'توزيع السلالات: ' + (breedSummary || 'لا توجد بيانات'),
+    'الإناث: ' + alive.filter(function(a){return a.gender==='female';}).length + ' | الذكور: ' + alive.filter(function(a){return a.gender==='male';}).length,
+    'تربية: ' + alive.filter(function(a){return a.purpose==='tarbiya';}).length + ' | تسمين: ' + alive.filter(function(a){return a.purpose==='tasmeen';}).length,
+    '',
+    '--- التكاثر ---',
+    'حوامل حالياً: ' + pregnant.length + ' رأس',
+    'ولادات ناجحة: ' + bornRecs.length + ' | إجمالي المواليد: ' + bornRecs.reduce(function(t,r){return t+(+r.offspring_count||0);},0),
+    upcomingBirths.length ? 'ولادات قادمة خلال 14 يوم: ' + upcomingBirths.length + ' (' + upcomingBirths.map(function(r){return (r.female_tag||r.female_breed||'—')+' في '+r.expected_birth;}).join(' | ') + ')' : 'لا توجد ولادات قريبة',
+    '',
+    '--- الصحة ---',
+    'قيد العلاج حالياً: ' + activeHealth.length + ' رأس' + (activeHealth.length ? ' (' + activeHealth.slice(0,3).map(function(r){return r.animal_tag||r.animal_breed||'—';}).join('، ') + ')' : ''),
+    withdrawal.length ? 'في فترة سحب علاج: ' + withdrawal.length + ' رأس — لا يجوز بيعها أو ذبحها' : 'لا توجد فترات سحب',
+    '',
+    '--- التحصين والمخزن ---',
+    vaccOverdue.length  ? 'تحصينات متأخرة: ' + vaccOverdue.map(function(v){return v.name;}).join('، ')  : 'لا تحصينات متأخرة',
+    vaccPending.length  ? 'تحصينات قادمة 7 أيام: ' + vaccPending.map(function(v){return v.name+' ('+v.scheduled_date+')';}).join('، ') : 'لا مواعيد قريبة',
+    lowMeds.length  ? 'أدوية عند الحد الأدنى: ' + lowMeds.map(function(m){return m.name;}).join('، ')  : 'المخزن جيد',
+    lowFeeds.length ? 'أعلاف عند الحد الأدنى: ' + lowFeeds.map(function(f){return f.name;}).join('، ') : '',
+    '',
+    '--- السلالات المتاحة ---',
+    'ماعز: ' + (s.goatBreeds||[]).join('، '),
+    'أغنام: ' + (s.sheepBreeds||[]).join('، '),
+    '=== نهاية البيانات ===',
+  ].filter(function(l){ return l !== undefined && l !== null; }).join('\n');
+
+  return ctx;
+}
+
+// ── Context bar (above chat) ──────────────────────────────
+function renderContextBar(s) {
+  var d = _farmData;
+  var alive = d.animals.filter(function(a){ return a.status === 'alive'; });
+  var pregnant = d.breeding.filter(function(r){ return r.status === 'pregnant'; });
+  var active   = d.health.filter(function(r){ return r.status === 'active'; });
+  var bar = document.getElementById('farm-ctx-bar');
+  if (!bar) return;
+  bar.innerHTML =
+    '<small class="text-gray fw-bold"><i class="bi bi-database-fill me-1"></i>بيانات المزرعة المحملة:</small>' +
+    [
+      {i:'bi-bar-chart-fill', c:'var(--orange)', l:'القطيع', v:ar(alive.length)},
+      {i:'bi-diagram-2-fill', c:'var(--purple)', l:'حوامل', v:ar(pregnant.length)},
+      {i:'bi-heart-pulse-fill',c:'var(--red)',  l:'علاج', v:ar(active.length)},
+    ].map(function(k){ return '<span><i class="bi '+k.i+'" style="color:'+k.c+'"></i> <strong>'+k.v+'</strong> '+k.l+'</span>'; }).join('') +
+    '<button class="action-btn sm ms-auto" onclick="refreshFarmData()"><i class="bi bi-arrow-repeat"></i> تحديث</button>';
+}
+
+window.refreshFarmData = async function() {
+  document.getElementById('farm-ctx-bar').innerHTML = '<span class="text-gray"><div class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block"></div> جاري التحديث...</span>';
+  var s = getSettings();
+  try {
+    var [animals, breeding, health, vaccines, meds, feeds] = await Promise.all([
+      fbGet('animals',true), fbGet('breeding',true), fbGet('health',true),
+      fbGet('vaccinations',true), fbGet('inventory_meds',true).catch(function(){return[];}),
+      fbGet('inventory_feeds',true).catch(function(){return[];})
+    ]);
+    _farmData = { animals:animals||[], breeding:breeding||[], health:health||[], vaccines:vaccines||[], meds:meds||[], feeds:feeds||[] };
+    _farmContext = buildFarmContext(s);
+    renderContextBar(s);
+    toast('تم تحديث بيانات المزرعة');
+  } catch(e) { toast('فشل التحديث: ' + e.message, 'error'); }
+};
+
+// ── Shortcuts ─────────────────────────────────────────────
+var SHORTCUTS = [
+  { icon:'📊', text:'كم عدد القطيع الحالي؟' },
+  { icon:'🐑', text:'كم عندنا ماعز شامي؟' },
+  { icon:'🤰', text:'كم عدد الحوامل؟' },
+  { icon:'🔴', text:'هل فيه حيوانات قيد العلاج؟' },
+  { icon:'🐐', text:'عندي مولود ماعز شامي ذكر' },
+  { icon:'🐑', text:'عندي مولود أغنام برقي أنثى' },
+  { icon:'➕', text:'اشتريت 5 ماعز شامي إناث تربية' },
+  { icon:'💀', text:'نافق معنا ماعز ذكر' },
+  { icon:'💉', text:'تم تحصين الكل بلقاح الدموي اليوم' },
+  { icon:'💊', text:'الحيوان M-001 يعاني من حرارة عالية' },
+  { icon:'❓', text:'ما هو موعد الولادة القادم؟' },
+  { icon:'📋', text:'اعطيني ملخص وضع المزرعة' },
+];
+
+function buildShortcuts(s) {
+  var grid = document.getElementById('shortcuts-grid');
+  if (!grid) return;
+  grid.innerHTML = SHORTCUTS.map(function(sh) {
+    return '<button class="shortcut-btn" onclick="useShortcut(\'' + sh.text.replace(/'/g,"\\'") + '\')">' +
+      '<span style="margin-left:4px">' + sh.icon + '</span>' + sh.text +
+    '</button>';
+  }).join('');
+}
+
+window.toggleShortcuts = function() {
+  _shortcutsOpen = !_shortcutsOpen;
+  var panel = document.getElementById('shortcuts-panel');
+  if (panel) panel.style.display = _shortcutsOpen ? 'block' : 'none';
+};
+
+window.useShortcut = function(text) {
+  document.getElementById('chat-input').value = text;
+  document.getElementById('chat-input').focus();
+};
+
+// ── Voice ─────────────────────────────────────────────────
+window.toggleVoice = function() {
+  if (_isRecording) { stopVoice(); return; }
+  if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+    toast('المتصفح لا يدعم التعرف على الصوت', 'error'); return;
+  }
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  _recognition = new SR();
+  _recognition.lang = 'ar-EG';
+  _recognition.continuous = false;
+  _recognition.interimResults = false;
+  _recognition.onresult = function(e) {
+    var t = e.results[0][0].transcript;
+    document.getElementById('chat-input').value = t;
+    stopVoice();
+    setTimeout(sendMessage, 300);
+  };
+  _recognition.onerror = function() { stopVoice(); };
+  _recognition.onend   = function() { _isRecording = false; updateVoiceUI(); };
+  _recognition.start();
+  _isRecording = true;
+  updateVoiceUI();
+  addMsg('system','🎙️ جاري الاستماع... تحدث الآن');
+};
+
+function stopVoice() { if (_recognition) { try { _recognition.stop(); } catch(e){} } _isRecording = false; updateVoiceUI(); }
+function updateVoiceUI() {
+  var btn = document.getElementById('voice-btn');
+  var ico = document.getElementById('voice-icon');
+  if (!btn) return;
+  btn.classList.toggle('recording', _isRecording);
+  if (ico) ico.className = _isRecording ? 'bi bi-stop-circle-fill' : 'bi bi-mic-fill';
+}
+
+// ── Input handler ─────────────────────────────────────────
+function handleKey(e) { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') sendMessage(); }
+
+// ── Send message ──────────────────────────────────────────
+window.sendMessage = async function() {
+  var input = document.getElementById('chat-input');
+  var text  = (input.value || '').trim();
+  if (!text) return;
+  input.value = '';
+
+  addMsg('user', text);
+  var typing = addTyping();
+
+  var s      = getSettings();
+  var apiKey = localStorage.getItem('farm_gemini_key');
+
+  if (!apiKey) {
+    removeTyping();
+    addMsg('bot','⚙️ يرجى إضافة مفتاح Gemini API — اضغط 🔑 أعلاه.');
+    return;
+  }
+
+  // ── System prompt with REAL farm data ────────────────
+  var system =
+    'أنت مساعد ذكي متخصص في إدارة مزارع الأغنام والماعز.\n' +
+    'لديك البيانات الحقيقية والمحدثة للمزرعة — استخدمها للإجابة بدقة.\n\n' +
+    _farmContext + '\n\n' +
+    'مهمتك: استخرج من رسالة المستخدم بيانات منظمة JSON.\n' +
+    'أنواع العمليات:\n' +
+    '- add_animal: إضافة حيوان/حيوانات (يمكن count > 1)\n' +
+    '- add_birth: تسجيل مولود (يتطلب mother_tag أو mother_breed)\n' +
+    '- mark_dead: تسجيل نفوق\n' +
+    '- add_health: تسجيل حالة صحية/علاج\n' +
+    '- add_vaccine: تسجيل تحصين\n' +
+    '- add_weight: تسجيل وزن حيوان\n' +
+    '- add_breeding: تسجيل تقريع (مواعدة)\n' +
+    '- add_finance: تسجيل عملية مالية\n' +
+    '- info: سؤال/استفسار — أجب مباشرة من البيانات أعلاه\n' +
+    '- clarify: الطلب غير واضح، اطلب توضيح\n\n' +
+    'استجب دائماً بـ JSON فقط بدون أي نص خارجه:\n' +
+    '{"action":"add_animal","data":{...},"summary":"ملخص عربي","confidence":0.9}\n\n' +
+    'حقول add_animal: species(goat/sheep), breed, gender(male/female), purpose(tarbiya/tasmeen/birth), count, birth_date, barn, tag, notes\n' +
+    'حقول add_birth: species, breed, gender, count, mother_tag, mother_breed, birth_weight, birth_date, barn\n' +
+    'حقول mark_dead: animal_tag, breed, gender, died_at, death_reason\n' +
+    'حقول add_health: animal_tag, animal_breed, diagnosis, medication, dosage, withdrawal_days, date, vet_name\n' +
+    'حقول add_vaccine: name, target_section, count, scheduled_date, status\n' +
+    'حقول add_weight: animal_tag, animal_breed, weight, date\n' +
+    'حقول add_breeding: female_tag, female_breed, male_tag, male_breed, mating_date, expected_birth\n' +
+    'حقول add_finance: type(income/expense), category, description, amount, date\n' +
+    'لـ info: {"action":"info","answer":"إجابة مفصلة من البيانات الحقيقية","summary":"..."}\n' +
+    'إذا الطلب غير واضح: {"action":"clarify","question":"...","summary":"..."}';
+
+  _history.push({ role: 'user', content: text });
+
+  try {
+    var geminiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=' + apiKey;
+    var resp = await fetch(geminiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: system }] },
+        contents: _history.map(function(m){ return { role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.content }] }; }),
+        generationConfig: { maxOutputTokens: 1000, temperature: 0.1 }
+      })
+    });
+    var data = await resp.json();
+    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+    var raw = data.candidates && data.candidates[0] && data.candidates[0].content
+      ? data.candidates[0].content.parts[0].text : '';
+
+    removeTyping();
+    _history.push({ role: 'assistant', content: raw });
+
+    var parsed = null;
+    try {
+      var jm = raw.match(/\{[\s\S]*\}/);
+      if (jm) parsed = JSON.parse(jm[0]);
+    } catch(e) {}
+
+    if (!parsed) { addMsg('bot', raw || 'عذراً، لم أفهم الطلب. حاول مجدداً.'); return; }
+
+    if (parsed.action === 'info')    addMsg('bot', (parsed.answer || parsed.summary || '—').replace(/\n/g,'<br>'));
+    else if (parsed.action === 'clarify') addMsg('bot', parsed.question || parsed.summary || '—');
+    else showConfirmation(parsed);
+
+  } catch(e) {
+    removeTyping();
+    var msg = '❌ ';
+    if (e.message.includes('API_KEY_INVALID') || e.message.includes('invalid'))
+      msg += 'مفتاح Gemini غلط — اضغط 🔑 وأدخل المفتاح الصحيح';
+    else if (e.message.includes('quota') || e.message.includes('RATE_LIMIT'))
+      msg += 'تجاوزت الحد المجاني. انتظر قليلاً ثم أعد المحاولة.';
+    else msg += 'خطأ: ' + e.message;
+    addMsg('bot', msg);
+  }
+};
+
+// ── Confirmation card ─────────────────────────────────────
+function showConfirmation(parsed) {
+  var d = _farmData;
+  var data = parsed.data || {};
+  var actionLabels = { add_animal:'إضافة حيوان', add_birth:'تسجيل ولادة', mark_dead:'تسجيل نفوق', add_health:'تسجيل صحة', add_vaccine:'تسجيل تحصين', add_weight:'تسجيل وزن', add_breeding:'تسجيل تقريع', add_finance:'تسجيل مالية' };
+  var fieldLabels  = { species:'النوع', breed:'السلالة', gender:'الجنس', purpose:'الغرض', count:'العدد', birth_date:'تاريخ الميلاد', barn:'الجمالون', tag:'رقم الترقيم', notes:'ملاحظات', mother_tag:'رقم الأم', mother_breed:'سلالة الأم', birth_weight:'وزن الميلاد', animal_tag:'رقم الحيوان', animal_breed:'السلالة', died_at:'تاريخ النفوق', death_reason:'سبب النفوق', diagnosis:'التشخيص', medication:'الدواء', dosage:'الجرعة', withdrawal_days:'أيام التأثير', vet_name:'الطبيب', vaccine_name:'اللقاح', target_section:'القسم', name:'الاسم', scheduled_date:'الموعد', weight:'الوزن (كجم)', female_tag:'ترقيم الأنثى', female_breed:'سلالة الأنثى', male_tag:'ترقيم الذكر', mating_date:'تاريخ التقريع', expected_birth:'الولادة المتوقعة', type:'النوع', category:'الفئة', description:'الوصف', amount:'المبلغ', date:'التاريخ' };
+  var valueLabels  = { goat:'ماعز', sheep:'أغنام', male:'ذكر', female:'أنثى', tarbiya:'تربية', tasmeen:'تسمين', birth:'مواليد', income:'إيراد', expense:'مصروف' };
+
+  var rows = Object.keys(data).map(function(k) {
+    var v = data[k];
+    if (v === null || v === undefined || v === '') return '';
+    return '<div class="confirm-row"><span class="text-gray">' + (fieldLabels[k]||k) + '</span><span class="fw-bold">' + (valueLabels[v]||v) + '</span></div>';
+  }).join('');
+
+  _pendingAction = parsed;
+  var html = '<div class="msg msg-bot" style="max-width:90%">' +
+    '<div class="fw-bold mb-2 blue-text"><i class="bi bi-question-circle-fill me-2"></i>' + (actionLabels[parsed.action]||'عملية') + '</div>' +
+    '<div class="text-gray mb-3" style="font-size:.82rem">' + (parsed.summary||'') + '</div>' +
+    '<div class="confirm-card"><div class="fw-bold mb-2 green-text" style="font-size:.8rem"><i class="bi bi-check2-square me-1"></i>البيانات المستخلصة:</div>' + rows + '</div>' +
+    '<div class="d-flex gap-2 mt-3 flex-wrap">' +
+      '<button class="action-btn primary" onclick="executeAction()"><i class="bi bi-check-lg"></i> تأكيد وحفظ</button>' +
+      '<button class="action-btn" onclick="editAndConfirm()"><i class="bi bi-pencil"></i> تعديل</button>' +
+      '<button class="action-btn" onclick="skipAction()"><i class="bi bi-x-lg"></i> تخطي</button>' +
+    '</div></div>';
+
+  var wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  wrap.style.cssText = 'display:flex;justify-content:flex-end';
+  document.getElementById('chat-messages').appendChild(wrap);
+  scrollChat();
+}
+
+// ── Execute action ────────────────────────────────────────
+window.executeAction = async function() {
+  if (!_pendingAction) return;
+  var parsed = _pendingAction; _pendingAction = null;
+  document.querySelectorAll('#chat-messages .action-btn').forEach(function(b){ b.disabled = true; });
+  addMsg('system','⏳ جاري الحفظ...');
+  var d = parsed.data || {};
+  var s = getSettings();
+  try {
+    if (parsed.action === 'add_animal') {
+      var count = parseInt(d.count) || 1;
+      for (var i = 0; i < count; i++) {
+        await fbPost('animals', { species:d.species, breed:d.breed, gender:d.gender, purpose:d.purpose||'tarbiya', status:'alive', tag:count===1?(d.tag||null):null, barn:d.barn||null, birth_date:d.birth_date||null, notes:d.notes||null, created_at:todayStr() });
+      }
+      await logActivity('add','animals','إضافة عبر المساعد: '+ar(count)+' '+d.breed+' '+d.gender);
+      addMsg('system','✅ تم إضافة '+ar(count)+' حيوان بنجاح');
+    }
+    else if (parsed.action === 'add_birth') {
+      var cnt = parseInt(d.count) || 1;
+      for (var j = 0; j < cnt; j++) {
+        await fbPost('animals', { species:d.species, breed:d.breed||d.mother_breed, gender:d.gender, purpose:'birth', status:'alive', mother_tag:d.mother_tag||null, mother_breed:d.mother_breed||null, birth_date:d.birth_date||todayStr(), barn:d.barn||null, birth_weight:d.birth_weight||null, created_at:todayStr() });
+      }
+      await logActivity('add','animals','تسجيل ولادة عبر المساعد: '+ar(cnt)+' مواليد');
+      addMsg('system','✅ تم تسجيل '+ar(cnt)+' مولود');
+    }
+    else if (parsed.action === 'mark_dead') {
+      var toKill = _farmData.animals.filter(function(a){ return a.status==='alive' && (d.animal_tag ? a.tag===d.animal_tag : (a.breed===d.breed && a.gender===d.gender)); }).slice(0,1);
+      if (toKill.length) {
+        await fbPatch('animals', toKill[0]._id, { status:'dead', died_at:d.died_at||todayStr(), death_cause:d.death_reason||null });
+        await logActivity('edit','animals','تسجيل نفوق: '+(d.animal_tag||d.breed));
+        addMsg('system','✅ تم تسجيل النفوق');
+      } else { addMsg('bot','⚠️ لم أجد الحيوان. تأكد من البيانات.'); return; }
+    }
+    else if (parsed.action === 'add_health') {
+      await fbPost('health', { animal_tag:d.animal_tag||'—', animal_breed:d.animal_breed||d.breed||'—', diagnosis:d.diagnosis||'—', medication:d.medication||'—', dosage:d.dosage||null, withdrawal_days:d.withdrawal_days||0, date:d.date||todayStr(), vet_name:d.vet_name||null, status:'active', notes:'سُجِّل عبر المساعد الذكي' });
+      await logActivity('add','health','تسجيل صحي: '+(d.diagnosis||'—'));
+      addMsg('system','✅ تم تسجيل الحالة الصحية');
+    }
+    else if (parsed.action === 'add_vaccine') {
+      await fbPost('vaccinations', { name:d.name||d.vaccine_name||'—', target_section:d.target_section||'الكل', count:d.count||0, scheduled_date:d.scheduled_date||todayStr(), status:d.status||'done', notes:'سُجِّل عبر المساعد الذكي' });
+      await logActivity('add','vaccinations','تسجيل تحصين: '+(d.name||d.vaccine_name||'—'));
+      addMsg('system','✅ تم تسجيل التحصين');
+    }
+    else if (parsed.action === 'add_weight') {
+      var animal = _farmData.animals.find(function(a){ return a.tag === d.animal_tag || a.breed === d.animal_breed; });
+      if (animal) await fbPatch('animals', animal._id, { current_weight: d.weight, weight_updated: d.date||todayStr() });
+      await fbPost('weight_log', { animal_tag:d.animal_tag||'—', animal_breed:d.animal_breed||'—', weight:d.weight, date:d.date||todayStr(), recorded_by:'مساعد ذكي' });
+      await logActivity('add','weight_log','تسجيل وزن: '+(d.animal_tag||d.animal_breed)+' = '+d.weight+' كجم');
+      addMsg('system','✅ تم تسجيل الوزن: '+ar(d.weight)+' كجم');
+    }
+    else if (parsed.action === 'add_breeding') {
+      var expBirth = null;
+      if (d.mating_date) { var bd = new Date(d.mating_date); bd.setDate(bd.getDate() + (getSettings().pregnancyDays||150)); expBirth = bd.toISOString().slice(0,10); }
+      await fbPost('breeding', { female_tag:d.female_tag||null, female_breed:d.female_breed||null, female_species:d.female_species||'goat', male_tag:d.male_tag||null, male_breed:d.male_breed||null, mating_date:d.mating_date||todayStr(), expected_birth:d.expected_birth||expBirth, status:'pregnant', notes:'سُجِّل عبر المساعد الذكي' });
+      await logActivity('add','breeding','تسجيل تقريع: '+(d.female_tag||d.female_breed||'—'));
+      addMsg('system','✅ تم تسجيل التقريع' + (expBirth ? ' — الولادة المتوقعة: '+expBirth : ''));
+    }
+    else if (parsed.action === 'add_finance' && can('finance')) {
+      await fbPost('finance', { type:d.type||'expense', category:d.category||'متنوع', description:d.description||'—', amount:d.amount||0, date:d.date||todayStr(), notes:'سُجِّل عبر المساعد الذكي' });
+      await logActivity('add','finance','تسجيل مالية: '+(d.description||'—'));
+      addMsg('system','✅ تم تسجيل العملية المالية: '+ar(d.amount||0)+' '+s.currency);
+    }
+
+    fbCacheInvalidate('animals'); fbCacheInvalidate('breeding'); fbCacheInvalidate('health');
+    addMsg('bot','تم الحفظ بنجاح! 🎉 هل تريد إضافة شيء آخر؟');
+    // Refresh context
+    setTimeout(function(){ window.refreshFarmData && window.refreshFarmData(); }, 1000);
+  } catch(e) {
+    addMsg('bot','❌ خطأ في الحفظ: ' + e.message);
+  }
+};
+
+window.skipAction = function() { _pendingAction = null; addMsg('system','تم التخطي.'); };
+
+window.editAndConfirm = function() {
+  if (!_pendingAction) return;
+  var d = _pendingAction.data; var s = getSettings();
+  var allBreeds = (s.goatBreeds||[]).concat(s.sheepBreeds||[]);
+  window._editPending = _pendingAction;
+  showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:480px">' +
+    '<h4><i class="bi bi-pencil-square accent-text"></i> تعديل البيانات</h4>' +
+    '<div class="row g-2">' +
+      '<div class="col-6"><label>النوع</label><select class="field" id="ea-sp"><option value="goat" '+(d.species==='goat'?'selected':'')+'>ماعز</option><option value="sheep" '+(d.species==='sheep'?'selected':'')+'>أغنام</option></select></div>' +
+      '<div class="col-6"><label>السلالة</label><select class="field" id="ea-breed">'+allBreeds.map(function(b){return'<option '+(d.breed===b?'selected':'')+'>'+b+'</option>';}).join('')+'<option value="مواليد" '+(d.breed==='مواليد'?'selected':'')+'>مواليد</option></select></div>' +
+    '</div><div class="row g-2">' +
+      '<div class="col-6"><label>الجنس</label><select class="field" id="ea-gen"><option value="male" '+(d.gender==='male'?'selected':'')+'>ذكر ♂</option><option value="female" '+(d.gender==='female'?'selected':'')+'>أنثى ♀</option></select></div>' +
+      '<div class="col-6"><label>الغرض</label><select class="field" id="ea-pur"><option value="tarbiya" '+(d.purpose==='tarbiya'?'selected':'')+'>تربية</option><option value="tasmeen" '+(d.purpose==='tasmeen'?'selected':'')+'>تسمين</option><option value="birth" '+(d.purpose==='birth'?'selected':'')+'>مواليد</option></select></div>' +
+    '</div>' +
+    (d.count!==undefined?'<label>العدد</label><input type="number" class="field" id="ea-count" value="'+(d.count||1)+'" min="1">':'') +
+    (d.mother_tag!==undefined?'<label>رقم الأم</label><input class="field" id="ea-mtag" value="'+(d.mother_tag||'')+'">':'') +
+    '<label>تاريخ</label><input type="date" class="field" id="ea-date" value="'+(d.birth_date||d.date||todayStr())+'">' +
+    '<label>ملاحظات</label><input class="field" id="ea-notes" value="'+(d.notes||'')+'">' +
+    '<div class="d-flex gap-2 justify-content-end mt-3">' +
+      '<button class="action-btn" onclick="closeModal()">إلغاء</button>' +
+      '<button class="action-btn primary" onclick="_applyEdit()"><i class="bi bi-check-lg"></i> تأكيد وحفظ</button>' +
+    '</div></div>');
+};
+
+window._applyEdit = function() {
+  var p = window._editPending; if (!p) return;
+  var gv = function(id){ var e=document.getElementById(id); return e?e.value:null; };
+  if (gv('ea-sp'))    p.data.species   = gv('ea-sp');
+  if (gv('ea-breed')) p.data.breed     = gv('ea-breed');
+  if (gv('ea-gen'))   p.data.gender    = gv('ea-gen');
+  if (gv('ea-pur'))   p.data.purpose   = gv('ea-pur');
+  if (gv('ea-count')) p.data.count     = parseInt(gv('ea-count'))||1;
+  if (gv('ea-mtag'))  p.data.mother_tag= gv('ea-mtag');
+  if (gv('ea-date'))  p.data.birth_date= gv('ea-date');
+  if (gv('ea-notes')) p.data.notes     = gv('ea-notes');
+  _pendingAction = p; closeModal(); executeAction();
+};
+
+// ── UI helpers ────────────────────────────────────────────
+function addMsg(type, text) {
+  var div = document.createElement('div');
+  div.className = 'msg msg-' + type;
+  div.innerHTML = String(text).replace(/\n/g,'<br>');
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;justify-content:' + (type==='user'?'flex-start':'flex-end');
+  wrap.appendChild(div);
+  document.getElementById('chat-messages').appendChild(wrap);
+  scrollChat();
+  return div;
+}
+function addTyping() {
+  var div = document.createElement('div'); div.className='msg msg-bot typing'; div.id='typing-indicator';
+  div.innerHTML='<span></span><span></span><span></span>';
+  var wrap=document.createElement('div'); wrap.style.cssText='display:flex;justify-content:flex-end'; wrap.id='typing-wrap';
+  wrap.appendChild(div); document.getElementById('chat-messages').appendChild(wrap); scrollChat(); return div;
+}
+function removeTyping() { var w=document.getElementById('typing-wrap'); if(w)w.remove(); }
+function scrollChat() { var m=document.getElementById('chat-messages'); m.scrollTop=m.scrollHeight; }
+
+window.clearChat = function() {
+  _history = []; _pendingAction = null;
+  document.getElementById('chat-messages').innerHTML = '<div class="msg msg-system">تم مسح المحادثة. ابدأ من جديد!</div>';
+};
+
+window.showFarmContext = function() {
+  showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:500px;max-height:85vh;overflow-y:auto">' +
+    '<h4><i class="bi bi-bar-chart-fill accent-text"></i> بيانات المزرعة المُرسَلة للـ AI</h4>' +
+    '<pre style="font-size:.72rem;color:var(--text-gray);white-space:pre-wrap;line-height:1.7;font-family:monospace">' + _farmContext + '</pre>' +
+    '<button class="action-btn mt-3" onclick="closeModal()">إغلاق</button>' +
+  '</div>');
+};
+
+window.openApiSettings = function() {
+  var current = localStorage.getItem('farm_gemini_key') || '';
+  showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:480px">' +
+    '<h4><i class="bi bi-key-fill" style="color:var(--yellow)"></i> مفتاح Gemini API (مجاني)</h4>' +
+    '<div class="mb-3 p-3" style="background:rgba(255,193,7,.07);border:1px solid rgba(255,193,7,.25);border-radius:10px;font-size:.83rem">' +
+      '<div class="fw-bold mb-2" style="color:var(--yellow)"><i class="bi bi-gift-fill me-1"></i>100% مجاني — 1500 طلب/يوم</div>' +
+      '<ol style="margin:0;padding-right:18px;line-height:2">' +
+        '<li>افتح <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--blue)">aistudio.google.com/app/apikey</a></li>' +
+        '<li>اضغط <strong>Create API key</strong></li>' +
+        '<li>انسخ المفتاح والصقه هنا</li>' +
+      '</ol>' +
+    '</div>' +
+    '<label>مفتاح Gemini API</label>' +
+    '<input class="field" id="gemini-key-input" type="password" value="' + current + '" placeholder="AIzaSy...">' +
+    '<div class="d-flex gap-2 justify-content-end mt-3">' +
+      '<button class="action-btn" onclick="closeModal()">إلغاء</button>' +
+      '<button class="action-btn primary" onclick="saveApiKey()"><i class="bi bi-check-lg"></i> حفظ</button>' +
+    '</div></div>');
+};
+
+window.saveApiKey = function() {
+  var key = document.getElementById('gemini-key-input').value.trim();
+  if (!key) { toast('أدخل المفتاح','error'); return; }
+  localStorage.setItem('farm_gemini_key', key);
+  closeModal();
+  var btn = document.getElementById('api-btn');
+  if (btn) { btn.style.background='rgba(0,230,118,.1)'; btn.style.borderColor='rgba(0,230,118,.3)'; btn.style.color='var(--green)'; }
+  toast('✅ تم حفظ مفتاح Gemini');
+};
+
+window.showExamples = function() {
+  showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:500px">' +
+    '<h4><i class="bi bi-lightbulb accent-text"></i> أمثلة على الأوامر</h4>' +
+    '<div class="d-flex flex-column gap-2">' +
+    SHORTCUTS.map(function(sh){ return '<button class="action-btn text-end" style="justify-content:flex-start;gap:10px;padding:10px 14px" onclick="document.getElementById(\'chat-input\').value=\'' + sh.text.replace(/'/g,"\\'") + '\';closeModal()"><span style="font-size:1.1rem">' + sh.icon + '</span><span>' + sh.text + '</span></button>'; }).join('') +
+    '</div></div>');
+};
+</script>
+</body>
+</html>
