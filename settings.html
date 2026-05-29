@@ -31,7 +31,85 @@
   <!-- ── RESET SECTION (Admin Only) ── -->
     
   
-  <!-- React-powered Features -->
+  
+  <!-- APK Install Section -->
+  <div class="settings-section" style="border-color:rgba(156,39,176,.35);background:rgba(156,39,176,.03)">
+    <h6 class="fw-bold mb-3">
+      <i class="bi bi-android2 me-1" style="color:#3ddc84"></i>
+      تثبيت التطبيق على الموبايل (APK)
+      <span class="type-badge ms-2" style="background:rgba(156,39,176,.15);color:#9c27b0;font-size:.65rem">Android</span>
+    </h6>
+    <div class="row g-3 mb-3">
+      <!-- Option 1: Install PWA -->
+      <div class="col-md-6">
+        <div class="wonder-card p-3 h-100" style="border-color:rgba(33,150,243,.3)">
+          <div class="d-flex align-items-center gap-3 mb-2">
+            <i class="bi bi-phone-fill" style="font-size:1.6rem;color:var(--blue)"></i>
+            <div>
+              <div class="fw-bold">تثبيت كـ PWA</div>
+              <small class="text-gray">سريع — من المتصفح مباشرة</small>
+            </div>
+          </div>
+          <p class="text-gray mb-3" style="font-size:.8rem">
+            افتح الموقع في Chrome على Android ← اضغط القائمة (⋮) ← "إضافة إلى الشاشة الرئيسية"
+          </p>
+          <div style="background:var(--bg-3);border-radius:10px;padding:10px;font-size:.76rem;color:var(--text-gray);font-family:monospace;direction:ltr">
+            https://farm-project-puce.vercel.app
+          </div>
+          <div class="mt-2 d-flex gap-2 flex-wrap">
+            <span class="type-badge badge-tarbiya">✅ بدون تثبيت</span>
+            <span class="type-badge badge-gray">✅ Offline Support</span>
+            <span class="type-badge badge-gray">✅ أيقونة على الهاتف</span>
+          </div>
+        </div>
+      </div>
+      <!-- Option 2: Build APK -->
+      <div class="col-md-6">
+        <div class="wonder-card p-3 h-100" style="border-color:rgba(61,220,132,.3)">
+          <div class="d-flex align-items-center gap-3 mb-2">
+            <i class="bi bi-android2" style="font-size:1.6rem;color:#3ddc84"></i>
+            <div>
+              <div class="fw-bold">APK مستقل</div>
+              <small class="text-gray">منفصل تماماً عن المتصفح</small>
+            </div>
+          </div>
+          <p class="text-gray mb-3" style="font-size:.8rem">
+            نزّل مشروع Android وابنيه بنفسك — يعطيك APK قابل للتثبيت والتوزيع
+          </p>
+          <div class="mt-2 d-flex gap-2 flex-wrap mb-2">
+            <span class="type-badge" style="background:rgba(61,220,132,.1);color:#3ddc84">✅ APK مستقل</span>
+            <span class="type-badge" style="background:rgba(61,220,132,.1);color:#3ddc84">✅ بدون متصفح</span>
+            <span class="type-badge badge-gray">يحتاج Android Studio</span>
+          </div>
+          <button class="action-btn primary w-100 mt-1" onclick="downloadAPKProject()" aria-label="تنزيل مشروع APK">
+            <i class="bi bi-download me-1"></i> تنزيل مشروع APK
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Build steps -->
+    <div id="apk-steps" style="display:none">
+      <div style="background:var(--bg-3);border:1px solid var(--border);border-radius:12px;padding:16px;font-size:.82rem">
+        <div class="fw-bold mb-3"><i class="bi bi-list-ol accent-text me-1"></i>خطوات بناء الـ APK</div>
+        <div class="d-flex flex-column gap-2">
+          ${[
+            ['1','تنزيل Android Studio','https://developer.android.com/studio','تنزيل'],
+            ['2','فك الضغط عن farm-apk.zip','—','—'],
+            ['3','npm install (داخل مجلد farm-apk)','—','—'],
+            ['4','افتح مجلد android/ في Android Studio','—','—'],
+            ['5','Build → Build APK','—','—'],
+          ].map(([n,t,u,l]) => `<div style="display:flex;align-items:center;gap:10px">
+            <span style="width:24px;height:24px;border-radius:50%;background:var(--orange);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;flex-shrink:0">${n}</span>
+            <span class="text-gray">${t}</span>
+            ${u!=='—'?`<a href="${u}" target="_blank" class="action-btn sm ms-auto">${l}</a>`:''}
+          </div>`).join('')}
+        </div>
+      </div>
+    </div>
+  </div>
+
+<!-- React-powered Features -->
   <div class="settings-section" style="border-color:rgba(33,150,243,.3)">
     <h6 class="fw-bold mb-3"><i class="bi bi-lightning-fill accent-text"></i> ميزات React المتقدمة</h6>
     <p class="text-gray mb-3" style="font-size:.82rem">مكونات React مدمجة مع التطبيق — تعمل دون الحاجة لإعادة تحميل الصفحة</p>
@@ -454,6 +532,21 @@ window.loadG2Charts = async function() {
     [animals, production] = await Promise.all([fbGet('animals'), fbGet('production_log').catch(function(){return[];})]);
   } catch(e) {}
   window.FarmReact.openG2Charts(animals, production);
+};
+
+window.downloadAPKProject = function() {
+  toast('جاري إعداد رابط التنزيل...', 'info');
+  // Show build steps
+  var steps = document.getElementById('apk-steps');
+  if (steps) steps.style.display = 'block';
+  // Link to the ZIP we prepared
+  setTimeout(function() {
+    var a = document.createElement('a');
+    a.href = 'farm-apk.zip';
+    a.download = 'bayan-farm-apk-project.zip';
+    a.click();
+    toast('✅ تم تنزيل مشروع APK — اتبع التعليمات في ملف BUILD_APK.md');
+  }, 500);
 };
 </script>
 </body>

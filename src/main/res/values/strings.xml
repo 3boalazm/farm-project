@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">بيان المزرعة</string>
-    <string name="title_activity_main">بيان المزرعة</string>
-    <string name="package_name">com.bayan.farm</string>
-    <string name="custom_url_scheme">com.bayan.farm</string>
-</resources>
