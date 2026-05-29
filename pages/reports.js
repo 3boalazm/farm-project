@@ -293,8 +293,7 @@ window.shareWhatsApp = function() {
   var breedLines = allBreeds.map(function(b){
     var cnt = alive.filter(function(a){return a.breed===b;}).length;
     return cnt > 0 ? '  • '+b+': '+cnt+' رأس' : null;
-  }).filter(Boolean).join('
-');
+  }).filter(Boolean).join('%0A');
 
   var text = [
     '🐐 *تقرير مزرعة '+s.farmName+'*',
@@ -315,8 +314,7 @@ window.shareWhatsApp = function() {
     '📈 *صافي الربح:* '+((inc-exp)>=0?'+':'')+(inc-exp).toLocaleString('ar-EG')+' '+s.currency,
     '',
     '_تم إنشاء هذا التقرير تلقائياً من نظام بيان المزرعة_',
-  ].join('
-');
+  ].join('%0A');
 
   var encoded = encodeURIComponent(text);
   window.open('https://wa.me/?text=' + encoded, '_blank');
