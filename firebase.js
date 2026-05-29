@@ -329,28 +329,37 @@ const JSON_HEADERS={
 };
 
 async function fbPost(path,data){
-  // Will capture the new ID after creation for undo
-
   const body=JSON.stringify({
     ...data,
     created_at:new Date().toISOString()
   });
 
-  const r=await fetch(fbUrl(path),{
-    method:'POST',
-    headers:JSON_HEADERS,
-    body
-  });
-
-  if(!r.ok){
+  // Offline: queue and return a temporary ID
+  if(!navigator.onLine){
+    var tmpId='offline_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+    if(window.FarmOfflineSync){
+      await FarmOfflineSync.enqueue('POST', path, null, {...data, created_at:new Date().toISOString(), _offline_id:tmpId});
+    }
     fbCacheInvalidate(path);
-  const t=await r.text();
-    throw new Error(`POST ${path}: ${r.status} ${t}`);
+    return tmpId;
   }
 
-  const res=await r.json();
-
-  return res.name;
+  try{
+    const r=await fetch(fbUrl(path),{method:'POST',headers:JSON_HEADERS,body});
+    if(!r.ok){fbCacheInvalidate(path);const t=await r.text();throw new Error('POST '+path+': '+r.status+' '+t);}
+    const res=await r.json();
+    return res.name;
+  }catch(e){
+    // Network error while online — queue offline
+    if(e.name==='TypeError'&&window.FarmOfflineSync){
+      var tmpId2='offline_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+      await FarmOfflineSync.enqueue('POST', path, null, {...data, created_at:new Date().toISOString()});
+      fbCacheInvalidate(path);
+      if(window.toast)toast('حُفظ محلياً — سيُرسل عند الاتصال','info');
+      return tmpId2;
+    }
+    throw e;
+  }
 }
 
 async function fbPut(path,id,data){
@@ -373,21 +382,25 @@ async function fbPut(path,id,data){
 }
 
 async function fbPatch(path,id,patch){
-  const body=JSON.stringify({
-    ...patch,
-    updated_at:new Date().toISOString()
-  });
+  const body=JSON.stringify({...patch,updated_at:new Date().toISOString()});
 
-  const r=await fetch(fbUrl(path,id),{
-    method:'PATCH',
-    headers:JSON_HEADERS,
-    body
-  });
-
-  if(!r.ok){
+  if(!navigator.onLine){
+    if(window.FarmOfflineSync) await FarmOfflineSync.enqueue('PATCH',path,id,{...patch,updated_at:new Date().toISOString()});
     fbCacheInvalidate(path);
-  const t=await r.text();
-    throw new Error(`PATCH ${path}/${id}: ${r.status} ${t}`);
+    return;
+  }
+
+  try{
+    const r=await fetch(fbUrl(path,id),{method:'PATCH',headers:JSON_HEADERS,body});
+    if(!r.ok){fbCacheInvalidate(path);const t=await r.text();throw new Error('PATCH '+path+'/'+id+': '+r.status+' '+t);}
+  }catch(e){
+    if(e.name==='TypeError'&&window.FarmOfflineSync){
+      await FarmOfflineSync.enqueue('PATCH',path,id,{...patch,updated_at:new Date().toISOString()});
+      fbCacheInvalidate(path);
+      if(window.toast)toast('حُفظ محلياً — سيُزامَن عند الاتصال','info');
+      return;
+    }
+    throw e;
   }
 }
 
