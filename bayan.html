@@ -3,192 +3,454 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>بيان القطيع — بيان المزرعة</title>
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+<title>بيان قطيع المزرعة — ٢٠٢٦/٠٦/٠١</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root{
-    --bg:#0a0a0a; --card:#161616; --card2:#1d1d1d; --border:#2a2a2a;
-    --text:#f3f4f6; --muted:#8a8a8a;
-    --green:#639922; --blue:#378add; --orange:#ff6b35; --yellow:#ffc107;
+    --bg:#0a0a0a; --bg2:#0f0f10; --card:#161618; --card2:#1d1d20; --line:#2a2a2e;
+    --text:#f3f4f6; --muted:#9a9aa2; --dim:#6a6a72;
+    --green:#22c55e; --blue:#3b82f6; --orange:#f97316; --yellow:#eab308; --purple:#a855f7;
+    --r:16px;
   }
   *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:'Cairo',sans-serif;background:var(--bg);color:var(--text);line-height:1.6;padding:0}
-  .wrap{max-width:1100px;margin:0 auto;padding:24px 16px 60px}
-  .head{text-align:center;padding:28px 0 8px}
-  .head h1{font-size:1.7rem;font-weight:800;color:var(--green);display:flex;align-items:center;justify-content:center;gap:10px}
-  .head p{color:var(--muted);font-size:.95rem;margin-top:6px}
-  .datebar{text-align:center;margin:18px 0 26px}
-  .datebar span{display:inline-block;background:rgba(99,153,34,.1);border:1px solid rgba(99,153,34,.3);border-radius:12px;padding:9px 22px;font-weight:700;color:var(--green)}
-  .row{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:14px}
-  .col4{flex:1 1 calc(25% - 14px);min-width:150px}
-  .col3{flex:1 1 calc(33.33% - 14px);min-width:240px}
-  .col6{flex:1 1 calc(50% - 7px)}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;text-align:center}
-  .card .ico{font-size:1.4rem;margin-bottom:4px}
-  .card .num{font-size:1.7rem;font-weight:800;line-height:1.2}
-  .card .lbl{color:var(--muted);font-size:.85rem;margin-top:2px}
-  .card .sub{font-size:.72rem;color:#666;margin-top:3px}
-  .divider{display:flex;align-items:center;gap:12px;margin:34px 0 18px;flex-wrap:wrap}
-  .divider .line{flex:1;min-width:30px;height:1px;background:var(--border)}
-  .divider h2{margin:0;font-weight:800;font-size:1.3rem}
-  .pill{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;padding:4px 14px;border-radius:20px;background:rgba(138,138,138,.15);color:var(--muted);border:1px solid rgba(138,138,138,.3)}
-  .breed{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px}
-  .breed-hd{display:flex;align-items:center;gap:12px;margin-bottom:14px}
-  .breed-hd .emoji{font-size:1.9rem}
-  .breed-hd .name{font-weight:800;font-size:1.05rem}
-  .breed-hd .cnt{color:var(--muted);font-size:.82rem}
-  .gbox{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center}
-  .gbox .gnum{font-size:1.25rem;font-weight:800;display:block}
-  .gbox .glbl{color:var(--muted);font-size:.72rem}
-  .badges{margin-top:12px;display:flex;flex-wrap:wrap;gap:6px}
-  .tag{font-size:.74rem;padding:3px 10px;border-radius:8px;font-weight:600}
-  .tag.tarbiya{background:rgba(99,153,34,.15);color:var(--green)}
-  .tag.tasmeen{background:rgba(255,107,53,.15);color:var(--orange)}
-  .tag.birth{background:rgba(255,193,7,.12);color:var(--yellow)}
-  .green{color:var(--green)} .blue{color:var(--blue)} .orange{color:var(--orange)} .yellow{color:var(--yellow)}
-  footer{text-align:center;color:var(--muted);font-size:.8rem;margin-top:40px;padding-top:20px;border-top:1px solid var(--border)}
-  footer small{font-size:.7rem;color:#555}
-  .printbtn{display:block;margin:24px auto 0;background:var(--card2);border:1px solid var(--border);color:var(--text);font-family:inherit;font-size:.9rem;padding:9px 22px;border-radius:10px;cursor:pointer}
-  .printbtn:hover{border-color:var(--green)}
+  html{scroll-behavior:smooth}
+  body{font-family:'Cairo',sans-serif;background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(34,197,94,.06), transparent 60%),
+    radial-gradient(900px 500px at 10% 0%, rgba(59,130,246,.05), transparent 55%),
+    var(--bg);
+    color:var(--text);line-height:1.7;min-height:100vh}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 16px 70px}
+
+  .hero{text-align:center;padding:46px 0 10px}
+  .hero .crest{font-size:2.6rem;animation:pop .8s cubic-bezier(.2,.9,.3,1.4) both}
+  .hero h1{font-size:2rem;font-weight:900;margin-top:6px;
+    background:linear-gradient(90deg,#fff,#bdebcb);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero .desc{color:var(--muted);font-size:1rem;margin-top:8px;max-width:580px;margin-inline:auto}
+  .hero .datechip{display:inline-flex;align-items:center;gap:8px;margin-top:16px;background:rgba(34,197,94,.1);
+    border:1px solid rgba(34,197,94,.35);color:#86efac;border-radius:30px;padding:8px 20px;font-weight:700;font-size:.95rem}
+
+  .shortcuts{position:sticky;top:0;z-index:50;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;
+    padding:14px 0;margin:22px 0 8px;background:rgba(10,10,10,.72);backdrop-filter:blur(14px);
+    border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .sc{display:inline-flex;align-items:center;gap:7px;background:var(--card2);border:1px solid var(--line);
+    color:var(--text);border-radius:30px;padding:8px 15px;font-family:inherit;font-size:.84rem;font-weight:600;
+    cursor:pointer;text-decoration:none;transition:.22s}
+  .sc:hover,.sc:focus{border-color:var(--green);background:rgba(34,197,94,.12);transform:translateY(-2px);outline:none}
+  .sc .dot{width:9px;height:9px;border-radius:50%}
+
+  .sec-title{display:flex;align-items:center;gap:11px;margin:40px 0 18px;font-size:1.35rem;font-weight:800;flex-wrap:wrap}
+  .sec-title .bar{width:5px;height:26px;border-radius:4px;flex:none}
+  .sec-title .hint{margin-inline-start:auto;font-size:.8rem;font-weight:500;color:var(--dim)}
+
+  .grid{display:grid;gap:16px}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:22px 18px;text-align:center;
+    position:relative;overflow:hidden;opacity:0;transform:translateY(16px);animation:rise .6s ease forwards}
+  .stat::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:var(--accent,var(--green))}
+  .stat .ico{font-size:1.5rem;margin-bottom:6px}
+  .stat .num{font-size:2rem;font-weight:900;line-height:1.1;color:var(--accent)}
+  .stat .lbl{color:var(--muted);font-size:.92rem;margin-top:3px;font-weight:600}
+  .stat .sub{font-size:.74rem;color:var(--dim);margin-top:5px}
+
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:22px;
+    opacity:0;transform:translateY(16px);animation:rise .6s ease forwards}
+  .panel h3{display:flex;align-items:center;gap:9px;font-size:1.1rem;font-weight:800;margin-bottom:6px}
+  .panel .ph-sub{color:var(--dim);font-size:.82rem;margin-bottom:14px}
+  .chart-box{position:relative;height:300px}
+  .legend{display:flex;flex-direction:column;gap:9px;margin-top:14px}
+  .legend .li{display:flex;align-items:center;gap:9px;font-size:.9rem}
+  .legend .li .sw{width:13px;height:13px;border-radius:4px;flex:none}
+  .legend .li .nm{font-weight:600}
+  .legend .li .vl{margin-inline-start:auto;color:var(--muted);font-variant-numeric:tabular-nums}
+
+  .tbl{width:100%;border-collapse:collapse;font-size:.92rem}
+  .tbl th,.tbl td{padding:13px 10px;text-align:center}
+  .tbl thead th{color:var(--dim);font-weight:700;font-size:.82rem;border-bottom:1px solid var(--line)}
+  .tbl tbody tr{border-bottom:1px solid var(--line)}
+  .tbl tbody tr:last-child{border-bottom:none}
+  .tbl td.cat{text-align:right;font-weight:700}
+  .tbl .big{font-weight:900;font-size:1.05rem}
+  .tbl tr.totalrow{background:rgba(249,115,22,.07)}
+  .tbl tr.totalrow td{color:var(--orange);font-weight:900}
+
+  .acc{background:var(--card);border:1px solid var(--line);border-radius:var(--r);margin-bottom:12px;overflow:hidden;
+    opacity:0;transform:translateY(14px);animation:rise .55s ease forwards}
+  .acc-hd{display:flex;align-items:center;gap:14px;padding:18px 20px;cursor:pointer;user-select:none;transition:.2s}
+  .acc-hd:hover{background:var(--card2)}
+  .acc-hd .emoji{font-size:2rem;flex:none}
+  .acc-hd .ttl{font-weight:800;font-size:1.15rem}
+  .acc-hd .meta{color:var(--muted);font-size:.84rem;font-weight:500}
+  .acc-hd .count{margin-inline-start:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+  .acc-hd .pill{font-size:.8rem;padding:5px 13px;border-radius:30px;font-weight:700;white-space:nowrap}
+  .acc-hd .chev{transition:.3s;color:var(--dim);font-size:1.3rem}
+  .acc.open .acc-hd .chev{transform:rotate(180deg)}
+  .acc-body{max-height:0;overflow:hidden;transition:max-height .4s ease}
+  .acc-inner{padding:6px 20px 22px}
+
+  .breedgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+  .bcard{background:var(--card2);border:1px solid var(--line);border-radius:13px;padding:16px}
+  .bcard-hd{display:flex;align-items:center;gap:11px;margin-bottom:13px}
+  .bcard-hd .be{font-size:1.7rem}
+  .bcard-hd .bn{font-weight:800;font-size:1.05rem}
+  .bcard-hd .bc{color:var(--muted);font-size:.78rem}
+  .gbox-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .gb{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:9px;text-align:center}
+  .gb .gn{font-size:1.2rem;font-weight:800;display:block}
+  .gb .gl{color:var(--dim);font-size:.7rem}
+  .tags{margin-top:12px;display:flex;flex-wrap:wrap;gap:6px}
+  .tg{font-size:.74rem;padding:3px 11px;border-radius:8px;font-weight:700}
+  .tg.t{background:rgba(34,197,94,.15);color:#86efac}
+  .tg.s{background:rgba(249,115,22,.15);color:#fdba74}
+  .tg.b{background:rgba(234,179,8,.15);color:#fde047}
+
+  .green{color:var(--green)} .blue{color:var(--blue)} .orange{color:var(--orange)}
+  .yellow{color:var(--yellow)} .muted{color:var(--muted)}
+
+  .glossary{background:var(--card);border:1px dashed var(--line);border-radius:var(--r);padding:20px 22px;margin-top:14px}
+  .glossary h4{font-size:1rem;font-weight:800;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .gl-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
+  .gl-item{display:flex;gap:10px;align-items:flex-start;font-size:.88rem}
+  .gl-item .ic{font-size:1.1rem;flex:none;margin-top:2px}
+  .gl-item b{color:var(--text)}
+  .gl-item span{color:var(--muted)}
+
+  footer{text-align:center;color:var(--muted);font-size:.82rem;margin-top:50px;padding-top:24px;border-top:1px solid var(--line)}
+  footer small{font-size:.72rem;color:var(--dim)}
+  .printbtn{display:inline-flex;align-items:center;gap:8px;margin:28px auto 0;background:var(--card2);
+    border:1px solid var(--line);color:var(--text);font-family:inherit;font-size:.92rem;padding:11px 26px;
+    border-radius:12px;cursor:pointer;transition:.2s}
+  .printbtn:hover{border-color:var(--green);background:rgba(34,197,94,.12)}
+  .center{text-align:center}
+
+  @keyframes rise{to{opacity:1;transform:translateY(0)}}
+  @keyframes pop{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:scale(1)}}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important}}
+
   @media print{
     body{background:#fff;color:#000}
-    .card,.breed,.gbox{border:1px solid #ccc;background:#fff;break-inside:avoid}
-    .printbtn{display:none}
-    .head h1{color:#000}
+    .shortcuts,.printbtn{display:none}
+    .panel,.stat,.acc,.bcard,.gb,.glossary{border:1px solid #ccc;background:#fff;break-inside:avoid}
+    .acc-body{max-height:none!important}
+    .hero h1{color:#000;-webkit-text-fill-color:#000}
   }
-  @media(max-width:600px){.col4,.col3{flex:1 1 calc(50% - 7px)}}
+  @media(max-width:880px){.g4{grid-template-columns:repeat(2,1fr)}.g2{grid-template-columns:1fr}}
+  @media(max-width:560px){
+    .g4{grid-template-columns:1fr}
+    .hero h1{font-size:1.6rem}
+    .acc-hd{flex-wrap:wrap}
+    .acc-hd .count{width:100%;justify-content:flex-start;margin-top:6px}
+    .sec-title{font-size:1.15rem}
+    .sec-title .hint{width:100%;margin-inline-start:0}
+    .tbl th,.tbl td{padding:10px 5px;font-size:.84rem}
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="head">
-    <h1>📋 بيان القطيع</h1>
-    <p>بيان الماعز والأغنام عن يوم ٢٠٢٦/٠٦/٠١</p>
+
+  <div class="hero">
+    <div class="crest">🐑🐐</div>
+    <h1>بيان قطيع المزرعة</h1>
+    <p class="desc">عرض شامل ومبسّط لعدد الماعز والأغنام في المزرعة، موزّعين حسب السلالة والغرض والجنس.</p>
+    <div class="datechip">📅 بيان مُحدّث بتاريخ ٢٠٢٦/٠٦/٠١</div>
   </div>
-  <div class="datebar"><span>📅 بيان عن يوم: ٢٠٢٦/٠٦/٠١</span></div>
-  <div id="content"></div>
-  <button class="printbtn" onclick="window.print()">🖨️ طباعة البيان</button>
+
+  <nav class="shortcuts" id="top">
+    <a class="sc" href="#summary"><span class="dot" style="background:var(--orange)"></span> الملخص العام</a>
+    <a class="sc" href="#charts"><span class="dot" style="background:var(--blue)"></span> الرسوم البيانية</a>
+    <a class="sc" href="#goats"><span class="dot" style="background:var(--green)"></span> الماعز</a>
+    <a class="sc" href="#sheep"><span class="dot" style="background:var(--blue)"></span> الأغنام</a>
+    <a class="sc" href="#glossary"><span class="dot" style="background:var(--yellow)"></span> دليل المصطلحات</a>
+  </nav>
+
+  <div class="sec-title" id="summary">
+    <span class="bar" style="background:var(--orange)"></span> الملخص العام للقطيع
+    <span class="hint">نظرة سريعة على إجمالي الأعداد</span>
+  </div>
+  <div id="topcards" class="grid g4"></div>
+
+  <div class="sec-title" id="charts">
+    <span class="bar" style="background:var(--blue)"></span> الرسوم البيانية والتحليل
+    <span class="hint">توزيع القطيع بصرياً</span>
+  </div>
+  <div class="grid g2" style="margin-bottom:16px">
+    <div class="panel" style="animation-delay:.05s">
+      <h3>📊 الذكور والإناث حسب السلالة</h3>
+      <div class="ph-sub">مقارنة أعداد الذكور مقابل الإناث في كل سلالة (رأس)</div>
+      <div class="chart-box"><canvas id="cGender"></canvas></div>
+    </div>
+    <div class="panel" style="animation-delay:.1s">
+      <h3>🥧 توزيع السلالات</h3>
+      <div class="ph-sub">نسبة كل سلالة من إجمالي القطيع (تربية وتجديد)</div>
+      <div class="chart-box" style="height:230px"><canvas id="cBreeds"></canvas></div>
+      <div class="legend" id="breedsLegend"></div>
+    </div>
+    <div class="panel" style="animation-delay:.15s">
+      <h3>🎯 توزيع الغرض</h3>
+      <div class="ph-sub">تقسيم القطيع حسب الغرض: تربية / تجديد قطيع / مواليد</div>
+      <div class="chart-box" style="height:230px"><canvas id="cPurpose"></canvas></div>
+      <div class="legend" id="purposeLegend"></div>
+    </div>
+    <div class="panel" style="animation-delay:.2s">
+      <h3>📋 ملخص القطيع بالأرقام</h3>
+      <div class="ph-sub">جدول تفصيلي بالفئات والإجماليات (رأس)</div>
+      <table class="tbl" id="summaryTable"></table>
+    </div>
+  </div>
+
+  <div class="sec-title" id="goats">
+    <span class="bar" style="background:var(--green)"></span> تفاصيل الماعز
+    <span class="hint">اضغط على القسم لعرض السلالات</span>
+  </div>
+  <div id="goatAcc"></div>
+
+  <div class="sec-title" id="sheep">
+    <span class="bar" style="background:var(--blue)"></span> تفاصيل الأغنام
+    <span class="hint">اضغط على القسم لعرض السلالات</span>
+  </div>
+  <div id="sheepAcc"></div>
+
+  <div class="sec-title" id="glossary">
+    <span class="bar" style="background:var(--yellow)"></span> دليل المصطلحات
+    <span class="hint">شرح مبسّط للزائر</span>
+  </div>
+  <div class="glossary">
+    <h4>📖 ماذا تعني الكلمات في هذا البيان؟</h4>
+    <div class="gl-grid">
+      <div class="gl-item"><span class="ic">🌱</span><div><b>تربية</b><br><span>رؤوس يتم تربيتها للحفاظ على القطيع وزيادته (إناث للولادة وذكور للتلقيح).</span></div></div>
+      <div class="gl-item"><span class="ic">🔄</span><div><b>تجديد قطيع</b><br><span>رؤوس يتم إعدادها لتحل محل القديمة في القطيع — أي تجديد الأعداد.</span></div></div>
+      <div class="gl-item"><span class="ic">✨</span><div><b>مواليد</b><br><span>الرؤوس الصغيرة التي وُلدت حديثاً في المزرعة.</span></div></div>
+      <div class="gl-item"><span class="ic">🐐</span><div><b>الماعز</b><br><span>السلالات: شامي، بور، بلدي.</span></div></div>
+      <div class="gl-item"><span class="ic">🐑</span><div><b>الأغنام</b><br><span>السلالات: برقي، دودبر، ميت ماستر.</span></div></div>
+      <div class="gl-item"><span class="ic">♂️♀️</span><div><b>ذكور / إناث</b><br><span>جنس الرأس — الإناث أساس تكاثر القطيع.</span></div></div>
+    </div>
+  </div>
+
+  <div class="center"><button class="printbtn" onclick="window.print()">🖨️ طباعة البيان</button></div>
+
   <footer>
-    ٢٠٢٦ &copy; بيان المزرعة<br>
-    <small>إشراف: لواء أحمد رجب نوح | تطوير: جندي مصطفى محمد إبراهيم</small>
+    ٢٠٢٦ &copy; بيان المزرعة — جميع الحقوق محفوظة<br>
+    <small>إشراف: لواء أحمد رجب نوح &nbsp;|&nbsp; تطوير: جندي مصطفى محمد إبراهيم</small>
   </footer>
 </div>
+
 <script>
 // ============================================================
-//  بيان ثابت مستقل تماماً — أرقام جدول الإكسيل 2026/06/01
-//  لا login، لا اتصال بقاعدة بيانات، لا ملفات خارجية.
-//  لتغيير الأرقام عدّل BAYAN_DATA أدناه.
+//  بيان ثابت مستقل — أرقام جدول الإكسيل بتاريخ ٢٠٢٦/٠٦/٠١
+//  لا login • لا قاعدة بيانات • لا ملفات خارجية (عدا Chart.js + الخط)
+//  الغرض: t=تربية | s=تجديد قطيع | b=مواليد  ، الجنس: m=ذكور f=إناث
+//  لتغيير الأرقام: عدّل DATA أدناه فقط.
 // ============================================================
-
-// purpose: tarbiya = تربية | tasmeen = تجديد قطيع | birth = مواليد
-var BAYAN_DATA = {
+var DATA = {
   goat: {
-    label:'الماعز', emoji:'🐐', color:'var(--green)',
+    label:'الماعز', emoji:'🐐', color:'#22c55e',
     breeds:[
-      {name:'بور',  tm:11, tf:15,  sm:4, sf:0,  bm:0,  bf:0},
-      {name:'شامي', tm:2,  tf:141, sm:0, sf:0,  bm:0,  bf:0},
-      {name:'بلدي', tm:1,  tf:26,  sm:0, sf:0,  bm:0,  bf:0},
-      {name:'مواليد',tm:0, tf:0,   sm:0, sf:0,  bm:50, bf:51}
-    ]
+      {name:'بور',  tm:11, tf:15,  sm:4, sf:0},
+      {name:'شامي', tm:1,  tf:141, sm:1, sf:0},   // ذكور: 1 تربية + 1 تجديد
+      {name:'بلدي', tm:1,  tf:26,  sm:0, sf:0}
+    ],
+    births:{m:50, f:51}                            // مواليد الماعز
   },
   sheep: {
-    label:'الأغنام', emoji:'🐑', color:'var(--blue)',
+    label:'الأغنام', emoji:'🐑', color:'#3b82f6',
     breeds:[
-      {name:'برقي',      tm:2, tf:68, sm:0, sf:0,  bm:0,  bf:0},
-      {name:'دودبر',     tm:1, tf:1,  sm:0, sf:0,  bm:0,  bf:0},
-      {name:'ميت ماستر',tm:1, tf:0,  sm:0, sf:0,  bm:0,  bf:0},
-      {name:'مواليد',    tm:0, tf:0,  sm:0, sf:12, bm:19, bf:17}
-    ]
+      {name:'برقي',      tm:2, tf:68, sm:0, sf:0},
+      {name:'دودبر',     tm:1, tf:1,  sm:0, sf:0},
+      {name:'ميت ماستر',tm:1, tf:0,  sm:0, sf:0}
+    ],
+    births:{m:19, f:17, tasmeenF:12}               // مواليد الأغنام + 12 تجديد قطيع إناث
   }
 };
+var BREED_COLORS={'شامي':'#f97316','برقي':'#22c55e','بور':'#3b82f6','بلدي':'#a855f7','ميت ماستر':'#eab308','دودبر':'#ec4899'};
 
-// تحويل الأرقام للعربية الهندية
-function ar(n){
-  var d=['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
-  return String(n).replace(/[0-9]/g,function(x){return d[+x];});
-}
+function ar(n){var d='٠١٢٣٤٥٦٧٨٩';return String(n).replace(/[0-9]/g,function(x){return d[+x];});}
 
-function totals(sp){
-  var t={tarbiya:0,tasmeen:0,births:0,males:0,females:0,total:0};
-  BAYAN_DATA[sp].breeds.forEach(function(b){
-    t.tarbiya += b.tm+b.tf;
-    t.tasmeen += b.sm+b.sf;
-    t.births  += b.bm+b.bf;
-    t.males   += b.tm+b.sm+b.bm;
-    t.females += b.tf+b.sf+b.bf;
+// إجماليات السلالات فقط (تربية + تجديد، بدون مواليد)
+function breedStats(sp){
+  var t={tarbiya:0,tasmeen:0,males:0,females:0,total:0};
+  DATA[sp].breeds.forEach(function(b){
+    t.tarbiya+=b.tm+b.tf; t.tasmeen+=b.sm+b.sf;
+    t.males+=b.tm+b.sm; t.females+=b.tf+b.sf;
   });
-  t.total = t.tarbiya+t.tasmeen+t.births;
+  t.total=t.tarbiya+t.tasmeen;
   return t;
 }
+// إجماليات المواليد
+function birthStats(sp){
+  var b=DATA[sp].births, tf=b.tasmeenF||0;
+  return {m:b.m, f:b.f+tf, tasmeenF:tf, total:b.m+b.f+tf, births_only:b.m+b.f};
+}
+var GB=breedStats('goat'), SB=breedStats('sheep');
+var GBR=birthStats('goat'), SBR=birthStats('sheep');
+var G_TOTAL=GB.total+GBR.total, S_TOTAL=SB.total+SBR.total, GRAND=G_TOTAL+S_TOTAL;
 
-function topCard(label,num,color,ico,sub){
-  return '<div class="col4"><div class="card">'+
+// ---------- TOP CARDS ----------
+function topCard(label,num,color,ico,sub,delay){
+  return '<div class="stat" style="--accent:'+color+';animation-delay:'+delay+'s">'+
     '<div class="ico" style="color:'+color+'">'+ico+'</div>'+
-    '<div class="num" style="color:'+color+'">'+ar(num)+'</div>'+
+    '<div class="num">'+ar(num)+'</div>'+
     '<div class="lbl">'+label+'</div>'+
-    (sub?'<div class="sub">'+sub+'</div>':'')+
-    '</div></div>';
+    (sub?'<div class="sub">'+sub+'</div>':'')+'</div>';
 }
+document.getElementById('topcards').innerHTML=
+  topCard('إجمالي القطيع',GRAND,'#f97316','📦',ar(G_TOTAL)+' ماعز + '+ar(S_TOTAL)+' أغنام',0)+
+  topCard('الماعز',G_TOTAL,'#22c55e','🐐',ar(GBR.total)+' مواليد',0.05)+
+  topCard('الأغنام',S_TOTAL,'#3b82f6','🐑',ar(SBR.total)+' مواليد',0.1)+
+  topCard('إجمالي المواليد',GBR.total+SBR.total,'#eab308','✨',ar(GBR.total)+' ماعز + '+ar(SBR.total)+' أغنام',0.15);
 
-function summaryRow(t,color){
-  return '<div class="row">'+
-    '<div class="col4"><div class="card"><div class="num green">'+ar(t.tarbiya)+'</div><div class="lbl">تربية</div></div></div>'+
-    '<div class="col4"><div class="card"><div class="num orange">'+ar(t.tasmeen)+'</div><div class="lbl">تجديد قطيع</div></div></div>'+
-    '<div class="col4"><div class="card"><div class="num yellow">'+ar(t.births)+'</div><div class="lbl">مواليد</div></div></div>'+
-    '<div class="col4"><div class="card"><div class="num" style="color:'+color+'">'+ar(t.males)+' ♂ / '+ar(t.females)+' ♀</div><div class="lbl">ذكور / إناث</div></div></div>'+
-    '</div>';
-}
+// ---------- SUMMARY TABLE (بدون سطر النافق) ----------
+(function(){
+  var rows=[
+    ['ماعز (تربية وتجديد)', GB.total, GB.males, GB.females],
+    ['أغنام (تربية وتجديد)', SB.total, SB.males, SB.females],
+    ['مواليد الماعز', GBR.total, GBR.m, GBR.f],
+    ['مواليد الأغنام', SBR.total, SBR.m, SBR.f]
+  ];
+  var h='<thead><tr><th style="text-align:right">الفئة</th><th>الإجمالي</th><th>ذكور</th><th>إناث</th></tr></thead><tbody>';
+  rows.forEach(function(r){
+    h+='<tr><td class="cat">'+r[0]+'</td><td class="big">'+ar(r[1])+'</td><td>'+ar(r[2])+'</td><td>'+ar(r[3])+'</td></tr>';
+  });
+  var tm=GB.males+SB.males+GBR.m+SBR.m, tf=GB.females+SB.females+GBR.f+SBR.f;
+  h+='<tr class="totalrow"><td class="cat">الإجمالي الكلي</td><td class="big">'+ar(GRAND)+'</td><td>'+ar(tm)+'</td><td>'+ar(tf)+'</td></tr>';
+  h+='</tbody>';
+  document.getElementById('summaryTable').innerHTML=h;
+})();
 
+// ---------- ACCORDIONS ----------
 function breedCard(emoji,b){
-  var tarbiya=b.tm+b.tf, tasmeen=b.sm+b.sf, birth=b.bm+b.bf;
-  var total=tarbiya+tasmeen+birth;
-  if(total===0)return '';
-  var h='<div class="col3"><div class="breed">';
-  h+='<div class="breed-hd"><div class="emoji">'+emoji+'</div>'+
-     '<div><div class="name">'+b.name+'</div><div class="cnt">'+ar(total)+' حيوان</div></div></div>';
-  h+='<div class="row" style="gap:8px">';
-  h+='<div class="col6"><div class="gbox"><span class="gnum green">'+ar(b.tm)+'</span><span class="glbl">ذكور تربية</span></div></div>';
-  h+='<div class="col6"><div class="gbox"><span class="gnum green">'+ar(b.tf)+'</span><span class="glbl">إناث تربية</span></div></div>';
-  h+='<div class="col6"><div class="gbox"><span class="gnum orange">'+ar(b.sm)+'</span><span class="glbl">ذكور تجديد</span></div></div>';
-  h+='<div class="col6"><div class="gbox"><span class="gnum orange">'+ar(b.sf)+'</span><span class="glbl">إناث تجديد</span></div></div>';
-  if(birth>0){
-    h+='<div class="col6"><div class="gbox"><span class="gnum yellow">'+ar(b.bm)+'</span><span class="glbl">ذكور مواليد</span></div></div>';
-    h+='<div class="col6"><div class="gbox"><span class="gnum yellow">'+ar(b.bf)+'</span><span class="glbl">إناث مواليد</span></div></div>';
-  }
-  h+='</div>';
-  h+='<div class="badges">';
-  if(tarbiya>0)h+='<span class="tag tarbiya">تربية '+ar(tarbiya)+'</span>';
-  if(tasmeen>0)h+='<span class="tag tasmeen">تجديد '+ar(tasmeen)+'</span>';
-  if(birth>0)h+='<span class="tag birth">مواليد '+ar(birth)+'</span>';
-  h+='</div>';
+  var tarbiya=b.tm+b.tf, tasmeen=b.sm+b.sf, total=tarbiya+tasmeen;
+  var h='<div class="bcard">';
+  h+='<div class="bcard-hd"><div class="be">'+emoji+'</div><div><div class="bn">'+b.name+'</div><div class="bc">'+ar(total)+' رأس</div></div></div>';
+  h+='<div class="gbox-row">';
+  h+='<div class="gb"><span class="gn green">'+ar(b.tm)+'</span><span class="gl">ذكور تربية</span></div>';
+  h+='<div class="gb"><span class="gn green">'+ar(b.tf)+'</span><span class="gl">إناث تربية</span></div>';
+  h+='<div class="gb"><span class="gn orange">'+ar(b.sm)+'</span><span class="gl">ذكور تجديد</span></div>';
+  h+='<div class="gb"><span class="gn orange">'+ar(b.sf)+'</span><span class="gl">إناث تجديد</span></div>';
+  h+='</div><div class="tags">';
+  if(tarbiya>0)h+='<span class="tg t">تربية '+ar(tarbiya)+' رأس</span>';
+  if(tasmeen>0)h+='<span class="tg s">تجديد '+ar(tasmeen)+' رأس</span>';
   h+='</div></div>';
   return h;
 }
-
-function species(sp,t){
-  var d=BAYAN_DATA[sp];
-  var h='<div class="divider"><h2 style="color:'+d.color+'">'+d.emoji+' '+d.label+'</h2>'+
-    '<div class="line"></div><span class="pill">'+ar(t.total)+' رأس</span></div>';
-  h+=summaryRow(t,d.color);
-  h+='<div class="row">';
-  d.breeds.forEach(function(b){ h+=breedCard(d.emoji,b); });
-  h+='</div>';
+function birthCard(sp){
+  var br=birthStats(sp);
+  if(br.total===0)return '';
+  var name=(sp==='goat'?'مواليد الماعز':'مواليد الأغنام');
+  var h='<div class="bcard" style="border-color:rgba(234,179,8,.4)">';
+  h+='<div class="bcard-hd"><div class="be">✨</div><div><div class="bn yellow">'+name+'</div><div class="bc">'+ar(br.total)+' رأس</div></div></div>';
+  h+='<div class="gbox-row">';
+  h+='<div class="gb"><span class="gn yellow">'+ar(br.m)+'</span><span class="gl">ذكور مواليد</span></div>';
+  h+='<div class="gb"><span class="gn yellow">'+ar(br.f)+'</span><span class="gl">إناث مواليد</span></div>';
+  h+='</div><div class="tags">';
+  h+='<span class="tg b">مواليد '+ar(br.births_only)+' رأس</span>';
+  if(br.tasmeenF>0)h+='<span class="tg s">تجديد قطيع '+ar(br.tasmeenF)+' رأس إناث</span>';
+  h+='</div></div>';
   return h;
 }
+function buildAcc(sp,delayBase){
+  var d=DATA[sp], bs=breedStats(sp), br=birthStats(sp), total=bs.total+br.total;
+  var cards='';
+  d.breeds.forEach(function(b){ cards+=breedCard(d.emoji,b); });
+  cards+=birthCard(sp);
+  return '<div class="acc open" style="animation-delay:'+delayBase+'s">'+
+    '<div class="acc-hd" onclick="toggleAcc(this)">'+
+      '<div class="emoji">'+d.emoji+'</div>'+
+      '<div><div class="ttl">'+d.label+'</div><div class="meta">'+ar(d.breeds.length)+' سلالات + مواليد</div></div>'+
+      '<div class="count">'+
+        '<span class="pill" style="background:rgba(34,197,94,.15);color:#86efac">تربية '+ar(bs.tarbiya)+'</span>'+
+        '<span class="pill" style="background:rgba(249,115,22,.15);color:#fdba74">تجديد '+ar(bs.tasmeen+br.tasmeenF)+'</span>'+
+        '<span class="pill" style="background:rgba(234,179,8,.15);color:#fde047">مواليد '+ar(br.births_only)+'</span>'+
+        '<span class="pill" style="background:'+d.color+';color:#04130a">'+ar(total)+' رأس</span>'+
+        '<span class="chev">⌄</span>'+
+      '</div>'+
+    '</div>'+
+    '<div class="acc-body"><div class="acc-inner"><div class="breedgrid">'+cards+'</div></div></div>'+
+  '</div>';
+}
+document.getElementById('goatAcc').innerHTML=buildAcc('goat',0);
+document.getElementById('sheepAcc').innerHTML=buildAcc('sheep',.08);
 
-(function render(){
-  var g=totals('goat'), sh=totals('sheep'), grand=g.total+sh.total;
-  var html='';
-  html+='<div class="row">';
-  html+=topCard('إجمالي القطيع', grand, 'var(--orange)', '📦', ar(g.total)+' ماعز + '+ar(sh.total)+' أغنام');
-  html+=topCard('الماعز', g.total, 'var(--green)', '🐐', ar(g.births)+' مواليد');
-  html+=topCard('الأغنام', sh.total, 'var(--blue)', '🐑', ar(sh.births)+' مواليد');
-  html+=topCard('إجمالي المواليد', g.births+sh.births, 'var(--yellow)', '✨', ar(g.males+sh.males)+' ♂ / '+ar(g.females+sh.females)+' ♀');
-  html+='</div>';
-  html+=species('goat',g);
-  html+=species('sheep',sh);
-  document.getElementById('content').innerHTML=html;
-})();
+function toggleAcc(hd){
+  var acc=hd.parentNode, body=hd.nextElementSibling;
+  acc.classList.toggle('open');
+  body.style.maxHeight = acc.classList.contains('open') ? body.scrollHeight+'px' : 0;
+}
+setTimeout(function(){
+  document.querySelectorAll('.acc.open .acc-body').forEach(function(b){b.style.maxHeight=b.scrollHeight+'px';});
+},120);
+window.addEventListener('resize',function(){
+  document.querySelectorAll('.acc.open .acc-body').forEach(function(b){b.style.maxHeight=b.scrollHeight+'px';});
+});
+
+// ---------- CHARTS ----------
+Chart.defaults.font.family="'Cairo',sans-serif";
+Chart.defaults.color='#9a9aa2';
+var allBreeds=DATA.goat.breeds.concat(DATA.sheep.breeds);
+
+// 1) ذكور/إناث بالسلالة
+new Chart(document.getElementById('cGender'),{
+  type:'bar',
+  data:{
+    labels:allBreeds.map(function(b){return b.name;}),
+    datasets:[
+      {label:'ذكور',data:allBreeds.map(function(b){return b.tm+b.sm;}),backgroundColor:'#3b82f6',borderRadius:6},
+      {label:'إناث',data:allBreeds.map(function(b){return b.tf+b.sf;}),backgroundColor:'#f97316',borderRadius:6}
+    ]
+  },
+  options:{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{position:'top',labels:{boxWidth:14,padding:16,font:{size:13}}},
+      tooltip:{callbacks:{label:function(c){return c.dataset.label+': '+ar(c.parsed.y)+' رأس';}}}},
+    scales:{y:{beginAtZero:true,grid:{color:'#2a2a2e'},ticks:{callback:function(v){return ar(v);}}},
+      x:{grid:{display:false}}},
+    animation:{duration:900,easing:'easeOutQuart'}}
+});
+
+// 2) توزيع السلالات
+var breedTotals=allBreeds.map(function(b){return {name:b.name,val:b.tm+b.tf+b.sm+b.sf};});
+var bSum=breedTotals.reduce(function(a,b){return a+b.val;},0);
+new Chart(document.getElementById('cBreeds'),{
+  type:'doughnut',
+  data:{labels:breedTotals.map(function(b){return b.name;}),
+    datasets:[{data:breedTotals.map(function(b){return b.val;}),
+      backgroundColor:breedTotals.map(function(b){return BREED_COLORS[b.name];}),borderWidth:2,borderColor:'#161618'}]},
+  options:{responsive:true,maintainAspectRatio:false,cutout:'62%',
+    plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:function(c){var p=Math.round(c.parsed/bSum*100);return c.label+': '+ar(c.parsed)+' رأس ('+ar(p)+'٪)';}}}},
+    animation:{animateRotate:true,duration:1000}}
+});
+document.getElementById('breedsLegend').innerHTML=breedTotals.map(function(b){
+  var p=Math.round(b.val/bSum*100);
+  return '<div class="li"><span class="sw" style="background:'+BREED_COLORS[b.name]+'"></span>'+
+    '<span class="nm">'+b.name+'</span><span class="vl">'+ar(b.val)+' رأس · '+ar(p)+'٪</span></div>';
+}).join('');
+
+// 3) توزيع الغرض (تربية / تجديد قطيع / مواليد) — محسوب صح
+var totalTarbiya=GB.tarbiya+SB.tarbiya;
+var totalTasmeen=GB.tasmeen+SB.tasmeen+GBR.tasmeenF+SBR.tasmeenF;
+var totalMawalid=GBR.births_only+SBR.births_only;
+var purpose=[
+  {name:'تربية',val:totalTarbiya,color:'#22c55e'},
+  {name:'تجديد قطيع',val:totalTasmeen,color:'#f97316'},
+  {name:'مواليد',val:totalMawalid,color:'#eab308'}
+];
+var pSum=purpose.reduce(function(a,b){return a+b.val;},0);
+new Chart(document.getElementById('cPurpose'),{
+  type:'doughnut',
+  data:{labels:purpose.map(function(p){return p.name;}),
+    datasets:[{data:purpose.map(function(p){return p.val;}),
+      backgroundColor:purpose.map(function(p){return p.color;}),borderWidth:2,borderColor:'#161618'}]},
+  options:{responsive:true,maintainAspectRatio:false,cutout:'62%',
+    plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:function(c){var p=Math.round(c.parsed/pSum*100);return c.label+': '+ar(c.parsed)+' رأس ('+ar(p)+'٪)';}}}},
+    animation:{animateRotate:true,duration:1000}}
+});
+document.getElementById('purposeLegend').innerHTML=purpose.map(function(p){
+  var pc=Math.round(p.val/pSum*100);
+  return '<div class="li"><span class="sw" style="background:'+p.color+'"></span>'+
+    '<span class="nm">'+p.name+'</span><span class="vl">'+ar(p.val)+' رأس · '+ar(pc)+'٪</span></div>';
+}).join('');
 </script>
 </body>
 </html>
