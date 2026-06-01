@@ -213,12 +213,14 @@ window.addEventListener('error', function(e) {
       <h3>🥧 توزيع السلالات</h3>
       <div class="ph-sub">نسبة كل سلالة من إجمالي القطيع (تربية وتجديد)</div>
       <div class="chart-box" style="height:230px"><canvas id="cBreeds"></canvas></div>
+      <div class="chart-fallback" id="fbBreeds"></div>
       <div class="legend" id="breedsLegend"></div>
     </div>
     <div class="panel" style="animation-delay:.15s">
       <h3>🎯 توزيع الغرض</h3>
       <div class="ph-sub">تقسيم القطيع حسب الغرض: تربية / تجديد قطيع / مواليد</div>
       <div class="chart-box" style="height:230px"><canvas id="cPurpose"></canvas></div>
+      <div class="chart-fallback" id="fbPurpose"></div>
       <div class="legend" id="purposeLegend"></div>
     </div>
     <div class="panel" style="animation-delay:.2s">
@@ -449,6 +451,20 @@ set('fbGender','<div class="barfb">'+allBreeds.map(function(b){
     '<span class="vl">ذ'+ar(m)+' / إ'+ar(f)+'</span></div>';
 }).join('')+'</div>');
 
+set('fbBreeds','<div class="barfb">'+breedTotals.map(function(b){
+  var p=Math.round(b.val/bSum*100);
+  return '<div class="row"><span class="nm">'+b.name+'</span><span class="track">'+
+    '<span class="seg" style="width:'+(p)+'%;background:'+BREED_COLORS[b.name]+'"></span></span>'+
+    '<span class="vl">'+ar(b.val)+' رأس · '+ar(p)+'٪</span></div>';
+}).join('')+'</div>');
+
+set('fbPurpose','<div class="barfb">'+purpose.map(function(p){
+  var pc=Math.round(p.val/pSum*100);
+  return '<div class="row"><span class="nm">'+p.name+'</span><span class="track">'+
+    '<span class="seg" style="width:'+(pc)+'%;background:'+p.color+'"></span></span>'+
+    '<span class="vl">'+ar(p.val)+' رأس · '+ar(pc)+'٪</span></div>';
+}).join('')+'</div>');
+
 // ========== THEME TOGGLE ==========
 window.toggleTheme=function(){
   var isLight=document.documentElement.classList.toggle('light');
@@ -523,10 +539,9 @@ window.__bayanDrawCharts=function(){
   }catch(e){chartsFailed();}
 };
 function chartsFailed(){
-  // أخفِ الرسوم وأظهر البديل النصي
-  ['cBreeds','cPurpose'].forEach(function(id){var c=document.getElementById(id);if(c)c.parentNode.style.display='none';});
-  var cg=document.getElementById('cGender');if(cg)cg.parentNode.style.display='none';
-  var fb=document.getElementById('fbGender');if(fb)fb.style.display='block';
+  // أخفِ اللوحات الفارغة وأظهر البدائل النصية
+  ['cGender','cBreeds','cPurpose'].forEach(function(id){var c=document.getElementById(id);if(c)c.style.display='none';});
+  ['fbGender','fbBreeds','fbPurpose'].forEach(function(id){var fb=document.getElementById(id);if(fb)fb.style.display='block';});
 }
 loadChartJS(function(ok){
   if(ok && window.Chart){ window.__bayanDrawCharts(); }
