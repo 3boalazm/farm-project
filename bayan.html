@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<script>(function(){var t=localStorage.getItem('farm_theme');if(t==='light')document.documentElement.classList.add('light-mode');}());</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>بيان القطيع — بيان المزرعة</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  .bayan-badge{display:inline-flex;align-items:center;gap:6px;font-size:.78rem;padding:4px 12px;border-radius:20px;background:rgba(144,164,174,.15);color:#90a4ae;border:1px solid rgba(144,164,174,.3)}
+  .species-divider{display:flex;align-items:center;gap:12px;margin:32px 0 18px}
+  .species-divider .line{flex:1;height:1px;background:var(--border)}
+  .species-divider h4{margin:0;font-weight:800}
+  .bayan-print-btn{cursor:pointer}
+  @media print{
+    .no-print{display:none!important}
+    body{background:#fff!important;color:#000!important}
+    .breed-card,.summary-card,.wonder-card{break-inside:avoid;border:1px solid #ccc!important}
+  }
+</style>
+</head>
+<body>
+<div class="page-wrap">
+  <div id="page-header"></div>
+  <div id="content"><div class="text-center py-5"><div class="spinner"></div></div></div>
+  <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
+    <span id="footer-year"></span> &copy; <span id="footer-farm"></span><br>
+    <small style="font-size:.72rem;color:var(--text-muted)">إشراف: لواء أحمد رجب نوح | تطوير: جندي مصطفى محمد إبراهيم</small>
+  </footer>
+</div>
+<script src="config.js"></script>
+<script src="firebase.js"></script>
+<script src="nav.js"></script>
+<script src="shared.js"></script>
+<script>
+var _animals=[];
+
+document.addEventListener('DOMContentLoaded', async function(){
+  if(!requireAuth())return;
+  initFirebase();
+  var s=getSettings();
+  document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
+  document.getElementById('footer-farm').textContent=s.farmName;
+  renderNavbar('bayan.html');
+  renderPageHeader(
+    '<i class="bi bi-clipboard-data green-text"></i> بيان القطيع',
+    'عرض شامل لقطيع المزرعة — الماعز والأغنام',
+    '<span class="bayan-badge no-print"><i class="bi bi-eye-fill"></i> عرض فقط</span>'+
+    '<button class="action-btn no-print bayan-print-btn" onclick="window.print()"><i class="bi bi-printer"></i> طباعة</button>'
+  );
+  try{
+    _animals=await fbGet('animals');
+  }catch(e){
+    document.getElementById('content').innerHTML='<div class="empty-state"><i class="bi bi-wifi-off"></i><p>خطأ في الاتصال: '+e.message+'</p></div>';
+    return;
+  }
+  renderBayan();
+});
+
+// ── إحصائيات نوع كامل ─────────────────────────────────────
+function speciesStats(sp){
+  var alive=_animals.filter(function(a){return a.status==='alive'&&a.species===sp;});
+  var births=alive.filter(function(a){return a.purpose==='birth'||a.breed==='مواليد';});
+  var tasmeen=alive.filter(function(a){return a.purpose==='tasmeen'&&a.breed!=='مواليد';});
+  var tarbiya=alive.filter(function(a){return a.purpose!=='birth'&&a.purpose!=='tasmeen'&&a.breed!=='مواليد';});
+  return{
+    total:alive.length,
+    births:births.length,
+    tasmeen:tasmeen.length,
+    tarbiya:tarbiya.length,
+    males:alive.filter(function(a){return a.gender==='male';}).length,
+    females:alive.filter(function(a){return a.gender==='female';}).length,
+  };
+}
+
+function renderBayan(){
+  var s=getSettings();
+  var el=document.getElementById('content');
+  var goat=speciesStats('goat');
+  var sheep=speciesStats('sheep');
+  var grandTotal=goat.total+sheep.total;
+
+  var html='';
+
+  // ── ملخص عام علوي ───────────────────────────────────────
+  html+='<div class="row g-3 mb-4">';
+  html+=topCard('إجمالي القطيع', grandTotal, 'var(--orange)', 'bi-collection-fill', ar(goat.total)+' ماعز + '+ar(sheep.total)+' أغنام');
+  html+=topCard('الماعز', goat.total, 'var(--green)', 'bi-tropical-storm', ar(goat.births)+' مواليد');
+  html+=topCard('الأغنام', sheep.total, 'var(--blue)', 'bi-cloud-fill', ar(sheep.births)+' مواليد');
+  html+=topCard('إجمالي المواليد', goat.births+sheep.births, 'var(--yellow)', 'bi-stars', ar(goat.males+sheep.males)+' ♂ / '+ar(goat.females+sheep.females)+' ♀');
+  html+='</div>';
+
+  // ════ قسم الماعز ════
+  html+='<div class="species-divider"><h4 class="green-text">🐐 الماعز</h4><div class="line"></div>'+
+        '<span class="bayan-badge">'+ar(goat.total)+' رأس</span></div>';
+  html+=speciesSummaryRow(goat,'var(--green)');
+  html+='<div class="row g-3 mb-2">';
+  s.goatBreeds.forEach(function(breed){
+    html+=breedCardRO('goat','🐐',breed);
+  });
+  html+='</div>';
+
+  // ════ قسم الأغنام ════
+  html+='<div class="species-divider"><h4 style="color:var(--blue)">🐑 الأغنام</h4><div class="line"></div>'+
+        '<span class="bayan-badge">'+ar(sheep.total)+' رأس</span></div>';
+  html+=speciesSummaryRow(sheep,'var(--blue)');
+  html+='<div class="row g-3 mb-2">';
+  s.sheepBreeds.forEach(function(breed){
+    html+=breedCardRO('sheep','🐑',breed);
+  });
+  html+='</div>';
+
+  el.innerHTML=html;
+}
+
+// ── كارت ملخص علوي ──────────────────────────────────────
+function topCard(label,num,color,icon,sub){
+  return '<div class="col-6 col-md-3"><div class="summary-card">'+
+    '<div style="font-size:1.3rem;color:'+color+';margin-bottom:4px"><i class="'+icon+'"></i></div>'+
+    '<div class="summary-number" style="color:'+color+'">'+ar(num)+'</div>'+
+    '<small class="text-gray">'+label+'</small>'+
+    (sub?'<div style="font-size:.7rem;color:var(--text-muted);margin-top:2px">'+sub+'</div>':'')+
+    '</div></div>';
+}
+
+// ── صف ملخص النوع (تربية/تسمين/مواليد/ذكور/إناث) ────────
+function speciesSummaryRow(st,color){
+  var html='<div class="row g-3 mb-3">';
+  html+='<div class="col-6 col-md-3"><div class="summary-card"><div class="summary-number green-text">'+ar(st.tarbiya)+'</div><small class="text-gray">تربية</small></div></div>';
+  html+='<div class="col-6 col-md-3"><div class="summary-card"><div class="summary-number accent-text">'+ar(st.tasmeen)+'</div><small class="text-gray">تسمين</small></div></div>';
+  html+='<div class="col-6 col-md-3"><div class="summary-card"><div class="summary-number" style="color:var(--yellow)">'+ar(st.births)+'</div><small class="text-gray">مواليد</small></div></div>';
+  html+='<div class="col-6 col-md-3"><div class="summary-card"><div class="summary-number" style="color:'+color+'">'+ar(st.males)+' ♂ / '+ar(st.females)+' ♀</div><small class="text-gray">ذكور / إناث</small></div></div>';
+  html+='</div>';
+  return html;
+}
+
+// ── كارت سلالة للعرض فقط (بدون أزرار تعديل) ──────────────
+function breedCardRO(sp,icon,breed){
+  var bs=breedStats(_animals,sp,breed);
+  if(bs.totalAll===0)return ''; // تخطي السلالات الفارغة
+
+  var html='<div class="col-lg-4 col-md-6"><div class="breed-card">';
+  html+='<div class="breed-header">';
+  html+='<div class="breed-icon">'+icon+'</div>';
+  html+='<div><div class="fw-bold">'+breed+'</div>';
+  html+='<small class="text-gray">'+ar(bs.totalAll)+' حيوان</small></div>';
+  html+='</div>';
+
+  html+='<div class="row g-2 mb-3">';
+  html+='<div class="col-6"><div class="gender-box"><span class="gender-count green-text">'+ar(bs.tarbiyaMale)+'</span><small class="text-gray">ذكور تربية</small></div></div>';
+  html+='<div class="col-6"><div class="gender-box"><span class="gender-count green-text">'+ar(bs.tarbiyaFemale)+'</span><small class="text-gray">إناث تربية</small></div></div>';
+  html+='<div class="col-6"><div class="gender-box"><span class="gender-count accent-text">'+ar(bs.tasmeenMale)+'</span><small class="text-gray">ذكور تسمين</small></div></div>';
+  html+='<div class="col-6"><div class="gender-box"><span class="gender-count accent-text">'+ar(bs.tasmeenFemale)+'</span><small class="text-gray">إناث تسمين</small></div></div>';
+  if(bs.birthCount>0){
+    html+='<div class="col-6"><div class="gender-box"><span class="gender-count" style="color:var(--yellow)">'+ar(bs.birthMale)+'</span><small class="text-gray">ذكور مواليد</small></div></div>';
+    html+='<div class="col-6"><div class="gender-box"><span class="gender-count" style="color:var(--yellow)">'+ar(bs.birthFemale)+'</span><small class="text-gray">إناث مواليد</small></div></div>';
+  }
+  html+='</div>';
+
+  html+='<div class="mb-1">';
+  if(bs.tarbiya>0)html+='<span class="type-badge badge-tarbiya">تربية '+ar(bs.tarbiya)+'</span> ';
+  if(bs.tasmeen>0)html+='<span class="type-badge badge-tasmeen">تسمين '+ar(bs.tasmeen)+'</span> ';
+  if(bs.birthCount>0)html+='<span class="type-badge" style="background:rgba(255,193,7,.12);color:var(--yellow)">مواليد '+ar(bs.birthCount)+'</span>';
+  html+='</div>';
+
+  html+='</div></div>';
+  return html;
+}
+</script>
+</body>
+</html>

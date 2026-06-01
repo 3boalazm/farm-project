@@ -56,9 +56,9 @@ const ROLES={
 const ROLE_PERMS={
   admin:      ()=>true,
   supervisor: p=>!['users','finance','activity'].includes(p),
-  vet:        p=>['health','vaccine','breeding','dash','notifications'].includes(p),
-  worker:     p=>['dash','animals','notifications'].includes(p),
-  visitor:    p=>['dash','animals','goats','sheep'].includes(p),
+  vet:        p=>['health','vaccine','breeding','dash','notifications','bayan'].includes(p),
+  worker:     p=>['dash','animals','notifications','bayan'].includes(p),
+  visitor:    p=>['dash','animals','goats','sheep','bayan'].includes(p),
 };
 
 function can(page){
@@ -70,39 +70,6 @@ function can(page){
     return u.custom_perms.includes(page);
   }
   return(ROLE_PERMS[u.role]||(()=>false))(page);
-}
-
-// ── ANIMAL STATUS CONFIG ─────────────────────────────────
-const ANIMAL_STATUS = {
-  alive:            { label: 'حي / سليم',     color: 'var(--green)',  icon: 'bi-check-circle-fill', short: 'سليم' },
-  healthy:          { label: 'سليم',          color: 'var(--green)',  icon: 'bi-check-circle-fill', short: 'سليم' },
-  under_treatment:  { label: 'قيد العلاج',    color: 'var(--orange)', icon: 'bi-bandaid-fill',      short: 'علاج' },
-  quarantine:       { label: 'في الحجر',      color: 'var(--yellow)', icon: 'bi-shield-fill-exclamation', short: 'حجر' },
-  sold:             { label: 'مُباع',         color: 'var(--blue)',   icon: 'bi-cash-coin',         short: 'مباع' },
-  dead:             { label: 'نافق',          color: 'var(--red)',    icon: 'bi-x-octagon-fill',    short: 'نافق' },
-};
-
-// Get effective animal status — derives under_treatment from active health records
-function getAnimalStatus(animal, healthRecords) {
-  if (!animal) return 'alive';
-  if (['dead','sold','quarantine'].includes(animal.status)) return animal.status;
-  // Auto-derive treatment status
-  if (Array.isArray(healthRecords)) {
-    const today = todayStr();
-    const active = healthRecords.find(h =>
-      h.animal_tag === animal.tag && h.status === 'active' &&
-      (!h.withdrawal_end || h.withdrawal_end >= today)
-    );
-    if (active) return 'under_treatment';
-  }
-  return animal.status === 'alive' ? 'healthy' : (animal.status || 'alive');
-}
-
-// Render status badge inline
-function statusBadge(status) {
-  const cfg = ANIMAL_STATUS[status] || ANIMAL_STATUS.alive;
-  return '<span class="type-badge" style="background:'+cfg.color+'22;color:'+cfg.color+';border:1px solid '+cfg.color+'44;font-size:.7rem;font-weight:600">'+
-    '<i class="bi '+cfg.icon+' me-1" style="font-size:.7rem"></i>'+cfg.short+'</span>';
 }
 
 // ── FIREBASE REST ────────────────────────────────────────
@@ -121,17 +88,14 @@ function fbUrl(path,id=''){
 }
 
 // SessionStorage cache for fbGet (TTL: 45s, persists across page navigations)
-const _fbCacheTTL=180000; // 3 min — stable data like animals/breeds
+const _fbCacheTTL=45000;
 function _fbCacheKey(p){return '_fbc_'+p;}
 function _fbCacheGet(p){
   try{
     const raw=sessionStorage.getItem(_fbCacheKey(p));
     if(!raw)return null;
     const e=JSON.parse(raw);
-    // Volatile collections get shorter TTL
-  const _volatileTTL = ['notifications','activity_log','daily_tasks'];
-  const _ttl = _volatileTTL.some(function(v){return p.startsWith(v);}) ? 30000 : _fbCacheTTL;
-  if(Date.now()-e.ts>_ttl){sessionStorage.removeItem(_fbCacheKey(p));return null;}
+    if(Date.now()-e.ts>_fbCacheTTL){sessionStorage.removeItem(_fbCacheKey(p));return null;}
     return e.data;
   }catch(e){return null;}
 }
@@ -329,37 +293,28 @@ const JSON_HEADERS={
 };
 
 async function fbPost(path,data){
+  // Will capture the new ID after creation for undo
+
   const body=JSON.stringify({
     ...data,
     created_at:new Date().toISOString()
   });
 
-  // Offline: queue and return a temporary ID
-  if(!navigator.onLine){
-    var tmpId='offline_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
-    if(window.FarmOfflineSync){
-      await FarmOfflineSync.enqueue('POST', path, null, {...data, created_at:new Date().toISOString(), _offline_id:tmpId});
-    }
+  const r=await fetch(fbUrl(path),{
+    method:'POST',
+    headers:JSON_HEADERS,
+    body
+  });
+
+  if(!r.ok){
     fbCacheInvalidate(path);
-    return tmpId;
+  const t=await r.text();
+    throw new Error(`POST ${path}: ${r.status} ${t}`);
   }
 
-  try{
-    const r=await fetch(fbUrl(path),{method:'POST',headers:JSON_HEADERS,body});
-    if(!r.ok){fbCacheInvalidate(path);const t=await r.text();throw new Error('POST '+path+': '+r.status+' '+t);}
-    const res=await r.json();
-    return res.name;
-  }catch(e){
-    // Network error while online — queue offline
-    if(e.name==='TypeError'&&window.FarmOfflineSync){
-      var tmpId2='offline_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
-      await FarmOfflineSync.enqueue('POST', path, null, {...data, created_at:new Date().toISOString()});
-      fbCacheInvalidate(path);
-      if(window.toast)toast('حُفظ محلياً — سيُرسل عند الاتصال','info');
-      return tmpId2;
-    }
-    throw e;
-  }
+  const res=await r.json();
+
+  return res.name;
 }
 
 async function fbPut(path,id,data){
@@ -382,25 +337,21 @@ async function fbPut(path,id,data){
 }
 
 async function fbPatch(path,id,patch){
-  const body=JSON.stringify({...patch,updated_at:new Date().toISOString()});
+  const body=JSON.stringify({
+    ...patch,
+    updated_at:new Date().toISOString()
+  });
 
-  if(!navigator.onLine){
-    if(window.FarmOfflineSync) await FarmOfflineSync.enqueue('PATCH',path,id,{...patch,updated_at:new Date().toISOString()});
+  const r=await fetch(fbUrl(path,id),{
+    method:'PATCH',
+    headers:JSON_HEADERS,
+    body
+  });
+
+  if(!r.ok){
     fbCacheInvalidate(path);
-    return;
-  }
-
-  try{
-    const r=await fetch(fbUrl(path,id),{method:'PATCH',headers:JSON_HEADERS,body});
-    if(!r.ok){fbCacheInvalidate(path);const t=await r.text();throw new Error('PATCH '+path+'/'+id+': '+r.status+' '+t);}
-  }catch(e){
-    if(e.name==='TypeError'&&window.FarmOfflineSync){
-      await FarmOfflineSync.enqueue('PATCH',path,id,{...patch,updated_at:new Date().toISOString()});
-      fbCacheInvalidate(path);
-      if(window.toast)toast('حُفظ محلياً — سيُزامَن عند الاتصال','info');
-      return;
-    }
-    throw e;
+  const t=await r.text();
+    throw new Error(`PATCH ${path}/${id}: ${r.status} ${t}`);
   }
 }
 
@@ -505,13 +456,7 @@ function getSettings(){
     pregnancyDays:        cfg.pregnancyDays||saved.pregnancyDays||150,
     vaccinationAlertDays: cfg.vaccinationAlertDays||saved.vaccinationAlertDays||7,
     weaningDays:          cfg.weaningDays||saved.weaningDays||60,
-    birthAlertDays:       saved.birthAlertDays||7,
-    medExpiryAlertDays:   saved.medExpiryAlertDays||30,
-    heatAlertTemp:        saved.heatAlertTemp||35,
-    coldAlertTemp:        saved.coldAlertTemp||10,
-    lowStockPct:          saved.lowStockPct||20,
-    heatReturnDays:       saved.heatReturnDays||18,
-    barnCapacity:         saved.barnCapacity||{},
+
     logoUrl:              saved.logoUrl||'',
     farmAddress:          saved.farmAddress||'',
   };

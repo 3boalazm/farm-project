@@ -13,6 +13,7 @@ var FARM_NAV = [
     {href:'animals.html',   icon:'bi-list-ul',             label:'إدارة القطيع',          perm:'animals'},
     {href:'goats.html',     icon:'bi-tropical-storm',      label:'الماعز',                perm:'animals'},
     {href:'sheep.html',     icon:'bi-cloud-fill',          label:'الأغنام',               perm:'animals'},
+    {href:'bayan.html',     icon:'bi-clipboard-data',      label:'بيان القطيع',           perm:'bayan'},
     {href:'births.html',    icon:'bi-stars',               label:'المواليد',              perm:'animals'},
     {href:'dead.html',      icon:'bi-x-octagon-fill',      label:'النافق',                perm:'animals'},
     {href:'barns.html',     icon:'bi-grid-3x3-gap-fill',   label:'الجمالونات والعنابر',   perm:'animals'},
@@ -20,13 +21,10 @@ var FARM_NAV = [
   ]},
   // ── الصحة والإنتاج ──
   {section: 'الصحة والإنتاج', items: [
-    {href:'health.html',     icon:'bi-heart-pulse-fill',    label:'الصحة',                 perm:'health'},
-    {href:'vaccine.html',    icon:'bi-bandaid-fill',        label:'التحصين',               perm:'health'},
-    {href:'breeding.html',   icon:'bi-diagram-2-fill',      label:'التكاثر',               perm:'breeding'},
-    {href:'production.html', icon:'bi-droplet-fill',        label:'الإنتاج',               perm:'animals'},
-    {href:'tasks.html',      icon:'bi-list-check',          label:'المهام اليومية',        perm:'animals'},
-    {href:'pedigree.html',   icon:'bi-diagram-3-fill',      label:'شجرة النسب',            perm:'animals'},
-    {href:'inventory.html',  icon:'bi-boxes',               label:'المخزن',                perm:'inventory'},
+    {href:'health.html',    icon:'bi-heart-pulse-fill',    label:'الصحة',                 perm:'health'},
+    {href:'vaccine.html',   icon:'bi-bandaid-fill',        label:'التحصين',               perm:'health'},
+    {href:'breeding.html',  icon:'bi-diagram-2-fill',      label:'التكاثر',               perm:'breeding'},
+    {href:'inventory.html', icon:'bi-boxes',               label:'المخزن',                perm:'inventory'},
   ]},
   // ── المالية والتقارير ──
   {section: 'المالية', items: [
