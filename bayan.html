@@ -405,6 +405,14 @@ function legendHTML(items,sum){
   '</div></div>';
 
   document.getElementById('content').innerHTML=html;
+
+  // legends + fallbacks (مضمونة بدون Chart.js)
+  set('lgPurpose',legendHTML(purpose,pSum));
+  set('lgGoat',legendHTML(goatDist.map(function(b){return {name:b.name,val:b.val,color:BREED_COLORS[b.name]};}),goatSum));
+  set('lgSheep',legendHTML(sheepDist.map(function(b){return {name:b.name,val:b.val,color:BREED_COLORS[b.name]};}),sheepSum));
+  buildFallbacks();
+
+  loadChartJS(function(ok){ if(ok&&window.Chart){drawCharts();} else {chartsFailed();} });
 })();
 
 function buildFallbacks(){
