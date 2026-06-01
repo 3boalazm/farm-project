@@ -112,14 +112,16 @@ function renderDashboard(animals, breeding, health, finance) {
   // Births are already detailed per-breed in the "مواليد" column of each row,
   // so the bottom aggregate rows duplicated that data.
 
-  // UI Components
-  const quickStats = [
-    { id:'total', l:'إجمالي القطيع', v:arNum(stats.total), c:'var(--orange)', i:'bi-bar-chart-fill', href:'animals.html' },
-    { id:'goats', l:'الماعز', v:arNum(stats.goats), c:'var(--green)', i:'bi-tropical-storm', href:'goats.html' },
-    { id:'sheep', l:'الأغنام', v:arNum(stats.sheep), c:'var(--blue)', i:'bi-cloud-fill', href:'sheep.html' },
-    { id:'pregnant', l:'حوامل', v:arNum(stats.pregnant), c:'var(--purple)', i:'bi-diagram-2', href:'breeding.html' },
-    { id:'goatBirths', l:'مواليد الماعز', v:arNum(stats.goatBirths), c:'var(--green)', i:'bi-stars', href:'births.html?sp=goat' },
-    { id:'sheepBirths', l:'مواليد الأغنام', v:arNum(stats.sheepBirths), c:'var(--blue)', i:'bi-stars', href:'births.html?sp=sheep' }
+  // UI Components — مرتبة: إجمالي | حوامل | [ماعز + مواليده] | [أغنام + مواليدها]
+  const quickStatGroups = [
+    // Row 1: إجمالي + حوامل (كاردات واسعة)
+    { id:'total',      l:'إجمالي القطيع', v:arNum(stats.total),      c:'var(--orange)', i:'bi-bar-chart-fill', href:'animals.html',        wide:true },
+    { id:'pregnant',   l:'حوامل',          v:arNum(stats.pregnant),   c:'var(--purple)', i:'bi-diagram-2',     href:'breeding.html',         wide:true },
+    // Row 2: ماعز → مواليد الماعز → أغنام → مواليد الأغنام
+    { id:'goats',      l:'الماعز',         v:arNum(stats.goats),      c:'var(--green)',  i:'bi-tropical-storm',href:'goats.html',             wide:false },
+    { id:'goatBirths', l:'مواليد الماعز',  v:arNum(stats.goatBirths), c:'var(--green)',  i:'bi-stars',         href:'births.html?sp=goat',   wide:false },
+    { id:'sheep',      l:'الأغنام',        v:arNum(stats.sheep),      c:'var(--blue)',   i:'bi-cloud-fill',    href:'sheep.html',            wide:false },
+    { id:'sheepBirths',l:'مواليد الأغنام', v:arNum(stats.sheepBirths),c:'var(--blue)',   i:'bi-stars',         href:'births.html?sp=sheep',  wide:false },
   ];
 
   const tableRows = breedData.map(b => `
@@ -135,10 +137,28 @@ function renderDashboard(animals, breeding, health, finance) {
 
   el.innerHTML = `
     <div id="weather-widget" class="wonder-card mb-4 p-3"><div class="text-gray" style="font-size:.82rem"><i class="bi bi-cloud-sun me-2"></i>جاري تحميل حالة الطقس...</div></div>
-    <div class="row g-3 mb-4">
-      ${quickStats.map(st => `
-        <div class="col-6 col-md-4 col-lg-2">
+    <!-- Row 1: إجمالي القطيع + حوامل -->
+    <div class="row g-3 mb-3">
+      ${quickStatGroups.filter(st => st.wide).map(st => `
+        <div class="col-6">
           <div class="summary-card">
+            <a href="${st.href}" style="text-decoration:none">
+              <i class="bi ${st.i} d-block mb-2" style="font-size:1.3rem;color:${st.c}"></i>
+              <div class="summary-number" style="color:${st.c}">${st.v}</div>
+              <small class="text-gray">${st.l}</small>
+            </a>
+            <div class="sync-status" id="sync-${st.id}">
+              <i class="bi bi-check-circle-fill sync-ok"></i> متزامن مع اليومية
+            </div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+    <!-- Row 2: ماعز | مواليد الماعز | أغنام | مواليد الأغنام — مرتبة بحيث كل نوع يسبق مواليده -->
+    <div class="row g-3 mb-4">
+      ${quickStatGroups.filter(st => !st.wide).map((st, i) => `
+        <div class="col-6">
+          <div class="summary-card" style="${i % 2 === 1 ? 'border-right: 3px solid ' + st.c + '33; margin-right: 2px;' : ''}">
             <a href="${st.href}" style="text-decoration:none">
               <i class="bi ${st.i} d-block mb-2" style="font-size:1.3rem;color:${st.c}"></i>
               <div class="summary-number" style="color:${st.c}">${st.v}</div>
