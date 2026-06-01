@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>بيان قطيع المزرعة — ٢٠٢٦/٠٦/٠١</title>
+<style>
+  :root{
+    --bg:#0a0a0a; --bg2:#0f0f10; --card:#161618; --card2:#1d1d20; --line:#2a2a2e;
+    --text:#f3f4f6; --muted:#9a9aa2; --dim:#6a6a72;
+    --green:#22c55e; --blue:#3b82f6; --orange:#f97316; --yellow:#eab308;
+    --r:16px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Cairo','Segoe UI',Tahoma,sans-serif;background:var(--bg);color:var(--text);line-height:1.7;min-height:100vh}
+  .wrap{max-width:1100px;margin:0 auto;padding:0 16px 60px}
+
+  .hero{text-align:center;padding:40px 0 8px}
+  .hero .crest{font-size:2.4rem}
+  .hero h1{font-size:1.9rem;font-weight:800;margin-top:6px;color:var(--green)}
+  .hero .desc{color:var(--muted);font-size:.98rem;margin-top:8px;max-width:560px;margin-inline:auto}
+  .datebar{text-align:center;margin:18px 0 26px}
+  .datebar span{display:inline-block;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);
+    border-radius:12px;padding:9px 22px;font-weight:700;color:var(--green)}
+
+  .row{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:14px}
+  .col4{flex:1 1 calc(25% - 14px);min-width:150px}
+  .col6{flex:1 1 calc(50% - 7px)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:20px 16px;text-align:center}
+  .card .ico{font-size:1.4rem;margin-bottom:4px}
+  .card .num{font-size:1.7rem;font-weight:800;line-height:1.2}
+  .card .lbl{color:var(--muted);font-size:.85rem;margin-top:2px}
+  .card .sub{font-size:.72rem;color:var(--dim);margin-top:3px}
+
+  .divider{display:flex;align-items:center;gap:12px;margin:34px 0 18px;flex-wrap:wrap}
+  .divider .line{flex:1;min-width:30px;height:1px;background:var(--line)}
+  .divider h2{margin:0;font-weight:800;font-size:1.3rem}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;padding:4px 14px;border-radius:20px;
+    background:rgba(154,154,162,.15);color:var(--muted);border:1px solid rgba(154,154,162,.3)}
+
+  .breed{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .breed-hd{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .breed-hd .emoji{font-size:1.8rem}
+  .breed-hd .name{font-weight:800;font-size:1.05rem}
+  .breed-hd .cnt{color:var(--muted);font-size:.8rem}
+  .gbox{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:10px;text-align:center}
+  .gbox .gn{font-size:1.2rem;font-weight:800;display:block}
+  .gbox .gl{color:var(--dim);font-size:.7rem}
+  .tags{margin-top:12px;display:flex;flex-wrap:wrap;gap:6px}
+  .tg{font-size:.74rem;padding:3px 10px;border-radius:8px;font-weight:700}
+  .tg.t{background:rgba(34,197,94,.15);color:#16a34a}
+  .tg.s{background:rgba(249,115,22,.15);color:#ea580c}
+  .tg.b{background:rgba(234,179,8,.18);color:#a16207}
+
+  .green{color:var(--green)} .blue{color:var(--blue)} .orange{color:var(--orange)} .yellow{color:var(--yellow)}
+
+  footer{text-align:center;color:var(--muted);font-size:.8rem;margin-top:40px;padding-top:20px;border-top:1px solid var(--line)}
+  footer small{font-size:.7rem;color:var(--dim)}
+  .printbtn{display:block;margin:24px auto 0;background:var(--card2);border:1px solid var(--line);color:var(--text);
+    font-family:inherit;font-size:.9rem;padding:10px 24px;border-radius:10px;cursor:pointer}
+  .printbtn:hover{border-color:var(--green)}
+
+  .actionsbar{display:flex;align-items:center;flex-wrap:wrap;gap:10px;background:var(--card);
+    border:1px solid var(--line);border-radius:var(--r);padding:14px 18px;margin:6px 0 4px}
+  .actionsbar .ab-lbl{font-weight:700;font-size:.92rem}
+  .ab-btn{font-family:inherit;font-size:.86rem;font-weight:700;border-radius:10px;padding:8px 16px;cursor:pointer;
+    border:1px solid var(--line);background:var(--card2);color:var(--text);transition:.2s}
+  .ab-btn:hover{transform:translateY(-2px)}
+  .ab-btn.goat{border-color:rgba(34,197,94,.4);color:#22c55e}
+  .ab-btn.goat:hover{background:rgba(34,197,94,.12)}
+  .ab-btn.sheep{border-color:rgba(59,130,246,.4);color:#3b82f6}
+  .ab-btn.sheep:hover{background:rgba(59,130,246,.12)}
+  .ab-btn.reset{border-color:rgba(249,115,22,.4);color:#f97316;margin-inline-start:auto}
+  .ab-btn.reset:hover{background:rgba(249,115,22,.12)}
+  .ab-note{font-size:.82rem;color:var(--green);opacity:0;transition:opacity .3s;width:100%;text-align:center}
+
+  @media print{
+    body{background:#fff;color:#000}
+    .card,.breed,.gbox{border:1px solid #ccc;background:#fff;break-inside:avoid}
+    .printbtn{display:none}
+    .hero h1{color:#000}
+  }
+  @media(max-width:600px){.col4{flex:1 1 calc(50% - 7px)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <div class="crest">🐐🐑</div>
+    <h1>بيان قطيع المزرعة</h1>
+    <p class="desc">عرض شامل لعدد الماعز والأغنام في المزرعة، موزّعين حسب السلالة والغرض والجنس.</p>
+  </div>
+  <div class="datebar"><span>📅 بيان عن يوم: ٢٠٢٦/٠٦/٠١</span></div>
+  <div id="content"></div>
+  <button class="printbtn" onclick="window.print()">🖨️ طباعة البيان</button>
+  <footer>
+    ٢٠٢٦ &copy; بيان المزرعة — جميع الحقوق محفوظة<br>
+    <small>إشراف: لواء أحمد رجب نوح | تطوير: جندي مصطفى محمد إبراهيم</small>
+  </footer>
+</div>
+
+<script>
+// ============================================================
+//  بيان ثابت بسيط — أرقام جدول الإكسيل ٢٠٢٦/٠٦/٠١
+//  بدون رسوم بيانية، بدون مكتبات خارجية. لتغيير الأرقام عدّل DATA.
+//  الغرض: t=تربية | s=تجديد قطيع | b=مواليد ، الجنس: m=ذكور f=إناث
+// ============================================================
+var DATA = {
+  goat: {
+    label:'الماعز', emoji:'🐐', color:'var(--green)',
+    breeds:[
+      {name:'بور',  tm:11, tf:15,  sm:4, sf:0},
+      {name:'شامي', tm:1,  tf:141, sm:1, sf:0},
+      {name:'بلدي', tm:1,  tf:26,  sm:0, sf:0}
+    ],
+    births:{m:50, f:51}
+  },
+  sheep: {
+    label:'الأغنام', emoji:'🐑', color:'var(--blue)',
+    breeds:[
+      {name:'برقي',      tm:2, tf:68, sm:0, sf:0},
+      {name:'دودبر',     tm:1, tf:1,  sm:0, sf:0},
+      {name:'ميت ماستر',tm:1, tf:0,  sm:0, sf:0}
+    ],
+    births:{m:19, f:17, tasmeenF:12}
+  }
+};
+
+// نسخة أصلية للرجوع إليها عند الضغط على "إعادة تعيين"
+var ORIGINAL = JSON.parse(JSON.stringify(DATA));
+
+function ar(n){var d='٠١٢٣٤٥٦٧٨٩';return String(n).replace(/[0-9]/g,function(x){return d[+x];});}
+
+function breedStats(sp){
+  var t={tarbiya:0,tasmeen:0,males:0,females:0,total:0};
+  DATA[sp].breeds.forEach(function(b){
+    t.tarbiya+=b.tm+b.tf; t.tasmeen+=b.sm+b.sf;
+    t.males+=b.tm+b.sm; t.females+=b.tf+b.sf;
+  });
+  t.total=t.tarbiya+t.tasmeen; return t;
+}
+function birthStats(sp){
+  var b=DATA[sp].births, tf=b.tasmeenF||0;
+  return {m:b.m, f:b.f+tf, tasmeenF:tf, total:b.m+b.f+tf, births_only:b.m+b.f};
+}
+
+function topCard(label,num,color,ico,sub){
+  return '<div class="col4"><div class="card">'+
+    '<div class="ico" style="color:'+color+'">'+ico+'</div>'+
+    '<div class="num" style="color:'+color+'">'+ar(num)+'</div>'+
+    '<div class="lbl">'+label+'</div>'+
+    (sub?'<div class="sub">'+sub+'</div>':'')+'</div></div>';
+}
+function summaryRow(t,color){
+  return '<div class="row">'+
+    '<div class="col4"><div class="card"><div class="num green">'+ar(t.tarbiya)+'</div><div class="lbl">تربية</div></div></div>'+
+    '<div class="col4"><div class="card"><div class="num orange">'+ar(t.tasmeen)+'</div><div class="lbl">تجديد قطيع</div></div></div>'+
+    '<div class="col4"><div class="card"><div class="num yellow">'+ar(t.births)+'</div><div class="lbl">مواليد</div></div></div>'+
+    '<div class="col4"><div class="card"><div class="num" style="color:'+color+'">'+ar(t.males)+' ♂ / '+ar(t.females)+' ♀</div><div class="lbl">ذكور / إناث</div></div></div>'+
+    '</div>';
+}
+function breedCard(emoji,b){
+  var tarbiya=b.tm+b.tf, tasmeen=b.sm+b.sf, total=tarbiya+tasmeen;
+  var h='<div class="col6"><div class="breed">';
+  h+='<div class="breed-hd"><div class="emoji">'+emoji+'</div><div><div class="name">'+b.name+'</div><div class="cnt">'+ar(total)+' رأس</div></div></div>';
+  h+='<div class="row" style="gap:8px">';
+  h+='<div class="col6"><div class="gbox"><span class="gn green">'+ar(b.tm)+'</span><span class="gl">ذكور تربية</span></div></div>';
+  h+='<div class="col6"><div class="gbox"><span class="gn green">'+ar(b.tf)+'</span><span class="gl">إناث تربية</span></div></div>';
+  h+='<div class="col6"><div class="gbox"><span class="gn orange">'+ar(b.sm)+'</span><span class="gl">ذكور تجديد</span></div></div>';
+  h+='<div class="col6"><div class="gbox"><span class="gn orange">'+ar(b.sf)+'</span><span class="gl">إناث تجديد</span></div></div>';
+  h+='</div><div class="tags">';
+  if(tarbiya>0)h+='<span class="tg t">تربية '+ar(tarbiya)+' رأس</span>';
+  if(tasmeen>0)h+='<span class="tg s">تجديد '+ar(tasmeen)+' رأس</span>';
+  h+='</div></div></div>';
+  return h;
+}
+function birthCard(sp){
+  var br=birthStats(sp);
+  if(br.total===0)return '';
+  var name=(sp==='goat'?'مواليد الماعز':'مواليد الأغنام');
+  var h='<div class="col6"><div class="breed" style="border-color:rgba(234,179,8,.4)">';
+  h+='<div class="breed-hd"><div class="emoji">✨</div><div><div class="name yellow">'+name+'</div><div class="cnt">'+ar(br.total)+' رأس</div></div></div>';
+  h+='<div class="row" style="gap:8px">';
+  h+='<div class="col6"><div class="gbox"><span class="gn yellow">'+ar(br.m)+'</span><span class="gl">ذكور مواليد</span></div></div>';
+  h+='<div class="col6"><div class="gbox"><span class="gn yellow">'+ar(br.f)+'</span><span class="gl">إناث مواليد</span></div></div>';
+  h+='</div><div class="tags">';
+  h+='<span class="tg b">مواليد '+ar(br.births_only)+' رأس</span>';
+  if(br.tasmeenF>0)h+='<span class="tg s">تجديد قطيع '+ar(br.tasmeenF)+' رأس إناث</span>';
+  h+='</div></div></div>';
+  return h;
+}
+function species(sp){
+  var d=DATA[sp], bs=breedStats(sp), br=birthStats(sp), total=bs.total+br.total;
+  var h='<div class="divider"><h2 style="color:'+d.color+'">'+d.emoji+' '+d.label+'</h2>'+
+    '<div class="line"></div><span class="pill">'+ar(total)+' رأس</span></div>';
+  h+=summaryRow({tarbiya:bs.tarbiya,tasmeen:bs.tasmeen+br.tasmeenF,births:br.births_only,males:bs.males+br.m,females:bs.females+br.f},d.color);
+  h+='<div class="row">';
+  d.breeds.forEach(function(b){ h+=breedCard(d.emoji,b); });
+  h+=birthCard(sp);
+  h+='</div>';
+  return h;
+}
+
+function render(){
+  var GB=breedStats('goat'), SB=breedStats('sheep');
+  var GBR=birthStats('goat'), SBR=birthStats('sheep');
+  var G_TOTAL=GB.total+GBR.total, S_TOTAL=SB.total+SBR.total, GRAND=G_TOTAL+S_TOTAL;
+
+  var html='<div class="row">';
+  html+=topCard('إجمالي القطيع', GRAND, 'var(--orange)', '📦', ar(G_TOTAL)+' ماعز + '+ar(S_TOTAL)+' أغنام');
+  html+=topCard('الماعز', G_TOTAL, 'var(--green)', '🐐', ar(GBR.total)+' مواليد');
+  html+=topCard('الأغنام', S_TOTAL, 'var(--blue)', '🐑', ar(SBR.total)+' مواليد');
+  html+=topCard('إجمالي المواليد', GBR.total+SBR.total, 'var(--yellow)', '✨', ar(GBR.total)+' ماعز + '+ar(SBR.total)+' أغنام');
+  html+='</div>';
+
+  // ===== أوبشن: تسجيل مولود (تفاعلي محلي — مؤقت) =====
+  html+='<div class="actionsbar no-print">'+
+    '<span class="ab-lbl">➕ تسجيل مولود جديد:</span>'+
+    '<button class="ab-btn goat" onclick="bayanBirth(\'goat\')">🐐 مولود ماعز</button>'+
+    '<button class="ab-btn sheep" onclick="bayanBirth(\'sheep\')">🐑 مولود أغنام</button>'+
+    '<button class="ab-btn reset" onclick="bayanReset()">↺ إعادة تعيين</button>'+
+    '<span class="ab-note" id="abNote"></span>'+
+  '</div>';
+
+  html+=species('goat');
+  html+=species('sheep');
+  document.getElementById('content').innerHTML=html;
+}
+
+// ===== الأوبشنز التفاعلية (تعدّل النسخة المحلية وتعيد الرسم) =====
+// تسجيل مولود: نسأل عن الجنس ونزوّد العدّاد المحلي. مؤقت — يرجع بالـ refresh.
+window.bayanBirth=function(sp){
+  var g = window.confirm('المولود ذكر؟\n\nموافق = ذكر  |  إلغاء = أنثى');
+  if(g){ DATA[sp].births.m += 1; }
+  else { DATA[sp].births.f += 1; }
+  render();
+  flash('✅ تم تسجيل مولود '+(sp==='goat'?'ماعز':'أغنام')+' '+(g?'(ذكر)':'(أنثى)')+' — مؤقت');
+};
+
+// إعادة تعيين: نرجّع البيانات لأصلها الثابت
+window.bayanReset=function(){
+  DATA = JSON.parse(JSON.stringify(ORIGINAL));
+  render();
+  flash('↺ تم إرجاع كل الأرقام لأصلها');
+};
+
+function flash(msg){
+  var n=document.getElementById('abNote');
+  if(!n)return;
+  n.textContent=msg;
+  n.style.opacity='1';
+  clearTimeout(window.__flashT);
+  window.__flashT=setTimeout(function(){n.style.opacity='0';},2600);
+}
+
+render();
+</script>
+</body>
+</html>
