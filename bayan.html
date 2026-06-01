@@ -10,14 +10,14 @@
 <link rel="stylesheet" href="styles.css">
 <style>
   .bayan-badge{display:inline-flex;align-items:center;gap:6px;font-size:.78rem;padding:4px 12px;border-radius:20px;background:rgba(144,164,174,.15);color:#90a4ae;border:1px solid rgba(144,164,174,.3)}
-  .species-divider{display:flex;align-items:center;gap:12px;margin:32px 0 18px}
-  .species-divider .line{flex:1;height:1px;background:var(--border)}
+  .bayan-date{display:inline-flex;align-items:center;gap:6px;font-size:.82rem;padding:5px 14px;border-radius:20px;background:rgba(99,153,34,.12);color:var(--green);border:1px solid rgba(99,153,34,.3);font-weight:700}
+  .species-divider{display:flex;align-items:center;gap:12px;margin:32px 0 18px;flex-wrap:wrap}
+  .species-divider .line{flex:1;min-width:30px;height:1px;background:var(--border)}
   .species-divider h4{margin:0;font-weight:800}
-  .bayan-print-btn{cursor:pointer}
   @media print{
     .no-print{display:none!important}
     body{background:#fff!important;color:#000!important}
-    .breed-card,.summary-card,.wonder-card{break-inside:avoid;border:1px solid #ccc!important}
+    .breed-card,.summary-card{break-inside:avoid;border:1px solid #ccc!important}
   }
 </style>
 </head>
@@ -35,9 +35,37 @@
 <script src="nav.js"></script>
 <script src="shared.js"></script>
 <script>
-var _animals=[];
+// ============================================================
+//  بيان ثابت — أرقام من جدول الإكسيل بتاريخ 2026/06/01
+//  لا يقرأ من Firebase. لتحديث الأرقام عدّل BAYAN_DATA أدناه.
+// ============================================================
 
-document.addEventListener('DOMContentLoaded', async function(){
+var BAYAN_DATE_ISO = '2026-06-01';
+var BAYAN_DATE_AR  = '١ يونيو ٢٠٢٦';
+
+// purpose: tarbiya = تربية | tasmeen = تجديد قطيع | birth = مواليد
+var BAYAN_DATA = {
+  goat: {
+    label:'الماعز', icon:'\uD83D\uDC10', color:'var(--green)', total:301,
+    breeds:[
+      {name:'بور',  tarbiyaMale:11, tarbiyaFemale:15,  tasmeenMale:4, tasmeenFemale:0,  birthMale:0,  birthFemale:0},
+      {name:'شامي', tarbiyaMale:2,  tarbiyaFemale:141, tasmeenMale:0, tasmeenFemale:0,  birthMale:0,  birthFemale:0},
+      {name:'بلدي', tarbiyaMale:1,  tarbiyaFemale:26,  tasmeenMale:0, tasmeenFemale:0,  birthMale:0,  birthFemale:0},
+      {name:'مواليد',tarbiyaMale:0, tarbiyaFemale:0,   tasmeenMale:0, tasmeenFemale:0,  birthMale:50, birthFemale:51}
+    ]
+  },
+  sheep: {
+    label:'الأغنام', icon:'\uD83D\uDC11', color:'var(--blue)', total:121,
+    breeds:[
+      {name:'برقي',      tarbiyaMale:2, tarbiyaFemale:68, tasmeenMale:0, tasmeenFemale:0,  birthMale:0,  birthFemale:0},
+      {name:'دودبر',     tarbiyaMale:1, tarbiyaFemale:1,  tasmeenMale:0, tasmeenFemale:0,  birthMale:0,  birthFemale:0},
+      {name:'ميت ماستر',tarbiyaMale:1, tarbiyaFemale:0,  tasmeenMale:0, tasmeenFemale:0,  birthMale:0,  birthFemale:0},
+      {name:'مواليد',    tarbiyaMale:0, tarbiyaFemale:0,  tasmeenMale:0, tasmeenFemale:12, birthMale:19, birthFemale:17}
+    ]
+  }
+};
+
+document.addEventListener('DOMContentLoaded', function(){
   if(!requireAuth())return;
   initFirebase();
   var s=getSettings();
@@ -46,76 +74,60 @@ document.addEventListener('DOMContentLoaded', async function(){
   renderNavbar('bayan.html');
   renderPageHeader(
     '<i class="bi bi-clipboard-data green-text"></i> بيان القطيع',
-    'عرض شامل لقطيع المزرعة — الماعز والأغنام',
+    'بيان الماعز والأغنام عن يوم ٢٠٢٦/٠٦/٠١',
+    '<span class="bayan-date no-print"><i class="bi bi-calendar-check"></i> '+BAYAN_DATE_AR+'</span>'+
     '<span class="bayan-badge no-print"><i class="bi bi-eye-fill"></i> عرض فقط</span>'+
-    '<button class="action-btn no-print bayan-print-btn" onclick="window.print()"><i class="bi bi-printer"></i> طباعة</button>'
+    '<button class="action-btn no-print" onclick="window.print()"><i class="bi bi-printer"></i> طباعة</button>'
   );
-  try{
-    _animals=await fbGet('animals');
-  }catch(e){
-    document.getElementById('content').innerHTML='<div class="empty-state"><i class="bi bi-wifi-off"></i><p>خطأ في الاتصال: '+e.message+'</p></div>';
-    return;
-  }
   renderBayan();
 });
 
-// ── إحصائيات نوع كامل ─────────────────────────────────────
-function speciesStats(sp){
-  var alive=_animals.filter(function(a){return a.status==='alive'&&a.species===sp;});
-  var births=alive.filter(function(a){return a.purpose==='birth'||a.breed==='مواليد';});
-  var tasmeen=alive.filter(function(a){return a.purpose==='tasmeen'&&a.breed!=='مواليد';});
-  var tarbiya=alive.filter(function(a){return a.purpose!=='birth'&&a.purpose!=='tasmeen'&&a.breed!=='مواليد';});
-  return{
-    total:alive.length,
-    births:births.length,
-    tasmeen:tasmeen.length,
-    tarbiya:tarbiya.length,
-    males:alive.filter(function(a){return a.gender==='male';}).length,
-    females:alive.filter(function(a){return a.gender==='female';}).length,
-  };
+function speciesTotals(sp){
+  var d=BAYAN_DATA[sp], t={tarbiya:0,tasmeen:0,births:0,males:0,females:0,total:0};
+  d.breeds.forEach(function(b){
+    t.tarbiya += b.tarbiyaMale + b.tarbiyaFemale;
+    t.tasmeen += b.tasmeenMale + b.tasmeenFemale;
+    t.births  += b.birthMale + b.birthFemale;
+    t.males   += b.tarbiyaMale + b.tasmeenMale + b.birthMale;
+    t.females += b.tarbiyaFemale + b.tasmeenFemale + b.birthFemale;
+  });
+  t.total = t.tarbiya + t.tasmeen + t.births;
+  return t;
 }
 
 function renderBayan(){
-  var s=getSettings();
   var el=document.getElementById('content');
-  var goat=speciesStats('goat');
-  var sheep=speciesStats('sheep');
-  var grandTotal=goat.total+sheep.total;
+  var g=speciesTotals('goat'), sh=speciesTotals('sheep');
+  var grand=g.total+sh.total;
 
   var html='';
+  html+='<div class="text-center mb-4"><div style="display:inline-block;background:rgba(99,153,34,.08);border:1px solid rgba(99,153,34,.25);border-radius:12px;padding:10px 24px">'+
+    '<i class="bi bi-calendar-check green-text"></i> <strong>بيان عن يوم:</strong> ٢٠٢٦/٠٦/٠١</div></div>';
 
-  // ── ملخص عام علوي ───────────────────────────────────────
   html+='<div class="row g-3 mb-4">';
-  html+=topCard('إجمالي القطيع', grandTotal, 'var(--orange)', 'bi-collection-fill', ar(goat.total)+' ماعز + '+ar(sheep.total)+' أغنام');
-  html+=topCard('الماعز', goat.total, 'var(--green)', 'bi-tropical-storm', ar(goat.births)+' مواليد');
-  html+=topCard('الأغنام', sheep.total, 'var(--blue)', 'bi-cloud-fill', ar(sheep.births)+' مواليد');
-  html+=topCard('إجمالي المواليد', goat.births+sheep.births, 'var(--yellow)', 'bi-stars', ar(goat.males+sheep.males)+' ♂ / '+ar(goat.females+sheep.females)+' ♀');
+  html+=topCard('إجمالي القطيع', grand, 'var(--orange)', 'bi-collection-fill', ar(g.total)+' ماعز + '+ar(sh.total)+' أغنام');
+  html+=topCard('الماعز', g.total, 'var(--green)', 'bi-tropical-storm', ar(g.births)+' مواليد');
+  html+=topCard('الأغنام', sh.total, 'var(--blue)', 'bi-cloud-fill', ar(sh.births)+' مواليد');
+  html+=topCard('إجمالي المواليد', g.births+sh.births, 'var(--yellow)', 'bi-stars', ar(g.males+sh.males)+' \u2642 / '+ar(g.females+sh.females)+' \u2640');
   html+='</div>';
 
-  // ════ قسم الماعز ════
-  html+='<div class="species-divider"><h4 class="green-text">🐐 الماعز</h4><div class="line"></div>'+
-        '<span class="bayan-badge">'+ar(goat.total)+' رأس</span></div>';
-  html+=speciesSummaryRow(goat,'var(--green)');
-  html+='<div class="row g-3 mb-2">';
-  s.goatBreeds.forEach(function(breed){
-    html+=breedCardRO('goat','🐐',breed);
-  });
-  html+='</div>';
-
-  // ════ قسم الأغنام ════
-  html+='<div class="species-divider"><h4 style="color:var(--blue)">🐑 الأغنام</h4><div class="line"></div>'+
-        '<span class="bayan-badge">'+ar(sheep.total)+' رأس</span></div>';
-  html+=speciesSummaryRow(sheep,'var(--blue)');
-  html+='<div class="row g-3 mb-2">';
-  s.sheepBreeds.forEach(function(breed){
-    html+=breedCardRO('sheep','🐑',breed);
-  });
-  html+='</div>';
+  html+=speciesSection('goat', g);
+  html+=speciesSection('sheep', sh);
 
   el.innerHTML=html;
 }
 
-// ── كارت ملخص علوي ──────────────────────────────────────
+function speciesSection(sp, totals){
+  var d=BAYAN_DATA[sp];
+  var html='<div class="species-divider"><h4 style="color:'+d.color+'">'+d.icon+' '+d.label+'</h4>'+
+    '<div class="line"></div><span class="bayan-badge">'+ar(totals.total)+' رأس</span></div>';
+  html+=summaryRow(totals, d.color);
+  html+='<div class="row g-3 mb-2">';
+  d.breeds.forEach(function(b){ html+=breedCard(d.icon, b); });
+  html+='</div>';
+  return html;
+}
+
 function topCard(label,num,color,icon,sub){
   return '<div class="col-6 col-md-3"><div class="summary-card">'+
     '<div style="font-size:1.3rem;color:'+color+';margin-bottom:4px"><i class="'+icon+'"></i></div>'+
@@ -125,44 +137,45 @@ function topCard(label,num,color,icon,sub){
     '</div></div>';
 }
 
-// ── صف ملخص النوع (تربية/تسمين/مواليد/ذكور/إناث) ────────
-function speciesSummaryRow(st,color){
+function summaryRow(t,color){
   var html='<div class="row g-3 mb-3">';
-  html+='<div class="col-6 col-md-3"><div class="summary-card"><div class="summary-number green-text">'+ar(st.tarbiya)+'</div><small class="text-gray">تربية</small></div></div>';
-  html+='<div class="col-6 col-md-3"><div class="summary-card"><div class="summary-number accent-text">'+ar(st.tasmeen)+'</div><small class="text-gray">تسمين</small></div></div>';
-  html+='<div class="col-6 col-md-3"><div class="summary-card"><div class="summary-number" style="color:var(--yellow)">'+ar(st.births)+'</div><small class="text-gray">مواليد</small></div></div>';
-  html+='<div class="col-6 col-md-3"><div class="summary-card"><div class="summary-number" style="color:'+color+'">'+ar(st.males)+' ♂ / '+ar(st.females)+' ♀</div><small class="text-gray">ذكور / إناث</small></div></div>';
+  html+='<div class="col-6 col-md-3"><div class="summary-card"><div class="summary-number green-text">'+ar(t.tarbiya)+'</div><small class="text-gray">تربية</small></div></div>';
+  html+='<div class="col-6 col-md-3"><div class="summary-card"><div class="summary-number accent-text">'+ar(t.tasmeen)+'</div><small class="text-gray">تجديد قطيع</small></div></div>';
+  html+='<div class="col-6 col-md-3"><div class="summary-card"><div class="summary-number" style="color:var(--yellow)">'+ar(t.births)+'</div><small class="text-gray">مواليد</small></div></div>';
+  html+='<div class="col-6 col-md-3"><div class="summary-card"><div class="summary-number" style="color:'+color+'">'+ar(t.males)+' \u2642 / '+ar(t.females)+' \u2640</div><small class="text-gray">ذكور / إناث</small></div></div>';
   html+='</div>';
   return html;
 }
 
-// ── كارت سلالة للعرض فقط (بدون أزرار تعديل) ──────────────
-function breedCardRO(sp,icon,breed){
-  var bs=breedStats(_animals,sp,breed);
-  if(bs.totalAll===0)return ''; // تخطي السلالات الفارغة
+function breedCard(icon, b){
+  var tarbiya=b.tarbiyaMale+b.tarbiyaFemale;
+  var tasmeen=b.tasmeenMale+b.tasmeenFemale;
+  var birth=b.birthMale+b.birthFemale;
+  var total=tarbiya+tasmeen+birth;
+  if(total===0)return '';
 
   var html='<div class="col-lg-4 col-md-6"><div class="breed-card">';
   html+='<div class="breed-header">';
   html+='<div class="breed-icon">'+icon+'</div>';
-  html+='<div><div class="fw-bold">'+breed+'</div>';
-  html+='<small class="text-gray">'+ar(bs.totalAll)+' حيوان</small></div>';
+  html+='<div><div class="fw-bold">'+b.name+'</div>';
+  html+='<small class="text-gray">'+ar(total)+' حيوان</small></div>';
   html+='</div>';
 
   html+='<div class="row g-2 mb-3">';
-  html+='<div class="col-6"><div class="gender-box"><span class="gender-count green-text">'+ar(bs.tarbiyaMale)+'</span><small class="text-gray">ذكور تربية</small></div></div>';
-  html+='<div class="col-6"><div class="gender-box"><span class="gender-count green-text">'+ar(bs.tarbiyaFemale)+'</span><small class="text-gray">إناث تربية</small></div></div>';
-  html+='<div class="col-6"><div class="gender-box"><span class="gender-count accent-text">'+ar(bs.tasmeenMale)+'</span><small class="text-gray">ذكور تسمين</small></div></div>';
-  html+='<div class="col-6"><div class="gender-box"><span class="gender-count accent-text">'+ar(bs.tasmeenFemale)+'</span><small class="text-gray">إناث تسمين</small></div></div>';
-  if(bs.birthCount>0){
-    html+='<div class="col-6"><div class="gender-box"><span class="gender-count" style="color:var(--yellow)">'+ar(bs.birthMale)+'</span><small class="text-gray">ذكور مواليد</small></div></div>';
-    html+='<div class="col-6"><div class="gender-box"><span class="gender-count" style="color:var(--yellow)">'+ar(bs.birthFemale)+'</span><small class="text-gray">إناث مواليد</small></div></div>';
+  html+='<div class="col-6"><div class="gender-box"><span class="gender-count green-text">'+ar(b.tarbiyaMale)+'</span><small class="text-gray">ذكور تربية</small></div></div>';
+  html+='<div class="col-6"><div class="gender-box"><span class="gender-count green-text">'+ar(b.tarbiyaFemale)+'</span><small class="text-gray">إناث تربية</small></div></div>';
+  html+='<div class="col-6"><div class="gender-box"><span class="gender-count accent-text">'+ar(b.tasmeenMale)+'</span><small class="text-gray">ذكور تجديد</small></div></div>';
+  html+='<div class="col-6"><div class="gender-box"><span class="gender-count accent-text">'+ar(b.tasmeenFemale)+'</span><small class="text-gray">إناث تجديد</small></div></div>';
+  if(birth>0){
+    html+='<div class="col-6"><div class="gender-box"><span class="gender-count" style="color:var(--yellow)">'+ar(b.birthMale)+'</span><small class="text-gray">ذكور مواليد</small></div></div>';
+    html+='<div class="col-6"><div class="gender-box"><span class="gender-count" style="color:var(--yellow)">'+ar(b.birthFemale)+'</span><small class="text-gray">إناث مواليد</small></div></div>';
   }
   html+='</div>';
 
   html+='<div class="mb-1">';
-  if(bs.tarbiya>0)html+='<span class="type-badge badge-tarbiya">تربية '+ar(bs.tarbiya)+'</span> ';
-  if(bs.tasmeen>0)html+='<span class="type-badge badge-tasmeen">تسمين '+ar(bs.tasmeen)+'</span> ';
-  if(bs.birthCount>0)html+='<span class="type-badge" style="background:rgba(255,193,7,.12);color:var(--yellow)">مواليد '+ar(bs.birthCount)+'</span>';
+  if(tarbiya>0)html+='<span class="type-badge badge-tarbiya">تربية '+ar(tarbiya)+'</span> ';
+  if(tasmeen>0)html+='<span class="type-badge badge-tasmeen">تجديد '+ar(tasmeen)+'</span> ';
+  if(birth>0)html+='<span class="type-badge" style="background:rgba(255,193,7,.12);color:var(--yellow)">مواليد '+ar(birth)+'</span>';
   html+='</div>';
 
   html+='</div></div>';
