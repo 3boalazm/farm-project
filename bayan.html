@@ -9,13 +9,13 @@
 <style>
   :root{
     --bg:#0a0a0a; --bg2:#0f0f10; --card:#161618; --card2:#1d1d20; --line:#2a2a2e;
-    --text:#f3f4f6; --muted:#9a9aa2; --dim:#6a6a72;
+    --text:#f3f4f6; --muted:#9a9aa2; --dim:#6a6a72; --grid:#2a2a2e;
     --green:#22c55e; --blue:#3b82f6; --orange:#f97316; --yellow:#eab308;
     --r:16px;
   }
   html.light{
     --bg:#f4f5f7; --bg2:#eceef1; --card:#ffffff; --card2:#f7f8fa; --line:#e2e5ea;
-    --text:#16181d; --muted:#5b6573; --dim:#8a93a3;
+    --text:#16181d; --muted:#5b6573; --dim:#8a93a3; --grid:#e2e5ea;
   }
   *{margin:0;padding:0;box-sizing:border-box}
   html{scroll-behavior:smooth}
@@ -74,6 +74,22 @@
   .tbl tr.totalrow{background:rgba(249,115,22,.07)}
   .tbl tr.totalrow td{color:var(--orange);font-weight:900}
 
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:20px;height:100%}
+  .panel h3{display:flex;align-items:center;gap:8px;font-size:1.05rem;font-weight:800;margin-bottom:4px}
+  .panel .ph-sub{color:var(--dim);font-size:.8rem;margin-bottom:14px}
+  .chart-box{position:relative;height:260px}
+  .cfb{display:none;flex-direction:column;gap:9px;margin-top:6px}
+  .cfb .row2{display:flex;align-items:center;gap:10px;font-size:.85rem}
+  .cfb .row2 .nm{width:80px;font-weight:600}
+  .cfb .row2 .track{flex:1;height:18px;background:var(--bg2);border-radius:6px;overflow:hidden;display:flex}
+  .cfb .row2 .seg{height:100%}
+  .cfb .row2 .vl{width:100px;color:var(--muted);font-size:.76rem;text-align:left}
+  .legend{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+  .legend .li{display:flex;align-items:center;gap:9px;font-size:.88rem}
+  .legend .li .sw{width:13px;height:13px;border-radius:4px;flex:none}
+  .legend .li .nm{font-weight:600}
+  .legend .li .vl{margin-inline-start:auto;color:var(--muted)}
+
   .breed{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
   .breed-hd{display:flex;align-items:center;gap:12px;margin-bottom:14px}
   .breed-hd .emoji{font-size:1.8rem}
@@ -110,7 +126,7 @@
   @media print{
     body{background:#fff;color:#000}
     .topbar,.shortcuts,.printbtn{display:none}
-    .card,.breed,.gbox,.tbl,.glossary{border:1px solid #ccc;background:#fff;break-inside:avoid}
+    .card,.breed,.gbox,.tbl,.glossary,.panel{border:1px solid #ccc;background:#fff;break-inside:avoid}
     .hero h1{color:#000}
   }
   @media(max-width:600px){.col4{flex:1 1 calc(50% - 7px)}.hero h1{font-size:1.6rem}}
@@ -132,6 +148,7 @@
   <nav class="shortcuts">
     <a class="sc" href="#summary"><span class="dot" style="background:var(--orange)"></span> الملخص العام</a>
     <a class="sc" href="#table"><span class="dot" style="background:var(--blue)"></span> الجدول</a>
+    <a class="sc" href="#charts"><span class="dot" style="background:var(--blue)"></span> الرسوم البيانية</a>
     <a class="sc" href="#goats"><span class="dot" style="background:var(--green)"></span> الماعز</a>
     <a class="sc" href="#sheep"><span class="dot" style="background:var(--blue)"></span> الأغنام</a>
     <a class="sc" href="#glossary"><span class="dot" style="background:var(--yellow)"></span> دليل المصطلحات</a>
@@ -148,7 +165,7 @@
 
 <script>
 // ============================================================
-//  بيان ثابت — عرض فقط، بدون رسوم بيانية وبدون تسجيل.
+//  بيان ثابت — عرض + رسوم بيانية (4 بلوكات). بدون تسجيل.
 //  أرقام جدول الإكسيل ٢٠٢٦/٠٦/٠١. لتغيير الأرقام عدّل DATA.
 //  الغرض: t=تربية | s=تجديد قطيع | b=مواليد ، الجنس: m=ذكور f=إناث
 // ============================================================
@@ -172,6 +189,7 @@ var DATA = {
     births:{m:19, f:17, tasmeenF:12}
   }
 };
+var BREED_COLORS={'شامي':'#f97316','برقي':'#22c55e','بور':'#3b82f6','بلدي':'#a855f7','ميت ماستر':'#eab308','دودبر':'#ec4899'};
 
 function ar(n){var d='٠١٢٣٤٥٦٧٨٩';return String(n).replace(/[0-9]/g,function(x){return d[+x];});}
 
@@ -262,6 +280,30 @@ function species(sp){
   return h;
 }
 
+// ===== بيانات الرسوم البيانية =====
+var allBreeds=DATA.goat.breeds.concat(DATA.sheep.breeds);
+var breedTotals=allBreeds.map(function(b){return {name:b.name,val:b.tm+b.tf+b.sm+b.sf};});
+var bSum=breedTotals.reduce(function(a,b){return a+b.val;},0)||1;
+var purpose=[
+  {name:'تربية',val:GB.tarbiya+SB.tarbiya,color:'#22c55e'},
+  {name:'تجديد قطيع',val:GB.tasmeen+SB.tasmeen+GBR.tasmeenF+SBR.tasmeenF,color:'#f97316'},
+  {name:'مواليد',val:GBR.births_only+SBR.births_only,color:'#eab308'}
+];
+var pSum=purpose.reduce(function(a,b){return a+b.val;},0)||1;
+var birthsByType=[
+  {name:'مواليد الماعز',val:GBR.births_only,color:'#22c55e'},
+  {name:'مواليد الأغنام',val:SBR.births_only,color:'#3b82f6'}
+];
+var btSum=birthsByType.reduce(function(a,b){return a+b.val;},0)||1;
+
+function legendHTML(items,sum){
+  return items.map(function(it){
+    var p=Math.round(it.val/sum*100);
+    return '<div class="li"><span class="sw" style="background:'+it.color+'"></span>'+
+      '<span class="nm">'+it.name+'</span><span class="vl">'+ar(it.val)+' رأس · '+ar(p)+'٪</span></div>';
+  }).join('');
+}
+
 (function render(){
   var html='';
   html+='<div id="summary"></div>';
@@ -274,6 +316,26 @@ function species(sp){
 
   html+='<div class="divider" id="table"><h2 style="color:var(--blue)">📋 ملخص القطيع بالأرقام</h2><div class="line"></div></div>';
   html+=summaryTable();
+
+  // ===== 4 بلوكات رسوم بيانية =====
+  html+='<div class="divider" id="charts"><h2 style="color:var(--blue)">📊 الرسوم البيانية والتحليل</h2><div class="line"></div></div>';
+  html+='<div class="row">'+
+    '<div class="col6"><div class="panel"><h3>📊 الذكور والإناث حسب السلالة</h3>'+
+      '<div class="ph-sub">مقارنة أعداد الذكور والإناث في كل سلالة (رأس)</div>'+
+      '<div class="chart-box"><canvas id="cGender"></canvas></div><div class="cfb" id="fbGender"></div></div></div>'+
+    '<div class="col6"><div class="panel"><h3>🥧 توزيع السلالات</h3>'+
+      '<div class="ph-sub">نسبة كل سلالة من القطيع (تربية وتجديد)</div>'+
+      '<div class="chart-box"><canvas id="cBreeds"></canvas></div><div class="cfb" id="fbBreeds"></div>'+
+      '<div class="legend" id="lgBreeds"></div></div></div>'+
+    '<div class="col6"><div class="panel"><h3>🎯 توزيع الغرض</h3>'+
+      '<div class="ph-sub">تربية / تجديد قطيع / مواليد</div>'+
+      '<div class="chart-box"><canvas id="cPurpose"></canvas></div><div class="cfb" id="fbPurpose"></div>'+
+      '<div class="legend" id="lgPurpose"></div></div></div>'+
+    '<div class="col6"><div class="panel"><h3>👶 المواليد حسب النوع</h3>'+
+      '<div class="ph-sub">مواليد الماعز مقابل مواليد الأغنام (رأس)</div>'+
+      '<div class="chart-box"><canvas id="cBirths"></canvas></div><div class="cfb" id="fbBirths"></div>'+
+      '<div class="legend" id="lgBirths"></div></div></div>'+
+  '</div>';
 
   html+=species('goat');
   html+=species('sheep');
@@ -288,13 +350,121 @@ function species(sp){
   '</div></div>';
 
   document.getElementById('content').innerHTML=html;
+
+  // اللوجند والبدائل النصية تُبنى دائماً (مضمونة بدون Chart.js)
+  set('lgBreeds',legendHTML(breedTotals.map(function(b){return {name:b.name,val:b.val,color:BREED_COLORS[b.name]};}),bSum));
+  set('lgPurpose',legendHTML(purpose,pSum));
+  set('lgBirths',legendHTML(birthsByType,btSum));
+  buildFallbacks();
+
+  // الرسوم البيانية في معزل آمن
+  loadChartJS(function(ok){ if(ok&&window.Chart){drawCharts();} else {chartsFailed();} });
 })();
+
+function set(id,html){var el=document.getElementById(id);if(el)el.innerHTML=html;}
+
+// البدائل النصية (تظهر فقط لو Chart.js فشل)
+function buildFallbacks(){
+  set('fbGender','<div style="display:flex;flex-direction:column;gap:9px;margin-top:6px">'+allBreeds.map(function(b){
+    var m=b.tm+b.sm, f=b.tf+b.sf, tot=m+f||1;
+    return '<div class="row2"><span class="nm">'+b.name+'</span><span class="track">'+
+      '<span class="seg" style="width:'+(m/tot*100)+'%;background:#3b82f6"></span>'+
+      '<span class="seg" style="width:'+(f/tot*100)+'%;background:#f97316"></span></span>'+
+      '<span class="vl">ذ'+ar(m)+' / إ'+ar(f)+'</span></div>';
+  }).join('')+'</div>');
+  function bars(items,sum){return '<div style="display:flex;flex-direction:column;gap:9px;margin-top:6px">'+items.map(function(it){
+    var p=Math.round(it.val/sum*100);
+    return '<div class="row2"><span class="nm">'+it.name+'</span><span class="track">'+
+      '<span class="seg" style="width:'+p+'%;background:'+it.color+'"></span></span>'+
+      '<span class="vl">'+ar(it.val)+' · '+ar(p)+'٪</span></div>';
+  }).join('')+'</div>';}
+  set('fbBreeds',bars(breedTotals.map(function(b){return{name:b.name,val:b.val,color:BREED_COLORS[b.name]};}),bSum));
+  set('fbPurpose',bars(purpose,pSum));
+  set('fbBirths',bars(birthsByType,btSum));
+}
+
+// تحميل Chart.js بأمان
+function loadChartJS(cb){
+  if(window.Chart){cb(true);return;}
+  var s=document.createElement('script');
+  s.src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
+  s.onload=function(){cb(true);};
+  s.onerror=function(){cb(false);};
+  document.head.appendChild(s);
+  setTimeout(function(){if(!window.Chart)cb(false);},2500);
+}
+
+var _charts=[];
+function drawCharts(){
+  try{
+    var css=getComputedStyle(document.documentElement);
+    var grid=css.getPropertyValue('--grid').trim()||'#2a2a2e';
+    var cardBg=css.getPropertyValue('--card').trim()||'#161618';
+    Chart.defaults.font.family="'Cairo',sans-serif";
+    Chart.defaults.color=css.getPropertyValue('--muted').trim()||'#9a9aa2';
+    _charts.forEach(function(c){try{c.destroy();}catch(e){}});_charts=[];
+
+    // 1) ذكور/إناث بالسلالة
+    _charts.push(new Chart(document.getElementById('cGender'),{
+      type:'bar',
+      data:{labels:allBreeds.map(function(b){return b.name;}),
+        datasets:[
+          {label:'ذكور',data:allBreeds.map(function(b){return b.tm+b.sm;}),backgroundColor:'#3b82f6',borderRadius:6},
+          {label:'إناث',data:allBreeds.map(function(b){return b.tf+b.sf;}),backgroundColor:'#f97316',borderRadius:6}
+        ]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{position:'top',labels:{boxWidth:14,padding:14}},
+          tooltip:{callbacks:{label:function(c){return c.dataset.label+': '+ar(c.parsed.y)+' رأس';}}}},
+        scales:{y:{beginAtZero:true,grid:{color:grid},ticks:{callback:function(v){return ar(v);}}},x:{grid:{display:false}}},
+        animation:{duration:900,easing:'easeOutQuart'}}
+    }));
+
+    // 2) توزيع السلالات (دائري)
+    _charts.push(new Chart(document.getElementById('cBreeds'),{
+      type:'doughnut',
+      data:{labels:breedTotals.map(function(b){return b.name;}),
+        datasets:[{data:breedTotals.map(function(b){return b.val;}),
+          backgroundColor:breedTotals.map(function(b){return BREED_COLORS[b.name];}),borderWidth:2,borderColor:cardBg}]},
+      options:{responsive:true,maintainAspectRatio:false,cutout:'60%',
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){var p=Math.round(c.parsed/bSum*100);return c.label+': '+ar(c.parsed)+' رأس ('+ar(p)+'٪)';}}}},
+        animation:{animateRotate:true,duration:1000}}
+    }));
+
+    // 3) توزيع الغرض (دائري)
+    _charts.push(new Chart(document.getElementById('cPurpose'),{
+      type:'doughnut',
+      data:{labels:purpose.map(function(p){return p.name;}),
+        datasets:[{data:purpose.map(function(p){return p.val;}),
+          backgroundColor:purpose.map(function(p){return p.color;}),borderWidth:2,borderColor:cardBg}]},
+      options:{responsive:true,maintainAspectRatio:false,cutout:'60%',
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){var p=Math.round(c.parsed/pSum*100);return c.label+': '+ar(c.parsed)+' رأس ('+ar(p)+'٪)';}}}},
+        animation:{animateRotate:true,duration:1000}}
+    }));
+
+    // 4) المواليد حسب النوع (أعمدة)
+    _charts.push(new Chart(document.getElementById('cBirths'),{
+      type:'bar',
+      data:{labels:birthsByType.map(function(b){return b.name;}),
+        datasets:[{label:'مواليد',data:birthsByType.map(function(b){return b.val;}),
+          backgroundColor:birthsByType.map(function(b){return b.color;}),borderRadius:8}]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return ar(c.parsed.y)+' رأس';}}}},
+        scales:{y:{beginAtZero:true,grid:{color:grid},ticks:{callback:function(v){return ar(v);}}},x:{grid:{display:false}}},
+        animation:{duration:900,easing:'easeOutQuart'}}
+    }));
+  }catch(e){chartsFailed();}
+}
+function chartsFailed(){
+  ['cGender','cBreeds','cPurpose','cBirths'].forEach(function(id){var c=document.getElementById(id);if(c&&c.parentNode)c.parentNode.style.display='none';});
+  ['fbGender','fbBreeds','fbPurpose','fbBirths'].forEach(function(id){var fb=document.getElementById(id);if(fb)fb.style.display='flex';});
+}
 
 // سويتش لايت/دارك
 window.toggleTheme=function(){
   var isLight=document.documentElement.classList.toggle('light');
   try{localStorage.setItem('bayan_theme',isLight?'light':'dark');}catch(e){}
   updateThemeBtn(isLight);
+  if(window.Chart)drawCharts();
 };
 function updateThemeBtn(isLight){
   var ic=document.getElementById('themeIcon'), lb=document.getElementById('themeLbl');
