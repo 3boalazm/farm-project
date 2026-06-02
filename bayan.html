@@ -211,7 +211,7 @@ var DATA = {
   sheep: {
     label:'الأغنام', emoji:'🐑', color:'var(--blue)',
     breeds:[
-      {name:'برقي',      tm:2, tf:68, sm:0, sf:0},
+      {name:'برقي',      tm:2, tf:56, sm:0, sf:12},
       {name:'دودبر',     tm:1, tf:1,  sm:0, sf:0},
       {name:'ميت ماستر',tm:1, tf:0,  sm:0, sf:0}
     ]
@@ -227,7 +227,7 @@ var BIRTHS = {
     {name:'شامي', m:11, f:11, tf:0}
   ],
   sheep:[
-    {name:'برقي',      m:18, f:16, tf:12},
+    {name:'برقي',      m:18, f:28, tf:0},
     {name:'دودبر',     m:0,  f:1,  tf:0},
     {name:'ميت ماستر',m:1,  f:0,  tf:0}
   ]
@@ -348,16 +348,32 @@ function species(sp){
 
 // ===== بيانات الرسوم البيانية =====
 function breedDist(sp){
-  // إجمالي كل سلالة = كبار + مواليد
-  return DATA[sp].breeds.map(function(b){
+  // كل سلالة = قطاع للكبار + قطاع منفصل للمواليد (بنفس اللون بباترن)
+  var out=[];
+  DATA[sp].breeds.forEach(function(b){
     var big=b.tm+b.tf+b.sm+b.sf;
-    var birth=0; BIRTHS[sp].forEach(function(x){if(x.name===b.name)birth=x.m+x.f+x.tf;});
-    return {name:b.name,val:big+birth};
+    if(big>0) out.push({name:b.name, val:big, color:BREED_COLORS[b.name], birth:false});
   });
+  BIRTHS[sp].forEach(function(x){
+    var birth=x.m+x.f+x.tf;
+    if(birth>0) out.push({name:'مواليد '+x.name, val:birth, color:BREED_COLORS[x.name], birth:true});
+  });
+  return out;
 }
 var goatDist=breedDist('goat'), sheepDist=breedDist('sheep');
 var goatSum=goatDist.reduce(function(a,b){return a+b.val;},0)||1;
 var sheepSum=sheepDist.reduce(function(a,b){return a+b.val;},0)||1;
+
+// مولّد باترن (خطوط مائلة) بنفس لون السلالة لتمييز المواليد
+function makePattern(color){
+  var c=document.createElement('canvas');c.width=10;c.height=10;
+  var x=c.getContext('2d');
+  x.fillStyle=color;x.fillRect(0,0,10,10);
+  x.strokeStyle='rgba(255,255,255,.55)';x.lineWidth=2.5;
+  x.beginPath();x.moveTo(0,10);x.lineTo(10,0);x.moveTo(-3,3);x.lineTo(3,-3);x.moveTo(7,13);x.lineTo(13,7);x.stroke();
+  return x.createPattern(c,'repeat');
+}
+function segFill(seg){ return seg.birth ? makePattern(seg.color) : seg.color; }
 
 // ذكور/إناث لكل السلالات (كبار فقط للوضوح)
 var allBreeds=DATA.goat.breeds.concat(DATA.sheep.breeds);
@@ -372,7 +388,10 @@ var pSum=purpose.reduce(function(a,b){return a+b.val;},0)||1;
 function legendHTML(items,sum){
   return items.map(function(it){
     var p=Math.round(it.val/sum*100);
-    return '<div class="li"><span class="sw" style="background:'+it.color+'"></span>'+
+    var sw=it.birth
+      ? '<span class="sw" style="background:'+it.color+';background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.6) 0 2px,transparent 2px 4px)"></span>'
+      : '<span class="sw" style="background:'+it.color+'"></span>';
+    return '<div class="li">'+sw+
       '<span class="nm">'+it.name+'</span><span class="vl">'+ar(it.val)+' رأس · '+ar(p)+'٪</span></div>';
   }).join('');
 }
@@ -400,11 +419,11 @@ function legendHTML(items,sum){
       '<div class="chart-box dough"><canvas id="cPurpose"></canvas></div><div class="cfb" id="fbPurpose"></div>'+
       '<div class="legend" id="lgPurpose"></div></div></div>'+
     '<div class="col6"><div class="panel"><h3>🐐 توزيع سلالات الماعز</h3>'+
-      '<div class="ph-sub">نسبة كل سلالة ماعز (شاملة المواليد)</div>'+
+      '<div class="ph-sub">الكبار + المواليد منفصلين (المواليد بنقش مخطّط)</div>'+
       '<div class="chart-box dough"><canvas id="cGoat"></canvas></div><div class="cfb" id="fbGoat"></div>'+
       '<div class="legend" id="lgGoat"></div></div></div>'+
     '<div class="col6"><div class="panel"><h3>🐑 توزيع سلالات الأغنام</h3>'+
-      '<div class="ph-sub">نسبة كل سلالة أغنام (شاملة المواليد)</div>'+
+      '<div class="ph-sub">الكبار + المواليد منفصلين (المواليد بنقش مخطّط)</div>'+
       '<div class="chart-box dough"><canvas id="cSheep"></canvas></div><div class="cfb" id="fbSheep"></div>'+
       '<div class="legend" id="lgSheep"></div></div></div>'+
   '</div>';
@@ -425,8 +444,8 @@ function legendHTML(items,sum){
 
   // legends + fallbacks (مضمونة بدون Chart.js)
   set('lgPurpose',legendHTML(purpose,pSum));
-  set('lgGoat',legendHTML(goatDist.map(function(b){return {name:b.name,val:b.val,color:BREED_COLORS[b.name]};}),goatSum));
-  set('lgSheep',legendHTML(sheepDist.map(function(b){return {name:b.name,val:b.val,color:BREED_COLORS[b.name]};}),sheepSum));
+  set('lgGoat',legendHTML(goatDist,goatSum));
+  set('lgSheep',legendHTML(sheepDist,sheepSum));
   buildFallbacks();
 
   loadChartJS(function(ok){ if(ok&&window.Chart){drawCharts();} else {chartsFailed();} });
@@ -442,13 +461,16 @@ function buildFallbacks(){
   }).join('')+'</div>');
   function bars(items,sum){return '<div style="display:flex;flex-direction:column;gap:9px;margin-top:6px">'+items.map(function(it){
     var p=Math.round(it.val/sum*100);
+    var bg=it.birth
+      ? it.color+';background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.6) 0 3px,transparent 3px 6px)'
+      : it.color;
     return '<div class="row2"><span class="nm">'+it.name+'</span><span class="track">'+
-      '<span class="seg" style="width:'+p+'%;background:'+it.color+'"></span></span>'+
+      '<span class="seg" style="width:'+p+'%;background:'+bg+'"></span></span>'+
       '<span class="vl">'+ar(it.val)+' · '+ar(p)+'٪</span></div>';
   }).join('')+'</div>';}
   set('fbPurpose',bars(purpose,pSum));
-  set('fbGoat',bars(goatDist.map(function(b){return{name:b.name,val:b.val,color:BREED_COLORS[b.name]};}),goatSum));
-  set('fbSheep',bars(sheepDist.map(function(b){return{name:b.name,val:b.val,color:BREED_COLORS[b.name]};}),sheepSum));
+  set('fbGoat',bars(goatDist,goatSum));
+  set('fbSheep',bars(sheepDist,sheepSum));
 }
 
 function loadChartJS(cb){
@@ -499,7 +521,7 @@ function drawCharts(){
       type:'doughnut',
       data:{labels:goatDist.map(function(b){return b.name;}),
         datasets:[{data:goatDist.map(function(b){return b.val;}),
-          backgroundColor:goatDist.map(function(b){return BREED_COLORS[b.name];}),borderWidth:2,borderColor:cardBg}]},
+          backgroundColor:goatDist.map(function(b){return segFill(b);}),borderWidth:2,borderColor:cardBg}]},
       options:{responsive:true,maintainAspectRatio:false,cutout:'60%',
         plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){var p=Math.round(c.parsed/goatSum*100);return c.label+': '+ar(c.parsed)+' رأس ('+ar(p)+'٪)';}}}},
         animation:{animateRotate:true,duration:1000}}
@@ -509,7 +531,7 @@ function drawCharts(){
       type:'doughnut',
       data:{labels:sheepDist.map(function(b){return b.name;}),
         datasets:[{data:sheepDist.map(function(b){return b.val;}),
-          backgroundColor:sheepDist.map(function(b){return BREED_COLORS[b.name];}),borderWidth:2,borderColor:cardBg}]},
+          backgroundColor:sheepDist.map(function(b){return segFill(b);}),borderWidth:2,borderColor:cardBg}]},
       options:{responsive:true,maintainAspectRatio:false,cutout:'60%',
         plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){var p=Math.round(c.parsed/sheepSum*100);return c.label+': '+ar(c.parsed)+' رأس ('+ar(p)+'٪)';}}}},
         animation:{animateRotate:true,duration:1000}}
