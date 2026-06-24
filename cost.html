@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <!-- Performance hints -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://farm-mz99-default-rtdb.europe-west1.firebasedatabase.app" crossorigin>
+  <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+  <link rel="dns-prefetch" href="https://aistudio.googleapis.com">
+  <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
+
+<script>(function(){var t=localStorage.getItem('farm_theme');if(t==='light')document.documentElement.classList.add('light-mode');}());</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>حاسبة التكاليف — بيان المزرعة</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="page-wrap">
+  <div id="page-header"></div>
+  <ul class="nav nav-pills mb-4 gap-2" id="cost-tabs">
+    <li><button class="nav-link active" onclick="switchCostTab('auto')"><i class="bi bi-robot me-2"></i>تلقائي (من بيانات المزرعة)</button></li>
+    <li><button class="nav-link" onclick="switchCostTab('manual')"><i class="bi bi-keyboard me-2"></i>يدوي (إدخال يدوي)</button></li>
+  </ul>
+  <div id="tab-auto"></div>
+  <div id="tab-manual" style="display:none"></div>
+  <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
+    © <span id="footer-year"></span> <span id="footer-farm"></span><br>
+    <small style="font-size:.72rem;color:var(--text-muted)">إشراف: لواء أحمد رجب نوح | تطوير: جندي مصطفى محمد إبراهيم</small>
+  </footer>
+</div>
+<script src="config.js"></script>
+<script src="firebase.js"></script>
+<script src="nav.js"></script>
+<script src="shared.js"></script>
+<script src="offline-sync.js" defer></script>
+<script src="pages/datepicker.js" defer></script>
+<script src="pages/tour.js" defer></script>
+<script>
+'use strict';
+let _costAnimals=[], _costFinance=[], _costMeds=[], _costFeeds=[], _costBreeding=[], _costVaccines=[];
+const CURR=()=>getSettings().currency;
+
+document.addEventListener('DOMContentLoaded', async ()=>{
+  if(!requireAuth())return;
+  initFirebase();
+  const s=getSettings();
+  document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
+  document.getElementById('footer-farm').textContent=s.farmName;
+  renderNavbar('cost.html');
+
+  // Style tabs
+  document.querySelectorAll('#cost-tabs .nav-link').forEach(b=>{
+    b.style.cssText='background:var(--bg-3);border:1px solid var(--border);color:var(--text-sub);border-radius:10px;padding:8px 16px;cursor:pointer;font-family:Cairo,sans-serif;font-size:.85rem;transition:.2s';
+  });
+  document.querySelector('#cost-tabs .nav-link.active').style.cssText+=';background:rgba(0,230,118,.1);border-color:rgba(0,230,118,.35);color:var(--green)';
+
+  renderPageHeader('<i class="bi bi-calculator-fill accent-text"></i> حاسبة التكاليف',
+    'احسب تكلفة رأس واحد تلقائياً أو يدوياً بكل التفاصيل','');
+
+  document.getElementById('tab-auto').innerHTML='<div class="text-center py-5"><div class="spinner"></div><div class="text-gray mt-2">جاري تحميل بيانات المزرعة...</div></div>';
+
+  try{
+    [_costAnimals,_costFinance,_costMeds,_costFeeds,_costBreeding,_costVaccines]=await Promise.all([
+      fbGet('animals'),fbGet('finance'),fbGet('inventory_meds'),
+      fbGet('inventory_feeds'),fbGet('breeding'),fbGet('vaccinations')
+    ]);
+  }catch(e){toast('خطأ: '+e.message,'error');}
+  renderAutoTab();
+  renderManualTab();
+});
+
+window.switchCostTab=function(tab){
+  document.getElementById('tab-auto').style.display=tab==='auto'?'block':'none';
+  document.getElementById('tab-manual').style.display=tab==='manual'?'block':'none';
+  document.querySelectorAll('#cost-tabs .nav-link').forEach(b=>{
+    const isA=b.getAttribute('onclick').includes("'"+tab+"'");
+    b.classList.toggle('active',isA);
+    b.style.background=isA?'rgba(0,230,118,.1)':'var(--bg-3)';
+    b.style.borderColor=isA?'rgba(0,230,118,.35)':'var(--border)';
+    b.style.color=isA?'var(--green)':'var(--text-sub)';
+  });
+};
+
+// ══════════════════════════════════════════════════════
+//  AUTO TAB — from farm data
+// ══════════════════════════════════════════════════════
+function renderAutoTab(){
+  const s=getSettings();
+  const alive=_costAnimals.filter(a=>a.status==='alive');
+  const n=alive.length||1;
+  const totalExp=_costFinance.filter(r=>r.type==='expense').reduce((t,r)=>t+(+r.amount||0),0);
+  const totalInc=_costFinance.filter(r=>r.type==='income').reduce((t,r)=>t+(+r.amount||0),0);
+
+  // Category breakdown
+  const cats={};
+  _costFinance.filter(r=>r.type==='expense').forEach(r=>{cats[r.category]=(cats[r.category]||0)+(+r.amount||0);});
+  const catRows=Object.entries(cats).sort((a,b)=>b[1]-a[1]);
+
+  // Feed stock value
+  const feedValue=_costFeeds.reduce((t,f)=>(+f.cost_per_unit||0)*(+f.quantity||0)+t,0);
+  // Med stock value (can't compute without price, show count)
+  const medCount=_costMeds.length;
+
+  // Per head
+  const perHead=totalExp/n;
+  const netPerHead=(totalInc-totalExp)/n;
+  const breakEven=perHead;
+
+  // Vaccine costs
+  const vaccCost=_costFinance.filter(r=>r.category&&r.category.includes('تحصين')).reduce((t,r)=>t+(+r.amount||0),0);
+  // Health costs
+  const healthCost=_costFinance.filter(r=>r.category&&(r.category.includes('دواء')||r.category.includes('علاج')||r.category.includes('بيطري'))).reduce((t,r)=>t+(+r.amount||0),0);
+  // Feed costs
+  const feedCost=_costFinance.filter(r=>r.category&&r.category.includes('علف')).reduce((t,r)=>t+(+r.amount||0),0);
+  // Labour
+  const labourCost=_costFinance.filter(r=>r.category&&r.category.includes('عمال')).reduce((t,r)=>t+(+r.amount||0),0);
+
+  const pct=(v)=>totalExp>0?Math.round(v/totalExp*100):0;
+
+  document.getElementById('tab-auto').innerHTML=
+  '<div class="row g-3 mb-4">'+
+    [['إجمالي الرؤوس الحية',ar(n),'var(--green)','bi-collection-fill'],
+     ['إجمالي المصروفات',totalExp.toLocaleString('ar-EG')+' '+CURR(),'var(--orange)','bi-wallet2'],
+     ['تكلفة الرأس الواحد',perHead.toFixed(0).toLocaleString()+' '+CURR(),'var(--blue)','bi-person-fill'],
+     ['صافي ربح/خسارة للرأس',(netPerHead>=0?'+':'')+netPerHead.toFixed(0)+' '+CURR(),netPerHead>=0?'var(--green)':'var(--red)','bi-graph-up-arrow']]
+    .map(x=>'<div class="col-6 col-md-3"><div class="summary-card"><i class="bi '+x[3]+' d-block mb-2" style="color:'+x[2]+';font-size:1.3rem"></i><div style="font-family:Lexend;font-size:1.1rem;font-weight:700;color:'+x[2]+'">'+x[1]+'</div><small class="text-gray">'+x[0]+'</small></div></div>').join('')+
+  '</div>'+
+
+  '<div class="row g-3 mb-4">'+
+    '<div class="col-lg-7">'+
+      '<div class="wonder-card">'+
+        '<div class="fw-bold mb-3"><i class="bi bi-pie-chart-fill accent-text me-2"></i>توزيع التكاليف حسب الفئة</div>'+
+        (catRows.length===0?'<div class="text-gray text-center py-3">لا توجد بيانات مالية بعد — أضف مصروفات من صفحة المالية</div>':
+        catRows.map(([cat,amt])=>{const p=pct(amt);return'<div class="finance-bar-wrap"><div class="lb"><span>'+cat+'</span><span class="fw-bold" style="color:var(--orange)">'+amt.toLocaleString('ar-EG')+' '+CURR()+' ('+p+'٪)</span></div><div class="finance-bar"><div class="finance-bar-fill" style="width:'+p+'%"></div></div></div>';}).join(''))+
+      '</div>'+
+    '</div>'+
+    '<div class="col-lg-5">'+
+      '<div class="wonder-card mb-3">'+
+        '<div class="fw-bold mb-3"><i class="bi bi-currency-exchange accent-text me-2"></i>المؤشرات المالية</div>'+
+        [['نقطة التعادل للرأس',breakEven.toFixed(0)+' '+CURR(),'<small class="text-gray">أقل سعر بيع بدون خسارة</small>'],
+         ['إجمالي الإيرادات',totalInc.toLocaleString('ar-EG')+' '+CURR(),''],
+         ['صافي الربح / الخسارة',(totalInc-totalExp>=0?'+':'')+(totalInc-totalExp).toLocaleString('ar-EG')+' '+CURR(),''],
+         ['قيمة مخزون الأعلاف',feedValue.toLocaleString('ar-EG')+' '+CURR(),''],
+         ['أصناف الأدوية',ar(medCount)+' صنف','']
+        ].map(([k,v,sub])=>'<div class="detail-row"><span class="detail-key">'+k+'</span><div><span class="detail-val">'+v+'</span>'+sub+'</div></div>').join('')+
+      '</div>'+
+    '</div>'+
+  '</div>'+
+
+  '<div class="wonder-card mb-4">'+
+    '<div class="d-flex justify-content-between align-items-center mb-3">'+
+      '<div class="fw-bold"><i class="bi bi-person-fill accent-text me-2"></i>تكلفة الرأس الواحد — مقارنة بالسوق</div>'+
+    '</div>'+
+    '<div class="row g-2 align-items-end">'+
+      '<div class="col-md-4"><label data-hint="ادخل سعر البيع المتوقع في السوق">سعر السوق المتوقع للرأس ('+CURR()+')</label><input type="number" class="field" id="auto-market-price" placeholder="مثال: 2500" min="0" onchange="_autoCalcProfit()"></div>'+
+      '<div class="col-md-4"><label>عدد الرؤوس المراد بيعها</label><input type="number" class="field" id="auto-sell-count" value="'+Math.min(10,n)+'" min="1" onchange="_autoCalcProfit()"></div>'+
+      '<div class="col-md-4"><button class="action-btn primary w-100" onclick="_autoCalcProfit()"><i class="bi bi-calculator"></i> احسب الربح</button></div>'+
+    '</div>'+
+    '<div id="auto-profit-result" class="mt-3" style="display:none">'+
+      '<div class="row g-3">'+
+        '<div class="col-md-4"><div class="stat-mini"><div class="num green-text" id="apr-income">—</div><div class="lbl">الإيراد المتوقع</div></div></div>'+
+        '<div class="col-md-4"><div class="stat-mini"><div class="num accent-text" id="apr-cost">—</div><div class="lbl">التكلفة الإجمالية</div></div></div>'+
+        '<div class="col-md-4"><div class="stat-mini"><div class="num" id="apr-profit">—</div><div class="lbl">صافي الربح</div></div></div>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+}
+
+window._autoCalcProfit=function(){
+  const price=+document.getElementById('auto-market-price').value||0;
+  const count=+document.getElementById('auto-sell-count').value||1;
+  const n=_costAnimals.filter(a=>a.status==='alive').length||1;
+  const totalExp=_costFinance.filter(r=>r.type==='expense').reduce((t,r)=>t+(+r.amount||0),0);
+  const perHead=totalExp/n;
+  const income=price*count;
+  const cost=perHead*count;
+  const profit=income-cost;
+  document.getElementById('auto-profit-result').style.display='block';
+  document.getElementById('apr-income').textContent=income.toLocaleString('ar-EG')+' '+CURR();
+  document.getElementById('apr-cost').textContent=cost.toFixed(0)+' '+CURR();
+  const profitEl=document.getElementById('apr-profit');
+  profitEl.textContent=(profit>=0?'+':'')+profit.toFixed(0)+' '+CURR();
+  profitEl.style.color=profit>=0?'var(--green)':'var(--red)';
+};
+
+// ══════════════════════════════════════════════════════
+//  MANUAL TAB — user enters all values
+// ══════════════════════════════════════════════════════
+const COST_SECTIONS=[
+  {id:'purchase', label:'ثمن الشراء أو القيمة الدفترية', icon:'bi-tag-fill', color:'var(--blue)',
+   fields:[{id:'purchase_price',label:'ثمن الشراء / رأس',unit:'عملة',hint:'تكلفة شراء الحيوان أو قيمته التقديرية إذا من مواليد المزرعة'},{id:'purchase_count',label:'عدد الرؤوس',unit:'رأس',hint:'عدد الحيوانات في هذه الدورة'}]},
+  {id:'feed', label:'الأعلاف', icon:'bi-bag-fill', color:'var(--orange)',
+   fields:[{id:'feed_conc',label:'علف مركز / يوم / رأس',unit:'كجم',hint:'كمية العلف المركز اليومية لكل رأس'},{id:'feed_berseem',label:'برسيم / يوم / رأس',unit:'كجم',hint:'برسيم جاف أو أخضر'},{id:'feed_other',label:'علف آخر / يوم / رأس',unit:'كجم',hint:'بونيكام، عرش فول، إلخ'},{id:'feed_price_kg',label:'متوسط سعر العلف',unit:'عملة/كجم',hint:'متوسط سعر الكيلو من كل أنواع العلف'},{id:'days',label:'مدة التربية / التسمين',unit:'يوم',hint:'عدد الأيام من الشراء حتى البيع'}]},
+  {id:'vaccine', label:'التطعيمات والوقاية', icon:'bi-bandaid-fill', color:'var(--green)',
+   fields:[{id:'vacc_cost',label:'تكلفة التطعيمات / رأس / دورة',unit:'عملة',hint:'إجمالي تكلفة كل اللقاحات (دموي، معوي، قلاعية، إلخ)'},{id:'deworm_cost',label:'إزالة الطفيليات / رأس',unit:'عملة',hint:'أدوية الديدان والطفيليات الخارجية'},{id:'salt_cost',label:'قوالب أملاح وفيتامينات / رأس',unit:'عملة',hint:'تكلفة الأملاح المعدنية والفيتامينات طوال الدورة'}]},
+  {id:'health', label:'الرعاية الصحية والعلاج', icon:'bi-heart-pulse-fill', color:'var(--red)',
+   fields:[{id:'vet_visit',label:'زيارة الطبيب البيطري',unit:'عملة',hint:'تكلفة الزيارات الدورية والفحوصات'},{id:'medicine_cost',label:'أدوية وعلاجات / رأس',unit:'عملة',hint:'مضادات حيوية، فيتامينات حقن، مطهرات'},{id:'lab_tests',label:'تحاليل دم / سونار',unit:'عملة',hint:'فحوصات الحمل والتحاليل الدورية'}]},
+  {id:'breeding', label:'التكاثر', icon:'bi-diagram-2-fill', color:'var(--purple)',
+   fields:[{id:'insem_cost',label:'تلقيح اصطناعي / تقريع',unit:'عملة',hint:'تكلفة التلقيح أو إيجار الفحل'},{id:'birth_care',label:'رعاية الولادة / مولود',unit:'عملة',hint:'تكلفة الطبيب وأدوات الولادة'},{id:'colostrum_cost',label:'بديل اللبان / مولود',unit:'عملة',hint:'لبن صناعي أو مكمل للمواليد'}]},
+  {id:'labour', label:'العمالة', icon:'bi-people-fill', color:'var(--yellow)',
+   fields:[{id:'labour_monthly',label:'راتب عامل / شهر',unit:'عملة',hint:'إجمالي رواتب العمالة'},{id:'labour_heads',label:'عدد الرؤوس التي يرعاها العامل',unit:'رأس',hint:'لتوزيع تكلفة العمالة على الرؤوس'}]},
+  {id:'utilities', label:'المرافق والطاقة', icon:'bi-lightning-fill', color:'var(--blue)',
+   fields:[{id:'water_cost',label:'المياه / شهر',unit:'عملة',hint:'فاتورة المياه'},{id:'electric_cost',label:'الكهرباء / شهر',unit:'عملة',hint:'فاتورة الكهرباء'},{id:'fuel_cost',label:'الوقود / شهر',unit:'عملة',hint:'ديزل وبنزين'}]},
+  {id:'consumables', label:'المستهلكات والصيانة', icon:'bi-tools', color:'var(--gray)',
+   fields:[{id:'tags_cost',label:'أرقام الأذن (Tags) / رأس',unit:'عملة',hint:'تكلفة أرقام الأذن أو الترقيم'},{id:'disinfect_cost',label:'منظفات ومطهرات / شهر',unit:'عملة',hint:'مواد تطهير الحظائر'},{id:'maintenance_cost',label:'صيانة / شهر',unit:'عملة',hint:'إصلاح الحظائر والمعدات'}]},
+  {id:'depreciation', label:'الإهلاك والرسوم', icon:'bi-building', color:'var(--gray)',
+   fields:[{id:'barn_depr',label:'إهلاك المنشآت / شهر',unit:'عملة',hint:'توزيع تكلفة البناء على سنوات الخدمة'},{id:'equip_depr',label:'إهلاك المعدات / شهر',unit:'عملة',hint:'موازين، آلات، سيارات'},{id:'admin_fees',label:'رسوم إدارية / شهر',unit:'عملة',hint:'رسوم جمعيات، سجلات سلالات، ترخيص'}]},
+];
+
+
+function renderManualTab(){
+  const s=getSettings();
+  let html='<div class="wonder-card mb-3 p-3" style="background:rgba(33,150,243,.06);border-color:rgba(33,150,243,.3)">'+
+    '<div class="fw-bold mb-1" style="color:var(--blue)"><i class="bi bi-info-circle-fill me-2"></i>كيف تعمل الحاسبة اليدوية؟</div>'+
+    '<small class="text-gray">أدخل قيم كل بند، والحاسبة ستحسب تلقائياً: تكلفة الرأس الواحد، نقطة التعادل، وصافي الربح المتوقع</small>'+
+  '</div>';
+
+  COST_SECTIONS.forEach(sec=>{
+    html+='<div class="settings-section mb-3">'+
+      '<div class="fw-bold mb-3" style="color:'+sec.color+'"><i class="bi '+sec.icon+' me-2"></i>'+sec.label+'</div>'+
+      '<div class="row g-2">'+
+      sec.fields.map(f=>
+        '<div class="col-md-4">'+
+          '<label data-hint="'+f.hint+'" style="cursor:help">'+f.label+' ('+f.unit+') <span class="info-tooltip" onclick="event.stopPropagation();showInfoModal(this)" data-tip="'+f.hint+'">!</span></label>'+
+          '<input type="number" class="field manual-cost-input" id="mc-'+f.id+'" placeholder="0" min="0" step="0.01" oninput="calcManualTotal()">'+
+        '</div>'
+      ).join('')+
+      '</div></div>';
+  });
+
+  html+='<div class="wonder-card mb-3">'+
+    '<div class="fw-bold mb-3"><i class="bi bi-bullseye accent-text me-2"></i>سعر البيع وحساب الربح</div>'+
+    '<div class="row g-2">'+
+      '<div class="col-md-4"><label data-hint="السعر المتوقع في السوق عند البيع">سعر البيع المتوقع / رأس ('+s.currency+')</label><input type="number" class="field" id="mc-sell-price" placeholder="0" min="0" oninput="calcManualTotal()"></div>'+
+      '<div class="col-md-4"><label data-hint="الوزن المتوقع عند البيع">الوزن المتوقع عند البيع (كجم)</label><input type="number" class="field" id="mc-sell-weight" placeholder="مثال: 50" min="0" oninput="calcManualTotal()"></div>'+
+      '<div class="col-md-4"><label data-hint="سعر الكيلو في السوق إن بيع بالكيلو">سعر الكيلو ('+s.currency+') — اختياري</label><input type="number" class="field" id="mc-kg-price" placeholder="0" min="0" oninput="calcManualTotal()"></div>'+
+    '</div>'+
+  '</div>'+
+
+  '<div class="wonder-card" id="manual-results" style="background:rgba(0,230,118,.05);border-color:rgba(0,230,118,.25)">'+
+    '<div class="fw-bold mb-3 green-text"><i class="bi bi-calculator me-2"></i>النتائج التلقائية</div>'+
+    '<div class="row g-3">'+
+      '<div class="col-md-3"><div class="stat-mini"><div class="num accent-text" id="mc-total">٠</div><div class="lbl">تكلفة الرأس الواحد</div></div></div>'+
+      '<div class="col-md-3"><div class="stat-mini"><div class="num" id="mc-breakeven">٠</div><div class="lbl">نقطة التعادل / كجم</div></div></div>'+
+      '<div class="col-md-3"><div class="stat-mini"><div class="num" id="mc-profit">٠</div><div class="lbl">صافي الربح / رأس</div></div></div>'+
+      '<div class="col-md-3"><div class="stat-mini"><div class="num" id="mc-roi">٠</div><div class="lbl">عائد الاستثمار ROI</div></div></div>'+
+    '</div>'+
+    '<div id="mc-breakdown" class="mt-4"></div>'+
+    '<div class="d-flex gap-2 justify-content-end mt-3">'+
+      '<button class="action-btn" onclick="resetManual()"><i class="bi bi-arrow-counterclockwise"></i> إعادة تعيين</button>'+
+      '<button class="action-btn primary" onclick="exportManualReport()"><i class="bi bi-filetype-csv"></i> تصدير التقرير</button>'+
+    '</div>'+
+  '</div>';
+
+  document.getElementById('tab-manual').innerHTML=html;
+}
+
+window.calcManualTotal=function(){
+  const s=getSettings();const g=id=>parseFloat(document.getElementById('mc-'+id)?.value)||0;
+  const days=g('days')||90;
+  const heads=g('purchase_count')||1;
+
+  // 1. Purchase
+  const purchase=g('purchase_price');
+
+  // 2. Feed
+  const feedPerDay=(g('feed_conc')+g('feed_berseem')+g('feed_other'))*g('feed_price_kg');
+  const feedTotal=feedPerDay*days;
+
+  // 3. Vaccines & prevention
+  const vaccines=g('vacc_cost')+g('deworm_cost')+g('salt_cost');
+
+  // 4. Health
+  const health=(g('vet_visit')+g('medicine_cost')+g('lab_tests'));
+
+  // 5. Breeding
+  const breeding=g('insem_cost')+g('birth_care')+g('colostrum_cost');
+
+  // 6. Labour (per head share)
+  const labourPerHead=g('labour_monthly')/(g('labour_heads')||1);
+  const labourTotal=labourPerHead*(days/30);
+
+  // 7. Utilities per head per month
+  const utilPerHead=(g('water_cost')+g('electric_cost')+g('fuel_cost'))/(heads||1);
+  const utilTotal=utilPerHead*(days/30);
+
+  // 8. Consumables
+  const consumables=g('tags_cost')+(g('disinfect_cost')+g('maintenance_cost'))/(heads||1)*(days/30);
+
+  // 9. Depreciation per head per month
+  const deprPerHead=(g('barn_depr')+g('equip_depr')+g('admin_fees'))/(heads||1);
+  const deprTotal=deprPerHead*(days/30);
+
+  const total=purchase+feedTotal+vaccines+health+breeding+labourTotal+utilTotal+consumables+deprTotal;
+  const sellPrice=g('sell-price')||0;
+  const sellWeight=g('sell-weight')||0;
+  const kgPrice=g('kg-price')||0;
+  const revenue=kgPrice>0&&sellWeight>0?kgPrice*sellWeight:(sellPrice||0);
+  const profit=revenue-total;
+  const roi=total>0?Math.round(profit/total*100):0;
+  const breakEvenKg=sellWeight>0&&total>0?total/sellWeight:0;
+
+  // Update display
+  const setEl=(id,val,color)=>{const e=document.getElementById(id);if(e){e.textContent=val;if(color)e.style.color=color;}};
+  setEl('mc-total',total.toFixed(0)+' '+s.currency);
+  setEl('mc-breakeven',breakEvenKg>0?breakEvenKg.toFixed(0)+' '+s.currency+'/كجم':'—');
+  setEl('mc-profit',(profit>=0?'+':'')+profit.toFixed(0)+' '+s.currency,profit>=0?'var(--green)':'var(--red)');
+  setEl('mc-roi',roi+'٪',roi>=0?'var(--green)':'var(--red)');
+
+  // Breakdown
+  const rows=[['ثمن الشراء',purchase],['الأعلاف',feedTotal],['التطعيمات والوقاية',vaccines],['الرعاية الصحية',health],['التكاثر',breeding],['العمالة',labourTotal],['المرافق والطاقة',utilTotal],['المستهلكات',consumables],['الإهلاك والرسوم',deprTotal]].filter(r=>r[1]>0);
+  const bdHtml=rows.length?'<div class="fw-bold mb-2 text-gray" style="font-size:.78rem">تفصيل التكاليف:</div>'+
+    rows.map(r=>{const p=total>0?Math.round(r[1]/total*100):0;return'<div class="finance-bar-wrap"><div class="lb"><span class="text-gray">'+r[0]+'</span><span class="fw-bold accent-text">'+r[1].toFixed(0)+' '+s.currency+' ('+p+'٪)</span></div><div class="finance-bar"><div class="finance-bar-fill" style="width:'+p+'%"></div></div></div>';}).join(''):'';
+  const bd=document.getElementById('mc-breakdown');if(bd)bd.innerHTML=bdHtml;
+};
+
+window.resetManual=function(){
+  document.querySelectorAll('.manual-cost-input').forEach(i=>i.value='');
+  ['mc-sell-price','mc-sell-weight','mc-kg-price'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  calcManualTotal();
+};
+
+window.exportManualReport=function(){
+  const s=getSettings();
+  const rows=[['البند','القيمة ('+s.currency+')']];
+  document.querySelectorAll('.manual-cost-input').forEach(inp=>{
+    const lbl=inp.previousElementSibling?.textContent?.replace(/[!؟]/g,'').trim();
+    const val=inp.value;
+    if(lbl&&val)rows.push([lbl,val]);
+  });
+  rows.push(['',''],['إجمالي تكلفة الرأس',document.getElementById('mc-total')?.textContent||''],['صافي الربح',document.getElementById('mc-profit')?.textContent||''],['ROI',document.getElementById('mc-roi')?.textContent||'']);
+  const csv=rows.map(r=>r.map(v=>'"'+v+'"').join(',')).join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download='cost-report-'+todayStr()+'.csv';a.click();
+  toast('تم تصدير التقرير');
+};
+</script>
+</body>
+</html>

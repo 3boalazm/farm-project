@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <!-- Performance hints -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://farm-mz99-default-rtdb.europe-west1.firebasedatabase.app" crossorigin>
+  <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+  <link rel="dns-prefetch" href="https://aistudio.googleapis.com">
+  <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
+
+<script>
+(function(){
+  var t=localStorage.getItem('farm_theme');
+  if(t==='light')document.documentElement.classList.add('light-mode');
+})();
+</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>المستخدمون — بيان المزرعة</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="page-wrap">
+  <div id="page-header"></div>
+  <div id="content"></div>
+  <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
+    © <span id="footer-year"></span> <span id="footer-farm"></span><br>
+    <small style="font-size:.72rem;color:#555">إشراف: لواء أحمد رجب نوح &nbsp;|&nbsp; تطوير: جندي مصطفى محمد إبراهيم</small>
+  </footer>
+</div>
+<script src="config.js"></script>
+<script src="firebase.js"></script>
+<script src="nav.js"></script>
+<script src="shared.js"></script>
+<script src="offline-sync.js" defer></script>
+<script src="pages/datepicker.js" defer></script>
+<script src="pages/tour.js" defer></script>
+<script>
+document.addEventListener('DOMContentLoaded',async ()=>{
+  if(!requireAuth())return;
+  if(!can('users')){
+    document.body.innerHTML='<div class="empty-state" style="padding-top:100px"><i class="bi bi-shield-x" style="font-size:3rem;display:block;margin-bottom:10px;opacity:.4"></i><p>غير مصرح بالوصول</p><a href="dashboard.html" class="action-btn">الرئيسية</a></div>';
+    return;
+  }
+  initFirebase();
+  const s=getSettings();
+  document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
+  document.getElementById('footer-farm').textContent=s.farmName;
+  renderNavbar('users.html');
+  renderPageHeader('<i class="bi bi-people-fill accent-text"></i> إدارة المستخدمين','','<button class="action-btn primary" onclick="openAddUser()"><i class="bi bi-person-plus-fill"></i> إضافة مستخدم</button>');
+  await renderUsers();
+});
+
+async function renderUsers(){
+  const users=await Users.all();
+  const el=document.getElementById('content');
+  el.innerHTML=`<div class="row g-3">
+    ${users.map(u=>{const role=ROLES[u.role]||ROLES.worker;return`
+    <div class="col-md-6 col-lg-4">
+      <div class="wonder-card" style="cursor:pointer" onclick="showUserDetail('${u.id}')">
+        <div class="d-flex align-items-start gap-3">
+          <div class="user-avatar" style="width:48px;height:48px;font-size:1.2rem;background:${role.color}22;color:${role.color}">${u.name.slice(0,1)}</div>
+          <div class="flex-grow-1">
+            <div class="fw-bold mb-1">${u.name}</div>
+            <div class="d-flex gap-2 mb-1">
+              <span class="type-badge role-badge-${u.role}" style="font-size:.72rem"><i class="bi ${role.icon}" style="margin-left:3px"></i>${role.label}</span>
+              ${u.active?`<span class="type-badge badge-tarbiya" style="font-size:.65rem">نشط</span>`:`<span class="type-badge badge-danger" style="font-size:.65rem">غير نشط</span>`}
+            </div>
+            <small class="text-gray">أُضيف ${u.created||'—'}</small>
+          </div>
+          <div class="d-flex gap-1">
+            <button class="icon-btn edit" onclick="event.stopPropagation();openEditUser('${u.id}')"><i class="bi bi-pencil"></i></button>
+            ${u.id!=='admin1'?`<button class="icon-btn del" onclick="event.stopPropagation();delUser('${u.id}')"><i class="bi bi-trash"></i></button>`:''}
+          </div>
+        </div>
+      </div>
+    </div>`;}).join('')}
+  </div>`;
+}
+
+async function showUserDetail(id){
+  const u=await Users.get(id);if(!u)return;
+  const role=ROLES[u.role]||ROLES.worker;
+  const perms={animals:'القطيع',health:'الصحة',breeding:'التكاثر',inventory:'المخزن',finance:'المالية',reports:'التقارير',users:'المستخدمون',activity:'سجل الأنشطة'};
+  const allowed=u.role==='admin'?Object.keys(perms):Object.keys(perms).filter(p=>(ROLE_PERMS[u.role]||(()=>false))(p));
+  showModal(`<div class="farm-modal" onclick="event.stopPropagation()">
+    <div class="d-flex align-items-center gap-3 mb-4">
+      <div class="user-avatar" style="width:56px;height:56px;font-size:1.4rem;background:${role.color}22;color:${role.color}">${u.name.slice(0,1)}</div>
+      <div><h4 class="mb-1">${u.name}</h4><span class="type-badge role-badge-${u.role}">${role.label}</span></div>
+    </div>
+    <h6 class="fw-bold mb-2 text-gray">الصلاحيات</h6>
+    ${Object.entries(perms).map(([k,l])=>`<div class="d-flex justify-content-between py-2" style="border-bottom:1px solid #1e1e1e">
+      <span class="text-gray">${l}</span>
+      <span class="${allowed.includes(k)?'green-text':'red-text'} fw-bold"><i class="bi bi-${allowed.includes(k)?'check-circle-fill':'x-circle-fill'}"></i> ${allowed.includes(k)?'مسموح':'محظور'}</span>
+    </div>`).join('')}
+    <div class="d-flex gap-2 justify-content-end mt-3">
+      <button class="action-btn" onclick="closeModal()">إغلاق</button>
+      <button class="action-btn primary" onclick="closeModal();openEditUser('${u.id}')"><i class="bi bi-pencil"></i> تعديل</button>
+    </div>
+  </div>`);
+}
+
+function openAddUser(){showUserModal({});}
+async function openEditUser(id){showUserModal(await Users.get(id)||{});}
+const ALL_PERMS={dash:'الرئيسية',animals:'القطيع',health:'الصحة',vaccine:'التحصين',breeding:'التكاثر',inventory:'المخزن',finance:'المالية',reports:'التقارير',users:'المستخدمون',activity:'سجل الأنشطة'};
+const ROLE_DPERMS={admin:Object.keys(ALL_PERMS),supervisor:['dash','animals','health','vaccine','breeding','inventory','reports'],vet:['dash','health','vaccine','breeding'],worker:['dash','animals'],visitor:['dash','animals']};
+
+function showUserModal(u){
+  const isEdit=!!(u.id&&u.name);
+  const defPerms=ROLE_DPERMS[u.role||'worker']||[];
+  const actPerms=u.custom_perms||defPerms;
+  showModal(`<div class="farm-modal" onclick="event.stopPropagation()" style="max-height:92vh;overflow-y:auto">
+    <h4><i class="bi bi-person-plus-fill accent-text"></i> ${isEdit?'تعديل':'إضافة'} مستخدم</h4>
+    <label>الاسم *</label><input class="field" id="u-name" value="${u.name||''}">
+    <label>الدور</label>
+    <select class="field" id="u-role" onchange="window._fillDefPerms()">${Object.entries(ROLES).map(([k,v])=>`<option value="${k}" ${u.role===k?'selected':''}>${v.label}</option>`).join('')}</select>
+    <label>رمز PIN ${isEdit?'(اتركه فارغاً للإبقاء)':'*'}</label>
+    <input type="password" class="field" id="u-pin" placeholder="••••" maxlength="8">
+    <label>الحالة</label>
+    <select class="field" id="u-active"><option value="true" ${u.active!==false?'selected':''}>نشط</option><option value="false" ${u.active===false?'selected':''}>غير نشط</option></select>
+    <div class="mt-3 p-3" style="background:rgba(255,255,255,.03);border-radius:12px;border:1px solid #2a2a2a">
+      <div class="fw-bold mb-2" style="font-size:.85rem"><i class="bi bi-shield-fill accent-text me-2"></i>تخصيص الصلاحيات <small class="text-gray fw-normal">(يمكن تركها للإعدادات الافتراضية)</small></div>
+      <div class="row g-2" id="perms-grid">
+        ${Object.entries(ALL_PERMS).map(([k,l])=>`<div class="col-6"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px;background:rgba(255,255,255,.03);border-radius:8px;border:1px solid #2a2a2a"><input type="checkbox" class="perm-cb" value="${k}" ${actPerms.includes(k)?'checked':''} style="accent-color:var(--green)"><span style="font-size:.82rem">${l}</span></label></div>`).join('')}
+      </div>
+      <div class="d-flex gap-2 mt-2">
+        <button class="action-btn sm" onclick="window._fillDefPerms()"><i class="bi bi-arrow-counterclockwise"></i> افتراضي</button>
+        <button class="action-btn sm" onclick="document.querySelectorAll('.perm-cb').forEach(c=>c.checked=true)"><i class="bi bi-check-all"></i> الكل</button>
+      </div>
+    </div>
+    <div class="d-flex gap-2 justify-content-end mt-3">
+      <button class="action-btn" onclick="closeModal()">إلغاء</button>
+      <button class="action-btn primary" onclick="submitUser('${u.id||''}')">حفظ</button>
+    </div>
+  </div>`);
+  window._fillDefPerms=function(){const r=document.getElementById('u-role')?.value||'worker';const d=ROLE_DPERMS[r]||[];document.querySelectorAll('.perm-cb').forEach(c=>{c.checked=d.includes(c.value);});};
+}
+window.submitUser=async function(existingId){
+  const name=document.getElementById('u-name').value.trim();if(!name){toast('يرجى إدخال الاسم','error');return;}
+  const pin=document.getElementById('u-pin').value.trim();
+  const role=document.getElementById('u-role').value;
+  const active=document.getElementById('u-active').value==='true';
+  if(!existingId&&!pin){toast('يرجى إدخال رمز PIN','error');return;}
+  if(pin&&pin.length<4){toast('PIN يجب أن يكون 4 أرقام على الأقل','error');return;}
+  const selectedPerms=[...document.querySelectorAll('.perm-cb:checked')].map(c=>c.value);
+  const defaults=ROLE_DPERMS[role]||[];
+  const customPerms=JSON.stringify([...selectedPerms].sort())===JSON.stringify([...defaults].sort())?null:selectedPerms;
+  if(existingId){
+    const patch={name,role,active,custom_perms:customPerms};if(pin)patch.pin=pin;
+    await Users.update(existingId,patch);
+    logActivity('edit','users',`تعديل بيانات المستخدم: ${name}${customPerms?' (صلاحيات مخصصة)':''}`);
+    toast('تم التحديث');
+  }else{
+    await Users.add({id:genId(),name,role,pin,active,custom_perms:customPerms,created:todayStr()});
+    logActivity('add','users',`إضافة مستخدم: ${name} — ${ROLES[role]?.label}${customPerms?' (مخصص)':''}`);
+    toast('تمت الإضافة');
+  }
+  closeModal();
+  await renderUsers();
+};
+window.delUser=async function(id){
+  if(id==='admin1'){toast('لا يمكن حذف المدير الرئيسي','error');return;}
+  if(!confirm('حذف هذا المستخدم؟'))return;
+  const u=await Users.get(id);
+  await Users.del(id);
+  logActivity('delete','users',`حذف المستخدم: ${u?.name||id}`);
+  toast('تم الحذف');
+  await renderUsers();
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<script>(function(){var t=localStorage.getItem('farm_theme');if(t==='light')document.documentElement.classList.add('light-mode');}());</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>الأغنام — بيان المزرعة</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="page-wrap">
+  <div id="page-header"></div>
+  <div id="content"><div class="text-center py-5"><div class="spinner"></div></div></div>
+  <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
+    <span id="footer-year"></span> &copy; <span id="footer-farm"></span><br>
+    <small style="font-size:.72rem;color:var(--text-muted)">إشراف: لواء أحمد رجب نوح | تطوير: جندي مصطفى محمد إبراهيم</small>
+  </footer>
+</div>
+<script src="config.js"></script>
+<script src="firebase.js"></script>
+<script src="nav.js"></script>
+<script src="shared.js"></script>
+<script>
+var _animals=[];
+
+document.addEventListener('DOMContentLoaded', async function(){
+  if(!requireAuth())return;
+  initFirebase();
+  var s=getSettings();
+  document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
+  document.getElementById('footer-farm').textContent=s.farmName;
+  renderNavbar('sheep.html');
+  renderPageHeader(
+    '<i class="bi bi-cloud-fill green-text"></i> الأغنام',
+    'إدارة قطيع الأغنام',
+    (can('animals')?
+      '<button class="action-btn primary" onclick="openAddGoat()"><i class="bi bi-plus-lg"></i> إضافة أغنام</button>'+
+      '<button class="action-btn" onclick="openUnifiedBirthModal(\'sheep\')" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.3);color:var(--yellow)"><i class="bi bi-stars"></i> مواليد</button>'+
+      '<button class="action-btn danger" onclick="openMarkDeathGoat()"><i class="bi bi-x-octagon"></i> نفوق</button>':'')
+  );
+  try{
+    _animals=await fbGet('animals');
+  }catch(e){
+    document.getElementById('content').innerHTML='<div class="empty-state"><i class="bi bi-wifi-off"></i><p>خطأ: '+e.message+'</p></div>';
+    return;
+  }
+  renderPage();
+});
+
+function renderPage(){
+  var s=getSettings();
+  var el=document.getElementById('content');
+  var alive=_animals.filter(function(a){return a.status==='alive';});
+  var sheeps=alive.filter(function(a){return a.species==='sheep';});
+  var births=sheeps.filter(function(a){return a.purpose==='birth'||a.breed==='مواليد';});
+  var regular=sheeps.filter(function(a){return a.purpose!=='birth'&&a.breed!=='مواليد';});
+
+  // Summary stats
+  // Compute total from configured breeds only — matches exactly what breed cards show.
+  // Previously used sheeps.length (all alive sheep) which diverged from breed card sums
+  // after the species filter fix; now both numbers come from the same source.
+  var breedTotal=0, breedBirthTotal=0;
+  s.sheepBreeds.forEach(function(b){
+    var bs=breedStats(_animals,'sheep',b);
+    breedTotal+=bs.totalAll;
+    breedBirthTotal+=bs.birthCount;
+  });
+  var breedRegularTotal=breedTotal-breedBirthTotal;
+
+  var html='<div class="row g-3 mb-4">';
+  html+='<div class="col-6 col-md-3"><div class="summary-card"><div class="summary-number green-text">'+ar(breedTotal)+'</div>';
+  html+='<small class="text-gray">إجمالي الأغنام</small>';
+  html+='<div style="font-size:.7rem;color:var(--text-muted);margin-top:2px">'+ar(breedRegularTotal)+' سلالات + '+ar(breedBirthTotal)+' مواليد</div>';
+  html+='</div></div>';
+  html+='<div class="col-6 col-md-3"><div class="summary-card"><div class="summary-number" style="color:var(--yellow)">'+ar(births.length)+'</div><small class="text-gray">المواليد</small></div></div>';
+  html+='<div class="col-6 col-md-3"><div class="summary-card"><div class="summary-number accent-text">'+ar(regular.filter(function(a){return a.purpose==='tasmeen';}).length)+'</div><small class="text-gray">تسمين</small></div></div>';
+  html+='<div class="col-6 col-md-3"><div class="summary-card"><div class="summary-card-text red-text">'+ar(_animals.filter(function(a){return a.species==='sheep'&&a.status==='dead';}).length)+'</div><small class="text-gray">نافق</small></div></div>';
+  html+='</div>';
+
+  // Quick links
+  html+='<div class="d-flex gap-2 flex-wrap mb-4">';
+  html+='<a href="animals.html?species=sheep&status=alive&purpose=tarbiya,tasmeen" class="action-btn sm"><i class="bi bi-list-ul"></i> كل الأغنام</a>';
+  html+='<a href="animals.html?species=sheep&purpose=birth" class="action-btn sm" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.3);color:var(--yellow)"><i class="bi bi-stars"></i> المواليد</a>';
+  html+='<a href="animals.html?species=sheep&purpose=tasmeen" class="action-btn sm" style="background:rgba(255,107,53,.1);border-color:rgba(255,107,53,.3);color:var(--orange)"><i class="bi bi-graph-up"></i> التسمين</a>';
+  html+='<a href="breeding.html" class="action-btn sm" style="background:rgba(156,39,176,.1);border-color:rgba(156,39,176,.3);color:var(--purple)"><i class="bi bi-diagram-2-fill"></i> التكاثر</a>';
+  html+='<a href="births.html?sp=sheep" class="action-btn sm" style="background:rgba(33,150,243,.1);border-color:rgba(33,150,243,.3);color:var(--blue)"><i class="bi bi-stars"></i> تفاصيل المواليد</a>';
+  html+='</div>';
+
+  // Breed cards
+  html+='<h6 class="fw-bold mb-3"><i class="bi bi-grid-3x3-gap-fill accent-text me-2"></i>السلالات</h6>';
+  html+='<div class="row g-3 mb-4">';
+
+  s.sheepBreeds.forEach(function(breed){
+    var bs=breedStats(_animals,'sheep',breed);
+    var sc=JSON.parse(localStorage.getItem('breed_colors')||'{}');
+    var clr=sc[breed]||'var(--green)';
+
+    html+='<div class="col-lg-4 col-md-6"><div class="breed-card">';
+    html+='<div class="breed-header">';
+    html+='<div class="breed-icon">🐑</div>';
+    html+='<div><div class="fw-bold">'+breed+'</div>';
+    html+='<small class="text-gray">'+ar(bs.totalAll)+' حيوان</small></div>';
+    html+='</div>';
+    html+='<div class="row g-2 mb-3">';
+    html+='<div class="col-6"><div class="gender-box"><span class="gender-count green-text">'+ar(bs.tarbiyaMale)+'</span><small class="text-gray">ذكور تربية</small></div></div>';
+    html+='<div class="col-6"><div class="gender-box"><span class="gender-count green-text">'+ar(bs.tarbiyaFemale)+'</span><small class="text-gray">إناث تربية</small></div></div>';
+    html+='<div class="col-6"><div class="gender-box"><span class="gender-count accent-text">'+ar(bs.tasmeenMale)+'</span><small class="text-gray">ذكور تسمين</small></div></div>';
+    html+='<div class="col-6"><div class="gender-box"><span class="gender-count accent-text">'+ar(bs.tasmeenFemale)+'</span><small class="text-gray">إناث تسمين</small></div></div>';
+    if(bs.birthCount>0){
+      html+='<div class="col-6"><div class="gender-box"><span class="gender-count" style="color:var(--yellow)">'+ar(bs.birthMale)+'</span><small class="text-gray">ذكور مواليد</small></div></div>';
+      html+='<div class="col-6"><div class="gender-box"><span class="gender-count" style="color:var(--yellow)">'+ar(bs.birthFemale)+'</span><small class="text-gray">إناث مواليد</small></div></div>';
+    }
+    html+='</div>';
+    html+='<div class="mb-2">';
+    if(bs.tarbiya>0)html+='<span class="type-badge badge-tarbiya">تربية '+ar(bs.tarbiya)+'</span> ';
+    if(bs.tasmeen>0)html+='<span class="type-badge badge-tasmeen">تسمين '+ar(bs.tasmeen)+'</span> ';
+    if(bs.birthCount>0)html+='<span class="type-badge" style="background:rgba(255,193,7,.12);color:var(--yellow)">مواليد '+ar(bs.birthCount)+'</span>';
+    html+='</div>';
+    html+='<div class="d-flex gap-2 mt-2">';
+    html+='<a href="animals.html?species=sheep&breed='+encodeURIComponent(breed)+'" class="action-btn sm flex-grow-1" style="justify-content:center"><i class="bi bi-list-ul"></i> عرض القائمة</a>';
+    if(can('admin')){
+      html+='<button class="action-btn sm" style="background:rgba(33,150,243,.1);border-color:rgba(33,150,243,.35);color:var(--blue)" onclick="openBreedEdit(\'sheep\',\''+encodeURIComponent(breed)+'\')"><i class="bi bi-pencil-square"></i></button>';
+    }
+    html+='</div></div></div>';
+  });
+
+  html+='</div>';
+
+  // Births summary
+  if(births.length>0){
+    html+='<div class="wonder-card mb-4"><h6 class="fw-bold mb-3"><i class="bi bi-stars" style="color:var(--yellow)"></i> المواليد</h6>';
+    html+='<div class="row g-3">';
+    html+='<div class="col-6"><div class="summary-card"><div class="summary-number" style="color:var(--blue)">'+ar(births.filter(function(a){return a.gender==='male';}).length)+'</div><small class="text-gray">ذكور مواليد</small></div></div>';
+    html+='<div class="col-6"><div class="summary-card"><div class="summary-number" style="color:var(--orange)">'+ar(births.filter(function(a){return a.gender==='female';}).length)+'</div><small class="text-gray">إناث مواليد</small></div></div>';
+    html+='</div>';
+    html+='<a href="births.html?sp=sheep" class="action-btn sm mt-3"><i class="bi bi-arrow-left"></i> تفاصيل المواليد</a></div>';
+  }
+
+  el.innerHTML=html;
+}
+
+// ── Add Goat ────────────────────────────────────────
+window.openAddGoat=function(){
+  var s=getSettings();
+  showModal('<div class="farm-modal" onclick="event.stopPropagation()">'+
+    '<h4><i class="bi bi-plus-circle accent-text"></i> إضافة أغنام</h4>'+
+    '<label>السلالة</label><select class="field" id="m-breed">'+
+      s.sheepBreeds.map(function(b){return'<option>'+b+'</option>';}).join('')+
+    '</select>'+
+    '<label>الغرض</label><select class="field" id="m-purpose">'+
+      '<option value="tarbiya">تربية</option>'+
+      '<option value="tasmeen">تسمين</option>'+
+    '</select>'+
+    '<div class="row g-2">'+
+      '<div class="col-6"><label>الجنس</label><select class="field" id="m-gender"><option value="female">أنثى ♀</option><option value="male">ذكر ♂</option></select></div>'+
+      '<div class="col-6"><label>الكمية</label><input type="number" class="field" id="m-qty" value="1" min="1" max="50"></div>'+
+    '</div>'+
+    '<div class="row g-2">'+
+      '<div class="col-6"><label>تاريخ الميلاد</label><input type="date" class="field" id="m-bdate" value="'+todayStr()+'"></div>'+
+      '<div class="col-6"><label>رقم الترقيم</label><input class="field" id="m-tag" placeholder="اختياري"></div>'+
+    '</div>'+
+    '<div class="d-flex gap-2 justify-content-end mt-3">'+
+      '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
+      '<button class="action-btn primary" onclick="submitAddGoat()">حفظ</button>'+
+    '</div></div>');
+};
+window.submitAddGoat=async function(){
+  var breed=document.getElementById('m-breed').value;
+  var purpose=document.getElementById('m-purpose').value;
+  var gender=document.getElementById('m-gender').value;
+  var qty=parseInt(document.getElementById('m-qty').value)||1;
+  var bdate=document.getElementById('m-bdate').value;
+  var tag=document.getElementById('m-tag').value.trim();
+  closeModal();toast('جاري الحفظ...','info');
+  for(var i=0;i<qty;i++){
+    try{await fbPost('animals',{species:'sheep',breed:breed,gender:gender,purpose:purpose,status:'alive',birth_date:bdate,tag:qty===1?tag||null:null,barn:null});}catch(e){}
+  }
+  await logActivity('add','animals','إضافة '+ar(qty)+' أغنام '+breed);
+  toast('تمت إضافة '+ar(qty)+' أغنام');
+  _animals=await fbGet('animals');renderPage();
+};
+
+// ── Mark Death ───────────────────────────────────────
+
+// ── Death helpers ────────────────────────────────────
+function genDeathId(){
+  var d=new Date();
+  var pad=function(n){return n<10?'0'+n:n;};
+  var datePart=d.getFullYear()+''+pad(d.getMonth()+1)+''+pad(d.getDate());
+  var rand=Math.random().toString(36).substring(2,6).toUpperCase();
+  return'DTH-'+datePart+'-'+rand;
+}
+function nowTimeStr(){
+  var d=new Date();
+  var pad=function(n){return n<10?'0'+n:n;};
+  return pad(d.getHours())+':'+pad(d.getMinutes());
+}
+window.onDeathAnimalChangeGoat=function(){
+  var sel=document.getElementById('d-id');
+  if(!sel)return;
+  var id=sel.value;
+  var a=_animals.find(function(x){return x._id===id;});
+  if(!a)return;
+  var tagEl=document.getElementById('d-tag');
+  var breedEl=document.getElementById('d-breed');
+  if(tagEl)tagEl.value=a.tag||'—';
+  if(breedEl)breedEl.value=a.breed||'—';
+};
+
+window.openMarkDeathGoat=function(){
+  var alive=_animals.filter(function(a){return a.status==='alive'&&a.species==='sheep';});
+  if(!alive.length){toast('لا توجد أغنام حية','error');return;}
+  var first=alive[0]||{};
+  var deathId=genDeathId();
+  showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:540px;max-height:92vh;overflow-y:auto">'+
+    '<h4 style="color:var(--red)"><i class="bi bi-x-octagon-fill"></i> تسجيل نفوق أغنام</h4>'+
+
+    '<label>الحيوان *</label>'+
+    '<select class="field" id="d-id" onchange="onDeathAnimalChangeGoat()">'+
+      alive.slice(0,300).map(function(a){return'<option value="'+a._id+'">'+(a.breed||'—')+(a.tag?' #'+a.tag:'')+' ('+(a.gender==='male'?'ذكر':'أنثى')+')</option>';}).join('')+
+    '</select>'+
+
+    '<div class="row g-2">'+
+      '<div class="col-6">'+
+        '<label>الترقيم</label>'+
+        '<input class="field" id="d-tag" value="'+(first.tag||'—')+'" readonly style="background:var(--bg-3);opacity:.7">'+
+      '</div>'+
+      '<div class="col-6">'+
+        '<label>السلالة</label>'+
+        '<input class="field" id="d-breed" value="'+(first.breed||'—')+'" readonly style="background:var(--bg-3);opacity:.7">'+
+      '</div>'+
+    '</div>'+
+
+    '<div class="row g-2">'+
+      '<div class="col-6">'+
+        '<label>تاريخ النفوق *</label>'+
+        '<input type="date" class="field" id="d-date" value="'+todayStr()+'">'+
+      '</div>'+
+      '<div class="col-6">'+
+        '<label>الوقت <span class="text-gray" style="font-weight:400">(اختياري)</span></label>'+
+        '<input type="time" class="field" id="d-time" value="'+nowTimeStr()+'">'+
+      '</div>'+
+    '</div>'+
+
+    '<label>سبب الوفاة *</label>'+
+    '<select class="field" id="d-reason">'+
+      '<option value="مرض">مرض</option>'+
+      '<option value="حادث">حادث</option>'+
+      '<option value="إجهاد حراري">إجهاد حراري</option>'+
+      '<option value="مضاعفات ولادة">مضاعفات ولادة</option>'+
+      '<option value="سوء تغذية">سوء تغذية</option>'+
+      '<option value="غير معروف">غير معروف</option>'+
+      '<option value="أخرى">أخرى</option>'+
+    '</select>'+
+
+    '<div class="row g-2">'+
+      '<div class="col-6">'+
+        '<label>تم التشريح؟</label>'+
+        '<select class="field" id="d-autopsy">'+
+          '<option value="no">لا</option>'+
+          '<option value="yes">نعم</option>'+
+        '</select>'+
+      '</div>'+
+      '<div class="col-6">'+
+        '<label>قيمة الخسارة ('+getSettings().currency+')</label>'+
+        '<input type="number" class="field" id="d-loss" placeholder="0" min="0">'+
+      '</div>'+
+    '</div>'+
+
+    '<label>معرف الوفاة</label>'+
+    '<input class="field" id="d-death-id" value="'+deathId+'" placeholder="DTH-YYYYMMDD-XXXX">'+
+
+    '<label>ملاحظات <span class="text-gray" style="font-weight:400">(اختياري)</span></label>'+
+    '<textarea class="field" id="d-notes" rows="2" placeholder="أي تفاصيل إضافية..."></textarea>'+
+
+    '<div class="d-flex gap-2 justify-content-end mt-3">'+
+      '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
+      '<button class="action-btn danger" onclick="submitDeathGoat()"><i class="bi bi-x-octagon-fill"></i> تسجيل النفوق</button>'+
+    '</div>'+
+  '</div>');
+};
+window.submitDeathGoat=async function(){
+  var id=document.getElementById('d-id').value;
+  var date=document.getElementById('d-date').value;
+  var time=document.getElementById('d-time')?.value||'';
+  var reason=document.getElementById('d-reason')?.value||'غير معروف';
+  var autopsy=document.getElementById('d-autopsy')?.value==='yes';
+  var loss=parseFloat(document.getElementById('d-loss')?.value)||0;
+  var deathId=document.getElementById('d-death-id')?.value.trim()||genDeathId();
+  var notes=document.getElementById('d-notes')?.value.trim()||null;
+
+  if(!id){toast('اختر حيواناً','error');return;}
+  if(!date){toast('حدد تاريخ النفوق','error');return;}
+
+  var patch={
+    status:'dead',died_at:date,death_time:time||null,
+    death_reason:reason,death_autopsy:autopsy,
+    death_loss:loss||null,death_id:deathId,death_notes:notes
+  };
+  closeModal();
+  toast('جاري التسجيل...','info');
+  try{
+    await fbPatch('animals',id,patch);
+    if(loss>0){
+      await fbPost('finance',{
+        date:date,type:'loss',category:'نفوق حيوانات',
+        amount:loss,
+        description:'نفوق — '+deathId+(reason?' | '+reason:''),
+        added_by:getUser()?.name
+      });
+    }
+    await logActivity('edit','animals','نفوق: '+deathId+' | '+reason+(autopsy?' | تشريح':''));
+    toast('✅ تم تسجيل النفوق — '+deathId);
+    fbCacheInvalidate('animals');
+    _animals=await fbGet('animals');renderPage();
+  }catch(e){toast('فشل: '+e.message,'error');}
+};
+
+// ── Breed Edit ───────────────────────────────────────
+window.openBreedEdit=function(sp, breedEnc){
+  var breed=decodeURIComponent(breedEnc);
+  var cur=_animals.filter(function(a){return a.status==='alive'&&a.species===sp&&a.breed===breed;});
+  var mTar=cur.filter(function(a){return a.gender==='male'&&a.purpose==='tarbiya';}).length;
+  var fTar=cur.filter(function(a){return a.gender==='female'&&a.purpose==='tarbiya';}).length;
+  var mTas=cur.filter(function(a){return a.gender==='male'&&a.purpose==='tasmeen';}).length;
+  var fTas=cur.filter(function(a){return a.gender==='female'&&a.purpose==='tasmeen';}).length;
+
+  window._breedEditData={sp:sp,breed:breed,mTar:mTar,fTar:fTar,mTas:mTas,fTas:fTas};
+
+  showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:480px">'+
+    '<h4><i class="bi bi-pencil-square" style="color:var(--blue)"></i> تعديل سلالة: '+breed+'</h4>'+
+    '<div class="mb-3 p-3" style="background:rgba(33,150,243,.06);border:1px solid rgba(33,150,243,.2);border-radius:10px;font-size:.82rem">'+
+      'الأرقام الحالية: تربية ('+ar(mTar)+'♂ / '+ar(fTar)+'♀) | تسمين ('+ar(mTas)+'♂ / '+ar(fTas)+'♀)<br>'+
+      '<span class="text-gray">الزيادة تضيف حيوانات — النقص يعطّل الزيادة</span>'+
+    '</div>'+
+    '<h6 class="fw-bold mb-2 green-text"><i class="bi bi-seedling me-1"></i>تربية</h6>'+
+    '<div class="row g-2 mb-3">'+
+      '<div class="col-6"><label>ذكور تربية</label><input type="number" class="field" id="be-mtar" value="'+mTar+'" min="0"></div>'+
+      '<div class="col-6"><label>إناث تربية</label><input type="number" class="field" id="be-ftar" value="'+fTar+'" min="0"></div>'+
+    '</div>'+
+    '<h6 class="fw-bold mb-2 accent-text"><i class="bi bi-graph-up me-1"></i>تسمين</h6>'+
+    '<div class="row g-2 mb-3">'+
+      '<div class="col-6"><label>ذكور تسمين</label><input type="number" class="field" id="be-mtas" value="'+mTas+'" min="0"></div>'+
+      '<div class="col-6"><label>إناث تسمين</label><input type="number" class="field" id="be-ftas" value="'+fTas+'" min="0"></div>'+
+    '</div>'+
+    '<div id="be-diff" class="mb-2" style="font-size:.82rem;min-height:20px"></div>'+
+    '<div class="d-flex gap-2 justify-content-end">'+
+      '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
+      '<button class="action-btn primary" onclick="submitBreedEdit()"><i class="bi bi-check-lg"></i> حفظ وتحديث</button>'+
+    '</div></div>');
+
+  // Live diff
+  ['be-mtar','be-ftar','be-mtas','be-ftas'].forEach(function(id){
+    var el=document.getElementById(id);
+    if(!el)return;
+    el.addEventListener('input',function(){
+      var nm=parseInt(document.getElementById('be-mtar').value)||0;
+      var nf=parseInt(document.getElementById('be-ftar').value)||0;
+      var nt=parseInt(document.getElementById('be-mtas').value)||0;
+      var ntf=parseInt(document.getElementById('be-ftas').value)||0;
+      var adds=Math.max(0,nm-mTar)+Math.max(0,nf-fTar)+Math.max(0,nt-mTas)+Math.max(0,ntf-fTas);
+      var removes=Math.max(0,mTar-nm)+Math.max(0,fTar-nf)+Math.max(0,mTas-nt)+Math.max(0,fTas-ntf);
+      var d=document.getElementById('be-diff');
+      if(d)d.innerHTML=(adds>0?'<span class="green-text">+'+ar(adds)+' إضافة</span> ':'')+
+                       (removes>0?'<span class="accent-text">−'+ar(removes)+' إزالة</span>':'');
+    });
+  });
+};
+
+window.submitBreedEdit=async function(){
+  var d=window._breedEditData;
+  if(!d)return;
+  var newMTar=parseInt(document.getElementById('be-mtar').value)||0;
+  var newFTar=parseInt(document.getElementById('be-ftar').value)||0;
+  var newMTas=parseInt(document.getElementById('be-mtas').value)||0;
+  var newFTas=parseInt(document.getElementById('be-ftas').value)||0;
+
+  if(newMTar===d.mTar&&newFTar===d.fTar&&newMTas===d.mTas&&newFTas===d.fTas){
+    toast('لا توجد تغييرات','info');closeModal();return;
+  }
+
+  closeModal();toast('جاري التحديث...','info');
+  var added=0,removed=0;
+  var cats=[['male','tarbiya',d.mTar,newMTar],['female','tarbiya',d.fTar,newFTar],
+            ['male','tasmeen',d.mTas,newMTas],['female','tasmeen',d.fTas,newFTas]];
+
+  for(var ci=0;ci<cats.length;ci++){
+    var cat=cats[ci];
+    var diff=cat[3]-cat[2];
+    if(diff===0)continue;
+    if(diff>0){
+      for(var i=0;i<diff;i++){
+        try{await fbPost('animals',{species:d.sp,breed:d.breed,gender:cat[0],purpose:cat[1],status:'alive',birth_date:null,barn:null,tag:null,notes:'تمت الإضافة من صفحة السلالة'});added++;}catch(e){}
+      }
+    } else {
+      var toRemove=_animals.filter(function(a){return a.status==='alive'&&a.species===d.sp&&a.breed===d.breed&&a.gender===cat[0]&&a.purpose===cat[1];}).slice(0,Math.abs(diff));
+      for(var j=0;j<toRemove.length;j++){
+        try{await fbPatch('animals',toRemove[j]._id,{status:'dead',died_at:todayStr(),death_reason:'تعديل من صفحة السلالة'});removed++;}catch(e){}
+      }
+    }
+  }
+
+  fbCacheInvalidate('animals');
+  await logActivity('edit','animals','تعديل سلالة '+d.breed+': +'+ar(added)+' −'+ar(removed));
+  toast('تم تحديث '+d.breed+': +'+ar(added)+' إضافة، −'+ar(removed)+' إزالة');
+  _animals=await fbGet('animals');
+  renderPage();
+};
+</script>
+</body>
+</html>

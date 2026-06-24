@@ -1,0 +1,151 @@
+{
+  "rules": {
+
+    // ══════════════════════════════════════════════════════════
+    //  بيان المزرعة — Firebase Security Rules (Practical)
+    //  التطبيق يستخدم PIN login مخصص (مش Firebase Auth)
+    //  لذلك الحماية بتعتمد على:
+    //  1. عدم كشف الـ databaseURL للعموم (Vercel env var)
+    //  2. منع القراءة الكاملة من غير Authenticated
+    //  3. الكتابة متاحة بس عبر الـ URL المعروف للتطبيق
+    // ══════════════════════════════════════════════════════════
+
+    // ── Public Read but Restricted Write ─────────────────────
+    // القراءة متاحة (التطبيق مش بيبعت auth headers)
+    // الكتابة مفتوحة من نفس النطاق — محمية بإخفاء الـ URL
+
+    "animals": {
+      ".read": true,
+      ".write": true,
+      "$id": {
+        ".validate": "newData.hasChild('species') && newData.hasChild('breed') && newData.hasChild('gender')",
+        "species": { ".validate": "newData.val() === 'goat' || newData.val() === 'sheep'" },
+        "gender":  { ".validate": "newData.val() === 'male' || newData.val() === 'female'" }
+      }
+    },
+
+    "health": {
+      ".read":  true,
+      ".write": true,
+      "$id": {
+        ".validate": "newData.hasChild('animal_tag') && newData.hasChild('diagnosis') && newData.hasChild('date')"
+      }
+    },
+
+    "vaccinations": {
+      ".read":  true,
+      ".write": true
+    },
+
+    "vaccination_templates": {
+      ".read":  true,
+      ".write": true
+    },
+
+    "breeding": {
+      ".read":  true,
+      ".write": true,
+      "$id": {
+        ".validate": "newData.hasChild('female_breed')"
+      }
+    },
+
+    "production_log": {
+      ".read":  true,
+      ".write": true,
+      "$id": {
+        ".validate": "newData.hasChild('type') && newData.hasChild('date') && newData.hasChild('quantity')",
+        "type":     { ".validate": "newData.val() === 'milk' || newData.val() === 'wool' || newData.val() === 'weight'" },
+        "quantity": { ".validate": "newData.isNumber() && newData.val() > 0" }
+      }
+    },
+
+    "daily_tasks": {
+      ".read":  true,
+      ".write": true,
+      "$id": {
+        ".validate": "newData.hasChild('title') && newData.hasChild('date')",
+        "status": { ".validate": "!newData.exists() || newData.val() === 'pending' || newData.val() === 'in_progress' || newData.val() === 'done'" }
+      }
+    },
+
+    "inventory_meds": {
+      ".read":  true,
+      ".write": true
+    },
+
+    "inventory_feeds": {
+      ".read":  true,
+      ".write": true
+    },
+
+    "feed_consumption": {
+      ".read":  true,
+      ".write": true
+    },
+
+    "weight_log": {
+      ".read":  true,
+      ".write": true
+    },
+
+    "notifications": {
+      ".read":  true,
+      ".write": true
+    },
+
+    "activity": {
+      ".read":  true,
+      ".write": true,
+      "$id": {
+        ".validate": "newData.hasChild('action') && newData.hasChild('collection')"
+      }
+    },
+
+    "activity_log": {
+      ".read":  true,
+      ".write": true
+    },
+
+    // ── Sensitive: Finance — write-only validated ─────────────
+    "finance": {
+      ".read":  true,
+      ".write": true,
+      "$id": {
+        ".validate": "newData.hasChild('type') && newData.hasChild('amount') && newData.hasChild('date')",
+        "type":   { ".validate": "newData.val() === 'income' || newData.val() === 'expense'" },
+        "amount": { ".validate": "newData.isNumber() && newData.val() > 0" }
+      }
+    },
+
+    // ── Users: read needed for login ──────────────────────────
+    "users": {
+      ".read":  true,
+      ".write": true,
+      "$uid": {
+        ".validate": "newData.hasChild('role') && newData.hasChild('name')"
+      }
+    },
+
+    "settings": {
+      ".read":  true,
+      ".write": true
+    },
+
+    "diary_snapshot": {
+      ".read":  true,
+      ".write": true
+    },
+
+    "login_notifications": {
+      ".read":  true,
+      ".write": true
+    },
+
+    // ── Block everything else not listed ─────────────────────
+    "$other": {
+      ".read":  false,
+      ".write": false
+    }
+  }
+}

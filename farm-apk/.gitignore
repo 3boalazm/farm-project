@@ -1,0 +1,19 @@
+# Node
+node_modules/
+
+# Android build outputs
+android/app/build/
+android/.gradle/
+android/build/
+
+# Keystore (NEVER commit this)
+*.keystore
+*.jks
+
+# Local config
+android/local.properties
+
+# IDE
+.idea/
+*.iml
+.DS_Store

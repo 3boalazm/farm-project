@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<script>(function(){var t=localStorage.getItem('farm_theme');if(t==='light')document.documentElement.classList.add('light-mode');}());</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>المواليد — بيان المزرعة</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="page-wrap">
+  <div id="page-header"></div>
+  <div id="content"><div class="text-center py-5"><div class="spinner"></div></div></div>
+  <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
+    <span id="footer-year"></span> &copy; <span id="footer-farm"></span><br>
+    <small style="font-size:.72rem;color:var(--text-muted)">إشراف: لواء أحمد رجب نوح | تطوير: جندي مصطفى محمد إبراهيم</small>
+  </footer>
+</div>
+<script src="config.js"></script>
+<script src="firebase.js"></script>
+<script src="nav.js"></script>
+<script src="shared.js"></script>
+<script>
+'use strict';
+var _animals=[];
+
+document.addEventListener('DOMContentLoaded', async function(){
+  if(!requireAuth())return;
+  initFirebase();
+  var s=getSettings();
+  document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
+  document.getElementById('footer-farm').textContent=s.farmName;
+  renderNavbar('births.html');
+  renderPageHeader(
+    '<i class="bi bi-stars" style="color:var(--yellow)"></i> المواليد',
+    'متابعة مواليد المزرعة',
+    (can('animals')?
+      '<button class="action-btn primary" onclick="openUnifiedBirthModal(\'goat\')"><i class="bi bi-plus-lg"></i> مولود ماعز</button>'+
+      '<button class="action-btn" onclick="openUnifiedBirthModal(\'sheep\')" style="background:rgba(33,150,243,.1);border-color:rgba(33,150,243,.3);color:var(--blue)"><i class="bi bi-plus-lg"></i> مولود أغنام</button>':'')
+  );
+  try{
+    _animals=await fbGet('animals');
+  }catch(e){
+    document.getElementById('content').innerHTML='<div class="empty-state"><i class="bi bi-wifi-off"></i><p>خطأ: '+e.message+'</p></div>';
+    return;
+  }
+  renderPage();
+});
+
+function getBirths(sp){
+  return _animals.filter(function(a){
+    return a.status==='alive' && a.species===sp && isBirth(a);
+  });
+}
+
+// A newborn = any LIVING animal recorded as a birth. This covers BOTH:
+//  • Old / imported births  → breed === 'مواليد'  (no mother_breed)
+//  • Newly registered births → real breed + purpose === 'birth' (+ mother_breed)
+// Same definition the dashboard uses, so the births total here always matches
+// the "مواليد" total in ملخص المزرعة. Old births now sit next to the new ones.
+function isBirth(a){
+  return a.purpose==='birth' || a.breed==='مواليد';
+}
+
+// Grouping key: new births carry the mother's breed; old generic births fall
+// back to 'مواليد'. This places imported and freshly added births side by side.
+function birthBreedOf(a){
+  return a.mother_breed || a.breed || 'مواليد';
+}
+
+function renderPage(){
+  var s=getSettings();
+  var el=document.getElementById('content');
+
+  var goatBirths=getBirths('goat');
+  var sheepBirths=getBirths('sheep');
+  var allBirths=goatBirths.concat(sheepBirths);
+
+  if(!allBirths.length){
+    el.innerHTML='<div class="empty-state"><i class="bi bi-stars"></i>'+
+      '<p>لا توجد مواليد مسجّلة حتى الآن</p>'+
+      '<div class="d-flex gap-2 justify-content-center flex-wrap">'+
+        '<button class="action-btn primary" onclick="openUnifiedBirthModal(\'goat\')"><i class="bi bi-plus-lg"></i> تسجيل مولود ماعز</button>'+
+        '<button class="action-btn" onclick="openUnifiedBirthModal(\'sheep\')"><i class="bi bi-plus-lg"></i> تسجيل مولود أغنام</button>'+
+      '</div></div>';
+    return;
+  }
+
+  // ── Summary cards ────────────────────────────────
+  var html='<div class="row g-3 mb-4">';
+  html+='<div class="col-6 col-md-3"><div class="summary-card">'+
+    '<div class="summary-number" style="color:var(--yellow)">'+ar(allBirths.length)+'</div>'+
+    '<small class="text-gray">إجمالي المواليد</small></div></div>';
+  html+='<div class="col-6 col-md-3"><div class="summary-card">'+
+    '<div class="summary-number green-text">'+ar(goatBirths.length)+'</div>'+
+    '<small class="text-gray">مواليد الماعز</small></div></div>';
+  html+='<div class="col-6 col-md-3"><div class="summary-card">'+
+    '<div class="summary-number" style="color:var(--blue)">'+ar(sheepBirths.length)+'</div>'+
+    '<small class="text-gray">مواليد الأغنام</small></div></div>';
+  html+='<div class="col-6 col-md-3"><div class="summary-card">'+
+    '<div class="summary-number" style="color:var(--blue)">'+ar(allBirths.filter(function(a){return a.gender==='male';}).length)+
+    ' ♂ / '+ar(allBirths.filter(function(a){return a.gender==='female';}).length)+' ♀</div>'+
+    '<small class="text-gray">ذكور / إناث</small></div></div>';
+  html+='</div>';
+
+  // ── Goat births section ─────────────────────────
+  if(goatBirths.length>0){
+    html+=renderSpeciesSection('goat','🐐','مواليد الماعز','var(--green)',goatBirths,s.goatBreeds);
+  }
+
+  // ── Sheep births section ────────────────────────
+  if(sheepBirths.length>0){
+    html+=renderSpeciesSection('sheep','🐑','مواليد الأغنام','var(--blue)',sheepBirths,s.sheepBreeds);
+  }
+
+  el.innerHTML=html;
+}
+
+function renderSpeciesSection(sp, icon, title, color, births, breedList){
+  var html='<div class="mb-4">';
+  html+='<h5 class="fw-bold mb-3">'+icon+' '+title+
+    ' <span class="type-badge" style="background:rgba(255,193,7,.12);color:var(--yellow);font-size:.8rem">'+ar(births.length)+' رأس</span></h5>';
+  html+='<div class="row g-3">';
+
+  // Build the ordered list of breeds that actually have births. Configured
+  // breeds come first (stable order), then any extra breed found in the data,
+  // then the generic 'مواليد' bucket for old/imported births.
+  var order=breedList.slice();
+  births.forEach(function(a){
+    var b=birthBreedOf(a);
+    if(order.indexOf(b)<0)order.push(b);
+  });
+  if(order.indexOf('مواليد')<0)order.push('مواليد');
+
+  order.forEach(function(breed){
+    // Every birth whose group (mother breed, or generic 'مواليد') matches.
+    var ba=births.filter(function(a){return birthBreedOf(a)===breed;});
+    if(!ba.length)return; // skip breeds with no births
+
+    var males  =ba.filter(function(a){return a.gender==='male';}).length;
+    var females=ba.filter(function(a){return a.gender==='female';}).length;
+    var tasmeen=ba.filter(function(a){return a.purpose==='tasmeen';}).length;
+    var mawalid=ba.length-tasmeen;
+    var total  =ba.length;
+
+    html+='<div class="col-lg-4 col-md-6"><div class="breed-card">';
+
+    // Card header
+    html+='<div class="breed-header">';
+    html+='<div class="breed-icon">'+icon+'</div>';
+    html+='<div>'+
+      '<div class="fw-bold">'+breed+'</div>'+
+      '<small class="text-gray">'+ar(total)+' مولود</small>'+
+    '</div></div>';
+
+    // Gender boxes
+    html+='<div class="row g-2 mb-3">';
+    html+='<div class="col-6"><div class="gender-box">'+
+      '<span class="gender-count" style="color:var(--blue)">'+ar(males)+'</span>'+
+      '<small class="text-gray">ذكور</small></div></div>';
+    html+='<div class="col-6"><div class="gender-box">'+
+      '<span class="gender-count" style="color:var(--orange)">'+ar(females)+'</span>'+
+      '<small class="text-gray">إناث</small></div></div>';
+    html+='</div>';
+
+    // Badges (مواليد vs تسمين)
+    html+='<div class="mb-2">';
+    if(mawalid>0)html+='<span class="type-badge badge-tarbiya">مواليد '+ar(mawalid)+'</span> ';
+    if(tasmeen>0)html+='<span class="type-badge badge-tasmeen">تسمين '+ar(tasmeen)+'</span>';
+    html+='</div>';
+
+    // Buttons
+    html+='<div class="d-flex gap-2 mt-2">';
+    html+='<a href="animals.html?species='+sp+'&breed='+encodeURIComponent(breed)+'" class="action-btn sm flex-grow-1" style="justify-content:center">'+
+      '<i class="bi bi-list-ul"></i> عرض القائمة</a>';
+    if(can('admin')){
+      html+='<button class="action-btn sm" style="background:rgba(33,150,243,.1);border-color:rgba(33,150,243,.35);color:var(--blue)" '+
+        'onclick="openBirthBreedEdit(\''+sp+'\',\''+encodeURIComponent(breed)+'\')">'+
+        '<i class="bi bi-pencil-square"></i></button>';
+    }
+    html+='</div>';
+
+    html+='</div></div>';
+  });
+
+  html+='</div></div>';
+  return html;
+}
+
+// ── Birth Breed Edit Modal ────────────────────────────
+window.openBirthBreedEdit=function(sp, breedEnc){
+  var breed=decodeURIComponent(breedEnc);
+  var cur=_animals.filter(function(a){
+    if(a.status!=='alive'||a.species!==sp)return false;
+    if(breed==='مواليد') return a.breed==='مواليد'&&!a.mother_breed;
+    return (a.mother_breed===breed)||(a.breed===breed&&(a.purpose==='birth'));
+  });
+  var mB=cur.filter(function(a){return a.gender==='male'&&(a.purpose==='birth'||a.purpose==='tarbiya');}).length;
+  var fB=cur.filter(function(a){return a.gender==='female'&&(a.purpose==='birth'||a.purpose==='tarbiya');}).length;
+  var mT=cur.filter(function(a){return a.gender==='male'&&a.purpose==='tasmeen';}).length;
+  var fT=cur.filter(function(a){return a.gender==='female'&&a.purpose==='tasmeen';}).length;
+  // Only show edit for birth/tasmeen, not regular tarbiya
+  var spLabel=sp==='goat'?'ماعز':'أغنام';
+
+  window._birthEditData={sp:sp,breed:breed,mB:mB,fB:fB,mT:mT,fT:fT};
+
+  showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:480px">'+
+    '<h4><i class="bi bi-pencil-square" style="color:var(--blue)"></i> تعديل مواليد: '+breed+' ('+spLabel+')</h4>'+
+    '<div class="mb-3 p-3" style="background:rgba(255,193,7,.06);border:1px solid rgba(255,193,7,.25);border-radius:10px;font-size:.82rem">'+
+      'الأرقام الحالية: مواليد ('+ar(mB)+'♂ / '+ar(fB)+'♀) | تسمين ('+ar(mT)+'♂ / '+ar(fT)+'♀)<br>'+
+      '<span class="text-gray">الزيادة تضيف مواليد — النقص يعطّل الزيادة</span>'+
+    '</div>'+
+    '<h6 class="fw-bold mb-2" style="color:var(--yellow)"><i class="bi bi-stars me-1"></i>مواليد (تربية)</h6>'+
+    '<div class="row g-2 mb-3">'+
+      '<div class="col-6"><label>ذكور مواليد</label><input type="number" class="field" id="bb-mB" value="'+mB+'" min="0"></div>'+
+      '<div class="col-6"><label>إناث مواليد</label><input type="number" class="field" id="bb-fB" value="'+fB+'" min="0"></div>'+
+    '</div>'+
+    '<h6 class="fw-bold mb-2 accent-text"><i class="bi bi-graph-up me-1"></i>تسمين</h6>'+
+    '<div class="row g-2 mb-3">'+
+      '<div class="col-6"><label>ذكور تسمين</label><input type="number" class="field" id="bb-mT" value="'+mT+'" min="0"></div>'+
+      '<div class="col-6"><label>إناث تسمين</label><input type="number" class="field" id="bb-fT" value="'+fT+'" min="0"></div>'+
+    '</div>'+
+    '<div id="bb-diff" class="mb-2" style="font-size:.82rem;min-height:20px"></div>'+
+    '<div class="d-flex gap-2 justify-content-end">'+
+      '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
+      '<button class="action-btn primary" onclick="submitBirthBreedEdit()"><i class="bi bi-check-lg"></i> حفظ وتحديث</button>'+
+    '</div></div>');
+
+  // Live diff preview
+  ['bb-mB','bb-fB','bb-mT','bb-fT'].forEach(function(id){
+    var el=document.getElementById(id);
+    if(!el)return;
+    el.addEventListener('input',function(){
+      var nm=parseInt(document.getElementById('bb-mB').value)||0;
+      var nf=parseInt(document.getElementById('bb-fB').value)||0;
+      var nt=parseInt(document.getElementById('bb-mT').value)||0;
+      var ntf=parseInt(document.getElementById('bb-fT').value)||0;
+      var adds=Math.max(0,nm-mB)+Math.max(0,nf-fB)+Math.max(0,nt-mT)+Math.max(0,ntf-fT);
+      var removes=Math.max(0,mB-nm)+Math.max(0,fB-nf)+Math.max(0,mT-nt)+Math.max(0,fT-ntf);
+      var d=document.getElementById('bb-diff');
+      if(d)d.innerHTML=(adds>0?'<span class="green-text">+'+ar(adds)+' إضافة</span> ':'')+
+                       (removes>0?'<span class="accent-text">−'+ar(removes)+' إزالة</span>':'');
+    });
+  });
+};
+
+window.submitBirthBreedEdit=async function(){
+  var d=window._birthEditData;
+  if(!d)return;
+  var newMB=parseInt(document.getElementById('bb-mB').value)||0;
+  var newFB=parseInt(document.getElementById('bb-fB').value)||0;
+  var newMT=parseInt(document.getElementById('bb-mT').value)||0;
+  var newFT=parseInt(document.getElementById('bb-fT').value)||0;
+
+  if(newMB===d.mB&&newFB===d.fB&&newMT===d.mT&&newFT===d.fT){
+    toast('لا توجد تغييرات','info');closeModal();return;
+  }
+
+  closeModal();toast('جاري التحديث...','info');
+  var added=0,removed=0;
+  // [gender, purpose, old, new]
+  var cats=[
+    ['male','birth',d.mB,newMB],
+    ['female','birth',d.fB,newFB],
+    ['male','tasmeen',d.mT,newMT],
+    ['female','tasmeen',d.fT,newFT]
+  ];
+
+  for(var ci=0;ci<cats.length;ci++){
+    var cat=cats[ci];
+    var diff=cat[3]-cat[2];
+    if(diff===0)continue;
+    if(diff>0){
+      for(var i=0;i<diff;i++){
+        try{
+          await fbPost('animals',{
+            species:d.sp,
+            breed:d.breed==='مواليد'?'مواليد':d.breed,
+            mother_breed:d.breed!=='مواليد'?d.breed:null,
+            gender:cat[0],purpose:cat[1],
+            status:'alive',birth_date:todayStr(),barn:null,tag:null,
+            notes:'تمت الإضافة من صفحة المواليد'
+          });
+          added++;
+        }catch(e){}
+      }
+    } else {
+      var toRemove=_animals.filter(function(a){
+        return a.status==='alive'&&a.species===d.sp&&a.breed===d.breed&&
+               a.gender===cat[0]&&a.purpose===cat[1];
+      }).slice(0,Math.abs(diff));
+      for(var j=0;j<toRemove.length;j++){
+        try{
+          await fbPatch('animals',toRemove[j]._id,{
+            status:'dead',died_at:todayStr(),death_reason:'تعديل من صفحة المواليد'
+          });
+          removed++;
+        }catch(e){}
+      }
+    }
+  }
+
+  fbCacheInvalidate('animals');
+  await logActivity('edit','animals','تعديل مواليد '+d.breed+': +'+ar(added)+' −'+ar(removed));
+  toast('تم تحديث '+d.breed+': +'+ar(added)+' إضافة، −'+ar(removed)+' إزالة');
+  _animals=await fbGet('animals');
+  renderPage();
+};
+</script>
+</body>
+</html>
