@@ -589,12 +589,12 @@ function renderInitialTab(el) {
   el.innerHTML =
     '<div class="wonder-card mb-4" style="background:rgba(244,67,54,.06);border-color:rgba(244,67,54,.3)">' +
       '<div class="fw-bold mb-2 red-text"><i class="bi bi-exclamation-triangle-fill me-2"></i>تحذير — استخدم مرة واحدة فقط</div>' +
-      '<p class="text-gray" style="font-size:.85rem;margin:0">يستورد <strong style="color:var(--orange)">٤٦٢ حيوان</strong> من بيانات المزرعة الأصلية. تأكد أن القطيع فارغ أولاً.</p>' +
+      '<p class="text-gray" style="font-size:.85rem;margin:0">يستورد <strong style="color:var(--orange)">٤٤٠ حيوان</strong> من بيانات المزرعة الأصلية. تأكد أن القطيع فارغ أولاً.</p>' +
     '</div>' +
     '<div class="wonder-card mb-4">' +
-      '<div class="fw-bold mb-3"><i class="bi bi-table accent-text me-2"></i>بيان الماعز والأغنام — ٢٠٢٦/٠٤/٠٤</div>' +
+      '<div class="fw-bold mb-3"><i class="bi bi-table accent-text me-2"></i>بيان الماعز والأغنام — ٢٠٢٦/٠٤/٢٤</div>' +
       '<div class="row g-3 mb-3">' +
-        [{l:'إجمالي الأغنام',v:'١٤٠',c:'var(--blue)',i:'bi-cloud-fill'},{l:'إجمالي الماعز',v:'٣٢٢',c:'var(--green)',i:'bi-tropical-storm'},{l:'الإجمالي الكلي',v:'٤٦٢',c:'var(--orange)',i:'bi-bar-chart-fill'}].map(function(k){return '<div class="col-4"><div class="summary-card text-center"><i class="bi '+k.i+' d-block mb-1" style="color:'+k.c+'"></i><div class="fw-bold" style="color:'+k.c+'">'+k.v+'</div><small class="text-gray">'+k.l+'</small></div></div>';}).join('') +
+        [{l:'إجمالي الأغنام',v:'١٢١',c:'var(--blue)',i:'bi-cloud-fill'},{l:'إجمالي الماعز',v:'٣١٩',c:'var(--green)',i:'bi-tropical-storm'},{l:'الإجمالي الكلي',v:'٤٤٠',c:'var(--orange)',i:'bi-bar-chart-fill'}].map(function(k){return '<div class="col-4"><div class="summary-card text-center"><i class="bi '+k.i+' d-block mb-1" style="color:'+k.c+'"></i><div class="fw-bold" style="color:'+k.c+'">'+k.v+'</div><small class="text-gray">'+k.l+'</small></div></div>';}).join('') +
       '</div>' +
       '<div id="init-progress" style="display:none;margin-bottom:16px">' +
         '<div class="d-flex justify-content-between mb-1"><span class="text-gray" style="font-size:.82rem" id="init-status">جاري الاستيراد...</span><span class="fw-bold" id="init-pct">0٪</span></div>' +
@@ -603,7 +603,7 @@ function renderInitialTab(el) {
       '<div id="init-result" style="display:none" class="mb-3"></div>' +
       '<div class="d-flex gap-2 flex-wrap align-items-center">' +
         '<button class="action-btn primary" onclick="startInitialImport()" id="init-btn" style="padding:12px 28px">' +
-          '<i class="bi bi-cloud-arrow-up-fill me-2"></i>بدء استيراد ٤٦٢ حيوان' +
+          '<i class="bi bi-cloud-arrow-up-fill me-2"></i>بدء استيراد ٤٤٠ حيوان' +
         '</button>' +
         '<a href="animals.html" class="action-btn"><i class="bi bi-list-ul me-1"></i>عرض القطيع</a>' +
       '</div>' +
@@ -611,7 +611,7 @@ function renderInitialTab(el) {
 }
 
 window.startInitialImport = async function() {
-  if (!confirm('هل أنت متأكد من استيراد ٤٦٢ حيوان؟\n\nتأكد أن قاعدة البيانات فارغة أو جديدة.')) return;
+  if (!confirm('هل أنت متأكد من استيراد ٤٤٠ حيوان؟\n\nتأكد أن قاعدة البيانات فارغة أو جديدة.')) return;
   var btn    = document.getElementById('init-btn');
   var prog   = document.getElementById('init-progress');
   var result = document.getElementById('init-result');
