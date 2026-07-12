@@ -562,3 +562,24 @@ window._ubSubmit=async function(){
     else setTimeout(()=>location.reload(),1200);
   }catch(e){toast('خطأ: '+e.message,'error');console.error(e);}
 };
+
+// ── FLOATING ACTION BUTTON ──────────────────────────────────
+function addFAB(label,actionFn,iconClass){
+  iconClass=iconClass||'bi-plus-lg';
+  var existing=document.getElementById('global-fab');
+  if(existing)existing.remove();
+  var btn=document.createElement('button');
+  btn.id='global-fab';
+  btn.setAttribute('aria-label',label);
+  btn.setAttribute('title',label);
+  btn.innerHTML='<i class="bi '+iconClass+'"></i>';
+  btn.style.cssText='position:fixed;bottom:80px;left:20px;width:56px;height:56px;border-radius:50%;background:var(--orange);color:#fff;border:none;box-shadow:0 8px 24px rgba(255,107,53,.5);font-size:1.3rem;cursor:pointer;z-index:1000;display:none;align-items:center;justify-content:center;transition:.2s;font-family:Cairo,sans-serif';
+  btn.onclick=actionFn;
+  btn.onmouseover=function(){this.style.transform='scale(1.08)';};
+  btn.onmouseout=function(){this.style.transform='scale(1)';};
+  document.body.appendChild(btn);
+  var mq=window.matchMedia('(max-width:768px)');
+  function applyMQ(e){btn.style.display=e.matches?'flex':'none';}
+  applyMQ(mq);
+  if(mq.addEventListener)mq.addEventListener('change',applyMQ);
+}

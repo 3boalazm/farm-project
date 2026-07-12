@@ -72,6 +72,39 @@ function can(page){
   return(ROLE_PERMS[u.role]||(()=>false))(page);
 }
 
+// ── ANIMAL STATUS CONFIG ─────────────────────────────────
+const ANIMAL_STATUS = {
+  alive:            { label: 'حي / سليم',     color: 'var(--green)',  icon: 'bi-check-circle-fill', short: 'سليم' },
+  healthy:          { label: 'سليم',          color: 'var(--green)',  icon: 'bi-check-circle-fill', short: 'سليم' },
+  under_treatment:  { label: 'قيد العلاج',    color: 'var(--orange)', icon: 'bi-bandaid-fill',      short: 'علاج' },
+  quarantine:       { label: 'في الحجر',      color: 'var(--yellow)', icon: 'bi-shield-fill-exclamation', short: 'حجر' },
+  sold:             { label: 'مُباع',         color: 'var(--blue)',   icon: 'bi-cash-coin',         short: 'مباع' },
+  dead:             { label: 'نافق',          color: 'var(--red)',    icon: 'bi-x-octagon-fill',    short: 'نافق' },
+};
+
+// Get effective animal status — derives under_treatment from active health records
+function getAnimalStatus(animal, healthRecords) {
+  if (!animal) return 'alive';
+  if (['dead','sold','quarantine'].includes(animal.status)) return animal.status;
+  // Auto-derive treatment status
+  if (Array.isArray(healthRecords)) {
+    const today = todayStr();
+    const active = healthRecords.find(h =>
+      h.animal_tag === animal.tag && h.status === 'active' &&
+      (!h.withdrawal_end || h.withdrawal_end >= today)
+    );
+    if (active) return 'under_treatment';
+  }
+  return animal.status === 'alive' ? 'healthy' : (animal.status || 'alive');
+}
+
+// Render status badge inline
+function statusBadge(status) {
+  const cfg = ANIMAL_STATUS[status] || ANIMAL_STATUS.alive;
+  return '<span class="type-badge" style="background:'+cfg.color+'22;color:'+cfg.color+';border:1px solid '+cfg.color+'44;font-size:.7rem;font-weight:600">'+
+    '<i class="bi '+cfg.icon+' me-1" style="font-size:.7rem"></i>'+cfg.short+'</span>';
+}
+
 // ── FIREBASE REST ────────────────────────────────────────
 let FB_URL='';
 
