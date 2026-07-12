@@ -18,6 +18,103 @@ const ar=n=>String(n??'').replace(/\d/g,d=>AR[+d]);
 const todayStr=()=>new Date().toISOString().slice(0,10);
 function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
 
+// ── PIN Hashing (Security Migration) ──────────────────────
+// Replaces plaintext PIN storage. Uses the browser's built-in Web
+// Crypto API (SHA-256) — no new library/dependency added. Salted with
+// the user's own id so two people with the same PIN don't produce the
+// same hash. Real improvement over plaintext, but not a complete fix
+// on its own: a 4-digit PIN only has 10,000 possible values, fast to
+// brute-force offline even hashed, if an attacker can already read the
+// users collection at all (a Firebase rules problem, tracked
+// separately — see database.rules.secure.json, not deployed).
+async function hashPin(pin, userId){
+  const enc=new TextEncoder().encode('bayan-farm-pin-salt:'+userId+':'+pin);
+  const digest=await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+// ── Firebase Authentication bridge ─────────────────────────
+// Gives each app user a REAL, persistent Firebase Auth UID without
+// changing the PIN-pad UI. Uses Firebase's email/password provider
+// underneath: each app user's own id becomes a synthetic,
+// never-emailed address (u_{appUserId}@bayan-farm.internal), and
+// their PIN becomes a Firebase-valid password (padded to meet the
+// 6-char minimum). The real security value isn't the password's raw
+// entropy (still ultimately a 4-digit PIN) — it's that verification
+// now happens on Firebase's own servers, which rate-limit repeated
+// failed attempts, unlike client-side comparison.
+//
+// Deliberately best-effort and fail-safe: every call is wrapped so
+// that if email/password sign-in isn't enabled yet in the Firebase
+// Console, these calls fail quietly and the app continues exactly as
+// it does today on the PIN-hash system alone. Activates automatically
+// the moment that one Console setting is flipped — no further deploy
+// needed.
+function _authEmailFor(appUserId){ return 'u_'+appUserId+'@bayan-farm.internal'; }
+function _authPasswordFor(pin){ return 'bfarm-pin-'+pin+'-v1'; }
+
+let _authIdToken=null, _authTokenExpiry=0, _authUid=null;
+
+function _authStore(d){
+  _authIdToken=d.idToken; _authUid=d.localId||d.uid||_authUid;
+  _authTokenExpiry=Date.now()+(Number(d.expiresIn||d.expires_in||3600)*1000-60000);
+  try{localStorage.setItem('_farm_auth_refresh',JSON.stringify({refreshToken:d.refreshToken||d.refresh_token, uid:_authUid}));}catch(e){}
+}
+
+async function _authRefresh(){
+  try{
+    const stored=JSON.parse(localStorage.getItem('_farm_auth_refresh')||'null');
+    if(!stored||!stored.refreshToken)return null;
+    const r=await fetch('https://securetoken.googleapis.com/v1/token?key='+FIREBASE_CONFIG.apiKey,{
+      method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:'grant_type=refresh_token&refresh_token='+stored.refreshToken
+    });
+    if(!r.ok)return null;
+    const d=await r.json();
+    _authIdToken=d.id_token; _authUid=d.user_id||stored.uid;
+    _authTokenExpiry=Date.now()+(Number(d.expires_in)*1000-60000);
+    localStorage.setItem('_farm_auth_refresh',JSON.stringify({refreshToken:d.refresh_token, uid:_authUid}));
+    return _authIdToken;
+  }catch(e){return null;}
+}
+
+// Called once, right after a successful PIN login (see login.html).
+// Tries signing in to the bridged account; creates it if this is the
+// first time (lazy migration, same pattern as the pin_hash migration).
+async function signInWithFirebaseAuth(appUserId, pin){
+  const email=_authEmailFor(appUserId), password=_authPasswordFor(pin);
+  const base='https://identitytoolkit.googleapis.com/v1/accounts:';
+  try{
+    let r=await fetch(base+'signInWithPassword?key='+FIREBASE_CONFIG.apiKey,{
+      method:'POST', headers:JSON_HEADERS,
+      body:JSON.stringify({email,password,returnSecureToken:true})
+    });
+    if(!r.ok){
+      r=await fetch(base+'signUp?key='+FIREBASE_CONFIG.apiKey,{
+        method:'POST', headers:JSON_HEADERS,
+        body:JSON.stringify({email,password,returnSecureToken:true})
+      });
+    }
+    if(!r.ok)return null; // Firebase Auth not enabled yet, or a real failure — best-effort
+    _authStore(await r.json());
+    // Maintain uid_lookup/{firebaseUid} -> appUserId so database rules
+    // can later resolve "who is this Firebase UID, in app terms" to
+    // check their role (needed since auth.uid is a random string
+    // Firebase assigns, unrelated to this app's own user ids).
+    try{ await fbPut('uid_lookup', _authUid, {appUserId}); }catch(e){ /* best-effort */ }
+    return _authUid;
+  }catch(e){
+    console.warn('Firebase Auth bridge unavailable (non-fatal, app continues on PIN-hash auth):',e.message);
+    return null;
+  }
+}
+
+async function _getValidAuthToken(){
+  if(_authIdToken && Date.now()<_authTokenExpiry)return _authIdToken;
+  if(_authIdToken || localStorage.getItem('_farm_auth_refresh'))return await _authRefresh();
+  return null;
+}
+
 // ── AUTH ─────────────────────────────────────────────────
 function getUser(){
   try{
@@ -33,6 +130,8 @@ function setUser(u){
 
 function logout(){
   localStorage.removeItem('farm_user');
+  localStorage.removeItem('_farm_auth_refresh');
+  _authIdToken=null; _authUid=null; _authTokenExpiry=0;
   window.location.href='login.html';
 }
 
@@ -116,8 +215,10 @@ function initFirebase(){
   return !!FB_URL;
 }
 
-function fbUrl(path,id=''){
-  return `${FB_URL}/${path}${id?'/'+id:''}.json`;
+async function fbUrl(path,id=''){
+  const base=`${FB_URL}/${path}${id?'/'+id:''}.json`;
+  const token=await _getValidAuthToken();
+  return token ? `${base}?auth=${token}` : base;
 }
 
 // SessionStorage cache for fbGet (TTL: 45s, persists across page navigations)
@@ -201,20 +302,26 @@ async function undoLast(){
   try{
     if(op.type==='post'){
       // Undo add: delete the created record
-      if(op.id){await fetch(fbUrl(op.table,op.id),{method:'DELETE'});}
+      if(op.id){await fetch(await fbUrl(op.table,op.id),{method:'DELETE'});}
       fbCacheInvalidate(op.table);
       toast('تم التراجع عن إضافة سجل في '+op.table);
     } else if(op.type==='patch'){
       // Undo edit: restore previous values
       if(op.prev&&op.id){
-        var r=await fetch(fbUrl(op.table,op.id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(op.prev)});
+        var r=await fetch(await fbUrl(op.table,op.id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(op.prev)});
       }
       fbCacheInvalidate(op.table);
       toast('تم التراجع عن تعديل سجل في '+op.table);
     } else if(op.type==='delete'){
       // Undo delete: re-create the record
       if(op.prev){
-        await fetch(fbUrl(op.table)+'/'+op.id+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(op.prev)});
+        // BUG FIX: this previously built the URL as
+        // fbUrl(op.table) + '/' + op.id + '.json', but fbUrl() already
+        // appends '.json' when called with no id — a malformed
+        // double-.json URL that would have always failed. Now calls
+        // fbUrl(op.table, op.id) directly, matching every other call
+        // site in this file.
+        await fetch(await fbUrl(op.table,op.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(op.prev)});
       }
       fbCacheInvalidate(op.table);
       toast('تم استعادة السجل المحذوف في '+op.table);
@@ -232,7 +339,7 @@ async function undoLast(){
 async function fbGet(path, skipCache){
   if(!skipCache){const cached=_fbCacheGet(path);if(cached)return cached;}
   try{
-    const r=await fetch(fbUrl(path));
+    const r=await fetch(await fbUrl(path));
 
     if(r.status===404||r.status===204){
       _fbCacheSet(path,[]);
@@ -264,7 +371,7 @@ async function fbGet(path, skipCache){
 }
 
 async function fbGetOne(path,id){
-  const r=await fetch(fbUrl(path,id));
+  const r=await fetch(await fbUrl(path,id));
 
   if(!r.ok){
     throw new Error(`Firebase GET ${path}/${id}: ${r.status}`);
@@ -277,7 +384,7 @@ async function fbGetOne(path,id){
 // جلب عنصر واحد مباشرة (لا يحوّله لقائمة)
 async function fbGetSingle(path){
   try{
-    const r=await fetch(fbUrl(path));
+    const r=await fetch(await fbUrl(path));
     if(r.status===404||r.status===204)return null;
     if(!r.ok)throw new Error(`Firebase GET ${path}: ${r.status}`);
     const data=await r.json();
@@ -333,14 +440,21 @@ async function fbPost(path,data){
     created_at:new Date().toISOString()
   });
 
-  const r=await fetch(fbUrl(path),{
+  const r=await fetch(await fbUrl(path),{
     method:'POST',
     headers:JSON_HEADERS,
     body
   });
 
+  // BUG FIX: cache invalidation used to happen ONLY inside the failure
+  // branch below. On a successful POST, the 45-second cache still held
+  // pre-create data, so a page re-fetching this same path right after
+  // saving could show stale data missing the record it just created.
+  // Invalidating unconditionally (matching fbDelete's existing
+  // behavior) fixes this for both outcomes.
+  fbCacheInvalidate(path);
+
   if(!r.ok){
-    fbCacheInvalidate(path);
   const t=await r.text();
     throw new Error(`POST ${path}: ${r.status} ${t}`);
   }
@@ -356,14 +470,16 @@ async function fbPut(path,id,data){
     updated_at:new Date().toISOString()
   });
 
-  const r=await fetch(fbUrl(path,id),{
+  const r=await fetch(await fbUrl(path,id),{
     method:'PUT',
     headers:JSON_HEADERS,
     body
   });
 
+  // Same fix as fbPost above — invalidate unconditionally, not just on failure.
+  fbCacheInvalidate(path);
+
   if(!r.ok){
-    fbCacheInvalidate(path);
   const t=await r.text();
     throw new Error(`PUT ${path}/${id}: ${r.status} ${t}`);
   }
@@ -375,14 +491,16 @@ async function fbPatch(path,id,patch){
     updated_at:new Date().toISOString()
   });
 
-  const r=await fetch(fbUrl(path,id),{
+  const r=await fetch(await fbUrl(path,id),{
     method:'PATCH',
     headers:JSON_HEADERS,
     body
   });
 
+  // Same fix as fbPost above — invalidate unconditionally, not just on failure.
+  fbCacheInvalidate(path);
+
   if(!r.ok){
-    fbCacheInvalidate(path);
   const t=await r.text();
     throw new Error(`PATCH ${path}/${id}: ${r.status} ${t}`);
   }
@@ -392,10 +510,10 @@ async function fbDelete(path,id){fbCacheInvalidate(path);
   // Capture data before deletion for undo
   var _delData=null;
   try{
-    var _dr=await fetch(fbUrl(path,id));
+    var _dr=await fetch(await fbUrl(path,id));
     if(_dr.ok)_delData=await _dr.json();
   }catch(e){}
-  const r=await fetch(fbUrl(path,id),{
+  const r=await fetch(await fbUrl(path,id),{
     method:'DELETE'
   });
 
@@ -461,11 +579,14 @@ const Users={
   async init(){
     const users = await fbGet('users');
     if(!users.length){
+      // FIX: this bootstrap path runs on EVERY page load (via initApp()
+      // below) whenever the users collection is empty — was still
+      // writing a plaintext pin.
       await fbPut('users','admin1',{
         id:'admin1',
         name:'مدير المزرعة',
         role:'admin',
-        pin:'1234',
+        pin_hash:await hashPin('1234','admin1'),
         active:true,
         created:todayStr()
       });

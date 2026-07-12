@@ -36,6 +36,7 @@
 <script src="firebase.js"></script>
 <script src="nav.js"></script>
 <script src="shared.js"></script>
+<script src="sw-register.js"></script>
 <script src="offline-sync.js" defer></script>
 <script src="pages/datepicker.js" defer></script>
 <script src="pages/tour.js" defer></script>
@@ -150,12 +151,14 @@ window.submitUser=async function(existingId){
   const defaults=ROLE_DPERMS[role]||[];
   const customPerms=JSON.stringify([...selectedPerms].sort())===JSON.stringify([...defaults].sort())?null:selectedPerms;
   if(existingId){
-    const patch={name,role,active,custom_perms:customPerms};if(pin)patch.pin=pin;
+    // SECURITY FIX: store pin_hash instead of the plaintext pin field.
+    const patch={name,role,active,custom_perms:customPerms};if(pin)patch.pin_hash=await hashPin(pin,existingId);
     await Users.update(existingId,patch);
     logActivity('edit','users',`تعديل بيانات المستخدم: ${name}${customPerms?' (صلاحيات مخصصة)':''}`);
     toast('تم التحديث');
   }else{
-    await Users.add({id:genId(),name,role,pin,active,custom_perms:customPerms,created:todayStr()});
+    const newId=genId();
+    await Users.add({id:newId,name,role,pin_hash:await hashPin(pin,newId),active,custom_perms:customPerms,created:todayStr()});
     logActivity('add','users',`إضافة مستخدم: ${name} — ${ROLES[role]?.label}${customPerms?' (مخصص)':''}`);
     toast('تمت الإضافة');
   }
