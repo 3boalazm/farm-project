@@ -3,12 +3,6 @@ let meds=[], feeds=[], equipment=[], invTab='meds', editInvId=null;
 
 document.addEventListener('DOMContentLoaded', async ()=>{
   if(!requireAuth())return;
-  // SECURITY FIX: nav.js grants this page perm:'inventory', but no
-  // can('inventory') check enforced it.
-  if(!can('inventory')){
-    document.body.innerHTML='<div class="page-wrap"><div class="empty-state" style="padding-top:100px"><i class="bi bi-shield-x" style="font-size:3rem;display:block;margin-bottom:10px;opacity:.4"></i><p>غير مصرح بالوصول</p><a href="dashboard.html" class="action-btn">الرئيسية</a></div></div>';
-    return;
-  }
   const s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;

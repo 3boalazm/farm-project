@@ -29,34 +29,9 @@
   <div id="content"></div>
 
   <!-- ── RESET SECTION (Admin Only) ── -->
-  <div id="admin-reset-section" class="settings-section" style="display:none;border-color:rgba(244,67,54,.3)">
-    <h6 class="fw-bold mb-3"><i class="bi bi-tools accent-text"></i> أدوات الصيانة والاسترجاع (للمدير فقط)</h6>
-    <p class="text-gray mb-3" style="font-size:.82rem">أدوات لحل مشاكل التخزين المؤقت (Cache) ووضع العمل بدون إنترنت. استخدمها فقط لو التطبيق مش بيتحدّث أو فيه بيانات قديمة عالقة.</p>
-    <div class="row g-3">
-      <div class="col-md-6">
-        <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
-          <div>
-            <div class="fw-bold" style="font-size:.88rem">مسح البيانات المخزّنة مؤقتًا</div>
-            <small class="text-gray">يمسح نسخة البيانات المحفوظة محليًا فقط — بياناتك الحقيقية في القاعدة سليمة 100%. هيحتاج تحميل البيانات من جديد أول مرة بعدها.</small>
-          </div>
-        </div>
-        <button class="action-btn danger" onclick="_handleClearDataCache()" aria-label="مسح التخزين المؤقت">
-          <i class="bi bi-trash3-fill"></i> مسح التخزين المؤقت
-        </button>
-      </div>
-      <div class="col-md-6">
-        <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
-          <div>
-            <div class="fw-bold" style="font-size:.88rem">إلغاء تسجيل Service Worker (طوارئ)</div>
-            <small class="text-gray">⚠️ استخدم ده بس لو التطبيق عالق تمامًا. هيوقف وضع العمل بدون إنترنت مؤقتًا لحد ما تعمل تحديث للصفحة وهو هيسجّل نفسه تاني.</small>
-          </div>
-        </div>
-        <button class="action-btn danger" onclick="_handleUnregisterSW()" aria-label="إلغاء تسجيل Service Worker">
-          <i class="bi bi-exclamation-triangle-fill"></i> إلغاء تسجيل Service Worker
-        </button>
-      </div>
-    </div>
-  </div>
+    
+  
+  
 <!-- React-powered Features -->
   <div class="settings-section" style="border-color:rgba(33,150,243,.3)">
     <h6 class="fw-bold mb-3"><i class="bi bi-lightning-fill accent-text"></i> ميزات React المتقدمة</h6>
@@ -182,49 +157,6 @@
       </div>
     </div>
   </div>
-<script src="config.js"></script>
-<script src="firebase.js"></script>
-<script src="nav.js"></script>
-<script src="shared.js"></script>
-<script src="sw-register.js"></script>
-<script>
-// SECURITY FIX: this page had no auth gate and never called
-// renderNavbar() — unlike every other page in the app. Standard
-// boilerplate every sibling page uses, restored verbatim.
-document.addEventListener('DOMContentLoaded', function(){
-  if(!requireAuth())return;
-  renderNavbar('settings.html');
-});
-
-// ── Admin recovery-tool handlers (PWA / Service Worker) ──────
-// Reuses the existing admin authorization already used throughout
-// this file (u.role==='admin') — no new permission system.
-window._handleClearDataCache=async function(){
-  const u=getUser();
-  if(!u||u.role!=='admin'){toast('غير مصرح','error');return;}
-  if(!confirm('مسح التخزين المؤقت؟\nبياناتك الحقيقية في القاعدة سليمة تمامًا — ده بس بيمسح النسخة المحفوظة محليًا في المتصفح. هيحتاج تحميل البيانات من جديد أول مرة بعد المسح.'))return;
-  toast('جاري المسح...','info');
-  try{
-    const ok=await requestClearDataCache(8000);
-    toast(ok?'تم مسح التخزين المؤقت بنجاح':'انتهت المهلة — جرّب تاني أو استخدم زرار الطوارئ', ok?'success':'error');
-  }catch(e){
-    toast('فشل المسح: '+e.message,'error');
-  }
-};
-
-window._handleUnregisterSW=async function(){
-  const u=getUser();
-  if(!u||u.role!=='admin'){toast('غير مصرح','error');return;}
-  if(!confirm('⚠️ إلغاء تسجيل Service Worker؟\n\nده هيوقف وضع العمل بدون إنترنت مؤقتًا لحد ما تعمل تحديث للصفحة (F5) — وقتها هيتسجّل تاني تلقائيًا.\nاستخدم الزرار ده بس لو التطبيق عالق تمامًا ومفيش حل تاني اتحل معاه.'))return;
-  toast('جاري إلغاء التسجيل...','info');
-  try{
-    await unregisterServiceWorker();
-    toast('تم إلغاء التسجيل ومسح كل الكاش — حدّث الصفحة (F5) دلوقتي','success');
-  }catch(e){
-    toast('فشلت العملية: '+e.message,'error');
-  }
-};
-</script>
 <script>
 window.removeBreed=function(type,name){
   const s=getSettings();const arr=type==='goat'?s.goatBreeds:s.sheepBreeds;
