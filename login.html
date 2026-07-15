@@ -21,6 +21,10 @@
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="media/logo-icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="media/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="media/favicon-16.png">
+<link rel="apple-touch-icon" href="media/apple-touch-icon.png">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -80,12 +84,53 @@
 
   async function attemptLogin(){
     const users=await Users.all();
-    let user=users.find(u=>u.role===lRole&&u.pin===lPin&&u.active);
-    if(!user&&lRole==='admin'&&lPin==='1234'){
-      user=users.find(u=>u.role==='admin')||{id:'admin1',name:'مدير المزرعة',role:'admin',pin:'1234',active:true,created:new Date().toISOString().slice(0,10)};
+    // SECURITY FIX: verify against pin_hash instead of comparing
+    // plaintext pin. Candidates are narrowed by role+active first (no
+    // crypto needed for that), then each candidate's stored pin_hash is
+    // compared against a hash of the entered PIN computed with that
+    // same candidate's id as salt.
+    // Backward compatibility: any user record not yet migrated (still
+    // has a plaintext `pin` field, no `pin_hash` yet) is matched the
+    // old way, then lazily upgraded to pin_hash right here on success —
+    // nobody is locked out, and every account converges to hashed
+    // storage the next time each person logs in.
+    const roleCandidates=users.filter(u=>u.role===lRole&&u.active);
+    let user=null;
+    for(const candidate of roleCandidates){
+      if(candidate.pin_hash){
+        const computed=await hashPin(lPin,candidate.id);
+        if(computed===candidate.pin_hash){user=candidate;break;}
+      }else if(candidate.pin&&candidate.pin===lPin){
+        user=candidate;
+        try{
+          const newHash=await hashPin(lPin,candidate.id);
+          await Users.update(candidate.id,{pin_hash:newHash,pin:null});
+        }catch(e){/* migration is best-effort; login still succeeds either way */}
+        break;
+      }
+    }
+    // SECURITY FIX: this fallback used to trigger any time a
+    // role="admin" + pin="1234" login was attempted and didn't match a
+    // real user — including when a real admin already existed with a
+    // DIFFERENT pin. That made "1234" a permanent admin backdoor
+    // regardless of what PIN the farm's actual admin had configured.
+    // Scoped to users.length===0 so it only ever fires on a genuinely
+    // fresh/empty database (first-run bootstrap), the legitimate
+    // original intent. NOTE: fbGet() also returns [] on a network
+    // failure (not just a truly empty collection), so this bootstrap
+    // path could still be reached during a network outage — a
+    // pre-existing limitation of fbGet's error handling, not
+    // redesigned here.
+    if(!user&&users.length===0&&lRole==='admin'&&lPin==='1234'){
+      user=users.find(u=>u.role==='admin')||{id:'admin1',name:'مدير المزرعة',role:'admin',active:true,created:new Date().toISOString().slice(0,10)};
     }
     if(user){
       setUser(user);
+      // Establish the real Firebase Auth identity bridged to this app
+      // account, best-effort. If email/password sign-in isn't enabled
+      // yet in the Firebase Console, this quietly does nothing and
+      // login proceeds exactly as it did before — no regression.
+      try{ await signInWithFirebaseAuth(user.id, lPin); }catch(e){ /* non-fatal */ }
       // Log login activity
       if(initFirebase()){
         try{

@@ -21,17 +21,60 @@
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="media/logo-icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="media/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="media/favicon-16.png">
+<link rel="apple-touch-icon" href="media/apple-touch-icon.png">
 <link rel="stylesheet" href="styles.css">
+<script src="config.js"></script>
+<script src="firebase.js"></script>
+<script src="nav.js"></script>
+<script src="shared.js"></script>
 </head>
 <body>
 <div class="page-wrap">
   <div id="page-header"></div>
   <div id="content"></div>
 
-  <!-- ── RESET SECTION (Admin Only) ── -->
-    
-  
-  
+  <div id="admin-reset-section" style="display:none"></div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  if(!requireAuth())return;
+  var s=getSettings();
+  renderNavbar('settings.html');
+  renderPageHeaderV2({
+    title: '<i class="bi bi-gear-fill accent-text"></i> الإعدادات',
+    breadcrumb: [{label:'الرئيسية', href:'dashboard.html'}, {label:'الإعدادات'}]
+  });
+  renderAdminResetSection();
+});
+
+// Was a dangling reference before this fix: JS tried to show/hide #admin-reset-section
+// for admins, but no such element (or any content for it) existed anywhere in the file.
+function renderAdminResetSection(){
+  var el=document.getElementById('admin-reset-section');
+  if(!el)return;
+  var u=getUser();
+  if(!u||u.role!=='admin')return;
+  el.style.display='block';
+  el.innerHTML=renderSectionContainer({
+    title:'منطقة الحذف — للمدير فقط',
+    description:'كل إجراء هنا نهائي ولا يمكن التراجع عنه',
+    variant:'warning',
+    contentHtml:`
+      <div class="row g-2">
+        <div class="col-md-4"><button class="action-btn danger w-100" onclick="resetAnimals()"><i class="bi bi-trash"></i> مسح بيانات القطيع</button></div>
+        <div class="col-md-4"><button class="action-btn danger w-100" onclick="resetFinance()"><i class="bi bi-trash"></i> مسح البيانات المالية</button></div>
+        <div class="col-md-4"><button class="action-btn danger w-100" onclick="resetHealth()"><i class="bi bi-trash"></i> مسح الصحة والتكاثر</button></div>
+        <div class="col-md-4"><button class="action-btn danger w-100" onclick="resetActivity()"><i class="bi bi-trash"></i> مسح سجل الأنشطة</button></div>
+        <div class="col-md-4"><button class="action-btn danger w-100" onclick="resetNotifications()"><i class="bi bi-trash"></i> مسح الإشعارات</button></div>
+        <div class="col-md-4"><button class="action-btn danger w-100" style="background:var(--red);color:#fff" onclick="resetEverything()"><i class="bi bi-exclamation-octagon-fill"></i> مسح كل البيانات</button></div>
+      </div>`
+  });
+}
+</script>
+
 <!-- React-powered Features -->
   <div class="settings-section" style="border-color:rgba(33,150,243,.3)">
     <h6 class="fw-bold mb-3"><i class="bi bi-lightning-fill accent-text"></i> ميزات React المتقدمة</h6>
@@ -215,23 +258,22 @@ function toggleNotifSound(){
   if(lbl)lbl.textContent=off?'مكتوم':'مفعّل';
 })();
 
-// ── Admin Reset Section ──────────────────────────────
-(function(){
-  const u=getUser();
-  if(u&&u.role==='admin'){
-    const s=document.getElementById('admin-reset-section');
-    if(s)s.style.display='block';
-  }
-})();
+// Admin reset section is now rendered by renderAdminResetSection() in the init block above.
 
 async function _deleteTable(table){
   try{
     if(!FB_URL){toast('Firebase غير متصل','error');return false;}
-    const url=FB_URL+'/'+table+'.json';
-    const r=await fetch(url,{method:'DELETE'});
+    // BUG FIX: this used to build the URL manually (FB_URL+'/'+table+
+    // '.json'), bypassing fbUrl() entirely — meaning it never attached
+    // an auth token (would always fail once rules require auth != null)
+    // and, separately, always returned true without ever checking
+    // r.ok, so every caller (resetAnimals, resetFinance, resetHealth,
+    // resetActivity, resetNotifications, and the full-reset success
+    // counter) could report success even when the delete failed.
+    const r=await fetch(await fbUrl(table),{method:'DELETE'});
     fbCacheInvalidate(table);
     console.log('Deleted:',table,'status:',r.status);
-    return true; // Firebase DELETE returns 200 even for empty nodes
+    return r.ok;
   }catch(e){
     console.error('Delete failed:',table,e.message);
     return false;
@@ -250,30 +292,33 @@ window.resetAnimals=async function(){
 window.resetFinance=async function(){
   if(!confirm('مسح كل البيانات المالية؟'))return;
   toast('جاري المسح...','info');
-  await _deleteTable('finance');
+  const ok=await _deleteTable('finance');
   await logActivity('delete','system','مسح بيانات المالية');
-  toast('✅ تم مسح المالية');
+  toast(ok?'✅ تم مسح المالية':'⚠️ فشل المسح — تحقق من الاتصال', ok?'success':'error');
 };
 
 window.resetHealth=async function(){
   if(!confirm('مسح سجلات الصحة والتحصين والتكاثر؟'))return;
   toast('جاري المسح...','info');
-  await Promise.all([_deleteTable('health'),_deleteTable('vaccinations'),_deleteTable('breeding')]);
+  const results=await Promise.all([_deleteTable('health'),_deleteTable('vaccinations'),_deleteTable('breeding')]);
   await logActivity('delete','system','مسح الصحة والتحصين والتكاثر');
-  toast('✅ تم مسح الصحة والتحصين');
+  const allOk=results.every(Boolean);
+  toast(allOk?'✅ تم مسح الصحة والتحصين':'⚠️ المسح جزئي — تحقق من الاتصال', allOk?'success':'error');
 };
 
 window.resetActivity=async function(){
   if(!confirm('مسح كل سجل الأنشطة والإشعارات؟'))return;
   toast('جاري المسح...','info');
-  await Promise.all([_deleteTable('activity_log'),_deleteTable('login_notifications')]);
-  toast('✅ تم مسح سجل الأنشطة');
+  const results=await Promise.all([_deleteTable('activity_log'),_deleteTable('login_notifications')]);
+  const allOk=results.every(Boolean);
+  toast(allOk?'✅ تم مسح سجل الأنشطة':'⚠️ المسح جزئي — تحقق من الاتصال', allOk?'success':'error');
 };
 
 window.resetNotifications=async function(){
   if(!confirm('مسح كل الإشعارات؟'))return;
-  await Promise.all([_deleteTable('notifications'),_deleteTable('login_notifications')]);
-  toast('✅ تم مسح الإشعارات');
+  const results=await Promise.all([_deleteTable('notifications'),_deleteTable('login_notifications')]);
+  const allOk=results.every(Boolean);
+  toast(allOk?'✅ تم مسح الإشعارات':'⚠️ المسح جزئي — تحقق من الاتصال', allOk?'success':'error');
 };
 
 window.resetEverything=async function(){
@@ -292,7 +337,7 @@ window.resetEverything=async function(){
   Object.keys(localStorage).forEach(function(k){
     if(keysToKeep.indexOf(k)<0)localStorage.removeItem(k);
   });
-  toast('✅ تم مسح كل البيانات — يمكنك إعادة استيراد البيانات من صفحة الاستيراد');
+  toast(deleted===tables.length?'✅ تم مسح كل البيانات — يمكنك إعادة استيراد البيانات من صفحة الاستيراد':'⚠️ تم مسح '+deleted+' من '+tables.length+' — بعض البيانات لم يتم مسحها، تحقق من الاتصال', deleted===tables.length?'success':'error');
   setTimeout(function(){location.href='dashboard.html';},2000);
 };
 </script>

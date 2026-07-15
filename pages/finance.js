@@ -36,35 +36,37 @@ function renderFinancePage(s){
   const byCat={};finRecs.filter(r=>r.type==='expense').forEach(r=>{byCat[r.category]=(byCat[r.category]||0)+(+r.amount||0);});
   const topCats=Object.entries(byCat).sort((a,b)=>b[1]-a[1]).slice(0,6);
 
-  renderPageHeader('<i class="bi bi-wallet2 accent-text"></i> المالية والحسابات','','<button class="action-btn primary" onclick="openFinModal()"><i class="bi bi-plus-lg"></i> إضافة معاملة</button>');
+  renderPageHeaderV2({
+    title: '<i class="bi bi-wallet2 accent-text"></i> المالية والحسابات',
+    breadcrumb: [{label:'الرئيسية', href:'dashboard.html'}, {label:'المالية'}],
+    primaryAction: '<button class="action-btn primary" onclick="openFinModal()"><i class="bi bi-plus-lg"></i> إضافة معاملة</button>',
+    secondaryActions: `<button class="action-btn sm" onclick="showCostPerHead()"><i class="bi bi-calculator"></i> تكلفة/رأس</button><button class="action-btn sm" onclick="exportFinCSV()"><i class="bi bi-filetype-csv"></i> تصدير</button>`
+  });
   const el=document.getElementById('content');
 
-  el.innerHTML=`
+  const kpiHtml = `
   <div class="row g-3 mb-4">
-    <div class="col-md-4"><div class="summary-card"><i class="bi bi-arrow-up-circle-fill d-block mb-2" style="color:var(--green);font-size:1.4rem"></i><div class="summary-number green-text">${totalIn.toLocaleString('ar-EG')}</div><small class="text-gray">الإيرادات (${curr})</small></div></div>
-    <div class="col-md-4"><div class="summary-card"><i class="bi bi-arrow-down-circle-fill d-block mb-2" style="color:var(--orange);font-size:1.4rem"></i><div class="summary-number accent-text">${totalEx.toLocaleString('ar-EG')}</div><small class="text-gray">المصروفات (${curr})</small></div></div>
-    <div class="col-md-4"><div class="summary-card"><i class="bi bi-${net>=0?'graph-up-arrow':'graph-down-arrow'} d-block mb-2" style="color:${net>=0?'var(--green)':'var(--red)'};font-size:1.4rem"></i><div class="summary-number" style="color:${net>=0?'var(--green)':'var(--red)'}">${net>=0?'+':''}${net.toLocaleString('ar-EG')}</div><small class="text-gray">${net>=0?'صافي الربح':'صافي الخسارة'} (${curr})</small></div></div>
-  </div>
+    <div class="col-md-4">${renderKPICard({ label:'الإيرادات', value: totalIn.toLocaleString('ar-EG'), unit:curr, status:'normal' })}</div>
+    <div class="col-md-4">${renderKPICard({ label:'المصروفات', value: totalEx.toLocaleString('ar-EG'), unit:curr, status:'watch' })}</div>
+    <div class="col-md-4">${renderKPICard({ label: net>=0?'صافي الربح':'صافي الخسارة', value: (net>=0?'+':'')+net.toLocaleString('ar-EG'), unit:curr, status: net>=0?'normal':'alert' })}</div>
+  </div>`;
 
-  ${topCats.length>0?`<div class="wonder-card mb-4"><h6 class="fw-bold mb-3"><i class="bi bi-pie-chart-fill accent-text"></i> توزيع المصروفات</h6>
-  ${topCats.map(([cat,amt])=>{const pct=totalEx?Math.round(amt/totalEx*100):0;return`<div class="finance-bar-wrap"><div class="lb"><span class="text-gray">${cat}</span><span class="fw-bold accent-text">${amt.toLocaleString('ar-EG')} ${curr} (${pct}٪)</span></div><div class="finance-bar" role="presentation" aria-hidden="true"><div class="finance-bar-fill" style="width:${pct}%"></div></div></div>`;}).join('')}
-  </div>`:''}
+  const distributionHtml = topCats.length>0 ? renderChartContainer({
+    title:'توزيع المصروفات', subtitle:'أعلى الفئات', state:'ready',
+    chartHtml: topCats.map(([cat,amt])=>{const pct=totalEx?Math.round(amt/totalEx*100):0;return`<div class="finance-bar-wrap"><div class="lb"><span class="text-gray">${cat}</span><span class="fw-bold accent-text">${amt.toLocaleString('ar-EG')} ${curr} (${pct}٪)</span></div><div class="finance-bar" role="presentation" aria-hidden="true"><div class="finance-bar-fill" style="width:${pct}%"></div></div></div>`;}).join('')
+  }) : '';
 
+  el.innerHTML = kpiHtml + `<div class="mb-4">${distributionHtml}</div>` + `
   <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <div class="d-flex gap-2 flex-wrap align-items-center">
       ${['all','income','expense'].map(f=>`<button class="filter-btn${finFilter===f?' active':''}" onclick="finFilter='${f}';renderFinancePage(getSettings())">${{all:'الكل',income:'إيرادات',expense:'مصروفات'}[f]}</button>`).join('')}
       <input type="month" class="field" value="${finMonth}" onchange="finMonth=this.value;renderFinancePage(getSettings())" style="max-width:160px;padding:5px 10px;font-size:.78rem">
     </div>
-    <div class="d-flex gap-2">
-      <button class="action-btn sm" onclick="showCostPerHead()"><i class="bi bi-calculator"></i> تكلفة/رأس</button>
-      <button class="action-btn sm" onclick="exportFinCSV()"><i class="bi bi-filetype-csv"></i> تصدير</button>
-    </div>
   </div>
-
-  ${recs.length===0?`<div class="empty-state"><i class="bi bi-wallet2"></i><p>لا توجد معاملات مالية</p></div>`:`
-  <div class="wonder-card p-0"><div class="table-responsive"><table class="tbl" role="table" aria-label="جدول المعاملات المالية">
-    <thead><tr><th>التاريخ</th><th>النوع</th><th>الفئة</th><th>الوصف</th><th>الجمالون</th><th>المبلغ (${curr})</th><th></th></tr></thead>
-    <tbody>${recs.map(r=>`<tr>
+  ${recs.length===0 ? `<div class="empty-state"><i class="bi bi-wallet2"></i><p>لا توجد معاملات مالية</p></div>` : renderDataTableWrapper({
+    title: 'المعاملات المالية',
+    headers: ['التاريخ','النوع','الفئة','الوصف','الجمالون',`المبلغ (${curr})`,''],
+    rowsHtml: recs.map(r=>`<tr>
       <td class="text-gray">${r.date||'—'}</td>
       <td><span class="type-badge ${r.type==='income'?'badge-tarbiya':'badge-tasmeen'}">${r.type==='income'?'إيراد':'مصروف'}</span></td>
       <td>${r.category||'—'}</td>
@@ -75,12 +77,9 @@ function renderFinancePage(s){
         <button class="icon-btn edit" onclick="openFinModal('${r._id}')"><i class="bi bi-pencil"></i></button>
         <button class="icon-btn del" onclick="delFin('${r._id}')"><i class="bi bi-trash"></i></button>
       </div></td>
-    </tr>`).join('')}
-    <tfoot><tr style="background:rgba(255,255,255,.03)">
-      <td colspan="5" class="fw-bold text-gray">الإجمالي المعروض</td>
-      <td colspan="2" class="fw-bold"><span class="green-text">+${recs.filter(r=>r.type==='income').reduce((t,r)=>t+(+r.amount||0),0).toLocaleString('ar-EG')}</span> / <span class="accent-text">-${recs.filter(r=>r.type==='expense').reduce((t,r)=>t+(+r.amount||0),0).toLocaleString('ar-EG')}</span></td>
-    </tr></tfoot>
-  </table></div></div>`}`;
+    </tr>`).join(''),
+    paginationHtml: `<span class="text-gray" style="font-size:var(--text-xs)">الإجمالي المعروض: <span class="green-text fw-bold">+${recs.filter(r=>r.type==='income').reduce((t,r)=>t+(+r.amount||0),0).toLocaleString('ar-EG')}</span> / <span class="accent-text fw-bold">-${recs.filter(r=>r.type==='expense').reduce((t,r)=>t+(+r.amount||0),0).toLocaleString('ar-EG')}</span></span>`
+  })}`;
 }
 
 window.showCostPerHead=async function(){

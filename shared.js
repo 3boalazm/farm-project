@@ -19,6 +19,58 @@ function showModal(html){
 }
 function closeModal(){const r=document.getElementById('modal-root');if(r)r.innerHTML='';}
 
+// ── Shared modal shell (Repository 4, Phase 1A/1B/2A) ────────
+// Extracts ONLY the repeated farm-modal wrapper (outer div + icon+title
+// header) that every open*() modal function was duplicating inline.
+// Business logic, field markup, and footer buttons are passed in as-is
+// via bodyHtml/footerHtml — nothing about them is rewritten.
+// `color` is optional: when omitted, the <h4> gets no style attribute
+// at all (matching modals whose icon coloring comes from a class like
+// accent-text instead of an inline color).
+// `iconClass` is optional: appended to the icon's class list.
+// `extraClass` is optional: appended to the outer div's class list
+// (e.g. 'narrow' — a purely structural pass-through, same category
+// as `style`, not a new visual variant/theme).
+function renderFarmModal({icon, iconClass='', color='', title, bodyHtml='', footerHtml='', style='', extraClass=''}){
+  var h4Style = color ? ' style="color:'+color+'"' : '';
+  var iconCls = 'bi '+icon+(iconClass?' '+iconClass:'');
+  var outerCls = 'farm-modal'+(extraClass?' '+extraClass:'');
+  return '<div class="'+outerCls+'" onclick="event.stopPropagation()"'+(style?' style="'+style+'"':'')+'>'+
+    '<h4'+h4Style+'><i class="'+iconCls+'"></i> '+title+'</h4>'+
+    bodyHtml+
+    footerHtml+
+  '</div>';
+}
+
+// ── Shared bulk-action refresh sequence (Repository 4, Phase 2A) ──
+// The exact, byte-identical 3-line tail that both execBulk() and
+// execBulkDo() ran independently after every write: clear selection
+// state, refetch animals, re-render. Pure extraction — no logic
+// changed, no reordering, no new behavior.
+async function refreshAnimalsAfterBulk(){
+  _selected.clear();_selectMode=false;
+  animals=await fbGet('animals');
+  renderFilters();renderAnimals();
+}
+
+// ── Shared bulk-patch write loop (Repository 4, Phase 2B) ─────
+// Extracted from the three genuinely identical-shape loops in
+// execBulk() (edit/transfer/sell): a single, static, precomputed
+// payload applied to every id in `ids`, via fbPatch('animals', ...),
+// counting successes and silently swallowing individual failures —
+// exactly as each of the three did independently. Nearly a literal
+// copy-paste of the original loop body; only `ids` and `payload` are
+// now parameters instead of being read from the enclosing scope.
+// NOT used for the death branch (its payload is rebuilt per-iteration
+// using the loop index — a different shape, deliberately left as-is
+// this phase) or for delete (a different Firebase operation, fbDelete,
+// reserved for a future phase).
+async function commitBulkPatch(ids, payload){
+  var ok=0;
+  for(var i=0;i<ids.length;i++){try{await fbPatch('animals',ids[i],payload);ok++;}catch(e){}}
+  return ok;
+}
+
 // ── ARABIC UTILS ──────────────────────────────────────────
 const pad2=n=>ar(String(n).padStart(2,'0').replace(/0/g,'٠'));
 function todayAr(){const d=new Date();return`${ar(d.getFullYear())}/${pad2(d.getMonth()+1)}/${pad2(d.getDate())}`;}
@@ -68,7 +120,7 @@ function renderNavbar(activePage=''){
   </aside>
   <nav class="navbar-wonder">
     <div class="container d-flex justify-content-between align-items-center">
-      <a href="dashboard.html" class="navbar-brand"><span>🐐</span> ${s.farmName}</a>
+      <a href="dashboard.html" class="navbar-brand"><span>${s.logoUrl?`<img src="${s.logoUrl}" alt="" style="height:1.2em;width:auto;vertical-align:-.2em">`:'🐐'}</span> ${s.farmName}</a>
       <div class="d-flex align-items-center gap-2">
         <span class="date-badge d-none d-sm-flex"><i class="bi bi-calendar3"></i> ${todayAr()}</span>
         <button class="theme-btn d-none d-md-flex" onclick="toggleTheme()" id="theme-toggle-btn" title="تبديل المظهر">
@@ -224,6 +276,299 @@ function renderLoading(el){
 }
 function renderEmpty(el, icon, msg, btnHtml=''){
   el.innerHTML=`<div class="empty-state"><i class="bi ${icon}"></i><p>${msg}</p>${btnHtml}</div>`;
+}
+function renderErrorState(el, msg='حدث خطأ أثناء التحميل'){
+  el.innerHTML=`<div class="empty-state"><i class="bi bi-exclamation-triangle" style="color:var(--red)"></i><p>${msg}</p><button class="action-btn" onclick="location.reload()"><i class="bi bi-arrow-clockwise"></i> إعادة المحاولة</button></div>`;
+}
+
+// ══════════════════════════════════════════════════════
+// PHASE 2 — CORE COMPONENT SYSTEM
+// Additive only: renderPageHeader/renderEmpty/renderLoading above
+// are untouched, so every existing page keeps working unchanged.
+// Each function below returns/injects markup using the Phase 1
+// token scale — no new raw colors/sizes introduced.
+// ══════════════════════════════════════════════════════
+
+// ── 1. Page Header V2 (adds breadcrumb + description + primary/secondary split) ──
+function renderPageHeaderV2({ title, description='', breadcrumb=[], primaryAction='', secondaryActions='' }){
+  const el=document.getElementById('page-header');
+  if(!el)return;
+  const crumbHtml = breadcrumb.length ? `<nav class="page-breadcrumb">${
+    breadcrumb.map((b,i)=> i<breadcrumb.length-1
+      ? `<a href="${b.href||'#'}">${b.label}</a><span class="mx-1">/</span>`
+      : `<span>${b.label}</span>`
+    ).join('')
+  }</nav>` : '';
+  el.innerHTML = `
+    ${crumbHtml}
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+      <div>
+        <h4 class="fw-bold mb-0">${title}</h4>
+        ${description?`<small class="text-gray">${description}</small>`:''}
+      </div>
+      <div class="d-flex gap-2 flex-wrap align-items-center">
+        ${secondaryActions}
+        ${primaryAction}
+      </div>
+    </div>`;
+}
+
+// ── 2. Section Container ──
+function renderSectionContainer({ title, description='', actionHtml='', contentHtml='', variant='default' }){
+  const variantClass = variant==='highlighted' ? 'section-highlighted' : variant==='warning' ? 'section-warning' : '';
+  const padStyle = variant==='compact' ? 'padding:var(--space-3)' : '';
+  return `
+    <div class="wonder-card mb-4 ${variantClass}" style="${padStyle}">
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+        <div>
+          <h6 class="fw-bold mb-0" style="font-size:var(--text-lg)">${title}</h6>
+          ${description?`<small class="text-gray">${description}</small>`:''}
+        </div>
+        ${actionHtml?`<div>${actionHtml}</div>`:''}
+      </div>
+      <div>${contentHtml}</div>
+    </div>`;
+}
+
+// ── 3. KPI Card (states: normal/watch/alert, or loading:true, or empty via value=null) ──
+function renderMiniSparkline(data, color){
+  if(!data || !data.length) return '';
+  const w=100,h=28,max=Math.max(...data),min=Math.min(...data),range=(max-min)||1;
+  const pts=data.map((v,i)=>`${(i/(data.length-1)*w).toFixed(1)},${(h-((v-min)/range)*h).toFixed(1)}`).join(' ');
+  return `<div class="kpi-spark"><svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity=".8"/></svg></div>`;
+}
+function renderKPICard({ label, value=null, unit='', trend=null, trendDir='up', comparisonPeriod='', status='normal', sparklineData=null, href=null, loading=false, footerHtml='' }){
+  if(loading){
+    return `<div class="kpi-card"><div class="skeleton mb-2" style="height:12px;width:55%"></div><div class="skeleton mb-2" style="height:26px;width:40%"></div><div class="skeleton" style="height:10px;width:70%"></div></div>`;
+  }
+  if(value===null){
+    return `<div class="kpi-card"><div class="kpi-label mb-2">${label}</div><div class="text-gray" style="font-size:var(--text-sm)">لا توجد بيانات</div></div>`;
+  }
+  const statusMap = { normal:{c:'var(--green)',l:'طبيعي'}, watch:{c:'var(--yellow)',l:'يحتاج متابعة'}, alert:{c:'var(--red)',l:'تنبيه'} };
+  const st = statusMap[status] || statusMap.normal;
+  const trendHtml = trend!==null ? `<span class="kpi-trend ${trendDir==='up'?'kpi-trend-up':'kpi-trend-down'}"><i class="bi bi-arrow-${trendDir==='up'?'up':'down'}-short"></i>${trend>0?'+':''}${ar(trend)}%</span>` : '';
+  const inner = `
+    <div class="kpi-card-head">
+      <span class="kpi-label">${label}</span>
+      <span class="kpi-status-dot" style="background:${st.c}" title="${st.l}"></span>
+    </div>
+    <div class="kpi-value">${value}${unit?`<span class="kpi-unit">${unit}</span>`:''}</div>
+    <div class="kpi-foot">${trendHtml}${comparisonPeriod?`<span class="kpi-period">${comparisonPeriod}</span>`:''}</div>
+    ${renderMiniSparkline(sparklineData, st.c)}
+    ${footerHtml}`;
+  return href ? `<a href="${href}" class="kpi-card" style="text-decoration:none;color:inherit">${inner}</a>` : `<div class="kpi-card">${inner}</div>`;
+}
+
+// ── 4. Alert Card (severity: info/watch/critical) ──
+function renderAlertCard({ severity='info', icon='bi-info-circle', title, message='', source='', deadline='', actionLabel='', actionHref='' }){
+  const sevMap = { info:'var(--blue)', watch:'var(--yellow)', critical:'var(--red)' };
+  const color = sevMap[severity] || sevMap.info;
+  return `
+    <div class="alert-card-v2" style="border-right:3px solid ${color}">
+      <div class="d-flex align-items-start gap-2">
+        <i class="bi ${icon}" style="color:${color};font-size:1.1rem;margin-top:2px"></i>
+        <div class="flex-grow-1">
+          <div class="fw-bold" style="font-size:var(--text-sm)">${title}</div>
+          ${message?`<div class="text-gray" style="font-size:var(--text-xs)">${message}</div>`:''}
+          <div class="d-flex gap-2 mt-1 flex-wrap align-items-center" style="font-size:var(--text-2xs)">
+            ${source?`<span class="text-gray">${source}</span>`:''}
+            ${deadline?`<span class="text-gray">• ${deadline}</span>`:''}
+            ${actionLabel && actionHref ? `<a href="${actionHref}" class="fw-bold" style="color:${color};text-decoration:none">${actionLabel} ←</a>` : ''}
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── 5. Chart Container (state: ready/loading/empty/error) ──
+function renderChartContainer({ title, subtitle='', filterHtml='', chartHtml='', state='ready', emptyMsg='لا توجد بيانات كافية', errorMsg='تعذر تحميل الرسم البياني' }){
+  let body;
+  if(state==='loading') body=`<div class="text-center py-4"><div class="spinner"></div></div>`;
+  else if(state==='empty') body=`<div class="empty-state py-3"><i class="bi bi-bar-chart"></i><p>${emptyMsg}</p></div>`;
+  else if(state==='error') body=`<div class="empty-state py-3"><i class="bi bi-exclamation-triangle" style="color:var(--red)"></i><p>${errorMsg}</p></div>`;
+  else body=chartHtml;
+  return `
+    <div class="wonder-card h-100">
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-1">
+        <div><h6 class="fw-bold mb-0" style="font-size:var(--text-lg)">${title}</h6>${subtitle?`<small class="text-gray">${subtitle}</small>`:''}</div>
+        ${filterHtml?`<div>${filterHtml}</div>`:''}
+      </div>
+      <div class="mt-3">${body}</div>
+    </div>`;
+}
+
+// ── 6. Data Table Wrapper (state: ready/loading/empty) ──
+function renderDataTableWrapper({ title, filterHtml='', headers=[], rowsHtml='', state='ready', emptyMsg='لا توجد سجلات', actionsHtml='', paginationHtml='' }){
+  let bodyHtml;
+  if(state==='loading') bodyHtml=`<tr><td colspan="${headers.length||1}"><div class="text-center py-4"><div class="spinner"></div></div></td></tr>`;
+  else if(state==='empty') bodyHtml=`<tr><td colspan="${headers.length||1}"><div class="empty-state py-3"><i class="bi bi-inbox"></i><p>${emptyMsg}</p></div></td></tr>`;
+  else bodyHtml=rowsHtml;
+  return `
+    <div class="wonder-card p-0">
+      <div class="p-3 pb-2 d-flex justify-content-between align-items-center flex-wrap gap-2" style="border-bottom:1px solid var(--border-3)">
+        <div class="fw-bold" style="font-size:var(--text-sm)">${title}</div>
+        <div class="d-flex gap-2 align-items-center flex-wrap">${filterHtml}${actionsHtml}</div>
+      </div>
+      <div class="table-responsive">
+        <table class="tbl"><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${bodyHtml}</tbody></table>
+      </div>
+      ${paginationHtml?`<div class="p-2 d-flex justify-content-center" style="border-top:1px solid var(--border-3)">${paginationHtml}</div>`:''}
+    </div>`;
+}
+
+// ── 7. Timeline ──
+function renderTimelineItem({ time, eventType='', entity='', description='', statusBadgeHtml='' }){
+  return `
+    <div class="timeline-item-v2">
+      <div class="timeline-item-v2-dot"></div>
+      <div class="timeline-item-v2-body">
+        <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+          <div style="font-size:var(--text-sm)"><b>${eventType}</b>${entity?` — ${entity}`:''}</div>
+          <span class="text-gray" style="font-size:var(--text-2xs)">${time}</span>
+        </div>
+        ${description?`<div class="text-gray" style="font-size:var(--text-xs)">${description}</div>`:''}
+        ${statusBadgeHtml?`<div class="mt-1">${statusBadgeHtml}</div>`:''}
+      </div>
+    </div>`;
+}
+function renderTimeline(itemsHtmlArray){
+  return `<div class="timeline-v2">${itemsHtmlArray.join('')}</div>`;
+}
+
+// ── 8. Animal Card (farm-specific) ──
+function renderAnimalCard({ tag, breed, species='goat', status='alive', barn='', href=null, quickActionsHtml='' }){
+  const statusMap = { alive:{cls:'badge-tarbiya',label:'حي'}, dead:{cls:'badge-danger',label:'نافق'}, sold:{cls:'badge-gray',label:'مباع'}, treatment:{cls:'badge-tasmeen',label:'تحت العلاج'}, quarantine:{cls:'badge-blue',label:'حجر صحي'} };
+  const st = statusMap[status] || statusMap.alive;
+  const speciesIcon = species === 'goat' ? 'bi-tropical-storm' : 'bi-cloud-fill';
+  const inner = `
+    <div class="d-flex justify-content-between align-items-start mb-2">
+      <div class="d-flex align-items-center gap-2"><i class="bi ${speciesIcon}" style="color:var(--green)"></i><span class="fw-bold" style="font-size:var(--text-sm)">${tag||'—'}</span></div>
+      <span class="type-badge ${st.cls}">${st.label}</span>
+    </div>
+    <div class="text-gray mb-2" style="font-size:var(--text-xs)">${breed}${barn?` • ${barn}`:''}</div>
+    ${quickActionsHtml?`<div class="d-flex gap-1">${quickActionsHtml}</div>`:''}`;
+  return href ? `<a href="${href}" class="animal-card-v2" style="text-decoration:none;color:inherit;display:block">${inner}</a>` : `<div class="animal-card-v2">${inner}</div>`;
+}
+
+// ── 9. Production Widget (farm-specific, compact row — smaller than KPI Card) ──
+function renderProductionWidget({ type, value, unit='', trend=null, trendDir='up', period='', status='normal' }){
+  const statusMap = { normal:'var(--green)', watch:'var(--yellow)', alert:'var(--red)' };
+  const color = statusMap[status] || statusMap.normal;
+  const trendHtml = trend!==null ? `<span style="color:${trendDir==='up'?'var(--green)':'var(--red)'};font-size:var(--text-2xs);font-weight:700"><i class="bi bi-arrow-${trendDir==='up'?'up':'down'}-short"></i>${trend>0?'+':''}${ar(trend)}%</span>` : '';
+  return `
+    <div class="d-flex align-items-center justify-content-between" style="padding:var(--space-3) 0;border-bottom:1px solid var(--border-3)">
+      <div class="d-flex align-items-center gap-2">
+        <span class="kpi-status-dot" style="background:${color}"></span>
+        <div><div style="font-size:var(--text-sm);font-weight:600">${type}</div>${period?`<div class="text-gray" style="font-size:var(--text-2xs)">${period}</div>`:''}</div>
+      </div>
+      <div class="text-end">
+        <div style="font-family:'Lexend',sans-serif;font-weight:700;font-size:var(--text-lg)">${value}${unit?` <span class="text-gray" style="font-size:var(--text-xs)">${unit}</span>`:''}</div>
+        ${trendHtml}
+      </div>
+    </div>`;
+}
+
+// ── 10. Inventory Stock Indicator (farm-specific — progress bar, not a chart, per the report) ──
+function renderInventoryStockIndicator({ name, quantity, minQuantity=0, unit='' }){
+  const ratio = minQuantity > 0 ? quantity / (minQuantity * 3) : 1;
+  const pct = Math.max(4, Math.min(100, Math.round(ratio * 100)));
+  const isLow = minQuantity > 0 && quantity <= minQuantity;
+  const isWatch = !isLow && minQuantity > 0 && quantity <= minQuantity * 1.5;
+  const color = isLow ? 'var(--red)' : isWatch ? 'var(--yellow)' : 'var(--green)';
+  const label = isLow ? 'حرج' : isWatch ? 'يحتاج متابعة' : 'جيد';
+  return `
+    <div class="mb-2">
+      <div class="d-flex justify-content-between mb-1" style="font-size:var(--text-xs)">
+        <span class="fw-bold">${name}</span>
+        <span style="color:${color}">${ar(quantity)}${unit?` ${unit}`:''} <span class="text-gray">— ${label}</span></span>
+      </div>
+      <div class="m3-progress"><div class="m3-progress-fill" style="width:${pct}%;background:${color}"></div></div>
+    </div>`;
+}
+
+// ══════════════════════════════════════════════════════
+// PHASE 3 — ANALYTICS GRID chart generators
+// Hand-rolled SVG, consistent with the existing renderPieChart
+// approach (no charting library is loaded in this project).
+// Each returns null on insufficient data — callers must check
+// and fall back to renderChartContainer's 'empty' state
+// ("charts must degrade gracefully" per the report).
+// ══════════════════════════════════════════════════════
+
+function renderLineChartSVG(data, opts={}){
+  const { color='#10b981', height=180, width=560, showArea=true } = opts;
+  if(!data || data.length < 2) return null;
+  const values = data.map(d => +d.value || 0);
+  const labels = data.map(d => d.label || '');
+  const padding = { top:10, right:10, bottom:24, left:36 };
+  const cw = width - padding.left - padding.right;
+  const ch = height - padding.top - padding.bottom;
+  const maxV = Math.max(...values) * 1.15 || 1;
+  const minV = Math.min(0, Math.min(...values));
+  const range = (maxV - minV) || 1;
+  const pts = values.map((v,i) => ({
+    x: padding.left + (i/(values.length-1)) * cw,
+    y: padding.top + ch - ((v-minV)/range) * ch
+  }));
+  const pathD = pts.map((p,i) => `${i===0?'M':'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+  const areaD = `${pathD} L ${pts[pts.length-1].x.toFixed(1)} ${(padding.top+ch).toFixed(1)} L ${pts[0].x.toFixed(1)} ${(padding.top+ch).toFixed(1)} Z`;
+  const gridLines = [0,0.5,1].map(f => {
+    const y = padding.top + ch * (1-f);
+    const val = Math.round(minV + range*f);
+    return `<line x1="${padding.left}" y1="${y.toFixed(1)}" x2="${width-padding.right}" y2="${y.toFixed(1)}" stroke="var(--border-3)" stroke-width="1"/><text x="${padding.left-6}" y="${(y+3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--text-muted)">${ar(val)}</text>`;
+  }).join('');
+  const step = Math.max(1, Math.floor(pts.length/5));
+  const labelEls = pts.map((p,i) => (i%step===0 || i===pts.length-1) ? `<text x="${p.x.toFixed(1)}" y="${height-4}" text-anchor="middle" font-size="9" fill="var(--text-muted)">${labels[i]}</text>` : '').join('');
+  return `<svg width="100%" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">
+    ${gridLines}
+    ${showArea?`<path d="${areaD}" fill="${color}" opacity=".12"/>`:''}
+    <path d="${pathD}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    ${pts.map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="${color}"/>`).join('')}
+    ${labelEls}
+  </svg>`;
+}
+
+function renderGroupedBarSVG(data, opts={}){
+  const { colors=['#10b981','#ef4444'], height=180, width=560 } = opts;
+  if(!data || !data.length) return null;
+  const padding = { top:10, right:10, bottom:24, left:44 };
+  const cw = width - padding.left - padding.right;
+  const ch = height - padding.top - padding.bottom;
+  const maxV = Math.max(...data.flatMap(d=>d.values), 1) * 1.15;
+  const groupW = cw / data.length;
+  const nBars = data[0].values.length;
+  const barW = groupW / (nBars + 1.5);
+  const gridLines = [0,0.5,1].map(f => {
+    const y = padding.top + ch*(1-f);
+    return `<line x1="${padding.left}" y1="${y.toFixed(1)}" x2="${width-padding.right}" y2="${y.toFixed(1)}" stroke="var(--border-3)" stroke-width="1"/><text x="${padding.left-6}" y="${(y+3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--text-muted)">${ar(Math.round(maxV*f))}</text>`;
+  }).join('');
+  const bars = data.map((d,gi) => {
+    const groupX = padding.left + gi*groupW;
+    const rects = d.values.map((v,vi) => {
+      const bh = Math.max((v/maxV)*ch, 1);
+      const x = groupX + (vi+0.75)*barW;
+      const y = padding.top + ch - bh;
+      return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(barW*0.8).toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="${colors[vi]||'#9ca3af'}"/>`;
+    }).join('');
+    return rects + `<text x="${(groupX+groupW/2).toFixed(1)}" y="${height-4}" text-anchor="middle" font-size="9" fill="var(--text-muted)">${d.label}</text>`;
+  }).join('');
+  return `<svg width="100%" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">${gridLines}${bars}</svg>`;
+}
+
+function renderDonutSVG(segments, opts={}){
+  const { size=160, strokeWidth=22 } = opts;
+  const total = (segments||[]).reduce((t,s)=>t+(+s.value||0),0);
+  if(!total) return null;
+  const r=(size-strokeWidth)/2, cx=size/2, cy=size/2, circumference=2*Math.PI*r;
+  let offset=0;
+  const arcs = segments.filter(s=>s.value>0).map(s => {
+    const dash=(s.value/total)*circumference;
+    const el=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.color}" stroke-width="${strokeWidth}" stroke-dasharray="${dash.toFixed(1)} ${circumference.toFixed(1)}" stroke-dashoffset="${(-offset).toFixed(1)}" transform="rotate(-90 ${cx} ${cy})"/>`;
+    offset+=dash;
+    return el;
+  }).join('');
+  const legend = segments.filter(s=>s.value>0).map(s=>`<span class="d-inline-flex align-items-center gap-1" style="font-size:var(--text-xs);margin:0 6px"><span style="width:8px;height:8px;border-radius:50%;background:${s.color};display:inline-block"></span>${s.label} (${ar(s.value)})</span>`).join('');
+  return `<div class="text-center"><svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${arcs}<text x="${cx}" y="${cy+6}" text-anchor="middle" font-size="20" font-weight="700" fill="var(--text)" font-family="Lexend">${ar(total)}</text></svg><div class="d-flex flex-wrap justify-content-center mt-2">${legend}</div></div>`;
 }
 
 // ── BREED STATS ───────────────────────────────────────────

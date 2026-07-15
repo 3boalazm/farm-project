@@ -33,13 +33,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('footer-farm').textContent  = s.farmName;
   renderNavbar('reports.html');
   renderRelatedLinks('reports.js');
-  renderPageHeader(
-    '<i class="bi bi-graph-up accent-text"></i> التقارير والإحصائيات', '',
-    `<button class="action-btn" onclick="shareWhatsApp()" style="background:rgba(37,211,102,.1);border-color:rgba(37,211,102,.35);color:#25d366">
+  renderPageHeaderV2({
+    title: '<i class="bi bi-graph-up accent-text"></i> التقارير والإحصائيات',
+    breadcrumb: [{label:'الرئيسية', href:'dashboard.html'}, {label:'التقارير'}],
+    secondaryActions: `<button class="action-btn" onclick="shareWhatsApp()" style="background:rgba(37,211,102,.1);border-color:rgba(37,211,102,.35);color:#25d366">
        <i class="bi bi-whatsapp"></i> واتساب
-     </button>
-     <button class="action-btn" onclick="exportAllExcel()"><i class="bi bi-file-earmark-excel-fill" style="color:#4caf50"></i> Excel</button>`
-  );
+     </button>`,
+    primaryAction: `<button class="action-btn primary" onclick="exportAllExcel()"><i class="bi bi-file-earmark-excel-fill"></i> Excel</button>`
+  });
   const el = document.getElementById('content');
   renderLoading(el);
   const [animals,breeding,health,vaccines,finance,meds,feeds] = await Promise.all([
@@ -107,17 +108,16 @@ function renderReports(el, s) {
   el.innerHTML = `
   <div class="row g-3 mb-4">
     ${[
-      {l:'إجمالي القطيع',v:ar(m.alive.length),c:'var(--orange)',i:'bi-bar-chart-fill',h:'animals.html'},
-      {l:'معدل النفوق',v:ar(+m.deathRate)+'٪',c:+m.deathRate>5?'var(--red)':'var(--green)',i:'bi-graph-down',h:'dead.html'},
-      {l:'معدل الخصوبة',v:ar(+m.fertilityRate)+'٪',c:+m.fertilityRate>70?'var(--green)':'var(--orange)',i:'bi-diagram-2-fill',h:'breeding.html'},
-      {l:'إجمالي المواليد',v:ar(m.totalBirths),c:'var(--yellow)',i:'bi-stars',h:'births.html'},
-      {l:'الإيرادات',v:m.income.toLocaleString('ar-EG')+' '+m.curr,c:'var(--green)',i:'bi-wallet2',h:'finance.html'},
-      {l:'صافي الربح',v:((m.income-m.expense)>=0?'+':'')+(m.income-m.expense).toLocaleString('ar-EG')+' '+m.curr,c:(m.income-m.expense)>=0?'var(--green)':'var(--red)',i:'bi-graph-up-arrow',h:'finance.html'},
-    ].map(k=>`<div class="col-6 col-md-4 col-lg-2"><a href="${k.h}" style="text-decoration:none"><div class="summary-card"><i class="bi ${k.i} d-block mb-2" style="color:${k.c};font-size:1.3rem"></i><div style="font-size:.95rem;font-weight:700;color:${k.c};line-height:1.2">${k.v}</div><small class="text-gray">${k.l}</small></div></a></div>`).join('')}
+      {l:'إجمالي القطيع',v:ar(m.alive.length),status:'normal',h:'animals.html'},
+      {l:'معدل النفوق',v:ar(+m.deathRate)+'٪',status:+m.deathRate>5?'alert':'normal',h:'dead.html'},
+      {l:'معدل الخصوبة',v:ar(+m.fertilityRate)+'٪',status:+m.fertilityRate>70?'normal':'watch',h:'breeding.html'},
+      {l:'إجمالي المواليد',v:ar(m.totalBirths),status:'normal',h:'births.html'},
+      {l:'الإيرادات',v:m.income.toLocaleString('ar-EG')+' '+m.curr,status:'normal',h:'finance.html'},
+      {l:'صافي الربح',v:((m.income-m.expense)>=0?'+':'')+(m.income-m.expense).toLocaleString('ar-EG')+' '+m.curr,status:(m.income-m.expense)>=0?'normal':'alert',h:'finance.html'},
+    ].map(k=>`<div class="col-6 col-md-4 col-lg-2">${renderKPICard({ label:`<a href="${k.h}" style="color:inherit;text-decoration:none">${k.l}</a>`, value:k.v, status:k.status })}</div>`).join('')}
   </div>
   <div class="d-flex gap-2 flex-wrap mb-4">
     ${[['herd','bi-grid-3x3-gap-fill','القطيع'],['finance','bi-wallet2','المالية'],['health','bi-heart-pulse-fill','الصحة'],['breeding','bi-diagram-2-fill','التكاثر']].map(([t,i,l])=>`<button class="filter-btn${_tab===t?' active':''}" onclick="switchTab('${t}')"><i class="bi ${i} me-1"></i>${l}</button>`).join('')}
-    <button class="action-btn sm ms-auto" onclick="exportAllExcel()"><i class="bi bi-file-earmark-excel-fill" style="color:#4caf50"></i> Excel</button>
   </div>
   <div id="tab-content"></div>`;
   renderTab(_tab, m);
@@ -196,9 +196,15 @@ function renderFinanceTab(el, m) {
   const incCats=groupBy(fin.filter(r=>r.type==='income'),'category');
   const expCats=groupBy(fin.filter(r=>r.type==='expense'),'category');
   const mKeys=Object.keys(m.monthlyFin);
+  // Comparison controls (Phase 5): this month vs last month, from the same monthlyFin data already computed
+  const thisM=m.monthlyFin[mKeys[mKeys.length-1]]||{income:0,expense:0};
+  const lastM=m.monthlyFin[mKeys[mKeys.length-2]]||{income:0,expense:0};
+  const pctChange=(cur,prev)=>prev>0?Math.round(((cur-prev)/prev)*100):(cur>0?100:0);
+  const incTrend=pctChange(thisM.income,lastM.income);
+  const expTrend=pctChange(thisM.expense,lastM.expense);
   el.innerHTML=`
   <div class="row g-3 mb-4">
-    ${[{l:'الإيرادات',v:m.income.toLocaleString('ar-EG')+' '+curr,c:'var(--green)',i:'bi-arrow-up-circle-fill'},{l:'المصروفات',v:m.expense.toLocaleString('ar-EG')+' '+curr,c:'var(--red)',i:'bi-arrow-down-circle-fill'},{l:'صافي الربح',v:(net>=0?'+':'')+net.toLocaleString('ar-EG')+' '+curr,c:net>=0?'var(--green)':'var(--red)',i:'bi-graph-up-arrow'},{l:'عدد العمليات',v:ar(fin.length),c:'var(--blue)',i:'bi-receipt'}].map(k=>`<div class="col-6 col-md-3"><div class="summary-card"><i class="bi ${k.i} d-block mb-2" style="color:${k.c};font-size:1.3rem"></i><div style="font-size:.95rem;font-weight:700;color:${k.c}">${k.v}</div><small class="text-gray">${k.l}</small></div></div>`).join('')}
+    ${[{l:'الإيرادات',v:m.income.toLocaleString('ar-EG')+' '+curr,status:'normal',trend:incTrend,trendDir:incTrend>=0?'up':'down',period:'مقابل الشهر الماضي'},{l:'المصروفات',v:m.expense.toLocaleString('ar-EG')+' '+curr,status:'watch',trend:expTrend,trendDir:expTrend>=0?'up':'down',period:'مقابل الشهر الماضي'},{l:'صافي الربح',v:(net>=0?'+':'')+net.toLocaleString('ar-EG')+' '+curr,status:net>=0?'normal':'alert'},{l:'عدد العمليات',v:ar(fin.length),status:'normal'}].map(k=>`<div class="col-6 col-md-3">${renderKPICard({ label:k.l, value:k.v, status:k.status, trend:k.trend, trendDir:k.trendDir, comparisonPeriod:k.period })}</div>`).join('')}
   </div>
   <div class="wonder-card mb-4">
     <h6 class="fw-bold mb-3"><i class="bi bi-bar-chart-fill accent-text"></i> الإيرادات والمصروفات الشهرية</h6>
@@ -238,7 +244,7 @@ function renderHealthTab(el, m) {
   const lowFeeds=feeds.filter(f=>+f.quantity<=+f.min_quantity&&+f.min_quantity>0);
   el.innerHTML=`
   <div class="row g-3 mb-4">
-    ${[{l:'قيد العلاج',v:ar(m.activeHealth.length),c:m.activeHealth.length?'var(--orange)':'var(--green)',i:'bi-activity'},{l:'فترة سحب',v:ar(m.withdrawalHealth.length),c:m.withdrawalHealth.length?'var(--red)':'var(--green)',i:'bi-exclamation-triangle-fill'},{l:'إجمالي السجلات',v:ar(health.length),c:'var(--blue)',i:'bi-clipboard2-pulse-fill'},{l:'تحصين متأخر',v:ar(vac.filter(v=>v.status==='overdue').length),c:vac.filter(v=>v.status==='overdue').length?'var(--red)':'var(--green)',i:'bi-bandaid-fill'},{l:'أدوية قاربت نهايتها',v:ar(expiringMeds.length),c:expiringMeds.length?'var(--orange)':'var(--green)',i:'bi-capsule'},{l:'أعلاف عند الحد',v:ar(lowFeeds.length),c:lowFeeds.length?'var(--red)':'var(--green)',i:'bi-box-seam-fill'}].map(k=>`<div class="col-6 col-md-4 col-lg-2"><div class="summary-card"><i class="bi ${k.i} d-block mb-2" style="color:${k.c};font-size:1.3rem"></i><div style="font-size:.95rem;font-weight:700;color:${k.c}">${k.v}</div><small class="text-gray">${k.l}</small></div></div>`).join('')}
+    ${[{l:'قيد العلاج',v:ar(m.activeHealth.length),status:m.activeHealth.length?'watch':'normal'},{l:'فترة سحب',v:ar(m.withdrawalHealth.length),status:m.withdrawalHealth.length?'alert':'normal'},{l:'إجمالي السجلات',v:ar(health.length),status:'normal'},{l:'تحصين متأخر',v:ar(vac.filter(v=>v.status==='overdue').length),status:vac.filter(v=>v.status==='overdue').length?'alert':'normal'},{l:'أدوية قاربت نهايتها',v:ar(expiringMeds.length),status:expiringMeds.length?'watch':'normal'},{l:'أعلاف عند الحد',v:ar(lowFeeds.length),status:lowFeeds.length?'alert':'normal'}].map(k=>`<div class="col-6 col-md-4 col-lg-2">${renderKPICard({ label:k.l, value:k.v, status:k.status })}</div>`).join('')}
   </div>
   <div class="row g-3 mb-4">
     <div class="col-md-6"><div class="wonder-card h-100"><h6 class="fw-bold mb-3"><i class="bi bi-bar-chart-fill accent-text"></i> التشخيصات الأكثر شيوعاً</h6>${diagTop.length?'<div style="position:relative;height:200px"><canvas id="chart-diag"></canvas></div>':'<div class="text-gray text-center py-4">لا توجد سجلات بعد</div>'}</div></div>
@@ -262,7 +268,7 @@ function renderBreedingTab(el, m) {
   const mb=buildMonthlyBreeding(br); const mKeys=Object.keys(mb);
   el.innerHTML=`
   <div class="row g-3 mb-4">
-    ${[{l:'إجمالي السجلات',v:ar(br.length),c:'var(--orange)',i:'bi-collection-fill'},{l:'حوامل حالياً',v:ar(m.preg.length),c:'var(--blue)',i:'bi-heart-fill'},{l:'ولادات ناجحة',v:ar(m.born.length),c:'var(--green)',i:'bi-check-circle-fill'},{l:'إجمالي المواليد',v:ar(m.totalBirths),c:'var(--yellow)',i:'bi-people-fill'},{l:'معدل التوائم',v:ar(+m.twinRate)+'٪',c:'var(--purple)',i:'bi-people-fill'},{l:'معدل الخصوبة',v:ar(+m.fertilityRate)+'٪',c:+m.fertilityRate>70?'var(--green)':'var(--orange)',i:'bi-graph-up'}].map(k=>`<div class="col-6 col-md-4 col-lg-2"><div class="summary-card"><i class="bi ${k.i} d-block mb-2" style="color:${k.c};font-size:1.3rem"></i><div style="font-size:.95rem;font-weight:700;color:${k.c}">${k.v}</div><small class="text-gray">${k.l}</small></div></div>`).join('')}
+    ${[{l:'إجمالي السجلات',v:ar(br.length),status:'normal'},{l:'حوامل حالياً',v:ar(m.preg.length),status:'normal'},{l:'ولادات ناجحة',v:ar(m.born.length),status:'normal'},{l:'إجمالي المواليد',v:ar(m.totalBirths),status:'normal'},{l:'معدل التوائم',v:ar(+m.twinRate)+'٪',status:'normal'},{l:'معدل الخصوبة',v:ar(+m.fertilityRate)+'٪',status:+m.fertilityRate>70?'normal':'watch'}].map(k=>`<div class="col-6 col-md-4 col-lg-2">${renderKPICard({ label:k.l, value:k.v, status:k.status })}</div>`).join('')}
   </div>
   <div class="row g-3 mb-4">
     <div class="col-md-5"><div class="wonder-card h-100"><h6 class="fw-bold mb-3"><i class="bi bi-pie-chart-fill accent-text"></i> توزيع الحالات</h6><div style="position:relative;height:180px"><canvas id="chart-br-status"></canvas></div><div class="row g-2 mt-2">${[['حامل',m.preg.length,'var(--blue)'],['ولدت',m.born.length,'var(--green)'],['فشل',m.failed.length,'var(--red)']].map(([l,v,c])=>`<div class="col-4 text-center"><div class="fw-bold" style="color:${c}">${ar(v)}</div><small class="text-gray">${l}</small></div>`).join('')}</div></div></div>

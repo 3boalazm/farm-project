@@ -21,33 +21,54 @@ function renderHealthPage(s){
   const inWithdrawal=healthRecs.filter(r=>r.status==='active'&&r.withdrawal_end&&r.withdrawal_end>=t);
   const completed=healthRecs.filter(r=>r.status==='completed');
 
-  renderPageHeader('<i class="bi bi-heart-pulse-fill accent-text"></i> السجل الصحي',
-    `${ar(healthRecs.length)} سجل • ${ar(active.length)} قيد العلاج`,
-    can('health')?`<button class="action-btn primary" onclick="openHealthModal()"><i class="bi bi-plus-lg"></i> سجل جديد</button>`:''
-  );
+  renderPageHeaderV2({
+    title: '<i class="bi bi-heart-pulse-fill accent-text"></i> السجل الصحي',
+    description: `${ar(healthRecs.length)} سجل • ${ar(active.length)} قيد العلاج`,
+    breadcrumb: [{label:'الرئيسية', href:'dashboard.html'}, {label:'السجل الصحي'}],
+    primaryAction: can('health')?`<button class="action-btn primary" onclick="openHealthModal()"><i class="bi bi-plus-lg"></i> سجل جديد</button>`:'',
+    secondaryActions: `<button class="action-btn sm" onclick="exportHealthCSV()"><i class="bi bi-filetype-csv"></i> تصدير</button>`
+  });
   const el=document.getElementById('content');
 
-  // Withdrawal alert banner
-  const withdrawalAlert=inWithdrawal.length>0?`<div class="withdrawal-alert mb-4">
-    <div class="fw-bold mb-2 red-text"><i class="bi bi-exclamation-triangle-fill me-2"></i>تحذير: ${ar(inWithdrawal.length)} حيوان في تأثير العلاج — يُمنع البيع أو الذبح أو استخدام المنتجات</div>
-    ${inWithdrawal.map(r=>{const dLeft=Math.ceil((new Date(r.withdrawal_end)-new Date())/86400000);return`<div class="d-flex align-items-center gap-2 mt-2 flex-wrap">
-      <span class="type-badge badge-danger">${r.animal_tag||r.animal_breed}</span>
-      <small class="text-gray">${r.medication} — ينتهي ${r.withdrawal_end} <span style="color:var(--red)">(متبقي ${ar(Math.max(0,dLeft))} يوم)</span></small>
-    </div>`;}).join('')}
-  </div>`:'';
+  // KPI Summary (Analytics Template) — was 4 plain summary-cards, now the shared KPI Card component
+  const kpiHtml = `
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">${renderKPICard({ label:'قيد العلاج', value: ar(active.length), status: active.length>0?'watch':'normal' })}</div>
+    <div class="col-6 col-md-3">${renderKPICard({ label:'فترة سحب', value: ar(inWithdrawal.length), status: inWithdrawal.length>0?'alert':'normal' })}</div>
+    <div class="col-6 col-md-3">${renderKPICard({ label:'مكتملة', value: ar(completed.length), status:'normal' })}</div>
+    <div class="col-6 col-md-3">${renderKPICard({ label:'إجمالي', value: ar(healthRecs.length), status:'normal' })}</div>
+  </div>`;
+
+  // Chart Grid (Analytics Template) — status distribution, degrades gracefully if empty
+  const statusDonut = renderDonutSVG([
+    { label:'قيد العلاج', value: active.length, color:'#f59e0b' },
+    { label:'مكتمل', value: completed.length, color:'#10b981' },
+  ], { size:140 });
+  const analyticsHtml = `<div class="row g-3 mb-4"><div class="col-md-5">${renderChartContainer({ title:'توزيع الحالات', subtitle:'قيد العلاج مقابل مكتمل', chartHtml: statusDonut||'', state: statusDonut?'ready':'empty' })}</div></div>`;
+
+  // Withdrawal warnings — now individual Alert Cards (severity: critical) instead of one grouped banner
+  const withdrawalAlertsHtml = inWithdrawal.length>0 ? `
+    <div class="mb-4">
+      <div class="fw-bold mb-2" style="color:var(--red)"><i class="bi bi-exclamation-triangle-fill me-2"></i>تحذير: حيوانات في فترة تأثير العلاج</div>
+      ${inWithdrawal.map(r=>{
+        const dLeft=Math.ceil((new Date(r.withdrawal_end)-new Date())/86400000);
+        return renderAlertCard({ severity:'critical', icon:'bi-exclamation-triangle-fill',
+          title:`${r.animal_tag||r.animal_breed} — ${r.medication}`,
+          message:'يُمنع البيع أو الذبح أو استخدام المنتجات',
+          source:r.barn||'', deadline:`ينتهي ${r.withdrawal_end} (متبقي ${ar(Math.max(0,dLeft))} يوم)` });
+      }).join('')}
+    </div>` : '';
 
   let filtered=healthFilter==='all'?healthRecs:healthFilter==='active'?active:healthFilter==='withdrawal'?inWithdrawal:completed;
 
-  el.innerHTML=`
-  <div class="row g-3 mb-4">
-    ${[{l:'قيد العلاج',v:active.length,c:'var(--orange)',i:'bi-activity'},{l:'فترة سحب',v:inWithdrawal.length,c:'var(--red)',i:'bi-exclamation-triangle-fill'},{l:'مكتملة',v:completed.length,c:'var(--green)',i:'bi-check-circle-fill'},{l:'إجمالي',v:healthRecs.length,c:'var(--gray)',i:'bi-clipboard2-pulse-fill'}].map(s=>`<div class="col-6 col-md-3"><div class="summary-card"><i class="bi ${s.i} d-block mb-2" style="color:${s.c};font-size:1.3rem"></i><div class="summary-number" style="color:${s.c}">${ar(s.v)}</div><small class="text-gray">${s.l}</small></div></div>`).join('')}
-  </div>
-  ${withdrawalAlert}
+  // Filter Bar + Data list (Listing Template) — kept as record-cards, not forced into a literal <table>:
+  // health records carry rich per-record detail (diagnosis/medication/dosage/withdrawal/BCS) that
+  // compresses badly into narrow table columns, so the existing card-list is the better fit here.
+  el.innerHTML = kpiHtml + analyticsHtml + withdrawalAlertsHtml + `
   <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <div class="filter-bar">
       ${[{f:'all',l:'الكل',n:healthRecs.length},{f:'active',l:'قيد العلاج',n:active.length},{f:'withdrawal',l:'فترة سحب',n:inWithdrawal.length},{f:'completed',l:'مكتمل',n:completed.length}].map(x=>`<button class="filter-btn${healthFilter===x.f?' active':''}" onclick="healthFilter='${x.f}';renderHealthPage(getSettings())">${x.l} (${x.n})</button>`).join('')}
     </div>
-    <button class="action-btn sm" onclick="exportHealthCSV()"><i class="bi bi-filetype-csv"></i> تصدير</button>
   </div>
   ${filtered.length===0?`<div class="empty-state"><i class="bi bi-heart-pulse"></i><p>لا توجد سجلات</p></div>`:
   filtered.map(r=>{
