@@ -1,8 +1,14 @@
 'use strict';
-let meds=[], feeds=[], equipment=[], invTab='meds', editInvId=null;
+let meds=[], feeds=[], equipment=[], invTab='meds', editInvId=null, _invActivity=[];
 
 document.addEventListener('DOMContentLoaded', async ()=>{
   if(!requireAuth())return;
+  // SECURITY FIX: nav.js grants this page perm:'inventory', but no
+  // can('inventory') check enforced it.
+  if(!can('inventory')){
+    document.body.innerHTML='<div class="page-wrap"><div class="empty-state" style="padding-top:100px"><i class="bi bi-shield-x" style="font-size:3rem;display:block;margin-bottom:10px;opacity:.4"></i><p>غير مصرح بالوصول</p><a href="dashboard.html" class="action-btn">الرئيسية</a></div></div>';
+    return;
+  }
   const s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
@@ -17,6 +23,13 @@ document.addEventListener('DOMContentLoaded', async ()=>{
 
 async function loadInventory(){
   [meds,feeds,equipment]=await Promise.all([fbGet('inventory_meds'),fbGet('inventory_feeds'),fbGet('inventory_equipment')]);
+  // Recent Activity data source — inventory items themselves have no
+  // created_at field (confirmed by reading submitInv()), so a timeline
+  // reconstructed from them would show no real dates. activity_log
+  // already records every add/edit here via logActivity(), and
+  // dashboard.html already fetches this same collection for its own
+  // Recent Activity — same established pattern, not a new capability.
+  try{ _invActivity=await fbGet('activity_log'); }catch(e){ _invActivity=[]; }
 }
 
 function renderInventoryPage(s){
@@ -75,7 +88,26 @@ function renderInventoryPage(s){
   ${invTab==='meds'?renderMedsTable():''}
   ${invTab==='feeds'?renderFeedsTable(s):''}
   ${invTab==='equip'?renderEquipTable():''}
-  ${invTab==='consumption'?renderConsumptionTab():''}`;
+  ${invTab==='consumption'?renderConsumptionTab():''}
+
+  <!-- Recent Activity (Analytics Template) — NEW, was missing. Reuses
+       renderTimeline/renderTimelineItem; sourced from activity_log (real
+       data, per Activity Governance — no mock/placeholder events), same
+       pattern dashboard.html already uses. -->
+  <div class="wonder-card mt-4">
+    <h6 class="fw-bold mb-3" style="font-size:var(--text-lg)"><i class="bi bi-clock-history accent-text me-2"></i>النشاط الأخير</h6>
+    ${(function(){
+      const recent=(_invActivity||[])
+        .filter(a=>a.resource==='inventory'||a.resource==='feed_consumption')
+        .sort((a,b)=>(b.timestamp||'').localeCompare(a.timestamp||''))
+        .slice(0,6);
+      return recent.length?renderTimeline(recent.map(a=>renderTimelineItem({
+        time: a.timestamp?timeAr(a.timestamp):(a.date||''),
+        eventType: a.description||a.action||'',
+        entity: a.userName||'',
+      }))):`<div class="empty-state py-3"><i class="bi bi-clock-history"></i><p>لا يوجد نشاط مسجّل بعد</p></div>`;
+    })()}
+  </div>`;
 }
 
 function renderMedsTable(){
@@ -339,10 +371,17 @@ window.loadConsumptionRecords = async function() {
       '</div></div>' : '';
 
     el.innerHTML = summaryHTML +
-      '<div class="table-responsive"><table class="tbl" style="font-size:.8rem">'+
-        '<thead><tr><th>التاريخ</th><th>الجمالون</th><th>نوع العلف</th><th>الكمية (كجم)</th><th>مسجّل بواسطة</th><th>ملاحظات</th><th></th></tr></thead>'+
-        '<tbody>'+
-        _consumption.slice(0,30).map(function(r){
+      // MIGRATED from a manual <table class="tbl"> to renderDataTableWrapper
+      // (Repository 3, Phase 3 — Table Governance). Verified before migrating:
+      // sort is fixed (date descending, unaffected by the wrapper), no filter
+      // controls exist to preserve, the single row action (delete) is kept
+      // verbatim in rowsHtml, no dedicated pagination or per-table export
+      // existed to regress — identical behaviour, only the wrapper changed.
+      renderDataTableWrapper({
+        title: 'سجلات الاستهلاك',
+        headers: ['التاريخ','الجمالون','نوع العلف','الكمية (كجم)','مسجّل بواسطة','ملاحظات',''],
+        state: _consumption.length ? 'ready' : 'empty',
+        rowsHtml: _consumption.slice(0,30).map(function(r){
           return '<tr>'+
             '<td class="text-gray">'+( r.date||'—')+'</td>'+
             '<td><span class="type-badge badge-gray">'+( r.barn||'—')+'</span></td>'+
@@ -352,8 +391,8 @@ window.loadConsumptionRecords = async function() {
             '<td class="text-gray" style="font-size:.75rem">'+( r.notes||'')+'</td>'+
             '<td><button class="action-btn sm danger" onclick="delConsumption(\'' + r._id + '\')"><i class="bi bi-trash"></i></button></td>'+
           '</tr>';
-        }).join('')+
-        '</tbody></table></div>';
+        }).join('')
+      });
   } catch(e) {
     el.innerHTML = '<div class="red-text">خطأ في تحميل البيانات: '+e.message+'</div>';
   }
@@ -424,6 +463,12 @@ window.logConsumption = async function() {
 
   closeModal();
   try {
+    // ENGINEERING NOTE (RIB-07): feed_name below links this record to
+    // inventory_feeds by NAME (a string match), not by document ID.
+    // Renaming a feed item in Inventory silently orphans historical
+    // consumption records referencing the old name. Migration to an
+    // ID-based reference is intentionally deferred (RSOT/RDR) — no
+    // functional change made here.
     await fbPost('feed_consumption', {
       date: date, barn: barn, feed_name: feed_name,
       quantity_kg: qty, recorded_by: by||null, notes: notes||null,

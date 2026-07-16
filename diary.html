@@ -144,6 +144,11 @@ function disp(v, cls){
 // ── Init ─────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async function(){
   if(!requireAuth())return;
+  // SECURITY FIX (Phase 6 hardening): nav.js grants perm:'dash', unenforced until now.
+  if (!can('dash')) {
+    document.body.innerHTML='<div class="page-wrap"><div class="empty-state" style="padding-top:100px"><i class="bi bi-shield-x" style="font-size:3rem;display:block;margin-bottom:10px;opacity:.4"></i><p>غير مصرح بالوصول</p><a href="dashboard.html" class="action-btn">الرئيسية</a></div></div>';
+    return;
+  }
   initFirebase();
   var s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());

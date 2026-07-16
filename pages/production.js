@@ -42,6 +42,35 @@ async function loadData() {
 function renderMain() {
   const el = document.getElementById('content');
   const stats = computeStats();
+
+  // ── Analytics Row (Overview level) — NEW, was missing. ──
+  // The existing "Summary" tab already has monthly milk/wool trend and a
+  // breed-weight comparison, but both are Chart.js-based and hidden behind
+  // a tab click. This adds always-visible, at-a-glance equivalents right
+  // after the KPI row — matching dashboard.html/health.js's information
+  // architecture (KPIs, then Analytics, immediately visible) — using the
+  // exact SVG primitives named for reuse (renderLineChartSVG,
+  // renderGroupedBarSVG), NOT Chart.js. This does not replace, remove, or
+  // alter any of the existing tab-level Chart.js visualizations below.
+  const arMonthsP=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+  const nowP=new Date();
+  const trendMonths=[]; const compareMonths=[];
+  for(let i=5;i>=0;i--){
+    const d=new Date(nowP.getFullYear(),nowP.getMonth()-i,1);
+    const mStr=d.toISOString().slice(0,7);
+    const monthTotal=_prodData.filter(p=>(p.date||'').startsWith(mStr)).reduce((t,p)=>t+(+p.quantity||0),0);
+    trendMonths.push({ label: arMonthsP[d.getMonth()].slice(0,3), value: monthTotal });
+    const milkTotal=_prodData.filter(p=>p.type==='milk'&&(p.date||'').startsWith(mStr)).reduce((t,p)=>t+(+p.quantity||0),0);
+    const woolTotal=_prodData.filter(p=>p.type==='wool'&&(p.date||'').startsWith(mStr)).reduce((t,p)=>t+(+p.quantity||0),0);
+    compareMonths.push({ label: arMonthsP[d.getMonth()].slice(0,3), values:[milkTotal,woolTotal] });
+  }
+  const prodTrendSvg=renderLineChartSVG(trendMonths,{color:'#3b82f6'});
+  const prodCompareSvg=renderGroupedBarSVG(compareMonths,{colors:['#3b82f6','#f59e0b']});
+  const analyticsRowHtml = `<div class="row g-3 mb-4">
+    <div class="col-md-6">${renderChartContainer({ title:'اتجاه الإنتاج', subtitle:'إجمالي كل الأنواع — آخر 6 أشهر', chartHtml: prodTrendSvg||'', state: prodTrendSvg?'ready':'empty' })}</div>
+    <div class="col-md-6">${renderChartContainer({ title:'مقارنة الإنتاج', subtitle:'الحليب مقابل الصوف — آخر 6 أشهر', chartHtml: prodCompareSvg||'', state: prodCompareSvg?'ready':'empty' })}</div>
+  </div>`;
+
   el.innerHTML = `
   <!-- KPI Row (Analytics Template) -->
   <div class="row g-3 mb-4">
@@ -52,6 +81,8 @@ function renderMain() {
     <div class="col-6 col-md-4 col-lg-2">${renderKPICard({ label:'الإناث المنتجة', value: ar(stats.activeFemales), status:'normal' })}</div>
     <div class="col-6 col-md-4 col-lg-2">${renderKPICard({ label:'سجلات الإنتاج', value: ar(_prodData.length), status: _prodData.length===0?'watch':'normal' })}</div>
   </div>
+
+  ${analyticsRowHtml}
 
   <!-- Tab Navigation -->
   <div class="d-flex gap-2 flex-wrap mb-4" role="tablist" aria-label="فلاتر الإنتاج">
@@ -65,6 +96,22 @@ function renderMain() {
 
   <!-- Tab content -->
   <div id="prod-tab-content"></div>
+
+  <!-- Recent Activity (Analytics Template) — NEW, was missing. Reuses
+       renderTimeline/renderTimelineItem exactly as dashboard.html/health.js;
+       built from _prodData already loaded, no new Firebase call added. -->
+  <div class="wonder-card mt-4">
+    <h6 class="fw-bold mb-3" style="font-size:var(--text-lg)"><i class="bi bi-clock-history accent-text me-2"></i>النشاط الأخير</h6>
+    ${(function(){
+      const typeLabel={milk:'تسجيل حليب',wool:'تسجيل صوف',weight:'تسجيل وزن'};
+      const recent=[..._prodData].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,6);
+      return recent.length?renderTimeline(recent.map(p=>renderTimelineItem({
+        time: p.date||'',
+        eventType: typeLabel[p.type]||p.type,
+        entity: `${p.animal_breed||''}${p.animal_tag?' #'+p.animal_tag:''} — ${ar(+p.quantity||0)} ${p.unit==='liter'?'لتر':'كجم'}`,
+      }))):`<div class="empty-state py-3"><i class="bi bi-clock-history"></i><p>لا يوجد نشاط مسجّل بعد</p></div>`;
+    })()}
+  </div>
 
   <!-- FAB for mobile quick entry -->
   <button class="fab-btn" onclick="openProdEntry()" aria-label="تسجيل إنتاج سريع" title="تسجيل إنتاج"
@@ -372,23 +419,29 @@ function renderSummaryTab(el) {
   el.innerHTML = `
   <div class="row g-3 mb-4">
     <div class="col-md-6">
-      ${renderSectionContainer({
-        title: 'أعلى منتجي الحليب',
-        contentHtml: topMilk.length ? `
-          <table class="tbl" aria-label="قائمة أعلى منتجي الحليب">
-            <thead><tr><th>#</th><th>الحيوان</th><th>السلالة</th><th>إجمالي</th><th>متوسط/يوم</th></tr></thead>
-            <tbody>
-              ${topMilk.map((a, i) => `
-                <tr>
-                  <td class="fw-bold accent-text">${ar(i+1)}</td>
-                  <td class="fw-bold">${a.tag}</td>
-                  <td class="text-gray">${a.breed || '—'}</td>
-                  <td class="blue-text fw-bold">${ar(a.total.toFixed(1))} ل</td>
-                  <td class="text-gray">${ar((a.total/a.count).toFixed(2))} ل</td>
-                </tr>`).join('')}
-            </tbody>
-          </table>` : '<div class="text-gray text-center py-3">لا توجد بيانات</div>'
-      })}
+      ${(function(){
+        // MIGRATED from a manual <table class="tbl"> inside renderSectionContainer
+        // to renderDataTableWrapper (Repository 3, Phase 3 — Table Governance).
+        // Verified before migrating: this table has no sorting, filtering,
+        // row actions, pagination, or export of its own — a static top-8
+        // ranked list — so renderDataTableWrapper's identical <table class="tbl">
+        // output plus its title/empty-state chrome preserves 100% of the
+        // existing behaviour, nothing is downgraded.
+        return renderDataTableWrapper({
+          title: 'أعلى منتجي الحليب',
+          headers: ['#','الحيوان','السلالة','إجمالي','متوسط/يوم'],
+          state: topMilk.length ? 'ready' : 'empty',
+          emptyMsg: 'لا توجد بيانات',
+          rowsHtml: topMilk.map((a, i) => `
+            <tr>
+              <td class="fw-bold accent-text">${ar(i+1)}</td>
+              <td class="fw-bold">${a.tag}</td>
+              <td class="text-gray">${a.breed || '—'}</td>
+              <td class="blue-text fw-bold">${ar(a.total.toFixed(1))} ل</td>
+              <td class="text-gray">${ar((a.total/a.count).toFixed(2))} ل</td>
+            </tr>`).join('')
+        });
+      })()}
     </div>
     <div class="col-md-6">
       ${renderChartContainer({
@@ -529,6 +582,7 @@ window.submitProd = async function() {
     // Also update animal's current_weight if type=weight
     if (type === 'weight') {
       try { await fbPatch('animals', animal._id, { current_weight: qty, weight_updated: date }); } catch(e) {}
+      try { await fbPost('animals/'+animal._id+'/weights', { weight: qty, date: date, notes: notes || null }); } catch(e) {}
     }
 
     const typeLabel = { milk:'حليب', wool:'صوف', weight:'وزن' }[type];

@@ -3,6 +3,13 @@ let healthRecs=[], healthFilter='all', editHealthId=null;
 
 document.addEventListener('DOMContentLoaded', async ()=>{
   if(!requireAuth())return;
+  // SECURITY FIX (Phase 6 hardening): nav.js grants perm:'health', unenforced
+  // until now -- same bug class as vaccine.js, breeding.js, inventory.js.
+  if (!can('health')) {
+    document.getElementById('content').innerHTML='<div class="empty-state"><i class="bi bi-shield-x"></i><p>غير مصرح بالوصول لبيانات الصحة</p></div>';
+    renderNavbar('health.html');
+    return;
+  }
   const s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
@@ -44,7 +51,26 @@ function renderHealthPage(s){
     { label:'قيد العلاج', value: active.length, color:'#f59e0b' },
     { label:'مكتمل', value: completed.length, color:'#10b981' },
   ], { size:140 });
-  const analyticsHtml = `<div class="row g-3 mb-4"><div class="col-md-5">${renderChartContainer({ title:'توزيع الحالات', subtitle:'قيد العلاج مقابل مكتمل', chartHtml: statusDonut||'', state: statusDonut?'ready':'empty' })}</div></div>`;
+
+  // Treatment Trend — NEW, was missing (module structure calls for it, per
+  // Repository 3 Phase 2). Reuses renderLineChartSVG exactly as dashboard.html
+  // does; built entirely from healthRecs already loaded on this page — no new
+  // Firebase call added.
+  const arMonthsH=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+  const nowH=new Date();
+  const treatmentTrend=[];
+  for(let i=5;i>=0;i--){
+    const d=new Date(nowH.getFullYear(),nowH.getMonth()-i,1);
+    const mStr=d.toISOString().slice(0,7);
+    const count=healthRecs.filter(r=>(r.date||'').startsWith(mStr)).length;
+    treatmentTrend.push({ label: arMonthsH[d.getMonth()].slice(0,3), value: count });
+  }
+  const trendSvg=renderLineChartSVG(treatmentTrend,{color:'#f59e0b'});
+
+  const analyticsHtml = `<div class="row g-3 mb-4">
+    <div class="col-md-5">${renderChartContainer({ title:'توزيع الحالات', subtitle:'قيد العلاج مقابل مكتمل', chartHtml: statusDonut||'', state: statusDonut?'ready':'empty' })}</div>
+    <div class="col-md-7">${renderChartContainer({ title:'اتجاه العلاجات', subtitle:'آخر 6 أشهر', chartHtml: trendSvg||'', state: trendSvg?'ready':'empty' })}</div>
+  </div>`;
 
   // Withdrawal warnings — now individual Alert Cards (severity: critical) instead of one grouped banner
   const withdrawalAlertsHtml = inWithdrawal.length>0 ? `
@@ -97,7 +123,22 @@ function renderHealthPage(s){
         </div>
       </div>
     </div>`;
-  }).join('')}`;
+  }).join('')}
+  ${(function(){
+    // Recent Activity (Analytics Template) — NEW, was missing. Reuses
+    // renderTimeline/renderTimelineItem exactly as dashboard.html's own
+    // "Recent Activity" section; built from healthRecs already loaded,
+    // no new Firebase call added.
+    const recent=[...healthRecs].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,6);
+    return `<div class="wonder-card mt-4">
+      <h6 class="fw-bold mb-3" style="font-size:var(--text-lg)"><i class="bi bi-clock-history accent-text me-2"></i>النشاط الأخير</h6>
+      ${recent.length?renderTimeline(recent.map(r=>renderTimelineItem({
+          time: r.date||'',
+          eventType: r.status==='active'?'سجل علاج جديد':'علاج مكتمل',
+          entity: `${r.animal_breed||''}${r.animal_tag?' #'+r.animal_tag:''} — ${r.diagnosis||''}`,
+        }))):`<div class="empty-state py-3"><i class="bi bi-clock-history"></i><p>لا يوجد نشاط مسجّل بعد</p></div>`}
+    </div>`;
+  })()}`;
 }
 
 window.completeHealth=async function(id){

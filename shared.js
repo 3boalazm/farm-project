@@ -91,7 +91,8 @@ function renderNavbar(activePage=''){
   <aside class="sidebar-menu" id="sidebarMenu">
     <div class="sidebar-header">
       <div class="d-flex align-items-center gap-2">
-        <div class="farm-logo-sm">${s.logoUrl?`<img src="${s.logoUrl}" alt="">`:'🐐'}</div>
+        <div class="farm-logo-sm">${s.logoUrl==='media/logo-icon.svg'?`<img class="logo-for-light" src="media/logo-icon.svg" alt="">
+<img class="logo-for-dark" src="media/logo-icon-dark.svg" alt="">`:s.logoUrl?`<img src="${s.logoUrl}" alt="">`:'🐐'}</div>
         <div><div class="fw-bold" style="font-size:1rem">${s.farmName}</div>
         <small style="color:${ROLES[u?.role||'admin']?.color}">${ROLES[u?.role||'admin']?.label}</small></div>
       </div>
@@ -120,7 +121,7 @@ function renderNavbar(activePage=''){
   </aside>
   <nav class="navbar-wonder">
     <div class="container d-flex justify-content-between align-items-center">
-      <a href="dashboard.html" class="navbar-brand"><span>${s.logoUrl?`<img src="${s.logoUrl}" alt="" style="height:1.2em;width:auto;vertical-align:-.2em">`:'🐐'}</span> ${s.farmName}</a>
+      <a href="dashboard.html" class="navbar-brand"><span>${s.logoUrl==='media/logo-icon.svg'?`<img class="logo-for-light" src="media/logo-icon.svg" alt="" style="height:1.2em;width:auto;vertical-align:-.2em"><img class="logo-for-dark" src="media/logo-icon-dark.svg" alt="" style="height:1.2em;width:auto;vertical-align:-.2em">`:s.logoUrl?`<img src="${s.logoUrl}" alt="" style="height:1.2em;width:auto;vertical-align:-.2em">`:'🐐'}</span> ${s.farmName}</a>
       <div class="d-flex align-items-center gap-2">
         <span class="date-badge d-none d-sm-flex"><i class="bi bi-calendar3"></i> ${todayAr()}</span>
         <button class="theme-btn d-none d-md-flex" onclick="toggleTheme()" id="theme-toggle-btn" title="تبديل المظهر">
@@ -850,6 +851,22 @@ window._ubUpdateBreeds=function(){
   if(sel)sel.innerHTML=breeds.map(b=>'<option>'+b+'</option>').join('');
 };
 
+// ── Wave B Commit 1/N: canonical single-offspring creation, shared by
+// _ubSubmit() and submitBreeding()'s markBorn path (D-02). Same fields,
+// same order, same weight-history behavior as the pre-existing inline
+// logic this replaces -- no behavior change for _ubSubmit's own callers.
+window.createOffspringAnimal=async function(p){
+  const rec={species:p.species,breed:p.breed,gender:p.gender,purpose:p.purpose,status:'alive',birth_date:p.birthDate,
+    tag:p.tag||null,
+    mother_tag:p.motherTag,mother_breed:p.motherBreed,
+    father_tag:p.fatherTag||null,
+    birth_weight:p.weight||null,barn:p.barn||null,notes:p.notes||null};
+  const newAnimalId=await fbPost('animals',rec);
+  if(p.weight){
+    await fbPost('animals/'+newAnimalId+'/weights',{weight:p.weight, date:p.birthDate, notes:'وزن الميلاد'});
+  }
+  return newAnimalId;
+};
 window._ubSubmit=async function(){
   const sp=document.getElementById('ub-sp').value;
   const breed=document.getElementById('ub-breed').value;
@@ -888,16 +905,12 @@ window._ubSubmit=async function(){
     });
     // Save each animal
     for(let i=0;i<qty;i++){
-      const rec={species:sp,breed,gender,purpose,status:'alive',birth_date:bdate,
+      await window.createOffspringAnimal({
+        species:sp,breed,gender,purpose,birthDate:bdate,
         tag:qty===1?(tag||null):(tag?tag+'-'+(i+1):null),
-        mother_tag:motherTag,mother_breed:motherBreed,
-        father_tag:fatherTag||null,
-        birth_weight:weight,barn,notes:notes||null};
-      await fbPost('animals',rec);ok++;
-    }
-    // Save weight record if provided
-    if(weight&&ok>0){
-      await fbPost('weights',{date:bdate,weight,animal_tag:tag||motherTag+'-newborn',species:sp,breed,barn,notes:'وزن الميلاد'});
+        motherTag,motherBreed,fatherTag,weight,barn,notes
+      });
+      ok++;
     }
     await logActivity('add','animals','تسجيل ولادة: '+motherTag+' — '+ar(qty)+' مولود ('+breed+' '+(gender==='male'?'ذكر':'أنثى')+')');
     toast('✅ تم تسجيل الولادة و'+ar(qty)+' مولود في القطيع');
@@ -928,3 +941,46 @@ function addFAB(label,actionFn,iconClass){
   applyMQ(mq);
   if(mq.addEventListener)mq.addEventListener('change',applyMQ);
 }
+
+// ── Wave A Commit 5/6: Historical weight_log -> animals/{id}/weights ──
+// One-time (safely re-runnable) migration utility. Not wired to any UI
+// button in this commit -- callable explicitly (console or a future,
+// separately-scoped commit). Reads weight_log and animals; writes only
+// to animals/{id}/weights. Never deletes or modifies weight_log itself.
+window.migrateWeightLogToWeights=async function(){
+  var rows=await fbGet('weight_log')||[];
+  var animalsList=await fbGet('animals')||[];
+  var migrated=0, skippedDuplicate=0, unresolved=0, malformed=0;
+  var details=[];
+  for(var i=0;i<rows.length;i++){
+    var row=rows[i];
+    if(typeof row.weight!=='number' || !(row.weight>0) || !row.date){
+      malformed++; details.push({row:row,status:'malformed'}); continue;
+    }
+    var targetId=row.animal_id;
+    if(targetId){
+      var stillExists=animalsList.some(function(a){return a._id===targetId;});
+      if(!stillExists){
+        unresolved++; details.push({row:row,status:'unresolved-deleted-animal',animalId:targetId}); continue;
+      }
+    }else{
+      var matches=animalsList.filter(function(a){
+        if(row.animal_tag && row.animal_tag!=='—') return a.tag===row.animal_tag;
+        if(row.animal_breed && row.animal_breed!=='—') return a.breed===row.animal_breed;
+        return false;
+      });
+      if(matches.length!==1){
+        unresolved++; details.push({row:row,status:'unresolved-'+(matches.length===0?'no-match':'ambiguous')}); continue;
+      }
+      targetId=matches[0]._id;
+    }
+    var existing=await fbGet('animals/'+targetId+'/weights')||[];
+    var dup=existing.some(function(w){return w.weight===row.weight && w.date===row.date;});
+    if(dup){
+      skippedDuplicate++; details.push({row:row,status:'skipped-duplicate',animalId:targetId}); continue;
+    }
+    await fbPost('animals/'+targetId+'/weights',{weight:row.weight,date:row.date,notes:row.notes||null});
+    migrated++; details.push({row:row,status:'migrated',animalId:targetId});
+  }
+  return {total:rows.length, migrated:migrated, skippedDuplicate:skippedDuplicate, unresolved:unresolved, malformed:malformed, details:details};
+};

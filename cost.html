@@ -50,6 +50,14 @@ const CURR=()=>getSettings().currency;
 
 document.addEventListener('DOMContentLoaded', async ()=>{
   if(!requireAuth())return;
+  // SECURITY FIX (baseline hardening, re-confirmed missing during final
+  // verification): nav.js grants this page perm:'finance', but no
+  // can('finance') check enforced it — same bug class as breeding.js/
+  // inventory.js/reports.js, now closed to match.
+  if (!can('finance')) {
+    document.body.innerHTML='<div class="page-wrap"><div class="empty-state" style="padding-top:100px"><i class="bi bi-shield-x" style="font-size:3rem;display:block;margin-bottom:10px;opacity:.4"></i><p>غير مصرح بالوصول</p><a href="dashboard.html" class="action-btn">الرئيسية</a></div></div>';
+    return;
+  }
   initFirebase();
   const s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());

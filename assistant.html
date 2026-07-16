@@ -490,8 +490,27 @@ window.executeAction = async function() {
     }
     else if (parsed.action === 'add_birth') {
       var cnt = parseInt(d.count) || 1;
+      await fbPost('breeding', {
+        female_tag:d.mother_tag||null, mother_tag:d.mother_tag||null,
+        female_breed:d.mother_breed||null, mother_breed:d.mother_breed||null,
+        female_species:d.species,
+        male_tag:null,
+        mating_date:null, expected_birth:null,
+        actual_birth:d.birth_date||todayStr(), status:'born',
+        offspring_count:cnt,
+        male_offspring:d.gender==='male'?cnt:0,
+        female_offspring:d.gender==='female'?cnt:0,
+        birth_weights:d.birth_weight?String(d.birth_weight):null,
+        birth_amount:null, barn:d.barn||null,
+        added_by:'مساعد ذكي', notes:null
+      });
       for (var j = 0; j < cnt; j++) {
-        await fbPost('animals', { species:d.species, breed:d.breed||d.mother_breed, gender:d.gender, purpose:'birth', status:'alive', mother_tag:d.mother_tag||null, mother_breed:d.mother_breed||null, birth_date:d.birth_date||todayStr(), barn:d.barn||null, birth_weight:d.birth_weight||null, created_at:todayStr() });
+        await window.createOffspringAnimal({
+          species:d.species, breed:d.breed||d.mother_breed, gender:d.gender, purpose:'birth',
+          birthDate:d.birth_date||todayStr(), tag:null,
+          motherTag:d.mother_tag||null, motherBreed:d.mother_breed||null, fatherTag:null,
+          weight:d.birth_weight||null, barn:d.barn||null, notes:null
+        });
       }
       await logActivity('add','animals','تسجيل ولادة عبر المساعد: '+ar(cnt)+' مواليد');
       addMsg('system','✅ تم تسجيل '+ar(cnt)+' مولود');
@@ -516,9 +535,11 @@ window.executeAction = async function() {
     }
     else if (parsed.action === 'add_weight') {
       var animal = _farmData.animals.find(function(a){ return a.tag === d.animal_tag || a.breed === d.animal_breed; });
-      if (animal) await fbPatch('animals', animal._id, { current_weight: d.weight, weight_updated: d.date||todayStr() });
-      await fbPost('weight_log', { animal_tag:d.animal_tag||'—', animal_breed:d.animal_breed||'—', weight:d.weight, date:d.date||todayStr(), recorded_by:'مساعد ذكي' });
-      await logActivity('add','weight_log','تسجيل وزن: '+(d.animal_tag||d.animal_breed)+' = '+d.weight+' كجم');
+      if (animal) {
+        await fbPatch('animals', animal._id, { current_weight: d.weight, weight_updated: d.date||todayStr() });
+        await fbPost('animals/'+animal._id+'/weights', { weight: d.weight, date: d.date||todayStr(), notes: null });
+      }
+      await logActivity('add','animals','تسجيل وزن: '+(d.animal_tag||d.animal_breed)+' = '+d.weight+' كجم');
       addMsg('system','✅ تم تسجيل الوزن: '+ar(d.weight)+' كجم');
     }
     else if (parsed.action === 'add_breeding') {

@@ -3,6 +3,12 @@ let vaccines=[], vaccFilter='all', editVaccId=null;
 
 document.addEventListener('DOMContentLoaded', async ()=>{
   if(!requireAuth())return;
+  // SECURITY FIX (Phase 6 hardening): nav.js grants perm:'health', unenforced until now.
+  if (!can('health')) {
+    document.getElementById('content').innerHTML='<div class="empty-state"><i class="bi bi-shield-x"></i><p>غير مصرح بالوصول لبيانات التحصين</p></div>';
+    renderNavbar('vaccine.html');
+    return;
+  }
   const s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;

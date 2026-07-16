@@ -56,7 +56,26 @@ function renderFinancePage(s){
     chartHtml: topCats.map(([cat,amt])=>{const pct=totalEx?Math.round(amt/totalEx*100):0;return`<div class="finance-bar-wrap"><div class="lb"><span class="text-gray">${cat}</span><span class="fw-bold accent-text">${amt.toLocaleString('ar-EG')} ${curr} (${pct}٪)</span></div><div class="finance-bar" role="presentation" aria-hidden="true"><div class="finance-bar-fill" style="width:${pct}%"></div></div></div>`;}).join('')
   }) : '';
 
-  el.innerHTML = kpiHtml + `<div class="mb-4">${distributionHtml}</div>` + `
+  // Monthly Trend / Revenue vs Expense — NEW, was missing. A single grouped-bar
+  // chart, by month, naturally answers both the "Monthly Trend" and "Revenue vs
+  // Expense" requirements at once (each month's bar pair IS the comparison, and
+  // the sequence of months IS the trend) — the same pattern dashboard.html
+  // already uses for its own revenue/expense chart. Reuses renderGroupedBarSVG
+  // exactly; built from finRecs already loaded, no new Firebase call added.
+  const arMonthsF=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+  const nowF=new Date();
+  const revExpTrendF=[];
+  for(let i=5;i>=0;i--){
+    const d=new Date(nowF.getFullYear(),nowF.getMonth()-i,1);
+    const mStr=d.toISOString().slice(0,7);
+    const monthInc=finRecs.filter(r=>r.type==='income'&&(r.date||'').startsWith(mStr)).reduce((t,r)=>t+(+r.amount||0),0);
+    const monthExp=finRecs.filter(r=>r.type==='expense'&&(r.date||'').startsWith(mStr)).reduce((t,r)=>t+(+r.amount||0),0);
+    revExpTrendF.push({ label: arMonthsF[d.getMonth()].slice(0,3), values:[monthInc,monthExp] });
+  }
+  const revExpSvg=renderGroupedBarSVG(revExpTrendF,{colors:['#10b981','#ef4444']});
+  const trendHtml=renderChartContainer({ title:'الإيرادات مقابل المصروفات', subtitle:'آخر 6 أشهر', chartHtml: revExpSvg||'', state: revExpSvg?'ready':'empty' });
+
+  el.innerHTML = kpiHtml + `<div class="row g-3 mb-4"><div class="col-md-5">${distributionHtml}</div><div class="col-md-7">${trendHtml}</div></div>` + `
   <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <div class="d-flex gap-2 flex-wrap align-items-center">
       ${['all','income','expense'].map(f=>`<button class="filter-btn${finFilter===f?' active':''}" onclick="finFilter='${f}';renderFinancePage(getSettings())">${{all:'الكل',income:'إيرادات',expense:'مصروفات'}[f]}</button>`).join('')}
@@ -79,7 +98,21 @@ function renderFinancePage(s){
       </div></td>
     </tr>`).join(''),
     paginationHtml: `<span class="text-gray" style="font-size:var(--text-xs)">الإجمالي المعروض: <span class="green-text fw-bold">+${recs.filter(r=>r.type==='income').reduce((t,r)=>t+(+r.amount||0),0).toLocaleString('ar-EG')}</span> / <span class="accent-text fw-bold">-${recs.filter(r=>r.type==='expense').reduce((t,r)=>t+(+r.amount||0),0).toLocaleString('ar-EG')}</span></span>`
-  })}`;
+  })}` + `
+  <!-- Recent Activity (Analytics Template) — NEW, was missing. Reuses
+       renderTimeline/renderTimelineItem exactly as dashboard.html/health.js/
+       production.js; built from finRecs already loaded, no new Firebase call. -->
+  <div class="wonder-card mt-4">
+    <h6 class="fw-bold mb-3" style="font-size:var(--text-lg)"><i class="bi bi-clock-history accent-text me-2"></i>النشاط الأخير</h6>
+    ${(function(){
+      const recent=[...finRecs].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,6);
+      return recent.length?renderTimeline(recent.map(r=>renderTimelineItem({
+        time: r.date||'',
+        eventType: r.type==='income'?'إيراد':'مصروف',
+        entity: `${r.category||''} — ${(+r.amount||0).toLocaleString('ar-EG')} ${curr}`,
+      }))):`<div class="empty-state py-3"><i class="bi bi-clock-history"></i><p>لا يوجد نشاط مسجّل بعد</p></div>`;
+    })()}
+  </div>`;
 }
 
 window.showCostPerHead=async function(){

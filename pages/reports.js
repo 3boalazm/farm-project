@@ -28,6 +28,16 @@ var _tab  = 'herd';
 
 document.addEventListener('DOMContentLoaded', async () => {
   if (!requireAuth()) return;
+  // SECURITY FIX (found during complete audit, not part of the original
+  // known-issues list): nav.js grants this page perm:'reports', but no
+  // can('reports') check enforced it — same bug class as breeding.js/
+  // inventory.js. A logged-in user without the 'reports' permission
+  // could reach this entire page (everything except the finance
+  // subsection, which already has its own can('finance') check).
+  if (!can('reports')) {
+    document.body.innerHTML='<div class="page-wrap"><div class="empty-state" style="padding-top:100px"><i class="bi bi-shield-x" style="font-size:3rem;display:block;margin-bottom:10px;opacity:.4"></i><p>غير مصرح بالوصول</p><a href="dashboard.html" class="action-btn">الرئيسية</a></div></div>';
+    return;
+  }
   const s = getSettings();
   document.getElementById('footer-year').textContent = ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent  = s.farmName;
@@ -154,27 +164,38 @@ function renderHerdTab(el, m) {
     </div></div>
   </div>
   <div class="row g-3 mb-4">
-    <div class="col-md-6"><div class="wonder-card">
-      <h6 class="fw-bold mb-3"><i class="bi bi-table accent-text"></i> ملخص القطيع</h6>
-      <table class="tbl"><thead><tr><th>الفئة</th><th>الإجمالي</th><th>ذكور</th><th>إناث</th></tr></thead><tbody>
-        ${[{l:'ماعز (تربية وتسمين)',a:m.goats.filter(a=>a.species==='goat')},{l:'أغنام (تربية وتسمين)',a:m.sheep.filter(a=>a.species==='sheep')},{l:'المواليد',a:m.births},{l:'النافق',a:m.dead}].map(row=>`<tr><td>${row.l}</td><td class="fw-bold">${ar(row.a.length)}</td><td class="text-gray">${ar(row.a.filter(a=>a.gender==='male').length)}</td><td class="text-gray">${ar(row.a.filter(a=>a.gender==='female').length)}</td></tr>`).join('')}
-      </tbody></table>
-    </div></div>
+    <div class="col-md-6">
+      ${renderDataTableWrapper({
+        title: 'ملخص القطيع',
+        headers: ['الفئة','الإجمالي','ذكور','إناث'],
+        rowsHtml: [{l:'ماعز (تربية وتسمين)',a:m.goats.filter(a=>a.species==='goat')},{l:'أغنام (تربية وتسمين)',a:m.sheep.filter(a=>a.species==='sheep')},{l:'المواليد',a:m.births},{l:'النافق',a:m.dead}].map(row=>`<tr><td>${row.l}</td><td class="fw-bold">${ar(row.a.length)}</td><td class="text-gray">${ar(row.a.filter(a=>a.gender==='male').length)}</td><td class="text-gray">${ar(row.a.filter(a=>a.gender==='female').length)}</td></tr>`).join('')
+      })}
+    </div>
     <div class="col-md-6"><div class="wonder-card">
       <h6 class="fw-bold mb-3"><i class="bi bi-pie-chart accent-text"></i> توزيع الغرض</h6>
       <div style="position:relative;height:160px"><canvas id="chart-purpose"></canvas></div>
     </div></div>
   </div>
-  <div class="wonder-card mb-4">
-    <h6 class="fw-bold mb-3"><i class="bi bi-building accent-text"></i> توزيع القطيع على الجمالونات</h6>
-    <div style="position:relative;height:190px;margin-bottom:8px"><canvas id="chart-barns"></canvas></div>
-    <div class="table-responsive mt-3"><table class="tbl">
-      <thead><tr><th>الجمالون</th><th>الرؤوس</th><th>السلالات</th><th>الإشغال</th></tr></thead>
-      <tbody>
-        ${m.barnDist.map(b=>{const pct=Math.min(100,Math.round(b.count/200*100));return`<tr><td class="fw-bold">${b.barn}</td><td>${ar(b.count)}</td><td class="text-gray" style="font-size:.78rem">${b.breeds.slice(0,3).join('، ')||'—'}</td><td style="min-width:130px"><div class="d-flex align-items-center gap-2"><div class="finance-bar flex-grow-1" style="height:7px"><div class="finance-bar-fill" style="width:${pct}%;background:${pct>80?'var(--red)':pct>60?'var(--orange)':'var(--green)'}"></div></div><small style="color:${pct>80?'var(--red)':pct>60?'var(--orange)':'var(--green)'};min-width:32px">${pct}٪</small></div></td></tr>`;}).join('')}
-        <tr style="border-top:2px solid var(--border)"><td class="fw-bold accent-text">الإجمالي</td><td class="fw-bold">${ar(m.alive.length)}</td><td colspan="2"></td></tr>
-      </tbody>
-    </table></div>
+  <div class="mb-4">
+    <div class="wonder-card mb-0" style="padding-bottom:0">
+      <h6 class="fw-bold mb-3"><i class="bi bi-building accent-text"></i> توزيع القطيع على الجمالونات</h6>
+      <div style="position:relative;height:190px;margin-bottom:8px"><canvas id="chart-barns"></canvas></div>
+    </div>
+    ${(function(){
+      // MIGRATED from a manual <table class="tbl"> to renderDataTableWrapper
+      // (Repository 3, Phase 3 — Table Governance). Verified: no sorting,
+      // filtering, actions, or dedicated export existed to lose. The totals
+      // row (a genuine structural feature — a <tr> with colspan spanning the
+      // last two columns) is preserved verbatim inside rowsHtml, since the
+      // wrapper renders whatever rows it's given inside the same <tbody>.
+      const rows=m.barnDist.map(b=>{const pct=Math.min(100,Math.round(b.count/200*100));return`<tr><td class="fw-bold">${b.barn}</td><td>${ar(b.count)}</td><td class="text-gray" style="font-size:.78rem">${b.breeds.slice(0,3).join('، ')||'—'}</td><td style="min-width:130px"><div class="d-flex align-items-center gap-2"><div class="finance-bar flex-grow-1" style="height:7px"><div class="finance-bar-fill" style="width:${pct}%;background:${pct>80?'var(--red)':pct>60?'var(--orange)':'var(--green)'}"></div></div><small style="color:${pct>80?'var(--red)':pct>60?'var(--orange)':'var(--green)'};min-width:32px">${pct}٪</small></div></td></tr>`;}).join('')
+        + `<tr style="border-top:2px solid var(--border)"><td class="fw-bold accent-text">الإجمالي</td><td class="fw-bold">${ar(m.alive.length)}</td><td colspan="2"></td></tr>`;
+      return renderDataTableWrapper({
+        title: 'تفاصيل الجمالونات',
+        headers: ['الجمالون','الرؤوس','السلالات','الإشغال'],
+        rowsHtml: rows
+      });
+    })()}
   </div>`;
   setTimeout(()=>{
     if(!window.Chart)return;
@@ -214,13 +235,13 @@ function renderFinanceTab(el, m) {
     <div class="col-md-6"><div class="wonder-card h-100"><h6 class="fw-bold mb-3"><i class="bi bi-arrow-up-circle-fill" style="color:var(--green)"></i> مصادر الإيرادات</h6>${renderCatBars(incCats,m.income,'var(--green)')}</div></div>
     <div class="col-md-6"><div class="wonder-card h-100"><h6 class="fw-bold mb-3"><i class="bi bi-arrow-down-circle-fill" style="color:var(--red)"></i> بنود المصروفات</h6>${renderCatBars(expCats,m.expense,'var(--red)')}</div></div>
   </div>
-  <div class="wonder-card mb-4">
-    <h6 class="fw-bold mb-3"><i class="bi bi-clock-history accent-text"></i> آخر العمليات</h6>
-    <div class="table-responsive"><table class="tbl">
-      <thead><tr><th>التاريخ</th><th>النوع</th><th>الفئة</th><th>الوصف</th><th>المبلغ</th></tr></thead>
-      <tbody>${fin.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,10).map(r=>`<tr><td class="text-gray">${r.date||'—'}</td><td><span class="type-badge ${r.type==='income'?'badge-tarbiya':'badge-danger'}">${r.type==='income'?'إيراد':'مصروف'}</span></td><td class="text-gray">${r.category||'—'}</td><td>${r.description||'—'}</td><td class="fw-bold ${r.type==='income'?'green-text':'red-text'}">${(+r.amount||0).toLocaleString('ar-EG')} ${curr}</td></tr>`).join('')}</tbody>
-    </table></div>
-    <div class="mt-2 text-center"><a href="finance.html" class="action-btn sm"><i class="bi bi-arrow-left"></i> كل العمليات</a></div>
+  <div class="mb-4">
+    ${renderDataTableWrapper({
+      title: 'آخر العمليات',
+      headers: ['التاريخ','النوع','الفئة','الوصف','المبلغ'],
+      rowsHtml: fin.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,10).map(r=>`<tr><td class="text-gray">${r.date||'—'}</td><td><span class="type-badge ${r.type==='income'?'badge-tarbiya':'badge-danger'}">${r.type==='income'?'إيراد':'مصروف'}</span></td><td class="text-gray">${r.category||'—'}</td><td>${r.description||'—'}</td><td class="fw-bold ${r.type==='income'?'green-text':'red-text'}">${(+r.amount||0).toLocaleString('ar-EG')} ${curr}</td></tr>`).join(''),
+      actionsHtml: `<a href="finance.html" class="action-btn sm"><i class="bi bi-arrow-left"></i> كل العمليات</a>`
+    })}
   </div>`;
   setTimeout(()=>{
     if(!window.Chart)return;
@@ -251,7 +272,19 @@ function renderHealthTab(el, m) {
     <div class="col-md-6"><div class="wonder-card h-100"><h6 class="fw-bold mb-3"><i class="bi bi-pie-chart-fill accent-text"></i> حالة التحصين</h6><div style="position:relative;height:160px"><canvas id="chart-vac"></canvas></div><div class="row g-2 mt-2">${[['تم التنفيذ',m.vacDone,'var(--green)'],['انتظار',m.vacPend,'var(--orange)'],['متأخر',m.vacOver,'var(--red)']].map(([l,v,c])=>`<div class="col-4 text-center"><div class="fw-bold" style="color:${c}">${ar(v)}</div><small class="text-gray">${l}</small></div>`).join('')}</div></div></div>
   </div>
   ${m.withdrawalHealth.length?`<div class="withdrawal-alert mb-4"><div class="fw-bold red-text mb-2"><i class="bi bi-exclamation-triangle-fill me-2"></i>تحذير: ${ar(m.withdrawalHealth.length)} حيوان في فترة تأثير علاج</div>${m.withdrawalHealth.slice(0,4).map(r=>{const d=Math.max(0,Math.ceil((new Date(r.withdrawal_end)-new Date())/86400000));return`<div class="d-flex align-items-center gap-2 mt-1 flex-wrap"><span class="type-badge badge-danger">${r.animal_tag||r.animal_breed||'—'}</span><small class="text-gray">${r.medication} — ينتهي ${r.withdrawal_end} <span style="color:var(--red)">(${ar(d)} يوم)</span></small></div>`;}).join('')}<div class="mt-2"><a href="health.html" class="action-btn sm danger"><i class="bi bi-arrow-left"></i> عرض الكل</a></div></div>`:''}
-  ${expiringMeds.length?`<div class="wonder-card mb-4" style="border-color:rgba(255,193,7,.3)"><h6 class="fw-bold mb-3" style="color:var(--yellow)"><i class="bi bi-capsule me-2"></i>أدوية قاربت الانتهاء (30 يوم)</h6><div class="table-responsive"><table class="tbl"><thead><tr><th>الدواء</th><th>الكمية</th><th>تاريخ الانتهاء</th><th>متبقي</th></tr></thead><tbody>${expiringMeds.map(med=>{const d=Math.ceil((new Date(med.expiry)-new Date())/86400000);return`<tr><td class="fw-bold">${med.name||'—'}</td><td>${med.quantity||0} ${med.unit||''}</td><td class="text-gray">${med.expiry}</td><td><span class="type-badge ${d<=7?'badge-danger':'badge-yellow'}">${ar(d)} يوم</span></td></tr>`;}).join('')}</tbody></table></div><div class="mt-2"><a href="inventory.html" class="action-btn sm"><i class="bi bi-arrow-left"></i> الصيدلية</a></div></div>`:''}
+  <!-- MIGRATED to renderDataTableWrapper. Disclosed, minor cosmetic trade-off:
+       the original card had a distinct amber-tinted border (border-color:
+       rgba(255,193,7,.3)) signaling urgency; renderDataTableWrapper's own
+       wonder-card wrapper doesn't expose a color-override slot, so that
+       specific tint is not preserved. All functional behaviour (headers,
+       data, sort order, the "الصيدلية" link) is identical — verified,
+       nothing lost except this one color detail. -->
+  ${expiringMeds.length?`<div class="mb-4">${renderDataTableWrapper({
+    title: '⚠️ أدوية قاربت الانتهاء (30 يوم)',
+    headers: ['الدواء','الكمية','تاريخ الانتهاء','متبقي'],
+    rowsHtml: expiringMeds.map(med=>{const d=Math.ceil((new Date(med.expiry)-new Date())/86400000);return`<tr><td class="fw-bold">${med.name||'—'}</td><td>${med.quantity||0} ${med.unit||''}</td><td class="text-gray">${med.expiry}</td><td><span class="type-badge ${d<=7?'badge-danger':'badge-yellow'}">${ar(d)} يوم</span></td></tr>`;}).join(''),
+    actionsHtml: `<a href="inventory.html" class="action-btn sm"><i class="bi bi-arrow-left"></i> الصيدلية</a>`
+  })}</div>`:''}
   ${medTop.length?`<div class="wonder-card mb-4"><h6 class="fw-bold mb-3"><i class="bi bi-capsule-pill accent-text"></i> الأدوية الأكثر استخداماً</h6>${medTop.map((m2,i)=>`<div class="finance-bar-wrap"><div class="lb"><span>${m2.med||'غير محدد'}</span><span class="fw-bold">${ar(m2.count)} مرة</span></div><div class="finance-bar"><div class="finance-bar-fill" style="width:${Math.round(m2.count/medTop[0].count*100)}%;background:${CHART_COLORS[i]}"></div></div></div>`).join('')}</div>`:''}`;
   setTimeout(()=>{
     if(!window.Chart)return;
@@ -274,8 +307,17 @@ function renderBreedingTab(el, m) {
     <div class="col-md-5"><div class="wonder-card h-100"><h6 class="fw-bold mb-3"><i class="bi bi-pie-chart-fill accent-text"></i> توزيع الحالات</h6><div style="position:relative;height:180px"><canvas id="chart-br-status"></canvas></div><div class="row g-2 mt-2">${[['حامل',m.preg.length,'var(--blue)'],['ولدت',m.born.length,'var(--green)'],['فشل',m.failed.length,'var(--red)']].map(([l,v,c])=>`<div class="col-4 text-center"><div class="fw-bold" style="color:${c}">${ar(v)}</div><small class="text-gray">${l}</small></div>`).join('')}</div></div></div>
     <div class="col-md-7"><div class="wonder-card h-100"><h6 class="fw-bold mb-3"><i class="bi bi-graph-up accent-text"></i> المواليد شهرياً</h6><div style="position:relative;height:200px"><canvas id="chart-br-monthly"></canvas></div></div></div>
   </div>
-  ${breedFert.length?`<div class="wonder-card mb-4"><h6 class="fw-bold mb-3"><i class="bi bi-table accent-text"></i> معدل الخصوبة بالسلالة</h6><div class="table-responsive"><table class="tbl"><thead><tr><th>السلالة</th><th>سجلات</th><th>ولادات</th><th>المعدل</th></tr></thead><tbody>${breedFert.map(b=>`<tr><td class="fw-bold">${b.breed}</td><td>${ar(b.total)}</td><td class="green-text fw-bold">${ar(b.born)}</td><td><div class="d-flex align-items-center gap-2"><div class="finance-bar" style="width:80px;height:6px"><div class="finance-bar-fill" style="width:${b.rate}%;background:${b.rate>70?'var(--green)':b.rate>40?'var(--orange)':'var(--red)'}"></div></div><span class="fw-bold" style="color:${b.rate>70?'var(--green)':b.rate>40?'var(--orange)':'var(--red)'}">${ar(b.rate)}٪</span></div></td></tr>`).join('')}</tbody></table></div></div>`:''}
-  ${m.preg.length?`<div class="wonder-card mb-4"><h6 class="fw-bold mb-3"><i class="bi bi-stars" style="color:var(--yellow)"></i> الحوامل الحاليات</h6><div class="table-responsive"><table class="tbl"><thead><tr><th>الأم</th><th>السلالة</th><th>التقريع</th><th>الولادة المتوقعة</th><th>متبقي</th></tr></thead><tbody>${m.preg.sort((a,b)=>(a.expected_birth||'').localeCompare(b.expected_birth||'')).slice(0,8).map(r=>{const d=r.expected_birth?Math.ceil((new Date(r.expected_birth)-new Date())/86400000):null;return`<tr><td class="fw-bold">${r.female_tag||'—'}</td><td class="text-gray">${r.female_breed||'—'}</td><td class="text-gray">${r.mating_date||'—'}</td><td>${r.expected_birth||'—'}</td><td>${d!==null?`<span class="type-badge ${d<=0?'badge-danger':d<=7?'badge-yellow':'badge-tarbiya'}">${d<=0?'تأخرت!':d===0?'اليوم!':'بعد '+ar(d)+' يوم'}</span>`:'—'}</td></tr>`;}).join('')}</tbody></table></div><div class="mt-2"><a href="breeding.html" class="action-btn sm"><i class="bi bi-arrow-left"></i> كل السجلات</a></div></div>`:''}`;
+  ${breedFert.length?`<div class="mb-4">${renderDataTableWrapper({
+    title: 'معدل الخصوبة بالسلالة',
+    headers: ['السلالة','سجلات','ولادات','المعدل'],
+    rowsHtml: breedFert.map(b=>`<tr><td class="fw-bold">${b.breed}</td><td>${ar(b.total)}</td><td class="green-text fw-bold">${ar(b.born)}</td><td><div class="d-flex align-items-center gap-2"><div class="finance-bar" style="width:80px;height:6px"><div class="finance-bar-fill" style="width:${b.rate}%;background:${b.rate>70?'var(--green)':b.rate>40?'var(--orange)':'var(--red)'}"></div></div><span class="fw-bold" style="color:${b.rate>70?'var(--green)':b.rate>40?'var(--orange)':'var(--red)'}">${ar(b.rate)}٪</span></div></td></tr>`).join('')
+  })}</div>`:''}
+  ${m.preg.length?`<div class="mb-4">${renderDataTableWrapper({
+    title: 'الحوامل الحاليات',
+    headers: ['الأم','السلالة','التقريع','الولادة المتوقعة','متبقي'],
+    rowsHtml: m.preg.sort((a,b)=>(a.expected_birth||'').localeCompare(b.expected_birth||'')).slice(0,8).map(r=>{const d=r.expected_birth?Math.ceil((new Date(r.expected_birth)-new Date())/86400000):null;return`<tr><td class="fw-bold">${r.female_tag||'—'}</td><td class="text-gray">${r.female_breed||'—'}</td><td class="text-gray">${r.mating_date||'—'}</td><td>${r.expected_birth||'—'}</td><td>${d!==null?`<span class="type-badge ${d<=0?'badge-danger':d<=7?'badge-yellow':'badge-tarbiya'}">${d<=0?'تأخرت!':d===0?'اليوم!':'بعد '+ar(d)+' يوم'}</span>`:'—'}</td></tr>`;}).join(''),
+    actionsHtml: `<a href="breeding.html" class="action-btn sm"><i class="bi bi-arrow-left"></i> كل السجلات</a>`
+  })}</div>`:''}`;
   setTimeout(()=>{
     if(!window.Chart)return;
     mkChart('chart-br-status',{type:'doughnut',data:{labels:['حامل','ولدت','فشل'],datasets:[{data:[m.preg.length,m.born.length,m.failed.length],backgroundColor:['#2196f3','#00e676','#f44336'],borderWidth:0,hoverOffset:4}]},options:{responsive:true,maintainAspectRatio:false,cutout:'55%',plugins:{legend:{display:false}}}});

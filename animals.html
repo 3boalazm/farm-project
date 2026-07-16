@@ -63,6 +63,15 @@ if(params.get('search'))fSearch=params.get('search');
 // ── Init ─────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async function(){
   if(!requireAuth())return;
+  // SECURITY FIX (Phase 6 hardening): nav.js grants this page perm:'animals',
+  // but no can('animals') check enforced it -- same bug class already fixed
+  // elsewhere. A 'visitor'-role account can currently reach this page's
+  // bulk-action/edit/delete surface directly, despite the role model
+  // intending animals.html to require the 'animals' permission explicitly.
+  if (!can('animals')) {
+    document.body.innerHTML='<div class="page-wrap"><div class="empty-state" style="padding-top:100px"><i class="bi bi-shield-x" style="font-size:3rem;display:block;margin-bottom:10px;opacity:.4"></i><p>غير مصرح بالوصول</p><a href="dashboard.html" class="action-btn">الرئيسية</a></div></div>';
+    return;
+  }
   initFirebase();
   var s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
@@ -536,7 +545,7 @@ window.doBulk=function(action){
       footerHtml:
       '<div class="d-flex gap-2 justify-content-end mt-3">'+
         '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
-        '<button class="action-btn primary" onclick="execBulk(\'transfer\')">نقل '+cnt+'</button>'+
+        '<button class="action-btn primary" onclick="execBulk(\'transfer\',{barn:document.getElementById(\'b-barn\')?.value,reason:document.getElementById(\'b-reason\')?.value})">نقل '+cnt+'</button>'+
       '</div>'
     }));
   }
@@ -602,7 +611,7 @@ window.doBulk=function(action){
       footerHtml:
       '<div class="d-flex gap-2 justify-content-end mt-3">'+
         '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
-        '<button class="action-btn danger" onclick="execBulk(\'death\')"><i class="bi bi-x-octagon-fill"></i> تسجيل نفوق '+cnt+' حيوان</button>'+
+        '<button class="action-btn danger" onclick="execBulk(\'death\',{date:document.getElementById(\'b-date\')?.value,time:document.getElementById(\'b-time\')?.value,reason:document.getElementById(\'b-reason\')?.value,autopsy:document.getElementById(\'b-autopsy\')?.value,loss:document.getElementById(\'b-loss\')?.value,deathId:document.getElementById(\'b-death-id\')?.value,notes:document.getElementById(\'b-notes\')?.value})"><i class="bi bi-x-octagon-fill"></i> تسجيل نفوق '+cnt+' حيوان</button>'+
       '</div>'
     }));
   }
@@ -629,7 +638,88 @@ window.doBulk=function(action){
   }
 };
 
-window.execBulk=async function(action){
+// ── Bulk transfer action (Repository 4, Phase 2C) ──────────────
+// Extracted verbatim from execBulk()'s 'transfer' branch — same
+// field reads, same commitBulkPatch call, same logActivity message,
+// same toast. Only ids is now a parameter instead of a closure read;
+// ok is returned so execBulk's own toast (unchanged) keeps working.
+async function performBulkTransfer(ids,fields){
+  var barn=fields?.barn;
+  var reason=fields?.reason;
+  var ok=await commitBulkPatch(ids,{barn:barn});
+  await logActivity('edit','animals','نقل جماعي '+ar(ok)+' حيوان إلى '+barn+' | '+reason);
+  toast('تم نقل '+ar(ok)+' حيوان إلى '+barn);
+  return ok;
+}
+
+// ── Bulk sell action (Repository 4, Phase 2C Iteration 2) ──────
+// Extracted verbatim from execBulk()'s 'sell' branch — same field
+// reads, same commitBulkPatch call, same conditional finance write,
+// same logActivity message, same toast. Only ids is now a parameter;
+// ok is returned exactly as the branch's own local `ok` was used.
+async function performBulkSell(ids){
+  var date=document.getElementById('b-date')?.value||todayStr();
+  var price=parseFloat(document.getElementById('b-price')?.value)||0;
+  var buyer=document.getElementById('b-buyer')?.value||'—';
+  var ok=await commitBulkPatch(ids,{status:'sold',sold_date:date,sold_price:price||null,sold_to:buyer==='—'?null:buyer});
+  if(price>0)await fbPost('finance',{date:date,type:'income',category:'بيع حيوانات',amount:price,description:'بيع '+ar(ok)+' حيوان | '+buyer,added_by:getUser()?.name});
+  await logActivity('edit','animals','بيع جماعي '+ar(ok)+' | '+buyer+(price>0?' | '+ar(price)+' '+getSettings().currency:''));
+  toast('تم بيع '+ar(ok)+' حيوان'+(price>0?' بمبلغ '+ar(price)+' '+getSettings().currency:''));
+  return ok;
+}
+
+// ── Bulk death action (Repository 4, Phase 2C Iteration 3) ─────
+// Extracted verbatim from execBulk()'s 'death' branch. Deliberately
+// NOT routed through commitBulkPatch() — its per-iteration dynamic
+// animalDeathId (batchDeathId+'-'+(i+1)) is a different shape than
+// that helper's single-static-payload contract, exactly as this
+// project's own Phase 2B audit already established. The for-loop,
+// sequential awaits, and conditional finance write are all preserved
+// exactly as they were.
+async function performBulkDeath(ids,fields){
+  fields=fields||{};
+  var date=fields.date||todayStr();
+  var time=fields.time||'';
+  var reason=fields.reason||'غير معروف';
+  var autopsy=fields.autopsy==='yes';
+  var totalLoss=parseFloat(fields.loss)||0;
+  var batchDeathId=(fields.deathId||'').trim()||genDeathId();
+  var notes=(fields.notes||'').trim()||null;
+  var perAnimalLoss=totalLoss>0?Math.round((totalLoss/ids.length)*100)/100:null;
+  var ok=0;
+  for(var i=0;i<ids.length;i++){
+    var animalDeathId=batchDeathId+'-'+(i+1);
+    try{
+      await fbPatch('animals',ids[i],{
+        status:'dead',
+        died_at:date,
+        death_time:time||null,
+        death_reason:reason,
+        death_autopsy:autopsy,
+        death_loss:perAnimalLoss||null,
+        death_id:animalDeathId,
+        death_notes:notes,
+        death_batch_id:batchDeathId
+      });
+      ok++;
+    }catch(e){}
+  }
+  if(ok>0 && totalLoss>0){
+    try{
+      await fbPost('finance',{
+        date:date,type:'loss',category:'نفوق حيوانات',
+        amount:totalLoss,
+        description:'نفوق جماعي — '+batchDeathId+(reason?' | '+reason:'')+' ('+ar(ok)+' حيوان)',
+        added_by:getUser()?.name
+      });
+    }catch(e){}
+  }
+  await logActivity('edit','animals','نفوق جماعي '+ar(ok)+' | '+reason+(autopsy?' | تشريح':'')+' | '+batchDeathId);
+  toast('✅ تم تسجيل نفوق '+ar(ok)+' حيوان — '+batchDeathId);
+  return ok;
+}
+
+window.execBulk=async function(action,extra){
   var ids=[..._selected];
   closeModal();
   toast('جاري التنفيذ على '+ar(ids.length)+' حيوان...','info');
@@ -655,67 +745,35 @@ window.execBulk=async function(action){
     toast('✅ تم تعديل '+ar(ok)+' حيوان ('+changed+')');
   }
   else if(action==='transfer'){
-    var barn=document.getElementById('b-barn')?.value;
-    var reason=document.getElementById('b-reason')?.value;
-    ok=await commitBulkPatch(ids,{barn:barn});
-    await logActivity('edit','animals','نقل جماعي '+ar(ok)+' حيوان إلى '+barn+' | '+reason);
-    toast('تم نقل '+ar(ok)+' حيوان إلى '+barn);
+    ok=await performBulkTransfer(ids,extra);
   }
   else if(action==='death'){
-    var date=document.getElementById('b-date')?.value||todayStr();
-    var time=document.getElementById('b-time')?.value||'';
-    var reason=document.getElementById('b-reason')?.value||'غير معروف';
-    var autopsy=document.getElementById('b-autopsy')?.value==='yes';
-    var totalLoss=parseFloat(document.getElementById('b-loss')?.value)||0;
-    var batchDeathId=document.getElementById('b-death-id')?.value.trim()||genDeathId();
-    var notes=document.getElementById('b-notes')?.value.trim()||null;
-    var perAnimalLoss=totalLoss>0?Math.round((totalLoss/ids.length)*100)/100:null;
-    for(var i=0;i<ids.length;i++){
-      var animalDeathId=batchDeathId+'-'+(i+1);
-      try{
-        await fbPatch('animals',ids[i],{
-          status:'dead',
-          died_at:date,
-          death_time:time||null,
-          death_reason:reason,
-          death_autopsy:autopsy,
-          death_loss:perAnimalLoss||null,
-          death_id:animalDeathId,
-          death_notes:notes,
-          death_batch_id:batchDeathId
-        });
-        ok++;
-      }catch(e){}
-    }
-    if(ok>0 && totalLoss>0){
-      try{
-        await fbPost('finance',{
-          date:date,type:'loss',category:'نفوق حيوانات',
-          amount:totalLoss,
-          description:'نفوق جماعي — '+batchDeathId+(reason?' | '+reason:'')+' ('+ar(ok)+' حيوان)',
-          added_by:getUser()?.name
-        });
-      }catch(e){}
-    }
-    await logActivity('edit','animals','نفوق جماعي '+ar(ok)+' | '+reason+(autopsy?' | تشريح':'')+' | '+batchDeathId);
-    toast('✅ تم تسجيل نفوق '+ar(ok)+' حيوان — '+batchDeathId);
+    ok=await performBulkDeath(ids,extra);
   }
   else if(action==='sell'){
-    var date=document.getElementById('b-date')?.value||todayStr();
-    var price=parseFloat(document.getElementById('b-price')?.value)||0;
-    var buyer=document.getElementById('b-buyer')?.value||'—';
-    ok=await commitBulkPatch(ids,{status:'dead',sold_at:date,removal_reason:'sale'});
-    if(price>0)await fbPost('finance',{date:date,type:'income',category:'بيع حيوانات',amount:price,description:'بيع '+ar(ok)+' حيوان | '+buyer,added_by:getUser()?.name});
-    await logActivity('edit','animals','بيع جماعي '+ar(ok)+' | '+buyer+(price>0?' | '+ar(price)+' '+getSettings().currency:''));
-    toast('تم بيع '+ar(ok)+' حيوان'+(price>0?' بمبلغ '+ar(price)+' '+getSettings().currency:''));
+    ok=await performBulkSell(ids);
   }
   await refreshAnimalsAfterBulk();
 };
 
-window.execBulkDo=async function(action,ids){
-  toast('جاري الحذف...','info');var ok=0;
+// ── Bulk delete action (Repository 4, Phase 2D) ─────────────────
+// Extracted verbatim from execBulkDo()'s delete loop + its logActivity
+// call. The native confirm() dialog (in doBulk('delete')) and the
+// start/result toasts + refreshAnimalsAfterBulk() stay exactly where
+// they were, in execBulkDo — mirroring the same shape already
+// established for performBulkTransfer/Sell/Death in Phase 2C, so
+// execBulkDo becomes a thin wrapper the same way execBulk's branches
+// did, without redesigning anything new.
+async function performBulkDelete(ids){
+  var ok=0;
   for(var i=0;i<ids.length;i++){try{await fbDelete('animals',ids[i]);ok++;}catch(e){}}
   await logActivity('delete','animals','حذف جماعي '+ar(ok)+' حيوان');
+  return ok;
+}
+
+window.execBulkDo=async function(action,ids){
+  toast('جاري الحذف...','info');
+  var ok=await performBulkDelete(ids);
   toast('تم حذف '+ar(ok)+' حيوان');
   await refreshAnimalsAfterBulk();
 };
@@ -1119,12 +1177,20 @@ window.submitReset=async function(){
     }
     setTimeout(function(){location.reload();},1500);return;
   }
+  // Modal field-read-timing fix (Wave E): these two checkboxes were
+  // previously read via document.getElementById AFTER closeModal()
+  // already removed them from the DOM, so their .checked state was
+  // always undefined/false regardless of what the user selected —
+  // same root cause as BL-01/02/03. Captured here, before closeModal,
+  // using the exact same read expressions; no logic or order changed.
+  var resetDeadChecked=document.getElementById('reset-dead')?.checked;
+  var resetBirthsChecked=document.getElementById('reset-births')?.checked;
   closeModal();var done=0;
-  if(document.getElementById('reset-dead')?.checked){
+  if(resetDeadChecked){
     var dead=animals.filter(function(a){return a.status==='dead';});
     for(var a of dead){try{await fbDelete('animals',a._id);done++;}catch(e){}}
   }
-  if(document.getElementById('reset-births')?.checked){
+  if(resetBirthsChecked){
     var births=animals.filter(function(a){return a.status==='alive'&&a.purpose==='birth';});
     for(var a of births){try{await fbPatch('animals',a._id,{purpose:'tarbiya'});done++;}catch(e){}}
   }

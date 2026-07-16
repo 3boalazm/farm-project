@@ -41,6 +41,16 @@
  */
 document.addEventListener('DOMContentLoaded', async function(){
   if(!requireAuth())return;
+  // SECURITY FIX (Phase 6 hardening): nav.js grants this page perm:'dash',
+  // but no can('dash') check enforced it -- same bug class already fixed
+  // in cost.html/breeding.js/inventory.js/reports.js/finance.js/users.html.
+  // In practice 'dash' is granted to every current role, so this guard is
+  // defense-in-depth rather than a currently-exploitable gap -- added for
+  // consistency and to protect against a future, more restrictive role.
+  if (!can('dash')) {
+    document.body.innerHTML='<div class="page-wrap"><div class="empty-state" style="padding-top:100px"><i class="bi bi-shield-x" style="font-size:3rem;display:block;margin-bottom:10px;opacity:.4"></i><p>غير مصرح بالوصول</p><a href="login.html" class="action-btn">تسجيل الدخول</a></div></div>';
+    return;
+  }
   initFirebase();
   var s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
@@ -540,6 +550,35 @@ window.openMarkDeathDash=async function(){
       alive2.map(function(a){return'<option value="'+a._id+'">'+a.breed+(a.tag?' #'+a.tag:'')+(a.gender==='male'?' ذكر':' أنثى')+'</option>';}).join('')+
     '</select>'+
     '<label>التاريخ</label><input type="date" class="field" id="dd-d" value="'+todayStr()+'">'+
+    '<label>الوقت <span class="text-gray" style="font-weight:400">(اختياري)</span></label>'+
+    '<input type="time" class="field" id="dd-time">'+
+    '<label>سبب الوفاة *</label>'+
+    '<select class="field" id="dd-reason">'+
+      '<option value="مرض">مرض</option>'+
+      '<option value="حادث">حادث</option>'+
+      '<option value="إجهاد حراري">إجهاد حراري</option>'+
+      '<option value="مضاعفات ولادة">مضاعفات ولادة</option>'+
+      '<option value="سوء تغذية">سوء تغذية</option>'+
+      '<option value="غير معروف">غير معروف</option>'+
+      '<option value="أخرى">أخرى</option>'+
+    '</select>'+
+    '<div class="row g-2">'+
+      '<div class="col-6">'+
+        '<label>تم التشريح؟</label>'+
+        '<select class="field" id="dd-autopsy">'+
+          '<option value="no">لا</option>'+
+          '<option value="yes">نعم</option>'+
+        '</select>'+
+      '</div>'+
+      '<div class="col-6">'+
+        '<label>قيمة الخسارة ('+getSettings().currency+')</label>'+
+        '<input type="number" class="field" id="dd-loss" placeholder="0" min="0">'+
+      '</div>'+
+    '</div>'+
+    '<label>معرف الوفاة</label>'+
+    '<input class="field" id="dd-death-id" placeholder="DTH-YYYYMMDD-XXXX">'+
+    '<label>ملاحظات <span class="text-gray" style="font-weight:400">(اختياري)</span></label>'+
+    '<textarea class="field" id="dd-notes" rows="2"></textarea>'+
     '<div class="d-flex gap-2 justify-content-end mt-3">'+
       '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
       '<button class="action-btn danger" onclick="_ddSubmit()">تسجيل</button>'+
@@ -548,10 +587,25 @@ window.openMarkDeathDash=async function(){
 };
 window._ddSubmit=async function(){
   var id=document.getElementById('dd-a').value;if(!id){toast('يرجى اختيار حيوان','error');return;}
+  var diedAt=document.getElementById('dd-d').value;
+  var deathTime=document.getElementById('dd-time')?.value;
+  var deathReason=document.getElementById('dd-reason')?.value;
+  var deathAutopsy=document.getElementById('dd-autopsy')?.value==='yes';
+  var deathLoss=parseFloat(document.getElementById('dd-loss')?.value)||null;
+  var deathNotes=document.getElementById('dd-notes')?.value;
+  var deathId=document.getElementById('dd-death-id')?.value;
   closeModal();
   try{
-    await fbPatch('animals',id,{status:'dead',died_at:document.getElementById('dd-d').value});
-    await logActivity('edit','animals','تسجيل نفوق');
+    await fbPatch('animals',id,{status:'dead',died_at:diedAt,death_time:deathTime,death_reason:deathReason,death_autopsy:deathAutopsy,death_loss:deathLoss,death_notes:deathNotes,death_id:deathId});
+    if(deathLoss>0){
+      await fbPost('finance',{
+        date:diedAt,type:'loss',category:'نفوق حيوانات',
+        amount:deathLoss,
+        description:'نفوق — '+deathId+(deathReason?' | '+deathReason:''),
+        added_by:getUser()?.name
+      });
+    }
+    await logActivity('edit','animals','نفوق: '+deathId+' | '+deathReason+(deathAutopsy?' | تشريح':''));
     toast('تم تسجيل النفوق');
     setTimeout(() => { location.reload(); }, 1000);
   }catch(e){toast('فشل: '+e.message,'error');}

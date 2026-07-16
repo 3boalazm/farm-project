@@ -489,16 +489,29 @@ window.submitAddWeight=async function(){
     toast('تم تسجيل الوزن');
     weights=await fbGet('animals/'+animalId+'/weights')||[];
     weights.sort(function(a,b){return b.date.localeCompare(a.date);});
+    await fbPatch('animals',animalId,{current_weight:weights[0]?weights[0].weight:null,weight_updated:weights[0]?weights[0].date:null});
     renderDetail(getSettings());
   }catch(e){toast('فشل: '+e.message,'error');}
 };
 window.delWeightByIdx=async function(idx){
   var w=weights[idx];if(!w)return;
-  try{await fbDelete('animals/'+animalId+'/weights',w._id);toast('تم الحذف');weights=weights.filter(function(_,i){return i!==idx;});renderDetail(getSettings());}
+  try{
+    await fbDelete('animals/'+animalId+'/weights',w._id);toast('تم الحذف');
+    weights=weights.filter(function(_,i){return i!==idx;});
+    weights.sort(function(a,b){return b.date.localeCompare(a.date);});
+    await fbPatch('animals',animalId,{current_weight:weights[0]?weights[0].weight:null,weight_updated:weights[0]?weights[0].date:null});
+    renderDetail(getSettings());
+  }
   catch(e){toast('فشل','error');}
 };
 window.delWeight=async function(id){
-  try{await fbDelete('animals/'+animalId+'/weights',id);toast('تم الحذف');weights=weights.filter(function(w){return w._id!==id;});renderDetail(getSettings());}
+  try{
+    await fbDelete('animals/'+animalId+'/weights',id);toast('تم الحذف');
+    weights=weights.filter(function(w){return w._id!==id;});
+    weights.sort(function(a,b){return b.date.localeCompare(a.date);});
+    await fbPatch('animals',animalId,{current_weight:weights[0]?weights[0].weight:null,weight_updated:weights[0]?weights[0].date:null});
+    renderDetail(getSettings());
+  }
   catch(e){toast('فشل','error');}
 };
 
@@ -529,7 +542,7 @@ function openRemoveAnimal(){
     <label>سبب الإخراج</label><select class="field" id="r-reason"><option value="sale">بيع</option><option value="slaughter">ذبح</option><option value="death">نفوق</option></select>
     <label>التاريخ</label><input type="date" class="field" id="r-date" value="${todayStr()}">
     <label>ملاحظات (سعر البيع مثلاً)</label><textarea class="field" id="r-notes" rows="2"></textarea>
-    <div class="alert-warning mt-3">⚠️ هذا الإجراء لا يمكن التراجع عنه. سيُغيَّر الحيوان إلى "نافق".</div>
+    <div class="alert-warning mt-3">⚠️ هذا الإجراء لا يمكن التراجع عنه. سيتم تحديث حالة الحيوان وفقاً للسبب المحدد.</div>
     <div class="d-flex gap-2 justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إلغاء</button><button class="action-btn danger" onclick="submitRemoveAnimal()">تأكيد الإخراج</button></div>
   </div>`);
 }
@@ -537,8 +550,18 @@ window.submitRemoveAnimal=async function(){
   const reason=document.getElementById('r-reason').value;const date=document.getElementById('r-date').value;const notes=document.getElementById('r-notes').value.trim();
   closeModal();toast('جاري الحفظ...','info');
   try{
-    const updates={status:'dead',removed_at:date,removal_reason:reason,removal_notes:notes};
-    if(reason==='death')updates.died_at=date;
+    // Sale Source-of-Truth fix (Repository 5, Priority 1 follow-up): the
+    // 'sale' reason previously fell into the same status:'dead' write as
+    // genuine death/slaughter, matching the same broken convention already
+    // repaired in performBulkSell(). Only this one branch changes — death
+    // and slaughter keep their exact original update shape, untouched.
+    var updates;
+    if(reason==='sale'){
+      updates={status:'sold',sold_date:date,sold_price:null,sold_to:null,sold_notes:notes||null};
+    }else{
+      updates={status:'dead',removed_at:date,removal_reason:reason,removal_notes:notes};
+      if(reason==='death')updates.died_at=date;
+    }
     await fbPatch('animals',animalId,updates);
     await logActivity('remove','animals',`إخراج #${animal.tag||animalId} — ${reason==='sale'?'بيع':reason==='slaughter'?'ذبح':'نفوق'}`);
     toast('تم إخراج الحيوان');
