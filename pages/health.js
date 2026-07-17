@@ -243,8 +243,23 @@ window.submitHealth=async function(){
   const data={animal_tag:document.getElementById('h-tag').value.trim(),animal_breed:document.getElementById('h-breed').value,animal_species:document.getElementById('h-sp').value,barn:document.getElementById('h-barn').value,date:document.getElementById('h-date').value,vet_name:document.getElementById('h-vet').value.trim()||null,diagnosis:diag,medication:med,dosage:document.getElementById('h-dose').value.trim(),withdrawal_days:wdays,treatment_end:tend,withdrawal_end:withdrawal_end||null,bcs:document.getElementById('h-bcs').value||null,status:document.getElementById('h-stat').value,notes:document.getElementById('h-notes').value.trim()||null};
   closeModal();toast('جاري الحفظ...','info');
   try{
+    let healthId=editHealthId;
     if(editHealthId){await fbPatch('health',editHealthId,data);await logActivity('edit','health','تعديل سجل: '+diag);}
-    else{await fbPost('health',data);await logActivity('add','health','إضافة سجل: '+diag+' | '+med+(withdrawal_end?` | سحب حتى ${withdrawal_end}`:''));}
+    else{healthId=await fbPost('health',data);await logActivity('add','health','إضافة سجل: '+diag+' | '+med+(withdrawal_end?` | سحب حتى ${withdrawal_end}`:''));}
+    // Sprint 1, Epic 1: attach task automation -- additive only, does not
+    // change the health write above. Never blocks on failure.
+    if(data.withdrawal_end&&window.autoGenerateTask){
+      window.autoGenerateTask('medication_followup',{sourceId:healthId,animal_tag:data.animal_tag,withdrawal_end:data.withdrawal_end,barn:data.barn}).catch(function(){});
+    }
+    // Sprint 3, Epic 3: attach health risk evaluation -- health records
+    // carry animal_tag, not animal_id, so resolve it first. Fire-and-
+    // forget; never blocks on failure or delays the save above.
+    if(window.evaluateHealthRisk&&data.animal_tag){
+      fbGet('animals').then(function(allAnimals){
+        var match=(allAnimals||[]).find(function(a){return a.tag===data.animal_tag;});
+        if(match) return window.evaluateHealthRisk(match._id, match.tag, match.barn);
+      }).catch(function(){});
+    }
     toast(editHealthId?'تم التحديث':'تمت الإضافة');
     healthRecs=await fbGet('health');renderHealthPage(getSettings());
   }catch(e){toast('خطأ: '+e.message,'error');}

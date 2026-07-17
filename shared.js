@@ -984,3 +984,598 @@ window.migrateWeightLogToWeights=async function(){
   }
   return {total:rows.length, migrated:migrated, skippedDuplicate:skippedDuplicate, unresolved:unresolved, malformed:malformed, details:details};
 };
+
+// ══════════════════════════════════════════════════════════════
+//  TASK AUTOMATION ENGINE (Sprint 1, Epic 1 -- additive, new file
+//  region, does not modify any existing function).
+//
+//  Domain Event -> Automation Engine -> Task Generator -> Task Store
+//  Single centralized entry point: window.autoGenerateTask(eventType, payload)
+//
+//  Every caller (vaccine.js, breeding.js, health.js) invokes this
+//  SAME function -- no per-domain task-creation logic is duplicated.
+//  See docs/features/AUTO-TASK-GENERATION.md for the full design.
+// ══════════════════════════════════════════════════════════════
+
+// Local date-math helper for this engine's own use. NOTE: daysUntil()
+// already exists independently in pages/breeding.js and pages/vaccine.js
+// (pre-existing duplication, not introduced here, out of this sprint's
+// scope to consolidate) -- this engine does not add a third page-local
+// copy, it uses its own internal helper instead, scoped to this block.
+function _autoTaskDaysFromToday(n){var d=new Date();d.setDate(d.getDate()+n);return d.toISOString().slice(0,10);}
+
+var AUTO_TASK_RULES = {
+  vaccination_scheduled: {
+    category: 'medical', priority: 'high', role: 'vet',
+    title: function(p){ return 'تحصين: '+(p.name||'')+(p.target_section?' — '+p.target_section:''); },
+    dueDate: function(p){ return p.scheduled_date||null; },
+    relatedTag: function(p){ return p.target_section||null; },
+  },
+  expected_birth_approaching: {
+    category: 'breeding', priority: 'high', role: 'supervisor',
+    title: function(p){ return 'ولادة متوقعة: '+(p.female_tag||''); },
+    dueDate: function(p){ return p.expected_birth||null; },
+    relatedTag: function(p){ return p.female_tag||null; },
+  },
+  medication_followup: {
+    category: 'medical', priority: 'high', role: 'vet',
+    title: function(p){ return 'انتهاء فترة السحب: '+(p.animal_tag||''); },
+    dueDate: function(p){ return p.withdrawal_end||null; },
+    relatedTag: function(p){ return p.animal_tag||null; },
+  },
+  // Sprint 2, Epic 2: weight alerts reuse this SAME engine -- no second
+  // task-creation path. dueDate is "today" since a weight alert always
+  // needs attention now, not on a future scheduled date.
+  weight_alert: {
+    category: 'inspection', priority: 'medium', role: 'supervisor',
+    title: function(p){ return (p.alertTitle||'تنبيه وزن')+': '+(p.animal_tag||''); },
+    dueDate: function(p){ return p.todayStr||new Date().toISOString().slice(0,10); },
+    relatedTag: function(p){ return p.animal_tag||null; },
+  },
+  // Sprint 3, Epic 3: health risk alerts, same reuse pattern again.
+  health_risk_alert: {
+    category: 'medical', priority: 'high', role: 'vet',
+    title: function(p){ return (p.recommendation||'مراجعة صحية')+': '+(p.animal_tag||''); },
+    dueDate: function(p){ return p.todayStr||new Date().toISOString().slice(0,10); },
+    relatedTag: function(p){ return p.animal_tag||null; },
+  },
+  // Sprint 4, Epic 4: production alerts, same reuse pattern again.
+  production_alert: {
+    category: 'inspection', priority: 'medium', role: 'supervisor',
+    title: function(p){ return (p.alertTitle||'متابعة إنتاج')+': '+(p.animal_tag||''); },
+    dueDate: function(p){ return p.todayStr||new Date().toISOString().slice(0,10); },
+    relatedTag: function(p){ return p.animal_tag||null; },
+  },
+};
+
+// window.autoGenerateTask(eventType, payload)
+//   eventType: one of the keys in AUTO_TASK_RULES above.
+//   payload:   { sourceId, ...event-specific fields used by the rule's title()/dueDate() }
+//   Returns:   the task's _id (new or pre-existing), or null if nothing was created/found.
+//
+// Deduplication: deterministic, keyed on `eventType + ':' + payload.sourceId`.
+// At most one auto-generated task ever exists per (event type, source record),
+// regardless of its completion status. If the source record's computed due
+// date changes (e.g. a vaccination is rescheduled), the existing task's due
+// date is updated in place rather than a duplicate being created.
+//
+// Never throws -- a failure here must never block the caller's own
+// domain write (the vaccination/breeding/health record itself always
+// saves regardless of whether task automation succeeds).
+window.autoGenerateTask = async function(eventType, payload){
+  try{
+    var rule = AUTO_TASK_RULES[eventType];
+    if(!rule || !payload || !payload.sourceId) return null;
+    var dueDate = rule.dueDate(payload);
+    if(!dueDate) return null; // nothing to schedule without a date
+
+    var dedupKey = eventType+':'+payload.sourceId;
+    var existingTasks = await fbGet('daily_tasks');
+    var already = existingTasks.find(function(t){ return t.auto_dedup_key===dedupKey; });
+
+    if(already){
+      if(already.date!==dueDate){
+        await fbPatch('daily_tasks', already._id, {date: dueDate});
+      }
+      return already._id; // deterministic: never a second task for the same source event
+    }
+
+    var data = {
+      title: rule.title(payload), category: rule.category, priority: payload.priorityOverride||rule.priority,
+      date: dueDate, assigned_to: null, assigned_to_name: '',
+      barn: payload.barn||null, notes: 'مهمة مولّدة تلقائيًا',
+      recurring: false, recurring_days: null, is_template: false,
+      status: 'pending', created_at: new Date().toISOString(), created_by: 'النظام (تلقائي)',
+      auto_generated: true, auto_source_type: eventType, auto_source_id: payload.sourceId,
+      auto_dedup_key: dedupKey, related_tag: rule.relatedTag(payload),
+    };
+    var newId = await fbPost('daily_tasks', data);
+    await logActivity('add','daily_tasks','مهمة تلقائية: '+data.title);
+    return newId;
+  }catch(e){
+    return null; // fail silent and safe -- see docstring above
+  }
+};
+
+// ══════════════════════════════════════════════════════════════
+//  WEIGHT INTELLIGENCE ENGINE (Sprint 2, Epic 2 -- additive, new
+//  file region, does not modify any existing weight-writer function).
+//
+//  Weight Event -> Weight Intelligence Engine -> Rule Evaluation
+//    -> Alert -> Optional Task (reuses Sprint 1's autoGenerateTask)
+//    -> Notification (piggybacks on toast(), the existing UI feedback
+//       mechanism -- no new notification channel introduced)
+//
+//  Single centralized entry point: window.evaluateWeightAlert(animalId, animalTag, barn)
+//  Reads ONLY the certified Weight SSOT (animals/{id}/weights) -- never
+//  writes to it, never duplicates its calculation.
+//  See docs/features/WEIGHT-INTELLIGENCE.md for the full design.
+// ══════════════════════════════════════════════════════════════
+
+var WEIGHT_ALERT_RULES = {
+  weight_loss: {
+    severity: 'high', taskPriority: 'high', actionLabel: 'فحص بيطري',
+    evaluate: function(sortedHistory){
+      if(sortedHistory.length<2) return null;
+      var latest=sortedHistory[0], prev=sortedHistory[1];
+      if(!prev.weight||prev.weight<=0) return null;
+      var pct=(latest.weight-prev.weight)/prev.weight;
+      if(pct<=-0.05) return {current:latest.weight, previous:prev.weight, detail:'فقدان '+Math.abs(Math.round(pct*100))+'٪ منذ آخر وزن'};
+      return null;
+    },
+  },
+  no_growth: {
+    severity: 'medium', taskPriority: 'medium', actionLabel: 'مراجعة تغذية',
+    evaluate: function(sortedHistory){
+      if(sortedHistory.length<2) return null;
+      var latest=sortedHistory[0];
+      var latestDate=new Date(latest.date);
+      var older=null;
+      for(var i=1;i<sortedHistory.length;i++){
+        if((latestDate-new Date(sortedHistory[i].date))/86400000>=14){ older=sortedHistory[i]; break; }
+      }
+      if(!older||!older.weight||older.weight<=0) return null;
+      var pct=(latest.weight-older.weight)/older.weight;
+      if(Math.abs(pct)<0.01) return {current:latest.weight, previous:older.weight, detail:'بلا نمو ملحوظ خلال 14 يوم فأكثر'};
+      return null;
+    },
+  },
+};
+
+// Deterministic dedup: one active (non-resolved) alert per (animalId, ruleType).
+// Re-evaluation either updates an existing active alert in place, auto-resolves
+// one whose condition no longer holds, or creates a new one -- never duplicates.
+window.evaluateWeightAlert = async function(animalId, animalTag, barn){
+  try{
+    if(!animalId) return [];
+    var history=await fbGet('animals/'+animalId+'/weights')||[];
+    var sorted=history.slice().sort(function(a,b){return b.date.localeCompare(a.date);});
+    var existingAlerts=await fbGet('weight_alerts');
+    var results=[];
+
+    for(var ruleType in WEIGHT_ALERT_RULES){
+      var rule=WEIGHT_ALERT_RULES[ruleType];
+      var finding=rule.evaluate(sorted);
+      var active=existingAlerts.find(function(a){return a.animal_id===animalId&&a.rule_type===ruleType&&a.status==='active';});
+
+      if(finding){
+        if(active){
+          await fbPatch('weight_alerts',active._id,{current_weight:finding.current, previous_weight:finding.previous, detail:finding.detail, detected_at:new Date().toISOString()});
+          results.push(active._id);
+        }else{
+          var alertData={
+            animal_id:animalId, animal_tag:animalTag||'', barn:barn||null,
+            rule_type:ruleType, severity:rule.severity, action:rule.actionLabel,
+            current_weight:finding.current, previous_weight:finding.previous, detail:finding.detail,
+            status:'active', detected_at:new Date().toISOString(), resolved_at:null,
+          };
+          var newAlertId=await fbPost('weight_alerts',alertData);
+          await logActivity('add','weight_alerts','تنبيه وزن ('+rule.actionLabel+'): '+(animalTag||animalId));
+          results.push(newAlertId);
+          if(window.autoGenerateTask){
+            window.autoGenerateTask('weight_alert',{sourceId:newAlertId, animal_tag:animalTag, barn:barn, alertTitle:rule.actionLabel, priorityOverride:rule.taskPriority}).catch(function(){});
+          }
+          if(window.toast) window.toast('⚠️ تنبيه وزن: '+(animalTag||animalId)+' — '+rule.actionLabel,'error');
+        }
+      }else if(active){
+        // Condition no longer holds -- auto-resolve, do not delete (preserves history).
+        await fbPatch('weight_alerts',active._id,{status:'resolved', resolved_at:new Date().toISOString()});
+      }
+    }
+    return results;
+  }catch(e){
+    return []; // fail silent and safe -- must never block the weight write that triggered this
+  }
+};
+
+// Read-time staleness check (NOT event-driven -- by definition there is
+// no "new weight" event when a weight is MISSING). Intended to be called
+// once per dashboard/alerts-page load, not per weight write.
+window.evaluateMissingWeightAlerts = async function(animalsList, maxDays){
+  try{
+    maxDays = maxDays || 30;
+    var existingAlerts = await fbGet('weight_alerts');
+    var results = [];
+    var todayMs = Date.now();
+    for(var i=0;i<animalsList.length;i++){
+      var a = animalsList[i];
+      if(a.status==='dead'||a.status==='sold') continue;
+      if(!a.weight_updated) continue; // never weighed at all -- out of this rule's scope, not a regression
+      var daysSince = (todayMs - new Date(a.weight_updated).getTime())/86400000;
+      var active = existingAlerts.find(function(al){return al.animal_id===a._id&&al.rule_type==='missing_weight'&&al.status==='active';});
+      if(daysSince>=maxDays){
+        if(!active){
+          var alertData={
+            animal_id:a._id, animal_tag:a.tag||'', barn:a.barn||null,
+            rule_type:'missing_weight', severity:'medium', action:'إعادة الوزن',
+            current_weight:a.current_weight||null, previous_weight:null,
+            detail:'لا يوجد وزن مسجّل منذ '+Math.floor(daysSince)+' يوم',
+            status:'active', detected_at:new Date().toISOString(), resolved_at:null,
+          };
+          var newId=await fbPost('weight_alerts',alertData);
+          await logActivity('add','weight_alerts','تنبيه وزن (إعادة الوزن): '+(a.tag||a._id));
+          results.push(newId);
+          if(window.autoGenerateTask){
+            window.autoGenerateTask('weight_alert',{sourceId:newId, animal_tag:a.tag, barn:a.barn, alertTitle:'إعادة الوزن', priorityOverride:'medium'}).catch(function(){});
+          }
+        }
+      }else if(active){
+        await fbPatch('weight_alerts',active._id,{status:'resolved', resolved_at:new Date().toISOString()});
+      }
+    }
+    return results;
+  }catch(e){
+    return [];
+  }
+};
+
+// Manual resolution (e.g., staff investigated and confirmed it's fine).
+window.resolveWeightAlert = async function(alertId){
+  try{
+    await fbPatch('weight_alerts',alertId,{status:'resolved', resolved_at:new Date().toISOString()});
+    await logActivity('edit','weight_alerts','إغلاق تنبيه وزن يدويًا');
+    return true;
+  }catch(e){ return false; }
+};
+
+// ══════════════════════════════════════════════════════════════
+//  HEALTH INTELLIGENCE ENGINE (Sprint 3, Epic 3 -- additive, new
+//  file region, does not modify any existing health/vaccine/weight
+//  writer function).
+//
+//  Health Events -> Health Intelligence Engine -> Risk Evaluation
+//    -> Risk Score -> Recommendations -> Automation Engine (Sprint 1, reused)
+//
+//  DECISION SUPPORT ONLY -- this engine never asserts a diagnosis. It
+//  surfaces observable signals already present in certified data and
+//  recommends a human review; it never claims to know what is wrong.
+//
+//  Unlike Sprint 1's tasks and Sprint 2's alerts, the risk SCORE ITSELF
+//  is NOT persisted. It is a derived computation over existing health,
+//  vaccination, and weight-alert data -- recomputing it on demand avoids
+//  a second, potentially-stale source of truth for the same facts (a
+//  stored score could drift from the records it was computed from; an
+//  on-demand computation cannot). Only the OPTIONAL follow-up task this
+//  engine may create is persisted, via Sprint 1's existing engine.
+//
+//  Single centralized entry point: window.evaluateHealthRisk(animalId, animalTag, barn)
+//  See docs/features/HEALTH-INTELLIGENCE.md for the full design.
+// ══════════════════════════════════════════════════════════════
+
+var HEALTH_RISK_WEIGHTS = {
+  activeIllness: 30, weightLoss: 25, noGrowth: 10, missingWeight: 5,
+  missedVaccination: 20, repeatedMedication: 15, repeatedTreatment: 20,
+  noRecentCheck: 5, lowBCS: 15,
+};
+var HEALTH_RISK_WINDOWS = { repeatedMedicationDays: 30, repeatedTreatmentDays: 14, noRecentCheckDays: 180 };
+var HEALTH_RISK_BCS_THRESHOLD = 2.5;
+
+// Recommendation copy + task priority per contributing factor. Every
+// recommendation carries the `evidence` string already attached to its
+// contributor -- recommendations are never generated without a cited reason.
+var HEALTH_RECOMMENDATIONS = {
+  active_illness:      { label:'مراجعة بيطرية',   taskPriority:'high'   },
+  weight_weight_loss:  { label:'فحص بيطري',       taskPriority:'high'   },
+  weight_no_growth:    { label:'مراجعة تغذية',    taskPriority:'medium' },
+  weight_missing_weight:{ label:'إعادة الوزن',     taskPriority:'medium' },
+  missed_vaccination:  { label:'إكمال التحصين',   taskPriority:'high'   },
+  repeated_medication: { label:'متابعة العلاج',   taskPriority:'medium' },
+  repeated_treatment:  { label:'مراجعة بيطرية',   taskPriority:'high'   },
+  no_recent_check:     { label:'فحص روتيني',      taskPriority:'low'    },
+  low_bcs:              { label:'مراجعة تغذية',    taskPriority:'medium' },
+};
+// Display order for recommendations -- the most actionable, currently-
+// unresolved medical signals surface first, independent of point value.
+var HEALTH_FACTOR_PRIORITY_ORDER = ['active_illness','repeated_treatment','weight_weight_loss','weight_no_growth','weight_missing_weight','missed_vaccination','repeated_medication','low_bcs','no_recent_check'];
+
+window.evaluateHealthRisk = async function(animalId, animalTag, barn){
+  try{
+    if(!animalId||!animalTag) return null;
+    var allHealth = await fbGet('health');
+    var myHealth = (allHealth||[]).filter(function(r){return r.animal_tag===animalTag;})
+      .sort(function(a,b){return (b.date||'').localeCompare(a.date||'');});
+
+    var allWeightAlerts = await fbGet('weight_alerts');
+    var myWeightAlerts = (allWeightAlerts||[]).filter(function(a){return a.animal_id===animalId&&a.status==='active';});
+
+    var allVacc = await fbGet('vaccinations');
+    var today = new Date().toISOString().slice(0,10);
+    var myVacc = barn ? (allVacc||[]).filter(function(v){
+      return v.target_section===barn && (v.status==='overdue' || (v.status==='pending' && v.scheduled_date && v.scheduled_date<today));
+    }) : [];
+
+    var score=0, contributors=[];
+
+    var activeRec=myHealth.find(function(r){return r.status==='active';});
+    if(activeRec){
+      score+=HEALTH_RISK_WEIGHTS.activeIllness;
+      contributors.push({factor:'active_illness', points:HEALTH_RISK_WEIGHTS.activeIllness, evidence:(activeRec.diagnosis||'—')+' ('+(activeRec.date||'—')+')'});
+    }
+
+    myWeightAlerts.forEach(function(a){
+      var key='weight_'+a.rule_type;
+      var w = a.rule_type==='weight_loss'?HEALTH_RISK_WEIGHTS.weightLoss:a.rule_type==='no_growth'?HEALTH_RISK_WEIGHTS.noGrowth:a.rule_type==='missing_weight'?HEALTH_RISK_WEIGHTS.missingWeight:0;
+      if(w>0){ score+=w; contributors.push({factor:key, points:w, evidence:a.detail||a.action||''}); }
+    });
+
+    if(myVacc.length){
+      score+=HEALTH_RISK_WEIGHTS.missedVaccination;
+      contributors.push({factor:'missed_vaccination', points:HEALTH_RISK_WEIGHTS.missedVaccination, evidence:myVacc.map(function(v){return v.name;}).join('، ')});
+    }
+
+    var recentMed=myHealth.filter(function(r){return r.medication&&r.date&&(new Date()-new Date(r.date))/86400000<=HEALTH_RISK_WINDOWS.repeatedMedicationDays;});
+    if(recentMed.length>=2){
+      score+=HEALTH_RISK_WEIGHTS.repeatedMedication;
+      contributors.push({factor:'repeated_medication', points:HEALTH_RISK_WEIGHTS.repeatedMedication, evidence:ar(recentMed.length)+' سجلات دواء خلال '+ar(HEALTH_RISK_WINDOWS.repeatedMedicationDays)+' يوم'});
+    }
+
+    var recentTreat=myHealth.filter(function(r){return r.date&&(new Date()-new Date(r.date))/86400000<=HEALTH_RISK_WINDOWS.repeatedTreatmentDays;});
+    if(recentTreat.length>=3){
+      score+=HEALTH_RISK_WEIGHTS.repeatedTreatment;
+      contributors.push({factor:'repeated_treatment', points:HEALTH_RISK_WEIGHTS.repeatedTreatment, evidence:ar(recentTreat.length)+' سجلات خلال '+ar(HEALTH_RISK_WINDOWS.repeatedTreatmentDays)+' يوم'});
+    }
+
+    if(myHealth.length>0){
+      var lastDate=myHealth[0].date;
+      if(lastDate&&(new Date()-new Date(lastDate))/86400000>HEALTH_RISK_WINDOWS.noRecentCheckDays){
+        score+=HEALTH_RISK_WEIGHTS.noRecentCheck;
+        contributors.push({factor:'no_recent_check', points:HEALTH_RISK_WEIGHTS.noRecentCheck, evidence:'آخر سجل: '+lastDate});
+      }
+    }
+
+    var lastBcsRec=myHealth.find(function(r){return r.bcs;});
+    if(lastBcsRec&&parseFloat(lastBcsRec.bcs)<HEALTH_RISK_BCS_THRESHOLD){
+      score+=HEALTH_RISK_WEIGHTS.lowBCS;
+      contributors.push({factor:'low_bcs', points:HEALTH_RISK_WEIGHTS.lowBCS, evidence:'BCS: '+lastBcsRec.bcs+'/5 ('+(lastBcsRec.date||'—')+')'});
+    }
+
+    score=Math.min(100,score);
+    var level=score>=75?'critical':score>=50?'high':score>=25?'medium':'low';
+
+    contributors.sort(function(a,b){return HEALTH_FACTOR_PRIORITY_ORDER.indexOf(a.factor)-HEALTH_FACTOR_PRIORITY_ORDER.indexOf(b.factor);});
+    var recommendations=contributors.map(function(c){
+      var rec=HEALTH_RECOMMENDATIONS[c.factor]||{label:'مراجعة',taskPriority:'low'};
+      return {factor:c.factor, label:rec.label, taskPriority:rec.taskPriority, evidence:c.evidence};
+    });
+
+    // Optional follow-up task -- only for high/critical, and only the
+    // single top-priority recommendation, to avoid task-spam from one
+    // evaluation producing many tasks. Dedup is inherited automatically
+    // from Sprint 1's engine (one active task per animalId+eventType).
+    if((level==='high'||level==='critical')&&recommendations.length&&window.autoGenerateTask){
+      var top=recommendations[0];
+      window.autoGenerateTask('health_risk_alert',{sourceId:animalId, animal_tag:animalTag, barn:barn, recommendation:top.label, priorityOverride:top.taskPriority}).catch(function(){});
+    }
+
+    return { animalId:animalId, animalTag:animalTag, barn:barn||null, score:score, level:level, contributors:contributors, recommendations:recommendations, recentTimeline:myHealth.slice(0,5), evaluatedAt:new Date().toISOString() };
+  }catch(e){
+    return null; // fail silent and safe -- never blocks a caller's own render/write
+  }
+};
+
+// ══════════════════════════════════════════════════════════════
+//  PRODUCTION INTELLIGENCE ENGINE (Sprint 4, Epic 4 -- additive,
+//  new file region, does not modify pages/production.js's own writer).
+//
+//  Production Records -> KPI Engine -> Trend Analysis -> Operational
+//    Insight -> Recommendation -> Automation Engine (Sprint 1, reused)
+//
+//  SCOPE, ENFORCED IN CODE NOT JUST DOCS: this engine reads ONLY
+//  type==='milk' and type==='wool' production_log records. type==='weight'
+//  is Sprint 2's Weight Intelligence domain exclusively -- never read here.
+//
+//  Two entry points:
+//    window.evaluateProductionKPIs(animalId, animalTag, type)  -- pure,
+//      read-only computation, no writes, safe to call anywhere.
+//    window.evaluateProductionAlert(animalId, animalTag, type, barn) --
+//      wraps the KPI computation with alert persistence + dedup +
+//      auto-resolution/recovery-tracking + optional task, mirroring
+//      Sprint 2's evaluateWeightAlert design exactly.
+//  See docs/features/PRODUCTION-INTELLIGENCE.md for the full design.
+// ══════════════════════════════════════════════════════════════
+
+var PRODUCTION_KPI_WINDOWS = { trendWindowDays:7, dropBaselineDays:30, recentAverageDays:14, dropThresholdPct:0.15, trendThresholdPct:0.05 };
+
+function _prodWindowAverage(records, startDaysAgo, endDaysAgo){
+  var now=Date.now();
+  var startMs=now-startDaysAgo*86400000, endMs=now-endDaysAgo*86400000;
+  var inWindow=records.filter(function(r){ if(!r.date) return false; var t=new Date(r.date).getTime(); return t>=startMs && t<endMs; });
+  if(!inWindow.length) return null;
+  return inWindow.reduce(function(s,r){return s+(+r.quantity||0);},0)/inWindow.length;
+}
+
+// Pure, read-only. Never writes. Safe to call from any context, including tests.
+window.evaluateProductionKPIs = async function(animalId, animalTag, type){
+  try{
+    if(!animalId||!type||(type!=='milk'&&type!=='wool')) return null;
+    var allProd=await fbGet('production_log');
+    var mine=(allProd||[]).filter(function(r){return r.animal_id===animalId&&r.type===type;})
+      .sort(function(a,b){return (b.date||'').localeCompare(a.date||'');});
+    if(mine.length<2) return null; // not enough data for any trend judgment
+
+    var W=PRODUCTION_KPI_WINDOWS;
+    var recentAvg=_prodWindowAverage(mine, W.trendWindowDays, 0);
+    var priorAvg=_prodWindowAverage(mine, W.trendWindowDays*2, W.trendWindowDays);
+    var baselineAvg=_prodWindowAverage(mine, W.dropBaselineDays, W.trendWindowDays);
+
+    var trend='stable', trendPct=0;
+    if(recentAvg!=null&&priorAvg!=null&&priorAvg>0){
+      trendPct=(recentAvg-priorAvg)/priorAvg;
+      trend=trendPct>W.trendThresholdPct?'rising':trendPct<-W.trendThresholdPct?'declining':'stable';
+    }
+
+    var dropDetected=false, dropPct=0;
+    if(recentAvg!=null&&baselineAvg!=null&&baselineAvg>0){
+      dropPct=(baselineAvg-recentAvg)/baselineAvg;
+      dropDetected=dropPct>W.dropThresholdPct;
+    }
+
+    var recentWindow=mine.filter(function(r){return (Date.now()-new Date(r.date).getTime())/86400000<=W.recentAverageDays;});
+    var consistency=null, consistencyLabel=null;
+    if(recentWindow.length>=2){
+      var mean=recentWindow.reduce(function(s,r){return s+(+r.quantity||0);},0)/recentWindow.length;
+      var variance=recentWindow.reduce(function(s,r){return s+Math.pow((+r.quantity||0)-mean,2);},0)/recentWindow.length;
+      consistency = mean>0 ? Math.sqrt(variance)/mean : null;
+      consistencyLabel = consistency==null?null:consistency<0.2?'مستقر':consistency<0.5?'تذبذب متوسط':'تذبذب مرتفع';
+    }
+
+    return {
+      animalId:animalId, animalTag:animalTag, type:type,
+      recentAverage:recentAvg, priorAverage:priorAvg, baselineAverage:baselineAvg,
+      trend:trend, trendPct:trendPct, dropDetected:dropDetected, dropPct:dropPct,
+      consistency:consistency, consistencyLabel:consistencyLabel,
+    };
+  }catch(e){ return null; }
+};
+
+// Wraps the pure KPI computation with alert persistence, deterministic
+// dedup (one active alert per animalId+type), auto-resolution with
+// recovery tracking, and an optional Sprint-1 task -- exactly Sprint 2's
+// evaluateWeightAlert pattern, applied to a new domain.
+window.evaluateProductionAlert = async function(animalId, animalTag, type, barn){
+  try{
+    var kpis=await window.evaluateProductionKPIs(animalId, animalTag, type);
+    if(!kpis) return null;
+
+    var existingAlerts=await fbGet('production_alerts');
+    var active=existingAlerts.find(function(a){return a.animal_id===animalId&&a.production_type===type&&a.status==='active';});
+
+    if(kpis.dropDetected){
+      if(active){
+        await fbPatch('production_alerts',active._id,{drop_pct:kpis.dropPct, recent_average:kpis.recentAverage, detected_at:new Date().toISOString()});
+        return active._id;
+      }
+      var alertData={
+        animal_id:animalId, animal_tag:animalTag||'', production_type:type, barn:barn||null,
+        status:'active', drop_pct:kpis.dropPct, recent_average:kpis.recentAverage, baseline_average:kpis.baselineAverage,
+        average_at_detection:kpis.recentAverage,
+        detected_at:new Date().toISOString(), resolved_at:null, recovered:null,
+      };
+      var newId=await fbPost('production_alerts',alertData);
+      await logActivity('add','production_alerts','تنبيه إنتاج (انخفاض '+Math.round(kpis.dropPct*100)+'٪): '+(animalTag||animalId));
+      if(window.autoGenerateTask){
+        window.autoGenerateTask('production_alert',{sourceId:newId, animal_tag:animalTag, barn:barn, alertTitle:'متابعة انخفاض إنتاج'}).catch(function(){});
+      }
+      return newId;
+    }
+    if(active){
+      var recovered = kpis.recentAverage!=null && active.average_at_detection!=null && kpis.recentAverage>=active.average_at_detection;
+      await fbPatch('production_alerts',active._id,{status:'resolved', resolved_at:new Date().toISOString(), recovered:!!recovered});
+      return active._id;
+    }
+    return null;
+  }catch(e){ return null; }
+};
+
+// ══════════════════════════════════════════════════════════════
+//  UNIFIED DECISION ENGINE (Sprint 5, Epic 5 -- pure orchestration,
+//  zero new calculation of weight/health/production facts).
+//
+//  Weight Engine -> Health Engine -> Production Engine -> Automation
+//  Engine -> UNIFIED DECISION ENGINE -> Operational Priorities
+//
+//  This engine calls each Sprint 1-4 engine's existing, trusted,
+//  read-only evaluate function and combines their OUTPUTS. It never
+//  reimplements weight/health/production logic. Weight Intelligence's
+//  contribution reaches this score THROUGH Health Intelligence's own
+//  existing incorporation of weight_alerts (confirmed in source,
+//  shared.js's evaluateHealthRisk) -- adding weight_alerts a second
+//  time here would double-count the same fact. See
+//  docs/features/UNIFIED-PRIORITY-MODEL.md for the full reasoning.
+//
+//  Single centralized entry point: window.evaluateOperationalPriority(animalId, animalTag, barn)
+//  See docs/features/UNIFIED-DECISION-ENGINE.md for the full design.
+// ══════════════════════════════════════════════════════════════
+
+var UNIFIED_PRIORITY_WEIGHTS = { health:0.6, production:0.3, tasks:0.1 };
+var UNIFIED_TASK_PRIORITY_WEIGHT = { high:3, medium:2, low:1 };
+
+window.evaluateOperationalPriority = async function(animalId, animalTag, barn){
+  try{
+    if(!animalId||!animalTag) return null;
+
+    // Read-only calls into each existing, trusted, already-certified
+    // engine. Nothing below recomputes weight, health, or production facts.
+    var healthRisk = window.evaluateHealthRisk ? await window.evaluateHealthRisk(animalId, animalTag, barn) : null;
+    var milkKpi = window.evaluateProductionKPIs ? await window.evaluateProductionKPIs(animalId, animalTag, 'milk') : null;
+    var woolKpi = window.evaluateProductionKPIs ? await window.evaluateProductionKPIs(animalId, animalTag, 'wool') : null;
+    var allTasks = await fbGet('daily_tasks');
+    var myPendingTasks = (allTasks||[]).filter(function(t){ return t.status!=='done' && t.related_tag===animalTag; });
+
+    var healthScore = healthRisk ? healthRisk.score : 0;
+    var hasActiveIllness = !!(healthRisk && healthRisk.contributors && healthRisk.contributors.some(function(c){return c.factor==='active_illness';}));
+
+    var prodDrop = null;
+    if(milkKpi && milkKpi.dropDetected) prodDrop = milkKpi;
+    else if(woolKpi && woolKpi.dropDetected) prodDrop = woolKpi;
+    var productionSeverity = prodDrop ? Math.min(100, prodDrop.dropPct*100) : 0;
+
+    var taskSum = myPendingTasks.reduce(function(s,t){return s+(UNIFIED_TASK_PRIORITY_WEIGHT[t.priority]||1);},0);
+    var taskUrgencyBonus = Math.min(100, taskSum*20);
+
+    var W=UNIFIED_PRIORITY_WEIGHTS;
+    var score = Math.round(W.health*healthScore + W.production*productionSeverity + W.tasks*taskUrgencyBonus);
+    score = Math.min(100, Math.max(0, score));
+    var level = score>=75?'critical':score>=50?'high':score>=25?'medium':'low';
+
+    var contributingEngines=[];
+    if(healthScore>0) contributingEngines.push('health');
+    if(prodDrop) contributingEngines.push('production');
+    if(myPendingTasks.length>0) contributingEngines.push('tasks');
+    if(!contributingEngines.length) return null; // no signal at all -- not an operational priority
+
+    var confidence = contributingEngines.length>=2 ? 'high' : 'medium';
+
+    // Evidence: reused verbatim from each engine's own citations -- never synthesized.
+    var evidence=[];
+    if(healthRisk&&healthRisk.recommendations){
+      healthRisk.recommendations.forEach(function(r){ evidence.push({source:'health', label:r.label, detail:r.evidence}); });
+    }
+    if(prodDrop){
+      evidence.push({source:'production', label:'انخفاض إنتاج', detail:'انخفاض '+Math.round(prodDrop.dropPct*100)+'٪ ('+(prodDrop.type==='milk'?'حليب':'صوف')+')'});
+    }
+    if(myPendingTasks.length>0){
+      evidence.push({source:'tasks', label:'مهام معلّقة', detail:ar(myPendingTasks.length)+' مهمة بانتظار التنفيذ'});
+    }
+
+    return {
+      animalId:animalId, animalTag:animalTag, barn:barn||null,
+      score:score, level:level, confidence:confidence,
+      healthScore:healthScore, productionSeverity:productionSeverity, taskUrgencyBonus:taskUrgencyBonus,
+      hasActiveIllness:hasActiveIllness, contributingEngines:contributingEngines, evidence:evidence,
+      evaluatedAt:new Date().toISOString(),
+    };
+  }catch(e){ return null; }
+};
+
+// Applies the priority model's documented tie-breaking rules when
+// ranking multiple animals' already-computed priorities. A pure sort --
+// never recomputes anything.
+window.rankOperationalPriorities = function(priorityResults){
+  return (priorityResults||[]).slice().sort(function(a,b){
+    if(b.score!==a.score) return b.score-a.score;
+    if(a.hasActiveIllness!==b.hasActiveIllness) return a.hasActiveIllness?-1:1;
+    if(b.contributingEngines.length!==a.contributingEngines.length) return b.contributingEngines.length-a.contributingEngines.length;
+    return (a.animalTag||'').localeCompare(b.animalTag||'');
+  });
+};

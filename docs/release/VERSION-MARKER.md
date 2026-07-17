@@ -2,23 +2,21 @@
 
 ```
 Repository:  farm-bayan (بيان المزرعة)
-Commit:      4b1e8cf16712a746fd3e26b3e33c24a92f2d0b05
-Branch:      main
-Date:        Thu Jul 16 17:01:00 2026 +0000 (commit date)
-Export date: 2026-07-16 (this package's actual creation time)
-Phase:       7.5 — Source Export & Local Release Package
-Status:      Working tree NOT clean at export time -- see below
+Version:     v1.0.0-rc1
+Commit:      d19aa06 (chore(release): prepare v1.0.0-rc1)
+Tag:         v1.0.0-rc1
+Date:        2026-07-17
+Status:      Release Candidate
 ```
 
-## Important — Read Before Relying On This Package
+## What This Checkpoint Represents
+The first official Release Candidate, per `docs/release/VERSION-CERTIFICATION-v1.0.0-rc1.md`. Built on the certified engineering baseline (`baseline-v2-production-candidate`) plus six product sprints (Task Automation, Weight/Health/Production Intelligence, the Unified Decision Engine, and the Executive Dashboard consolidation) and this release-hardening cycle (Sprint 7).
 
-**The exported `source/` reflects the live working directory, not a clean checkout of `4b1e8cf` alone.** At export time, the following were real, uncommitted changes sitting on top of that commit:
+## Predecessor Chain
+`e655e2b` (Engineering Baseline Merge) -> `4b1e8cf`/`8be77dd` (Baseline Hardening, tagged `baseline-v2-production-candidate`) -> `33e42e3`...`aa04674` (Sprints 1-6) -> this release-hardening commit -> `v1.0.0-rc1`.
 
-- **All 10 Phase 6 permission-guard fixes** (`animals.html`, `barns.html`, `births.html`, `dashboard.html`, `dead.html`, `diary.html`, `goats.html`, `sheep.html`, `pages/health.js`, `pages/vaccine.js`) — modified, not committed.
-- **`package.json`** — modified (added `scripts`/`devDependencies` for the test/scan tooling).
-- **Everything from Phase 7**, entirely untracked: `.github/workflows/quality.yml`, `docs/audit/` (Phase 6 reports), `docs/development/`, `docs/testing/`, `docs/release/` (this directory), `package-lock.json`, `playwright.config.js`, `scripts/`, `tests/`.
+## Known Items Carried Forward Honestly
+See `docs/release/KNOWN-LIMITATIONS.md` for the complete, current list -- client-trusted permissions, no automated Firebase backup, `fbGet()` pagination, and a handful of smaller, explicitly-deferred items. None are release blockers for this application's current deployment context.
 
-**This is not a defect in the export — it is an accurate snapshot of real, verified work.** Every one of these changes was live-tested this session (10/10 permission fixes verified positive and negative; 32/32 automated tests passing). But **whoever receives this package should commit these changes** (or be told explicitly they're uncommitted) before treating `4b1e8cf` as the full story — the git history and the file contents are currently out of sync, and this package preserves the *files*, not a matching *commit*.
-
-## Recommendation
-Commit the Phase 6 + Phase 7 work as its own atomic commit before or immediately after distributing this package, so a future `git log` accurately reflects what's actually in the tree. Not done automatically here, consistent with this session's standing practice of only committing when explicitly requested.
+## Status Going Forward
+This tag is the safe rollback point for any future work. `docs/release/ROLLBACK-PLAN.md` (from the original certification) remains the correct mechanism -- unchanged by six sprints of purely additive functionality.

@@ -175,8 +175,14 @@ window.submitVacc=async function(){
   const data={name,target_section:document.getElementById('v-section').value,count:+document.getElementById('v-count').value||0,status:document.getElementById('v-status').value,scheduled_date:document.getElementById('v-scheduled').value||null,done_date:document.getElementById('v-done-date').value||null,progress:+document.getElementById('v-prog').value||0,repeat:document.getElementById('v-repeat').value||null,notes:document.getElementById('v-notes').value.trim()||null};
   closeModal();toast('جاري الحفظ...','info');
   try{
+    let vaccId=editVaccId;
     if(editVaccId){await fbPatch('vaccinations',editVaccId,data);await logActivity('edit','vaccine','تعديل تحصين: '+name);}
-    else{await fbPost('vaccinations',data);await logActivity('add','vaccine','إضافة تحصين: '+name);}
+    else{vaccId=await fbPost('vaccinations',data);await logActivity('add','vaccine','إضافة تحصين: '+name);}
+    // Sprint 1, Epic 1: attach task automation -- additive only, does not
+    // change the vaccination write above. Never blocks on failure.
+    if(data.status==='pending'&&data.scheduled_date&&window.autoGenerateTask){
+      window.autoGenerateTask('vaccination_scheduled',{sourceId:vaccId,name:data.name,target_section:data.target_section,scheduled_date:data.scheduled_date}).catch(function(){});
+    }
     toast(editVaccId?'تم التحديث':'تمت الإضافة');
     vaccines=await fbGet('vaccinations');
     renderVaccPage(getSettings());
@@ -292,12 +298,17 @@ window.submitTpl = async function() {
   if (!date) { toast('أدخل التاريخ','error'); return; }
   closeModal();
   try {
-    await fbPost('vaccinations', {
+    const newVaccId = await fbPost('vaccinations', {
       name:vaccName, target_section:section, count:count,
       scheduled_date:date, status:'pending', notes:notes||null,
       from_template:true, created_at:todayStr(),
     });
     await logActivity('add','vaccinations','جدولة من قالب: '+vaccName);
+    // Sprint 1, Epic 1: same automation entry point as submitVacc above --
+    // both writers converge onto one engine, no duplicated logic.
+    if(window.autoGenerateTask){
+      window.autoGenerateTask('vaccination_scheduled',{sourceId:newVaccId,name:vaccName,target_section:section,scheduled_date:date}).catch(function(){});
+    }
     toast('✅ تم إنشاء جدول التحصين');
     vaccines = await fbGet('vaccinations',true);
     renderVaccPage(getSettings());

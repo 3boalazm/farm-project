@@ -538,6 +538,9 @@ window.executeAction = async function() {
       if (animal) {
         await fbPatch('animals', animal._id, { current_weight: d.weight, weight_updated: d.date||todayStr() });
         await fbPost('animals/'+animal._id+'/weights', { weight: d.weight, date: d.date||todayStr(), notes: null });
+        // Sprint 2, Epic 2: attach weight intelligence -- additive only,
+        // does not change the writes above. Never blocks on failure.
+        if (window.evaluateWeightAlert) { window.evaluateWeightAlert(animal._id, animal.tag, animal.barn).catch(function(){}); }
       }
       await logActivity('add','animals','تسجيل وزن: '+(d.animal_tag||d.animal_breed)+' = '+d.weight+' كجم');
       addMsg('system','✅ تم تسجيل الوزن: '+ar(d.weight)+' كجم');

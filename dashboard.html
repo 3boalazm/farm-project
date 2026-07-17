@@ -61,12 +61,26 @@ document.addEventListener('DOMContentLoaded', async function(){
   renderLoading(el);
 
   try {
-    const [animals, breeding, health, finance, meds, feeds, equipment, production, activity] = await Promise.all([
+    const [animals, breeding, health, finance, meds, feeds, equipment, production, activity, weightAlerts, vaccinations, productionAlerts, dailyTasks] = await Promise.all([
       fbGet('animals'), fbGet('breeding'), fbGet('health'), fbGet('finance'),
       fbGet('inventory_meds'), fbGet('inventory_feeds'), fbGet('inventory_equipment'),
-      fbGet('production_log').catch(()=>[]), fbGet('activity_log').catch(()=>[])
+      fbGet('production_log').catch(()=>[]), fbGet('activity_log').catch(()=>[]),
+      fbGet('weight_alerts').catch(()=>[]), // Sprint 2, Epic 2
+      fbGet('vaccinations').catch(()=>[]),  // Sprint 3, Epic 3
+      fbGet('production_alerts').catch(()=>[]), // Sprint 4, Epic 4
+      fbGet('daily_tasks').catch(()=>[]) // Sprint 6, Epic 6 -- new, additive read
     ]);
-    renderDashboard(animals, breeding, health, finance, meds, feeds, equipment, production, activity);
+    // Sprint 2, Epic 2: read-time staleness check for animals with no
+    // recent weight -- fire-and-forget, never blocks dashboard rendering.
+    if (window.evaluateMissingWeightAlerts) { window.evaluateMissingWeightAlerts(animals, 30).catch(function(){}); }
+    renderDashboard(animals, breeding, health, finance, meds, feeds, equipment, production, activity, weightAlerts, vaccinations, productionAlerts, dailyTasks);
+    // Sprint 3, Epic 3: rank animals by health risk -- independent,
+    // async, fire-and-forget. Never blocks the synchronous render above.
+    // Sprint 5, Epic 5: ONE unified operational-priorities ranking,
+    // replacing the separate Sprint 3 (health-risk) and Sprint 4
+    // (production) rankings -- composes their existing outputs, never
+    // recomputes them. Independent, async, fire-and-forget.
+    if (window.renderUnifiedPriorities) { window.renderUnifiedPriorities(animals, health, weightAlerts, production).catch(function(){}); }
   } catch(e) {
     toast('خطأ في التحميل: '+e.message,'error');
   }
@@ -74,7 +88,7 @@ document.addEventListener('DOMContentLoaded', async function(){
 
 function daysLeftDash(d){ return Math.ceil((new Date(d)-new Date())/86400000); }
 
-function renderDashboard(animals, breeding, health, finance, meds, feeds, equipment, production, activity) {
+function renderDashboard(animals, breeding, health, finance, meds, feeds, equipment, production, activity, weightAlerts, vaccinations, productionAlerts, dailyTasks) {
   var s=getSettings();
   var el=document.getElementById('content');
   var alive = animals.filter(a => a.status === 'alive');
@@ -119,6 +133,22 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
   const priorityAlerts = [];
   if (todaySummary.deaths > 0) priorityAlerts.push({ severity:'critical', icon:'bi-heartbreak', title:`${ar(todaySummary.deaths)} حالة نفوق اليوم`, source:'القطيع', deadline:'اليوم', actionLabel:'عرض', actionHref:'animals.html' });
   if (lowMeds.length) priorityAlerts.push({ severity:'critical', icon:'bi-capsule', title:`${ar(lowMeds.length)} دواء وصل للحد الأدنى`, message: lowMeds.slice(0,3).map(m=>m.name).join('، '), source:'المخزون', actionLabel:'عرض', actionHref:'inventory.html' });
+  // Sprint 6, Epic 6: the weight-alert entry that used to live here was
+  // removed -- confirmed duplicated with Sprint 5's Unified Priorities
+  // panel (docs/features/DASHBOARD-INVENTORY.md). activeWeightAlerts/
+  // weekTrendDelta are still computed (used by the Unified Priorities
+  // panel's own stats below), just no longer pushed into priorityAlerts
+  // a second time.
+  const activeWeightAlerts = (weightAlerts||[]).filter(a => a.status === 'active');
+  const highRiskWeightAlerts = activeWeightAlerts.filter(a => a.severity === 'high');
+  // Trend: alerts detected in the last 7 days vs the 7 days before that -- a real
+  // week-over-week comparison, not just a cumulative total.
+  const _now = new Date();
+  const _7d = new Date(_now); _7d.setDate(_7d.getDate()-7);
+  const _14d = new Date(_now); _14d.setDate(_14d.getDate()-14);
+  const thisWeekAlerts = (weightAlerts||[]).filter(a => a.detected_at && new Date(a.detected_at) >= _7d).length;
+  const lastWeekAlerts = (weightAlerts||[]).filter(a => a.detected_at && new Date(a.detected_at) >= _14d && new Date(a.detected_at) < _7d).length;
+  const weekTrendDelta = thisWeekAlerts - lastWeekAlerts;
   if (overdueMaint.length) priorityAlerts.push({ severity:'watch', icon:'bi-tools', title:`${ar(overdueMaint.length)} معدّة متأخرة عن الصيانة`, source:'المخزون', actionLabel:'عرض', actionHref:'inventory.html' });
   if (expiringMeds.length) priorityAlerts.push({ severity:'watch', icon:'bi-hourglass-split', title:`${ar(expiringMeds.length)} دواء قريب من انتهاء الصلاحية`, message:'خلال أسبوع', source:'المخزون', actionLabel:'عرض', actionHref:'inventory.html' });
   if (lowFeeds.length) priorityAlerts.push({ severity:'watch', icon:'bi-basket', title:`${ar(lowFeeds.length)} علف وصل للحد الأدنى`, message: lowFeeds.slice(0,3).map(f=>f.name).join('، '), source:'المخزون', actionLabel:'عرض', actionHref:'inventory.html' });
@@ -186,6 +216,11 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
   }
 
   // ── Phase 3: Recent Records (unified across animals/health/finance, real dates) ──
+  // Sprint 6, Epic 6: extended into the "Operational Timeline" -- same
+  // merge/sort/render mechanism, four more event TYPES feeding it
+  // (production, weight-alert detection, birth, task automation).
+  // Each source collection is read exactly once here; no record is
+  // pushed under two different types, so nothing appears twice.
   const recentRecords = [];
   animals.forEach(a => {
     const d = a.created_at || a.imported_at || a.birth_date;
@@ -197,8 +232,26 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
   finance.forEach(f => {
     if (f.date) recentRecords.push({ date:f.date, type:'مالية', module:f.type==='income'?'إيراد':'مصروف', status:(+f.amount||0).toLocaleString('ar-EG')+' '+s.currency, statusCls: f.type==='income'?'badge-tarbiya':'badge-yellow' });
   });
+  (production||[]).forEach(p => {
+    if (p.date && (p.type==='milk'||p.type==='wool')) recentRecords.push({ date:p.date, type:'إنتاج', module:(p.animal_tag||'—')+' — '+(p.type==='milk'?'حليب':'صوف'), status:ar(p.quantity)+' '+(p.unit==='liter'?'لتر':'كجم'), statusCls:'badge-tarbiya' });
+  });
+  (weightAlerts||[]).forEach(w => {
+    if (w.detected_at) recentRecords.push({ date:w.detected_at.slice(0,10), type:'وزن', module:(w.animal_tag||'—')+' — '+(w.action||'تنبيه'), status:w.status==='active'?'نشط':'مُغلق', statusCls:w.status==='active'?'badge-danger':'badge-tarbiya' });
+  });
+  (breeding||[]).forEach(b => {
+    if (b.status==='born' && b.actual_birth) recentRecords.push({ date:b.actual_birth, type:'ولادة', module:(b.female_tag||'—')+' — '+ar(b.offspring_count||0)+' مولود', status:'مكتملة', statusCls:'badge-tarbiya' });
+  });
+  (dailyTasks||[]).forEach(t => {
+    if (t.auto_generated && t.created_at) recentRecords.push({ date:t.created_at.slice(0,10), type:'أتمتة', module:t.title||'—', status:t.status==='done'?'مُنجزة':'معلّقة', statusCls:t.status==='done'?'badge-tarbiya':'badge-yellow' });
+  });
   recentRecords.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-  const recentRecordsTop = recentRecords.slice(0,8);
+  const recentRecordsTop = recentRecords.slice(0,10);
+
+  // ── Sprint 6, Epic 6: Upcoming Tasks -- reads daily_tasks directly
+  // (a genuinely new dashboard read of already-existing Sprint 1 data),
+  // sorted by due date, pending/in_progress only. ──
+  const upcomingTasks = (dailyTasks||[]).filter(t=>t.status!=='done').sort((a,b)=>(a.date||'').localeCompare(b.date||'')).slice(0,6);
+  const overdueTasks = (dailyTasks||[]).filter(t=>t.status!=='done' && t.date && t.date<today);
 
   // ── Phase 3: Recent Activity (real activity_log, already written by logActivity() across the app) ──
   const recentActivity = [...(activity||[])].sort((a,b)=>(b.timestamp||'').localeCompare(a.timestamp||'')).slice(0,6);
@@ -257,6 +310,44 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
   `).join('');
 
   el.innerHTML = `
+    ${(() => {
+      // Sprint 6, Epic 6: Daily Briefing. Every sentence below is
+      // conditional on a real, computed number -- nothing is a
+      // template that always renders regardless of data. Self-contained
+      // (own variable names) for the same scoping-safety reason as the
+      // KPI Strip above.
+      const _activeHealthTagsB = new Set((health||[]).filter(r=>r.status==='active').map(r=>r.animal_tag));
+      const _activeWeightIdsB = new Set((weightAlerts||[]).filter(a=>a.status==='active').map(a=>a.animal_id));
+      const requiringActionB = (animals||[]).filter(a=>a.status==='alive'&&(_activeHealthTagsB.has(a.tag)||_activeWeightIdsB.has(a._id))).length;
+      const nowB=new Date(); const _7dB=new Date(nowB); _7dB.setDate(_7dB.getDate()-7); const _14dB=new Date(nowB); _14dB.setDate(_14dB.getDate()-14); const _28dB=new Date(nowB); _28dB.setDate(_28dB.getDate()-28);
+      const milkThisWeekB = (production||[]).filter(p=>p.type==='milk'&&p.date&&new Date(p.date)>=_7dB).reduce((t,p)=>t+(+p.quantity||0),0);
+      const milkLastWeekB = (production||[]).filter(p=>p.type==='milk'&&p.date&&new Date(p.date)>=_14dB&&new Date(p.date)<_7dB).reduce((t,p)=>t+(+p.quantity||0),0);
+      // Vaccination compliance trend: completions in the last 14 days vs the 14 before -- a real comparison, not an assumed "improved".
+      const vaccDoneRecentB = (vaccinations||[]).filter(v=>v.status==='done'&&v.done_date&&new Date(v.done_date)>=_14dB).length;
+      const vaccDonePriorB = (vaccinations||[]).filter(v=>v.status==='done'&&v.done_date&&new Date(v.done_date)>=_28dB&&new Date(v.done_date)<_14dB).length;
+      const overdueTasksB = (dailyTasks||[]).filter(t=>t.status!=='done'&&t.date&&t.date<today).length;
+      const resolvedWeekB = (dailyTasks||[]).filter(t=>t.status==='done'&&t.completed_at&&new Date(t.completed_at)>=_7dB).length;
+
+      const lines = [];
+      if (requiringActionB > 0) lines.push(`<i class="bi bi-exclamation-circle me-1" style="color:var(--red)"></i>${ar(requiringActionB)} حيوان يحتاج انتباهًا اليوم.`);
+      if (milkThisWeekB > 0 && milkLastWeekB > 0) {
+        if (milkThisWeekB > milkLastWeekB * 1.05) lines.push(`<i class="bi bi-arrow-up-circle me-1" style="color:var(--green)"></i>الإنتاج تحسّن هذا الأسبوع (${ar(Math.round(milkThisWeekB))} لتر مقابل ${ar(Math.round(milkLastWeekB))} الأسبوع الماضي).`);
+        else if (milkThisWeekB < milkLastWeekB * 0.95) lines.push(`<i class="bi bi-arrow-down-circle me-1" style="color:var(--red)"></i>الإنتاج تراجع هذا الأسبوع (${ar(Math.round(milkThisWeekB))} لتر مقابل ${ar(Math.round(milkLastWeekB))} الأسبوع الماضي).`);
+      }
+      if (vaccDoneRecentB > 0 || vaccDonePriorB > 0) {
+        if (vaccDoneRecentB > vaccDonePriorB) lines.push(`<i class="bi bi-shield-check me-1" style="color:var(--green)"></i>امتثال التحصين تحسّن (${ar(vaccDoneRecentB)} تحصين مكتمل آخر أسبوعين مقابل ${ar(vaccDonePriorB)} قبلها).`);
+        else if (vaccDoneRecentB < vaccDonePriorB) lines.push(`<i class="bi bi-shield-exclamation me-1" style="color:var(--yellow)"></i>امتثال التحصين تباطأ (${ar(vaccDoneRecentB)} تحصين مكتمل آخر أسبوعين مقابل ${ar(vaccDonePriorB)} قبلها).`);
+      }
+      if (overdueTasksB > 0) lines.push(`<i class="bi bi-clock-history me-1" style="color:var(--orange)"></i>${ar(overdueTasksB)} مهمة متأخرة عن موعدها.`);
+      if (resolvedWeekB > 0) lines.push(`<i class="bi bi-check2-all me-1" style="color:var(--green)"></i>${ar(resolvedWeekB)} مهمة أُنجزت هذا الأسبوع.`);
+
+      if (!lines.length) return '';
+      return `
+      <div class="wonder-card mb-4 p-3" style="border-inline-start:3px solid var(--blue)">
+        <div class="text-gray mb-2" style="font-size:.8rem"><i class="bi bi-file-text me-1"></i>موجز اليوم</div>
+        <div style="font-size:.85rem;line-height:1.9">${lines.join('<br>')}</div>
+      </div>`;
+    })()}
     ${priorityAlerts.length ? `
     <div class="mb-4">
       <div class="fw-bold mb-2" style="color:${priorityAlerts.some(a=>a.severity==='critical')?'var(--red)':'var(--yellow)'}"><i class="bi bi-bell-fill me-2"></i>تنبيهات ذات أولوية</div>
@@ -284,7 +375,80 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
         </div>
       </div>
     </div>
+    ${(() => {
+      // Sprint 5, Epic 5: ONE unified "Operational Priorities" panel,
+      // replacing the three separate Sprint 2/3/4 panels. Every
+      // aggregate number below is the EXACT SAME computation those
+      // panels already used (copied, not altered) -- only the
+      // presentation is consolidated, per this sprint's own mandate to
+      // compose, not recalculate. The per-animal ranking is now ONE
+      // unified list (via window.rankOperationalPriorities), replacing
+      // the separate health-risk and production-ranking lists.
+      const _health = health || [];
+      const _vacc = vaccinations || [];
+      const _prodAlerts = productionAlerts || [];
+      const activeIllnessCount = _health.filter(r => r.status === 'active').length;
+      const todayStr3 = today;
+      const vaccDone = _vacc.filter(v => v.status === 'done').length;
+      const vaccOverdue = _vacc.filter(v => v.status === 'overdue' || (v.status === 'pending' && v.scheduled_date && v.scheduled_date < todayStr3)).length;
+      const vaccTotal = _vacc.length;
+      const compliancePct = vaccTotal > 0 ? Math.round((vaccDone / vaccTotal) * 100) : 100;
+      const activeDeclining = _prodAlerts.filter(a => a.status === 'active').length;
+      const hasProductionData = (production || []).some(p => p.type === 'milk' || p.type === 'wool');
+      const hasAnySignal = activeWeightAlerts.length > 0 || activeIllnessCount > 0 || vaccTotal > 0 || activeDeclining > 0 || hasProductionData;
+      if (!hasAnySignal) return '';
+      return `
+      <div class="wonder-card mb-4 p-3">
+        <div class="text-gray mb-2" style="font-size:.8rem"><i class="bi bi-stars me-1"></i>الأولويات التشغيلية — Sprint 5 (يجمع الوزن + الصحة + الإنتاج + المهام، دعم قرار وليس تشخيصًا)</div>
+        <div class="row g-3 text-center mb-3">
+          <div class="col-6 col-md-3"><div style="font-size:1.3rem;font-weight:700;color:${activeIllnessCount>0?'var(--red)':'var(--green)'}">${ar(activeIllnessCount)}</div><small class="text-gray">حالات علاج نشطة</small></div>
+          <div class="col-6 col-md-3"><div style="font-size:1.3rem;font-weight:700;color:${compliancePct>=90?'var(--green)':compliancePct>=70?'var(--yellow)':'var(--red)'}">${ar(compliancePct)}٪</div><small class="text-gray">امتثال التحصين</small></div>
+          <div class="col-6 col-md-3"><div style="font-size:1.3rem;font-weight:700;color:${activeWeightAlerts.length>0?'var(--red)':'var(--green)'}">${ar(activeWeightAlerts.length)}</div><small class="text-gray">تنبيهات وزن</small></div>
+          <div class="col-6 col-md-3"><div style="font-size:1.3rem;font-weight:700;color:${activeDeclining>0?'var(--red)':'var(--green)'}">${ar(activeDeclining)}</div><small class="text-gray">إنتاج منخفض</small></div>
+        </div>
+        <div id="unified-priority-section" class="text-gray" style="font-size:.78rem">جاري حساب الأولويات التشغيلية الموحّدة...</div>
+      </div>`;
+    })()}
     <div id="weather-widget" class="wonder-card mb-4 p-3"><div class="text-gray" style="font-size:.82rem"><i class="bi bi-cloud-sun me-2"></i>جاري تحميل حالة الطقس...</div></div>
+    ${(() => {
+      // Sprint 6, Epic 6: Executive KPI Strip. Every value below reuses
+      // raw data this function already has as parameters -- no new
+      // intelligence, no engine call, just straightforward aggregation
+      // of collections this page (or a sibling engine) already reads.
+      // Self-contained (own variable names) deliberately, to avoid any
+      // risk of reaching into a same-named variable defined elsewhere
+      // in this large function at the wrong point in evaluation order.
+      const _activeHealthTagsK = new Set((health||[]).filter(r=>r.status==='active').map(r=>r.animal_tag));
+      const _activeWeightIdsK = new Set((weightAlerts||[]).filter(a=>a.status==='active').map(a=>a.animal_id));
+      const _aliveAnimals = (animals||[]).filter(a=>a.status==='alive');
+      const healthyAnimalsK = _aliveAnimals.filter(a=>!_activeHealthTagsK.has(a.tag) && !_activeWeightIdsK.has(a._id)).length;
+      const requiringActionK = _aliveAnimals.filter(a=>_activeHealthTagsK.has(a.tag) || _activeWeightIdsK.has(a._id)).length;
+      const activeTreatmentsK = (health||[]).filter(r=>r.status==='active').length;
+      const nowK = new Date(); const _7dK = new Date(nowK); _7dK.setDate(_7dK.getDate()-7); const _14dK = new Date(nowK); _14dK.setDate(_14dK.getDate()-14);
+      const milkThisWeekK = (production||[]).filter(p=>p.type==='milk'&&p.date&&new Date(p.date)>=_7dK).reduce((t,p)=>t+(+p.quantity||0),0);
+      const milkLastWeekK = (production||[]).filter(p=>p.type==='milk'&&p.date&&new Date(p.date)>=_14dK&&new Date(p.date)<_7dK).reduce((t,p)=>t+(+p.quantity||0),0);
+      const prodTrendUpK = milkThisWeekK > milkLastWeekK;
+      const activeWeightLossK = (weightAlerts||[]).filter(a=>a.status==='active'&&a.rule_type==='weight_loss').length;
+      const vaccDoneK = (vaccinations||[]).filter(v=>v.status==='done').length;
+      const vaccTotalK = (vaccinations||[]).length;
+      const complianceK = vaccTotalK>0 ? Math.round((vaccDoneK/vaccTotalK)*100) : 100;
+      const openTasksK = (dailyTasks||[]).filter(t=>t.status!=='done').length;
+      const resolvedWeekK = (dailyTasks||[]).filter(t=>t.status==='done'&&t.completed_at&&new Date(t.completed_at)>=_7dK).length;
+      return `
+      <div class="wonder-card mb-4 p-3">
+        <div class="text-gray mb-2" style="font-size:.8rem"><i class="bi bi-grid-3x3-gap me-1"></i>مؤشرات تنفيذية</div>
+        <div class="row g-2 text-center">
+          <div class="col-6 col-md-3 col-lg-2"><div style="font-size:1.1rem;font-weight:700;color:var(--green)">${ar(healthyAnimalsK)}</div><small class="text-gray">سليمة</small></div>
+          <div class="col-6 col-md-3 col-lg-2"><div style="font-size:1.1rem;font-weight:700;color:${requiringActionK>0?'var(--red)':'var(--green)'}">${ar(requiringActionK)}</div><small class="text-gray">تحتاج إجراء</small></div>
+          <div class="col-6 col-md-3 col-lg-2"><div style="font-size:1.1rem;font-weight:700;color:${activeTreatmentsK>0?'var(--yellow)':'var(--green)'}">${ar(activeTreatmentsK)}</div><small class="text-gray">علاج نشط</small></div>
+          <div class="col-6 col-md-3 col-lg-2"><div style="font-size:1.1rem;font-weight:700;color:${prodTrendUpK?'var(--green)':'var(--red)'}">${prodTrendUpK?'↑':'↓'}</div><small class="text-gray">اتجاه الإنتاج</small></div>
+          <div class="col-6 col-md-3 col-lg-2"><div style="font-size:1.1rem;font-weight:700;color:${activeWeightLossK>0?'var(--red)':'var(--green)'}">${activeWeightLossK>0?'↓':'↑'}</div><small class="text-gray">اتجاه الوزن</small></div>
+          <div class="col-6 col-md-3 col-lg-2"><div style="font-size:1.1rem;font-weight:700;color:${complianceK>=90?'var(--green)':complianceK>=70?'var(--yellow)':'var(--red)'}">${ar(complianceK)}٪</div><small class="text-gray">امتثال التحصين</small></div>
+          <div class="col-6 col-md-3 col-lg-2"><div style="font-size:1.1rem;font-weight:700;color:var(--text)">${ar(openTasksK)}</div><small class="text-gray">مهام مفتوحة</small></div>
+          <div class="col-6 col-md-3 col-lg-2"><div style="font-size:1.1rem;font-weight:700;color:var(--green)">${ar(resolvedWeekK)}</div><small class="text-gray">أُنجزت هذا الأسبوع</small></div>
+        </div>
+      </div>`;
+    })()}
     <!-- Hero KPI: إجمالي القطيع أكبر بصريًا من باقي الكروت -->
     <div class="row g-3 mb-3">
       <div class="col-md-8">
@@ -366,10 +530,26 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
       </div>
     </div>
 
-    <!-- Phase 3: Recent Records -->
+    <!-- Sprint 6, Epic 6: Upcoming Tasks -- reuses the SAME
+         renderDataTableWrapper component as Recent Records below, no
+         new rendering component introduced. -->
     <div class="mb-4">
       ${renderDataTableWrapper({
-        title: 'السجلات الأخيرة',
+        title: 'المهام القادمة' + (overdueTasks.length ? ` (${ar(overdueTasks.length)} متأخرة)` : ''),
+        headers: ['التاريخ','العنوان','الأولوية','الحالة'],
+        state: upcomingTasks.length ? 'ready' : 'empty',
+        rowsHtml: upcomingTasks.map(t => {
+          const isOverdue = t.date && t.date < today;
+          const priLabel = {high:'عالية',medium:'متوسطة',low:'منخفضة'}[t.priority]||t.priority;
+          return `<tr><td class="${isOverdue?'text-danger fw-bold':'text-gray'}">${t.date||'—'}</td><td class="fw-bold">${t.title||'—'}</td><td>${priLabel}</td><td><span class="type-badge ${isOverdue?'badge-danger':t.status==='in_progress'?'badge-tasmeen':'badge-yellow'}">${isOverdue?'متأخرة':t.status==='in_progress'?'قيد التنفيذ':'معلّقة'}</span></td></tr>`;
+        }).join('')
+      })}
+    </div>
+
+    <!-- Phase 3 (extended Sprint 6): Operational Timeline, unified across animals/health/finance/production/weight/birth/automation -->
+    <div class="mb-4">
+      ${renderDataTableWrapper({
+        title: 'الجدول الزمني التشغيلي',
         headers: ['التاريخ','النوع','التفاصيل','الحالة'],
         state: recentRecordsTop.length ? 'ready' : 'empty',
         rowsHtml: recentRecordsTop.map(r => `<tr><td class="text-gray">${r.date}</td><td class="fw-bold">${r.type}</td><td>${r.module}</td><td><span class="type-badge ${r.statusCls}">${r.status}</span></td></tr>`).join('')
@@ -394,6 +574,61 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
   // In a real scenario, we'd compare against a 'diary_snapshot' in Firebase
   checkSync(stats);
 }
+
+// Sprint 3, Epic 3: rank animals by health risk for the dashboard's
+// "highest risk" panel. Deliberately evaluates only CANDIDATE animals
+// (those already showing at least one real signal -- an active health
+// record or an active weight alert), not the entire herd -- most
+// animals score 0 and evaluating them all would be wasted work for no
+// visible benefit. fbGet's own ~45s cache means the underlying
+// health/vaccinations/weight_alerts reads inside evaluateHealthRisk
+// are not re-fetched over the network per candidate.
+// Sprint 4, Epic 4: rank animals by production for the dashboard's
+// top/lowest producer panels. Milk and wool are ranked SEPARATELY
+// (never combined -- liters and kilograms are not comparable units).
+// Only animals with 2+ records of a given type are evaluated (matches
+// evaluateProductionKPIs' own minimum-data requirement).
+// Sprint 5, Epic 5: ONE unified operational-priorities ranking for the
+// dashboard, replacing the separate Sprint 3/4 rankings. Composes
+// window.evaluateOperationalPriority() (itself pure composition over
+// Sprint 1-4's engines) -- this function adds no new scoring logic of
+// its own, only candidate selection and rendering.
+window.renderUnifiedPriorities = async function(animals, health, weightAlerts, production) {
+  var container = document.getElementById('unified-priority-section');
+  if (!container || !window.evaluateOperationalPriority) return;
+  try {
+    var activeHealthTags = new Set((health||[]).filter(function(r){return r.status==='active';}).map(function(r){return r.animal_tag;}));
+    var activeWeightAnimalIds = new Set((weightAlerts||[]).filter(function(a){return a.status==='active';}).map(function(a){return a.animal_id;}));
+    var producingAnimalIds = new Set((production||[]).filter(function(p){return p.type==='milk'||p.type==='wool';}).map(function(p){return p.animal_id;}));
+    var candidates = (animals||[]).filter(function(a){
+      return a.status!=='dead' && (activeHealthTags.has(a.tag) || activeWeightAnimalIds.has(a._id) || producingAnimalIds.has(a._id));
+    });
+    if (!candidates.length) { container.innerHTML = ''; return; }
+
+    var results = [];
+    for (var i=0; i<candidates.length; i++) {
+      var a = candidates[i];
+      var p = await window.evaluateOperationalPriority(a._id, a.tag, a.barn);
+      if (p) results.push(p);
+    }
+    if (!results.length) { container.innerHTML = ''; return; }
+    var ranked = window.rankOperationalPriorities ? window.rankOperationalPriorities(results) : results;
+    var top = ranked.slice(0,5);
+
+    var LEVEL_COLOR={critical:'var(--red)',high:'var(--orange)',medium:'var(--yellow)',low:'var(--green)'};
+    container.innerHTML = 'الأعلى أولوية: ' + top.map(function(r){
+      return '<a href="animal-detail.html?id='+r.animalId+'" style="color:'+(LEVEL_COLOR[r.level]||'var(--text)')+';text-decoration:none;font-weight:700" title="ثقة: '+(r.confidence==='high'?'عالية':'متوسطة')+' — '+r.contributingEngines.join('، ')+'">'+(r.animalTag||r.animalId)+' ('+ar(r.score)+')</a>';
+    }).join('، ');
+  } catch(e) { container.innerHTML = ''; }
+};
+
+// Sprint 4 and Sprint 3's own per-domain ranking functions
+// (renderProductionIntelligence, renderTopHealthRiskAnimals) were
+// removed here in Sprint 6 -- confirmed dead (zero call sites) since
+// Sprint 5 replaced them with window.renderUnifiedPriorities().
+// docs/features/DASHBOARD-INVENTORY.md. Their underlying engines
+// (evaluateProductionKPIs, evaluateHealthRisk) are untouched and
+// remain fully callable -- only this unused presentation layer is gone.
 
 async function checkSync(actual, animals) {
   // Get diary snapshot if exists, or calculate it

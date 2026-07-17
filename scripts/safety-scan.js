@@ -91,7 +91,7 @@ function walk(dir) {
     // NOT the same SSOT surface this scan polices -- scanning it here
     // would conflate two different repositories' worth of findings.
     if (['node_modules', '.git', 'tests', 'scripts'].includes(entry.name)) continue;
-    if (dir === '.' && entry.name === 'farm-apk') continue;
+    if (dir === '.' && (entry.name === 'farm-apk' || entry.name === 'release')) continue;
     const rel = path.join(dir, entry.name);
     if (entry.isDirectory()) walk(rel);
     else if (entry.name.endsWith('.html') || entry.name.endsWith('.js')) allJsHtml.push(rel);

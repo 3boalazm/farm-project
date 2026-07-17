@@ -303,8 +303,14 @@ window.submitBreeding=async function(){
   var wasAlreadyBorn = !!(editBId && typeof breedingRecs!=='undefined' && breedingRecs && breedingRecs.some(function(r){return r._id===editBId && r.status==='born';}));
   closeModal();toast('جاري الحفظ...','info');
   try{
+    let breedingId=editBId;
     if(editBId){await fbPatch('breeding',editBId,data);await logActivity('edit','breeding','تعديل تقريع: '+ft);}
-    else{await fbPost('breeding',data);await logActivity('add','breeding','تسجيل تقريع: '+ft+(status==='pregnant'?' — حامل':status==='born'?' — ولادة':''));}
+    else{breedingId=await fbPost('breeding',data);await logActivity('add','breeding','تسجيل تقريع: '+ft+(status==='pregnant'?' — حامل':status==='born'?' — ولادة':''));}
+    // Sprint 1, Epic 1: attach task automation -- additive only, does not
+    // change the breeding write above. Never blocks on failure.
+    if(status==='pregnant'&&data.expected_birth&&window.autoGenerateTask){
+      window.autoGenerateTask('expected_birth_approaching',{sourceId:breedingId,female_tag:data.female_tag,expected_birth:data.expected_birth,barn:data.barn}).catch(function(){});
+    }
     if(status==='born' && !wasAlreadyBorn){
       // birth_weights is a single free-text field on this form (unlike
       // _ubSubmit's per-batch numeric input). Only apply it as a real

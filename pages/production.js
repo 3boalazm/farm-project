@@ -583,6 +583,14 @@ window.submitProd = async function() {
     if (type === 'weight') {
       try { await fbPatch('animals', animal._id, { current_weight: qty, weight_updated: date }); } catch(e) {}
       try { await fbPost('animals/'+animal._id+'/weights', { weight: qty, date: date, notes: notes || null }); } catch(e) {}
+      // Sprint 2, Epic 2: attach weight intelligence -- additive only,
+      // does not change the writes above. Never blocks on failure.
+      if (window.evaluateWeightAlert) { window.evaluateWeightAlert(animal._id, animal.tag, animal.barn).catch(function(){}); }
+    } else if (type === 'milk' || type === 'wool') {
+      // Sprint 4, Epic 4: attach production intelligence -- additive
+      // only, milk/wool exclusively (weight is Sprint 2's domain,
+      // handled in the branch above, never here). Never blocks on failure.
+      if (window.evaluateProductionAlert) { window.evaluateProductionAlert(animal._id, animal.tag, type, animal.barn).catch(function(){}); }
     }
 
     const typeLabel = { milk:'حليب', wool:'صوف', weight:'وزن' }[type];

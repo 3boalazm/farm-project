@@ -53,7 +53,7 @@ Because primary auth isn't Firebase Auth, [database.rules.json](database.rules.j
 - [offline-sync.js](offline-sync.js) (`FarmOfflineSync`) queues writes in **IndexedDB** while offline and replays them (POST/PATCH/PUT/DELETE) when the connection returns. This is a real, distinct mechanism from the APK file-sync tooling (`tools/sync-apk/`, referenced in archived documentation, not confirmed present in this repository) and from `sync.js` (a species/breed reconciliation utility, likely related to the `diary_snapshot` feature — not independently confirmed as the same mechanism).
 
 ### Shared UI — [shared.js](shared.js), [nav.js](nav.js)
-- [shared.js](shared.js) holds all reusable UI: `toast()`, `showModal()/closeModal()`, `renderFarmModal()`, KPI/section/header components (see [COMPONENTS.md](COMPONENTS.md)), status badges, and Arabic date/number formatting. It is loaded on every page. It also houses the canonical Birth helper, `createOffspringAnimal()` (see Engineering Rules below).
+- [shared.js](shared.js) holds all reusable UI: `toast()`, `showModal()/closeModal()`, `renderFarmModal()`, KPI/section/header components (see [COMPONENTS.md](COMPONENTS.md)), status badges, and Arabic date/number formatting. It is loaded on every page. It also houses the canonical Birth helper, `createOffspringAnimal()` (see Engineering Rules below), and five decision-support engines added across Sprints 1-6 -- `autoGenerateTask()` (automation), `evaluateWeightAlert()`, `evaluateHealthRisk()`, `evaluateProductionKPIs()`, and `evaluateOperationalPriority()` (a pure composition layer over the other four, never recalculating their outputs). Full architecture, contracts, and design rationale for all five are in `docs/features/` -- start with `docs/features/UNIFIED-DECISION-ENGINE.md` for the composition layer, or `docs/features/INTELLIGENCE-CONTRACTS.md` for every engine's exact input/output shape.
 - [nav.js](nav.js) defines the sidebar as the `FARM_NAV` data structure; `buildSidebarNav()` renders it, filtering each item by its `perm` through `can()`. Edit `FARM_NAV` to change the menu.
 - [styles.css](styles.css) is a single global stylesheet built on a 3-tier CSS-variable token system (raw → semantic → component). See [DESIGN-TOKENS.md](DESIGN-TOKENS.md) for the type/spacing/radius/color scales — reuse tokens rather than adding new hardcoded values.
 
@@ -83,6 +83,7 @@ Because primary auth isn't Firebase Auth, [database.rules.json](database.rules.j
 | Full architecture, all three engineering threads | `docs/architecture/` |
 | Weight or Birth subsystem specifics | `docs/certification/WEIGHT.md` / `BIRTH.md` |
 | Modal-lifecycle rules | `docs/certification/MODAL_LIFECYCLE.md` |
+| Task automation, Weight/Health/Production Intelligence, or the Unified Decision Engine (Sprints 1-6) | `docs/features/` -- start with `docs/features/EXECUTIVE-DASHBOARD.md` for how they surface, or the specific `*-ANALYSIS.md`/`*-INTELLIGENCE.md` pair for the domain you're touching |
 | What's decided vs. still open | `docs/decisions/INDEX.md`, `docs/backlog/OPEN_DECISIONS.md` |
 | What's safe to work on next | `docs/backlog/VERIFIED_BACKLOG.md` |
 | Every known conflict/limitation | `docs/repository/RISK_REGISTER.md` |
