@@ -142,7 +142,22 @@ function renderHealthPage(s){
 }
 
 window.completeHealth=async function(id){
-  try{await fbPatch('health',id,{status:'completed'});await logActivity('edit','health','إكمال علاج');toast('تم إكمال العلاج');healthRecs=await fbGet('health');renderHealthPage(getSettings());}
+  try{
+    const r=healthRecs.find(function(x){return x._id===id;});
+    await fbPatch('health',id,{status:'completed'});await logActivity('edit','health','إكمال علاج');toast('تم إكمال العلاج');
+    // Sprint 11 (v1.4): closes the ORIGINAL 'medication_followup' reminder
+    // task created when this same health record's withdrawal_end was
+    // first set -- discovered gap (docs/features/WORKFLOW-DISCOVERY.md).
+    // Recommendation reuses evaluateHealthRisk() live, never re-scores.
+    if(window.completeWorkflow && r){
+      const animals=await fbGet('animals');
+      const animal=animals.find(function(a){return a.tag===r.animal_tag;});
+      window.completeWorkflow('medication', { sourceId:id, animalId:animal?animal._id:null, animalTag:r.animal_tag, barn:animal?animal.barn:null }).then(function(res){
+        if(res&&res.recommendation&&res.recommendation.text&&res.recommendation.actionable!==false)toast('💡 '+res.recommendation.text,'info');
+      }).catch(function(){});
+    }
+    healthRecs=await fbGet('health');renderHealthPage(getSettings());
+  }
   catch(e){toast('فشل: '+e.message,'error');}
 };
 
@@ -257,7 +272,22 @@ window.submitHealth=async function(){
     if(window.evaluateHealthRisk&&data.animal_tag){
       fbGet('animals').then(function(allAnimals){
         var match=(allAnimals||[]).find(function(a){return a.tag===data.animal_tag;});
-        if(match) return window.evaluateHealthRisk(match._id, match.tag, match.barn);
+        if(match){
+          window.evaluateHealthRisk(match._id, match.tag, match.barn);
+          // Sprint 14 (v1.7): deduct medication stock -- Best Effort,
+          // never blocks the health record itself (already saved above).
+          if(window.recordInventoryTransaction&&data.medication&&!editHealthId){
+            window.recordInventoryTransaction('meds', data.medication, -1, 'treatment', healthId).catch(function(){});
+          }
+          // Sprint 11 (v1.4): recommendation only, reusing the SAME
+          // resolved animal (no duplicate fbGet('animals') lookup). A
+          // NEW health record has no prior reminder of its own to close.
+          if(window.completeWorkflow&&!editHealthId){
+            window.completeWorkflow('health',{sourceId:healthId, animalId:match._id, animalTag:match.tag, barn:match.barn}).then(function(r){
+              if(r&&r.recommendation&&r.recommendation.text&&r.recommendation.actionable!==false)toast('💡 '+r.recommendation.text,'info');
+            }).catch(function(){});
+          }
+        }
       }).catch(function(){});
     }
     toast(editHealthId?'تم التحديث':'تمت الإضافة');

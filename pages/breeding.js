@@ -328,6 +328,16 @@ window.submitBreeding=async function(){
       for(var fi=0;fi<femaleCount;fi++){
         await window.createOffspringAnimal({species:data.female_species,breed:data.female_breed,gender:'female',purpose:'birth',birthDate:data.actual_birth,motherTag:data.mother_tag,motherBreed:data.mother_breed,fatherTag:data.male_tag,weight:singleWeight,barn:data.barn,notes:data.notes});
       }
+      // Sprint 11 (v1.4): closes the ORIGINAL 'expected_birth_approaching'
+      // reminder task created when this SAME breeding record was first
+      // marked pregnant -- discovered gap (docs/features/WORKFLOW-DISCOVERY.md):
+      // nothing previously resolved that reminder once the birth actually
+      // happened. Additive only, never blocks on failure.
+      if(window.completeWorkflow){
+        window.completeWorkflow('birth', { sourceId:breedingId, animalTag:data.female_tag }).then(function(r){
+          if(r&&r.recommendation&&r.recommendation.text&&r.recommendation.actionable!==false)toast('💡 '+r.recommendation.text,'info');
+        }).catch(function(){});
+      }
     }
     toast(editBId?'تم التحديث':'تمت الإضافة');
     breedingRecs=await fbGet('breeding');renderBreedingPage(getSettings());

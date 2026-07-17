@@ -24,6 +24,7 @@ var FARM_NAV = [
     {href:'health.html',    icon:'bi-heart-pulse-fill',    label:'الصحة',                 perm:'health'},
     {href:'vaccine.html',   icon:'bi-bandaid-fill',        label:'التحصين',               perm:'health'},
     {href:'breeding.html',  icon:'bi-diagram-2-fill',      label:'التكاثر',               perm:'breeding'},
+    {href:'production.html',icon:'bi-droplet-fill',        label:'الإنتاج'},
     {href:'inventory.html', icon:'bi-boxes',               label:'المخزن',                perm:'inventory'},
   ]},
   // ── المالية والتقارير ──
@@ -31,10 +32,12 @@ var FARM_NAV = [
     {href:'finance.html',   icon:'bi-wallet2',             label:'المالية',               perm:'finance'},
     {href:'cost.html',      icon:'bi-calculator-fill',     label:'حاسبة التكاليف',        perm:'finance'},
     {href:'reports.html',   icon:'bi-graph-up',            label:'التقارير',              perm:'reports'},
+    {href:'analytics.html', icon:'bi-bar-chart-line-fill', label:'التحليلات',             perm:'reports'},
   ]},
   // ── النظام ──
   {section: 'النظام', items: [
     {href:'notifications.html', icon:'bi-bell-fill',        label:'الإشعارات'},
+    {href:'tasks.html',         icon:'bi-check2-square',    label:'المهام'},
     {href:'assistant.html',     icon:'bi-robot',             label:'المساعد الذكي'},
     {href:'activity.html',      icon:'bi-clock-history',    label:'سجل الأنشطة',         perm:'admin'},
     {href:'users.html',         icon:'bi-people-fill',      label:'المستخدمون',           perm:'users'},

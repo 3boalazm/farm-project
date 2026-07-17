@@ -107,9 +107,22 @@ function daysUntil(dateStr){return Math.ceil((new Date(dateStr)-new Date())/8640
 window.markDone=async function(id){
   const u=getUser();
   try{
+    const v=vaccines.find(v=>v._id===id);
     await fbPatch('vaccinations',id,{status:'done',done_date:todayStr(),progress:100,executed_by:u?.name||'—'});
-    await logActivity('edit','vaccine','تنفيذ تحصين: '+vaccines.find(v=>v._id===id)?.name);
+    await logActivity('edit','vaccine','تنفيذ تحصين: '+v?.name);
     toast('تم تسجيل التحصين كمنجز');
+    // Sprint 11 (v1.4): closes the ORIGINAL 'vaccination_scheduled'
+    // reminder task created when this same vaccination was first
+    // scheduled -- discovered gap (docs/features/WORKFLOW-DISCOVERY.md).
+    if(window.completeWorkflow && v){
+      window.completeWorkflow('vaccination', { sourceId:id, targetSection:v.target_section }).then(function(r){
+        if(r&&r.recommendation&&r.recommendation.text&&r.recommendation.actionable!==false)toast('💡 '+r.recommendation.text,'info');
+      }).catch(function(){});
+    }
+    // Sprint 14 (v1.7): deduct vaccine stock -- Best Effort, never blocks marking done.
+    if(window.recordInventoryTransaction && v){
+      window.recordInventoryTransaction('meds', v.name, -(v.count||1), 'vaccination', id).catch(function(){});
+    }
     vaccines=await fbGet('vaccinations');
     renderVaccPage(getSettings());
   }catch(e){toast('فشل: '+e.message,'error');}

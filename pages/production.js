@@ -591,6 +591,9 @@ window.submitProd = async function() {
       // only, milk/wool exclusively (weight is Sprint 2's domain,
       // handled in the branch above, never here). Never blocks on failure.
       if (window.evaluateProductionAlert) { window.evaluateProductionAlert(animal._id, animal.tag, type, animal.barn).catch(function(){}); }
+      // Sprint 11 (v1.4): recommendation only -- Production Intelligence
+      // (Sprint 4) already self-resolves, so there is no stale reminder to close here.
+      if (window.completeWorkflow) { window.completeWorkflow('production', {sourceId:animal._id, animalId:animal._id, animalTag:animal.tag, barn:animal.barn, productionType:type}).then(function(r){ if(r&&r.recommendation&&r.recommendation.text&&r.recommendation.actionable!==false) toast('💡 '+r.recommendation.text,'info'); }).catch(function(){}); }
     }
 
     const typeLabel = { milk:'حليب', wool:'صوف', weight:'وزن' }[type];

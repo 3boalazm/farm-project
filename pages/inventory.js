@@ -222,6 +222,7 @@ window.openAddInv=function(){
     <label>اسم الدواء *</label><input class="field" id="i-name" placeholder="مثال: فيتامين أ + د">
     <div class="row g-2"><div class="col-4"><label>الكمية *</label><input type="number" class="field" id="i-qty" value="0" min="0"></div><div class="col-4"><label>الوحدة</label><input class="field" id="i-unit" value="عبوة" placeholder="عبوة، قرص..."></div><div class="col-4"><label>الحد الأدنى</label><input type="number" class="field" id="i-min" value="0" min="0"></div></div>
     <div class="row g-2"><div class="col-6"><label>تاريخ الانتهاء</label><input type="date" class="field" id="i-exp"></div><div class="col-6"><label>الجمالون</label><select class="field" id="i-barn">${barns.map(b=>`<option value="${b}">${b||'— الكل —'}</option>`).join('')}</select></div></div>
+    <div class="row g-2"><div class="col-6"><label>المورّد</label><input class="field" id="i-supplier" placeholder="اسم المورّد"></div><div class="col-6"><label>كمية إعادة الطلب</label><input type="number" class="field" id="i-reorder" value="0" min="0"></div></div>
     <label>الغرض</label><input class="field" id="i-purpose" placeholder="تطعيم، علاج، فيتامين...">
     <label>ملاحظات</label><textarea class="field" id="i-notes" rows="2"></textarea>
     <div class="d-flex gap-2 justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إلغاء</button><button class="action-btn primary" onclick="submitInv('meds')">حفظ</button></div></div>`);
@@ -294,7 +295,7 @@ window.submitInv=async function(type){
   const name=document.getElementById('i-name')?.value.trim();
   if(!name){toast('يرجى إدخال الاسم','error');return;}
   let data={name};
-  if(type==='meds'){data={...data,quantity:+document.getElementById('i-qty').value||0,unit:document.getElementById('i-unit').value.trim(),min_quantity:+document.getElementById('i-min').value||0,expiry:document.getElementById('i-exp').value||null,barn:document.getElementById('i-barn').value,purpose:document.getElementById('i-purpose').value.trim(),notes:document.getElementById('i-notes').value.trim()||null};}
+  if(type==='meds'){data={...data,quantity:+document.getElementById('i-qty').value||0,unit:document.getElementById('i-unit').value.trim(),min_quantity:+document.getElementById('i-min').value||0,expiry:document.getElementById('i-exp').value||null,barn:document.getElementById('i-barn').value,purpose:document.getElementById('i-purpose').value.trim(),notes:document.getElementById('i-notes').value.trim()||null,supplier:document.getElementById('i-supplier')?.value.trim()||null,reorder_quantity:+document.getElementById('i-reorder')?.value||0,active:true};}
   else if(type==='feeds'){data={...data,quantity:+document.getElementById('i-qty').value||0,unit:document.getElementById('i-unit').value.trim(),unit_weight:+document.getElementById('i-weight').value||50,min_quantity:+document.getElementById('i-min').value||0,cost_per_unit:+document.getElementById('i-cost').value||0,barn:document.getElementById('i-barn').value,purpose:document.getElementById('i-purpose').value};}
   else{data={...data,type:document.getElementById('i-type').value.trim(),status:document.getElementById('i-status').value,next_maintenance:document.getElementById('i-maint').value||null,asset_number:document.getElementById('i-asset').value.trim(),notes:document.getElementById('i-notes').value.trim()||null};}
   closeModal();toast('جاري الحفظ...','info');
@@ -475,6 +476,23 @@ window.logConsumption = async function() {
       created_at: new Date().toISOString(),
     });
     await logActivity('add','feed_consumption','تسجيل استهلاك: '+feed_name+' — '+barn+' — '+qty+'كجم');
+    // Sprint 14 (v1.7): deduct feed stock -- Best Effort, never blocks
+    // the consumption record itself (already saved above). Reuses the
+    // SAME name-based link this function already establishes.
+    // UNIT CAUTION: inventory_feeds.quantity is tracked in whole units
+    // (bags/sacks, unit_weight defaults to 50kg per unit -- confirmed
+    // by reading submitInv()'s own form field), while this function's
+    // qty is raw kilograms. Converting via the item's OWN unit_weight
+    // before deducting -- deducting raw kg directly against a
+    // unit-count quantity would silently misstate stock by that factor.
+    if(window.recordInventoryTransaction){
+      fbGet('inventory_feeds').then(function(allFeeds){
+        var match=(allFeeds||[]).find(function(f){return f.name===feed_name;});
+        var unitWeight = (match&&match.unit_weight>0) ? match.unit_weight : 50;
+        var deltaUnits = -(qty/unitWeight);
+        window.recordInventoryTransaction('feeds', feed_name, deltaUnits, 'feeding', null).catch(function(){});
+      }).catch(function(){});
+    }
     toast('✅ تم تسجيل استهلاك '+ar(qty)+' كجم من '+feed_name);
     setTimeout(function(){ loadConsumptionRecords(); }, 500);
   } catch(e) {

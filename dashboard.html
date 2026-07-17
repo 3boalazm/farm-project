@@ -61,19 +61,20 @@ document.addEventListener('DOMContentLoaded', async function(){
   renderLoading(el);
 
   try {
-    const [animals, breeding, health, finance, meds, feeds, equipment, production, activity, weightAlerts, vaccinations, productionAlerts, dailyTasks] = await Promise.all([
+    const [animals, breeding, health, finance, meds, feeds, equipment, production, activity, weightAlerts, vaccinations, productionAlerts, dailyTasks, workflowHistory] = await Promise.all([
       fbGet('animals'), fbGet('breeding'), fbGet('health'), fbGet('finance'),
       fbGet('inventory_meds'), fbGet('inventory_feeds'), fbGet('inventory_equipment'),
       fbGet('production_log').catch(()=>[]), fbGet('activity_log').catch(()=>[]),
       fbGet('weight_alerts').catch(()=>[]), // Sprint 2, Epic 2
       fbGet('vaccinations').catch(()=>[]),  // Sprint 3, Epic 3
       fbGet('production_alerts').catch(()=>[]), // Sprint 4, Epic 4
-      fbGet('daily_tasks').catch(()=>[]) // Sprint 6, Epic 6 -- new, additive read
+      fbGet('daily_tasks').catch(()=>[]), // Sprint 6, Epic 6
+      fbGet('workflow_history').catch(()=>[]) // Sprint 11 (v1.4) -- new, additive read
     ]);
     // Sprint 2, Epic 2: read-time staleness check for animals with no
     // recent weight -- fire-and-forget, never blocks dashboard rendering.
     if (window.evaluateMissingWeightAlerts) { window.evaluateMissingWeightAlerts(animals, 30).catch(function(){}); }
-    renderDashboard(animals, breeding, health, finance, meds, feeds, equipment, production, activity, weightAlerts, vaccinations, productionAlerts, dailyTasks);
+    renderDashboard(animals, breeding, health, finance, meds, feeds, equipment, production, activity, weightAlerts, vaccinations, productionAlerts, dailyTasks, workflowHistory);
     // Sprint 3, Epic 3: rank animals by health risk -- independent,
     // async, fire-and-forget. Never blocks the synchronous render above.
     // Sprint 5, Epic 5: ONE unified operational-priorities ranking,
@@ -81,6 +82,11 @@ document.addEventListener('DOMContentLoaded', async function(){
     // (production) rankings -- composes their existing outputs, never
     // recomputes them. Independent, async, fire-and-forget.
     if (window.renderUnifiedPriorities) { window.renderUnifiedPriorities(animals, health, weightAlerts, production).catch(function(){}); }
+    // Sprint 9: unread notification summary link, independent async render.
+    if (window.renderNotifSummaryLink) { window.renderNotifSummaryLink().catch(function(){}); }
+    // v1.2: Farm Forecast Summary, independent async render.
+    if (window.renderFarmForecastSummary) { window.renderFarmForecastSummary(animals, health, weightAlerts, production).catch(function(){}); }
+    if (window.renderInventoryExecCard) { window.renderInventoryExecCard().catch(function(){}); }
   } catch(e) {
     toast('خطأ في التحميل: '+e.message,'error');
   }
@@ -88,7 +94,7 @@ document.addEventListener('DOMContentLoaded', async function(){
 
 function daysLeftDash(d){ return Math.ceil((new Date(d)-new Date())/86400000); }
 
-function renderDashboard(animals, breeding, health, finance, meds, feeds, equipment, production, activity, weightAlerts, vaccinations, productionAlerts, dailyTasks) {
+function renderDashboard(animals, breeding, health, finance, meds, feeds, equipment, production, activity, weightAlerts, vaccinations, productionAlerts, dailyTasks, workflowHistory) {
   var s=getSettings();
   var el=document.getElementById('content');
   var alive = animals.filter(a => a.status === 'alive');
@@ -244,6 +250,13 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
   (dailyTasks||[]).forEach(t => {
     if (t.auto_generated && t.created_at) recentRecords.push({ date:t.created_at.slice(0,10), type:'أتمتة', module:t.title||'—', status:t.status==='done'?'مُنجزة':'معلّقة', statusCls:t.status==='done'?'badge-tarbiya':'badge-yellow' });
   });
+  // Sprint 11 (v1.4): workflow completions join the SAME merge/sort/
+  // render mechanism -- no new timeline component, reusing exactly
+  // what Sprint 6 already established.
+  const WORKFLOW_TYPE_LABEL = {birth:'ولادة',vaccination:'تحصين',medication:'علاج',weight:'وزن',production:'إنتاج',health:'صحة',sale:'بيع',death:'نفوق'};
+  (workflowHistory||[]).forEach(w => {
+    if (w.completed_at) recentRecords.push({ date:w.completed_at.slice(0,10), type:'مسار عمل', module:(WORKFLOW_TYPE_LABEL[w.workflow_type]||w.workflow_type)+' — '+(w.animal_tag||w.source_id||'—'), status:w.outcome==='success'?'نجح':'خطأ', statusCls:w.outcome==='success'?'badge-tarbiya':'badge-danger' });
+  });
   recentRecords.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const recentRecordsTop = recentRecords.slice(0,10);
 
@@ -375,6 +388,27 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
         </div>
       </div>
     </div>
+    ${can('finance') ? (() => {
+      // Sprint 13 (v1.6): Executive Finance Card. Reuses todaySummary.income/
+      // .expense verbatim (computed above, same numbers the card right
+      // above this one already shows) -- no new calculation, only a
+      // profit/cash-flow framing on top of the same two real figures.
+      const profitToday = todaySummary.income - todaySummary.expense;
+      return `
+      <div class="row g-3 mb-4">
+        <div class="col-12">
+          <div class="wonder-card p-3" style="border-inline-start:3px solid ${profitToday>=0?'var(--green)':'var(--red)'}">
+            <div class="text-gray mb-2" style="font-size:.8rem"><i class="bi bi-cash-coin me-1"></i>المالية التنفيذية اليوم</div>
+            <div class="row g-2 text-center">
+              <div class="col-4"><div class="fw-bold" style="font-size:1.2rem;color:${profitToday>=0?'var(--green)':'var(--red)'}">${(profitToday>=0?'+':'')}${profitToday.toLocaleString('ar-EG')}</div><small class="text-gray">الربح اليوم ${s.currency}</small></div>
+              <div class="col-4"><div class="fw-bold" style="font-size:1.2rem">${todaySummary.income.toLocaleString('ar-EG')}</div><small class="text-gray">إيرادات اليوم</small></div>
+              <div class="col-4"><div class="fw-bold" style="font-size:1.2rem">${todaySummary.expense.toLocaleString('ar-EG')}</div><small class="text-gray">مصروفات اليوم</small></div>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    })() : ''}
+    <div id="inventory-exec-card" class="mb-4"></div>
     ${(() => {
       // Sprint 5, Epic 5: ONE unified "Operational Priorities" panel,
       // replacing the three separate Sprint 2/3/4 panels. Every
@@ -408,6 +442,15 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
         </div>
         <div id="unified-priority-section" class="text-gray" style="font-size:.78rem">جاري حساب الأولويات التشغيلية الموحّدة...</div>
       </div>`;
+    })()}
+    <div id="farm-forecast-summary" class="mb-3"></div>
+    ${(() => {
+      // Sprint 9: a small, honest link to the notification center --
+      // NOT a replacement for the computed priorityAlerts/Unified-Priorities
+      // panels above (those are freshly computed status on every load;
+      // notifications are a separate, PERSISTED history a user may not
+      // have looked at yet). Populated async, fire-and-forget.
+      return `<div id="notif-summary-link" class="mb-3" style="font-size:.8rem"></div>`;
     })()}
     <div id="weather-widget" class="wonder-card mb-4 p-3"><div class="text-gray" style="font-size:.82rem"><i class="bi bi-cloud-sun me-2"></i>جاري تحميل حالة الطقس...</div></div>
     ${(() => {
@@ -593,6 +636,83 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
 // window.evaluateOperationalPriority() (itself pure composition over
 // Sprint 1-4's engines) -- this function adds no new scoring logic of
 // its own, only candidate selection and rendering.
+// Sprint 9: small, honest notification summary link. Reuses
+// window.getUnreadNotificationCount() (shared.js) -- the exact same
+// counting logic the bell badge and notifications.html itself use.
+// Does not duplicate any filtering logic.
+// v1.2: Farm Forecast Summary -- reuses window.forecastFarmSummary()
+// verbatim (shared.js), which itself composes the four per-domain
+// forecast functions. No calculation happens in this rendering function.
+// Sprint 14 (v1.7): Inventory Executive Card. Independent fetch
+// (dashboard's own batch doesn't include inventory), read-only,
+// nothing computed here is stored anywhere.
+window.renderInventoryExecCard = async function() {
+  var container = document.getElementById('inventory-exec-card');
+  if (!container) return;
+  try {
+    var results = await Promise.all([fbGet('inventory_meds'), fbGet('inventory_feeds'), fbGet('feed_consumption')]);
+    var meds = results[0]||[], feeds = results[1]||[], consumption = results[2]||[];
+    var lowStock = meds.filter(function(m){return +m.quantity<=+m.min_quantity && +m.min_quantity>0;}).length
+                 + feeds.filter(function(f){return +f.quantity<=+f.min_quantity && +f.min_quantity>0;}).length;
+    var outOfStock = meds.filter(function(m){return +m.quantity<=0;}).length + feeds.filter(function(f){return +f.quantity<=0;}).length;
+    var feedRemaining = feeds.reduce(function(s,f){return s+((+f.quantity||0)*(+f.unit_weight||50));},0);
+    var thisMonth = new Date().toISOString().slice(0,7);
+    var monthlyConsumptionKg = consumption.filter(function(c){return (c.date||'').startsWith(thisMonth);}).reduce(function(s,c){return s+(+c.quantity_kg||0);},0);
+    if (lowStock===0 && outOfStock===0 && feedRemaining===0 && monthlyConsumptionKg===0) { container.innerHTML=''; return; }
+    container.innerHTML = '<div class="wonder-card p-3" style="border-inline-start:3px solid '+(outOfStock>0?'var(--red)':lowStock>0?'var(--yellow)':'var(--green)')+'">'+
+      '<div class="text-gray mb-2" style="font-size:.8rem"><i class="bi bi-boxes me-1"></i>المخزون</div>'+
+      '<div class="row g-2 text-center">'+
+        '<div class="col-3"><div class="fw-bold" style="font-size:1.1rem;color:'+(lowStock>0?'var(--yellow)':'var(--green)')+'">'+ar(lowStock)+'</div><small class="text-gray">مخزون منخفض</small></div>'+
+        '<div class="col-3"><div class="fw-bold" style="font-size:1.1rem;color:'+(outOfStock>0?'var(--red)':'var(--green)')+'">'+ar(outOfStock)+'</div><small class="text-gray">نفاد كامل</small></div>'+
+        '<div class="col-3"><div class="fw-bold" style="font-size:1.1rem">'+ar(Math.round(feedRemaining))+'</div><small class="text-gray">علف متبقٍ (كجم)</small></div>'+
+        '<div class="col-3"><div class="fw-bold" style="font-size:1.1rem">'+ar(Math.round(monthlyConsumptionKg))+'</div><small class="text-gray">استهلاك الشهر (كجم)</small></div>'+
+      '</div></div>';
+  } catch(e) { container.innerHTML=''; }
+};
+
+window.renderFarmForecastSummary = async function(animals, health, weightAlerts, production) {
+  var container = document.getElementById('farm-forecast-summary');
+  if (!container || !window.forecastFarmSummary) return;
+  try {
+    var f = await window.forecastFarmSummary(animals, health, weightAlerts, production);
+    // Sprint 12 (v1.5): overall status indicator + structured, evidence-
+    // cited insights, reusing window.generateFarmInsights() -- pure
+    // composition over the SAME forecastFarmSummary() call above, no
+    // second computation.
+    var insights = window.generateFarmInsights ? await window.generateFarmInsights(animals, health, weightAlerts, production) : [];
+    if ((!f || (f.expectedWorkload7===0 && f.expectedRisks===0 && f.expectedDecliningWeight===0)) && !insights.length) { container.innerHTML=''; return; }
+    var hasHigh = insights.some(function(i){return i.confidence==='high';});
+    var hasAny = insights.length>0;
+    var statusIcon = hasHigh?'🔴':hasAny?'🟡':'🟢';
+    var statusLabel = hasHigh?'يتطلب انتباهًا':hasAny?'عبء متوقع أعلى من المعتاد':'مستقر';
+    container.innerHTML = '<div class="wonder-card p-3" style="border-inline-start:3px solid var(--blue)">'+
+      '<div class="d-flex justify-content-between align-items-center mb-2"><div class="text-gray" style="font-size:.8rem"><i class="bi bi-graph-up-arrow me-1"></i>توقعات المزرعة (٧ أيام)</div>'+
+      '<span style="font-size:.8rem">'+statusIcon+' '+statusLabel+'</span></div>'+
+      '<div class="row g-2 text-center mb-'+(insights.length?'3':'0')+'">'+
+        '<div class="col-3"><div class="fw-bold" style="font-size:1.1rem">'+ar((f&&f.expectedWorkload7)||0)+'</div><small class="text-gray">عبء متوقع</small></div>'+
+        '<div class="col-3"><div class="fw-bold" style="font-size:1.1rem;color:'+((f&&f.expectedRisks>0)?'var(--red)':'var(--green)')+'">'+ar((f&&f.expectedRisks)||0)+'</div><small class="text-gray">مخاطر متوقعة</small></div>'+
+        '<div class="col-3"><div class="fw-bold" style="font-size:1.1rem;color:'+((f&&f.expectedDecliningWeight>0)?'var(--yellow)':'var(--green)')+'">'+ar((f&&f.expectedDecliningWeight)||0)+'</div><small class="text-gray">وزن متراجع متوقع</small></div>'+
+        '<div class="col-3"><div class="fw-bold" style="font-size:1.1rem">'+ar((f&&f.expectedTreatments)||0)+'</div><small class="text-gray">علاجات متوقعة</small></div>'+
+      '</div>'+
+      (insights.length ? '<div style="font-size:.78rem;line-height:1.8">'+insights.map(function(i){
+        var c={high:'var(--red)',medium:'var(--yellow)',low:'var(--gray)'}[i.confidence]||'var(--gray)';
+        return '<div><span style="color:'+c+'">●</span> '+i.text+' <small class="text-gray">('+i.suggestedAction+')</small></div>';
+      }).join('')+'</div>' : '')+
+    '</div>';
+  } catch(e) { container.innerHTML=''; }
+};
+
+window.renderNotifSummaryLink = async function() {
+  var container = document.getElementById('notif-summary-link');
+  if (!container || !window.getUnreadNotificationCount) return;
+  try {
+    var count = await window.getUnreadNotificationCount();
+    container.innerHTML = count > 0
+      ? '<a href="notifications.html" style="color:var(--orange);text-decoration:none"><i class="bi bi-bell-fill me-1"></i>'+ar(count)+' إشعار غير مقروء — عرض الكل</a>'
+      : '';
+  } catch(e) { container.innerHTML = ''; }
+};
+
 window.renderUnifiedPriorities = async function(animals, health, weightAlerts, production) {
   var container = document.getElementById('unified-priority-section');
   if (!container || !window.evaluateOperationalPriority) return;

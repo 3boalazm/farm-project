@@ -1,27 +1,10 @@
 'use strict';
 
-// ── Chart.js — dynamic load ───────────────────────────────
-function loadChartJS(cb) {
-  if (window.Chart) { cb(); return; }
-  var s = document.createElement('script');
-  s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js';
-  s.onload = cb;
-  s.onerror = function() { console.warn('Chart.js failed'); cb(); };
-  document.head.appendChild(s);
-}
-
-const CHART_COLORS = ['#ff6b35','#00e676','#2196f3','#9c27b0','#ffc107','#f44336','#00bcd4','#8bc34a','#ff9800','#e91e63'];
-const isDark   = () => !document.documentElement.classList.contains('light-mode');
-const textClr  = () => isDark() ? '#b0b0b0' : '#64748b';
-const gridClr  = () => isDark() ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
-const _charts  = {};
-
-function mkChart(id, cfg) {
-  if (_charts[id]) _charts[id].destroy();
-  var ctx = document.getElementById(id);
-  if (!ctx || !window.Chart) return null;
-  return (_charts[id] = new Chart(ctx, cfg));
-}
+// Chart.js loader/wrapper (loadChartJS, mkChart, CHART_COLORS, textClr,
+// gridClr) moved to shared.js (v1.3) so the new analytics.html page
+// can reuse the exact same wrapper instead of a second copy -- see
+// docs/features/ANALYTICS-ARCHITECTURE.md. Behavior unchanged; these
+// names remain globally available exactly as before.
 
 var _data = {};
 var _tab  = 'herd';
@@ -53,12 +36,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   const el = document.getElementById('content');
   renderLoading(el);
-  const [animals,breeding,health,vaccines,finance,meds,feeds] = await Promise.all([
+  const [animals,breeding,health,vaccines,finance,meds,feeds,production,weightAlerts,productionAlerts,dailyTasks,notifications,workflowHistory,feedConsumption,inventoryTransactions] = await Promise.all([
     fbGet('animals'),fbGet('breeding'),fbGet('health'),
     fbGet('vaccinations'),fbGet('finance'),
     fbGet('inventory_meds'),fbGet('inventory_feeds'),
+    fbGet('production_log').catch(()=>[]),
+    fbGet('weight_alerts').catch(()=>[]),
+    fbGet('production_alerts').catch(()=>[]),
+    fbGet('daily_tasks').catch(()=>[]),
+    fbGet('notifications').catch(()=>[]),
+    fbGet('workflow_history').catch(()=>[]),
+    fbGet('feed_consumption').catch(()=>[]),      // Sprint 14 (v1.7): reused SSOT, read-only
+    fbGet('inventory_transactions').catch(()=>[]),// Sprint 14 (v1.7): new, additive, read-only
   ]);
-  _data = {animals,breeding,health,vaccines,finance,meds,feeds,s};
+  _data = {animals,breeding,health,vaccines,finance,meds,feeds,production,weightAlerts,productionAlerts,dailyTasks,notifications,workflowHistory,feedConsumption,inventoryTransactions,s};
   window._reportData = _data;
   loadChartJS(() => renderReports(el, s));
 });
@@ -127,7 +118,7 @@ function renderReports(el, s) {
     ].map(k=>`<div class="col-6 col-md-4 col-lg-2">${renderKPICard({ label:`<a href="${k.h}" style="color:inherit;text-decoration:none">${k.l}</a>`, value:k.v, status:k.status })}</div>`).join('')}
   </div>
   <div class="d-flex gap-2 flex-wrap mb-4">
-    ${[['herd','bi-grid-3x3-gap-fill','القطيع'],['finance','bi-wallet2','المالية'],['health','bi-heart-pulse-fill','الصحة'],['breeding','bi-diagram-2-fill','التكاثر']].map(([t,i,l])=>`<button class="filter-btn${_tab===t?' active':''}" onclick="switchTab('${t}')"><i class="bi ${i} me-1"></i>${l}</button>`).join('')}
+    ${[['herd','bi-grid-3x3-gap-fill','القطيع'],['finance','bi-wallet2','المالية'],['health','bi-heart-pulse-fill','الصحة'],['breeding','bi-diagram-2-fill','التكاثر'],['intelligence','bi-stars','الذكاء التشغيلي'],['forecast','bi-graph-up-arrow','التوقعات'],['workflows','bi-diagram-3-fill','سجل العمليات'],['inventory','bi-boxes','المخزون']].map(([t,i,l])=>`<button class="filter-btn${_tab===t?' active':''}" onclick="switchTab('${t}')"><i class="bi ${i} me-1"></i>${l}</button>`).join('')}
   </div>
   <div id="tab-content"></div>`;
   renderTab(_tab, m);
@@ -135,7 +126,7 @@ function renderReports(el, s) {
 
 window.switchTab = function(tab) {
   _tab = tab;
-  const labels = {herd:'القطيع',finance:'المالية',health:'الصحة',breeding:'التكاثر'};
+  const labels = {herd:'القطيع',finance:'المالية',health:'الصحة',breeding:'التكاثر',intelligence:'الذكاء التشغيلي',forecast:'التوقعات',workflows:'سجل العمليات',inventory:'المخزون'};
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.textContent.trim().includes(labels[tab]||tab)));
   renderTab(tab, computeMetrics(_data));
 };
@@ -147,6 +138,10 @@ function renderTab(tab, m) {
   if (tab==='finance')  renderFinanceTab(el,m);
   if (tab==='health')   renderHealthTab(el,m);
   if (tab==='breeding') renderBreedingTab(el,m);
+  if (tab==='intelligence') renderIntelligenceTab(el,m);
+  if (tab==='forecast') renderForecastTab(el,m);
+  if (tab==='workflows') renderWorkflowsTab(el,m);
+  if (tab==='inventory') renderInventoryTab(el,m);
 }
 
 // ════════════════ TAB 1: HERD ═════════════════════════════
@@ -227,6 +222,7 @@ function renderFinanceTab(el, m) {
   <div class="row g-3 mb-4">
     ${[{l:'الإيرادات',v:m.income.toLocaleString('ar-EG')+' '+curr,status:'normal',trend:incTrend,trendDir:incTrend>=0?'up':'down',period:'مقابل الشهر الماضي'},{l:'المصروفات',v:m.expense.toLocaleString('ar-EG')+' '+curr,status:'watch',trend:expTrend,trendDir:expTrend>=0?'up':'down',period:'مقابل الشهر الماضي'},{l:'صافي الربح',v:(net>=0?'+':'')+net.toLocaleString('ar-EG')+' '+curr,status:net>=0?'normal':'alert'},{l:'عدد العمليات',v:ar(fin.length),status:'normal'}].map(k=>`<div class="col-6 col-md-3">${renderKPICard({ label:k.l, value:k.v, status:k.status, trend:k.trend, trendDir:k.trendDir, comparisonPeriod:k.period })}</div>`).join('')}
   </div>
+  <div id="finance-advanced-kpis" class="row g-3 mb-4"></div>
   <div class="wonder-card mb-4">
     <h6 class="fw-bold mb-3"><i class="bi bi-bar-chart-fill accent-text"></i> الإيرادات والمصروفات الشهرية</h6>
     <div style="position:relative;height:220px"><canvas id="chart-fin-monthly"></canvas></div>
@@ -247,6 +243,28 @@ function renderFinanceTab(el, m) {
     if(!window.Chart)return;
     mkChart('chart-fin-monthly',{type:'bar',data:{labels:mKeys.map(monthLabel),datasets:[{label:'الإيرادات',data:mKeys.map(k=>m.monthlyFin[k].income),backgroundColor:'rgba(0,230,118,0.7)',borderRadius:4},{label:'المصروفات',data:mKeys.map(k=>m.monthlyFin[k].expense),backgroundColor:'rgba(244,67,54,0.7)',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:textClr(),font:{family:'Cairo'}}}},scales:{x:{ticks:{color:textClr()},grid:{display:false}},y:{ticks:{color:textClr(),callback:v=>v.toLocaleString('ar-EG')},grid:{color:gridClr()}}}}});
   },50);
+  renderFinanceAdvancedKPIs();
+}
+
+// Sprint 13 (v1.6): advanced finance KPIs -- reuses
+// window.computeFinanceKPIs() verbatim, no new calculation in this tab.
+async function renderFinanceAdvancedKPIs() {
+  const c = document.getElementById('finance-advanced-kpis');
+  if (!c || !window.computeFinanceKPIs) return;
+  try {
+    const k = await window.computeFinanceKPIs(null, null);
+    if (!k) { c.innerHTML=''; return; }
+    const pct = (v) => v===null ? '—' : ar(Math.round(v*100))+'٪';
+    const money = (v) => v===null ? '—' : ar(Math.round(v*100)/100).toLocaleString('ar-EG');
+    c.innerHTML = [
+      {l:'متوسط التكلفة/حيوان',v:money(k.avgCostPerAnimal),status:'normal'},
+      {l:'متوسط الإيراد/حيوان',v:money(k.avgRevenuePerAnimal),status:'normal'},
+      {l:'نسبة تكلفة العلف',v:pct(k.feedCostPct),status:'normal'},
+      {l:'نسبة تكلفة الدواء',v:pct(k.medicineCostPct),status:'normal'},
+      {l:'هامش الربح',v:pct(k.profitMargin),status:(k.profitMargin!==null&&k.profitMargin<0)?'alert':'normal'},
+      {l:'العائد على الاستثمار (ROI)',v:pct(k.roi),status:'normal'},
+    ].map(x=>`<div class="col-6 col-md-2">${renderKPICard({label:x.l, value:x.v, status:x.status})}</div>`).join('');
+  } catch(e) { c.innerHTML=''; }
 }
 
 function renderCatBars(cats,total,color) {
@@ -325,8 +343,229 @@ function renderBreedingTab(el, m) {
   },50);
 }
 
+// ════════════════ TAB 5: OPERATIONAL INTELLIGENCE (Sprint 8) ═══
+// Reuses Sprint 1-5's engines verbatim (evaluateHealthRisk,
+// evaluateProductionKPIs, evaluateOperationalPriority,
+// rankOperationalPriorities, all from shared.js) -- this tab computes
+// NOTHING itself beyond simple counts over already-fetched raw
+// collections (weightAlerts/productionAlerts/dailyTasks), exactly the
+// same discipline the dashboard's own equivalent panels follow.
+function renderIntelligenceTab(el, m) {
+  const wAlerts=_data.weightAlerts||[]; const pAlerts=_data.productionAlerts||[]; const tasks=_data.dailyTasks||[];
+  const activeWeight=wAlerts.filter(a=>a.status==='active');
+  const activeProd=pAlerts.filter(a=>a.status==='active');
+  const openTasks=tasks.filter(t=>t.status!=='done');
+  const now7=new Date(); const d7=new Date(now7); d7.setDate(d7.getDate()-7);
+  const resolvedWeek=tasks.filter(t=>t.status==='done'&&t.completed_at&&new Date(t.completed_at)>=d7);
+  const autoTasks=tasks.filter(t=>t.auto_generated);
+  // Sprint 9: notification statistics -- reuses the same notifications
+  // collection notifications.html itself reads, no new calculation.
+  const notifs=_data.notifications||[];
+  const unreadNotifs=notifs.filter(n=>!n.read);
+  const resolvedNotifs=notifs.filter(n=>n.read);
+  const criticalNotifs=notifs.filter(n=>n.type==='danger'||n.priorityLevel==='critical');
+  const withResponseTime=notifs.filter(n=>n.read_at&&n.created_at);
+  const avgResponseMin=withResponseTime.length
+    ? Math.round(withResponseTime.reduce((t,n)=>t+(new Date(n.read_at)-new Date(n.created_at)),0)/withResponseTime.length/60000)
+    : null;
+  el.innerHTML=`
+  <div class="row g-3 mb-4">
+    ${[{l:'تنبيهات وزن نشطة',v:ar(activeWeight.length),status:activeWeight.length?'alert':'normal'},
+       {l:'إنتاج منخفض نشط',v:ar(activeProd.length),status:activeProd.length?'alert':'normal'},
+       {l:'مهام مفتوحة',v:ar(openTasks.length),status:openTasks.length?'watch':'normal'},
+       {l:'أُنجزت هذا الأسبوع',v:ar(resolvedWeek.length),status:'normal'},
+       {l:'مهام مولّدة تلقائيًا',v:ar(autoTasks.length),status:'normal'}]
+      .map(k=>`<div class="col-6 col-md-4 col-lg-2">${renderKPICard({ label:k.l, value:k.v, status:k.status })}</div>`).join('')}
+  </div>
+  <div class="wonder-card mb-4">
+    <h6 class="fw-bold mb-3"><i class="bi bi-bell-fill accent-text"></i> إحصائيات الإشعارات</h6>
+    <div class="row g-3 text-center">
+      <div class="col-6 col-md-3"><div class="fw-bold" style="font-size:1.3rem;color:${unreadNotifs.length?'var(--red)':'var(--green)'}">${ar(unreadNotifs.length)}</div><small class="text-gray">غير مقروءة</small></div>
+      <div class="col-6 col-md-3"><div class="fw-bold" style="font-size:1.3rem;color:var(--green)">${ar(resolvedNotifs.length)}</div><small class="text-gray">مُطالَعة</small></div>
+      <div class="col-6 col-md-3"><div class="fw-bold" style="font-size:1.3rem;color:${criticalNotifs.length?'var(--red)':'var(--text)'}">${ar(criticalNotifs.length)}</div><small class="text-gray">حرجة</small></div>
+      <div class="col-6 col-md-3"><div class="fw-bold" style="font-size:1.3rem;color:var(--text)">${avgResponseMin!==null?ar(avgResponseMin)+' د':'—'}</div><small class="text-gray">متوسط زمن الاستجابة</small></div>
+    </div>
+    ${avgResponseMin===null?'<div class="text-gray mt-2" style="font-size:.72rem">لا توجد بيانات استجابة كافية بعد -- يُحسب فقط للإشعارات المقروءة بعد هذا التحديث</div>':''}
+  </div>
+  <div class="wonder-card mb-4"><h6 class="fw-bold mb-1"><i class="bi bi-stars accent-text"></i> الأعلى أولوية تشغيلية</h6>
+    <div class="text-gray mb-3" style="font-size:.8rem">مُركَّبة من ذكاء الصحة + الإنتاج + المهام المعلّقة — دعم قرار، وليس تشخيصًا</div>
+    <div id="intel-ranking-table">${renderDataTableWrapper({title:'',headers:['الحيوان','الأولوية','الدرجة','الثقة','المحركات المساهمة'],state:'loading',rowsHtml:''})}</div>
+  </div>`;
+  renderIntelligenceRanking();
+}
+
+// Async, independent of renderIntelligenceTab's synchronous render above
+// (same fire-and-forget pattern Sprint 5/6 established on the dashboard).
+// Candidate selection here is intentionally a fresh, page-local filter
+// (matching this project's own established convention that presentation-
+// layer candidate selection lives per-page, not in shared.js) -- but the
+// actual SCORING is entirely window.evaluateOperationalPriority(), never
+// reimplemented.
+async function renderIntelligenceRanking() {
+  const container = document.getElementById('intel-ranking-table');
+  if (!container || !window.evaluateOperationalPriority) return;
+  try {
+    const animals = _data.animals||[];
+    const activeHealthTags = new Set((_data.health||[]).filter(r=>r.status==='active').map(r=>r.animal_tag));
+    const activeWeightIds = new Set((_data.weightAlerts||[]).filter(a=>a.status==='active').map(a=>a.animal_id));
+    const producingIds = new Set((_data.production||[]).filter(p=>p.type==='milk'||p.type==='wool').map(p=>p.animal_id));
+    const candidates = animals.filter(a=>a.status!=='dead' && (activeHealthTags.has(a.tag)||activeWeightIds.has(a._id)||producingIds.has(a._id)));
+    const results=[];
+    for (const a of candidates) {
+      const p = await window.evaluateOperationalPriority(a._id, a.tag, a.barn);
+      if (p) results.push(p);
+    }
+    const ranked = window.rankOperationalPriorities ? window.rankOperationalPriorities(results) : results;
+    const LEVEL_LABEL={critical:'حرج',high:'مرتفع',medium:'متوسط',low:'منخفض'};
+    const ENGINE_LABEL={health:'الصحة',production:'الإنتاج',tasks:'المهام'};
+    container.innerHTML = renderDataTableWrapper({
+      title:'', headers:['الحيوان','الأولوية','الدرجة','الثقة','المحركات المساهمة'],
+      state: ranked.length?'ready':'empty',
+      rowsHtml: ranked.slice(0,15).map(r=>`<tr><td class="fw-bold"><a href="animal-detail.html?id=${r.animalId}">${r.animalTag||r.animalId}</a></td><td><span class="type-badge ${r.level==='critical'?'badge-danger':r.level==='high'?'badge-yellow':'badge-tarbiya'}">${LEVEL_LABEL[r.level]||r.level}</span></td><td>${ar(r.score)}/100</td><td class="text-gray">${r.confidence==='high'?'عالية':'متوسطة'}</td><td class="text-gray">${r.contributingEngines.map(e=>ENGINE_LABEL[e]||e).join('، ')}</td></tr>`).join('')
+    });
+  } catch(e) { container.innerHTML=''; }
+}
+
+// ════════════════ TAB 6: FORECAST (v1.2) ═══════════════════
+// Reuses window.forecast*() functions verbatim (shared.js) -- this tab
+// computes NOTHING itself beyond candidate selection, exactly the same
+// discipline as TAB 5's intelligence ranking.
+function renderForecastTab(el, m) {
+  el.innerHTML=`
+  <div class="wonder-card mb-4 p-3" style="border-inline-start:3px solid var(--blue)">
+    <div class="text-gray mb-2" style="font-size:.8rem"><i class="bi bi-info-circle me-1"></i>التوقعات إحصائية وقائمة على قواعد باستخدام البيانات الموجودة فقط -- ليست تعلّم آلة، ولا تستبدل التقييم البيطري</div>
+    <div id="forecast-farm-summary-report"></div>
+  </div>
+  <div class="wonder-card mb-4 p-3"><h6 class="fw-bold mb-2"><i class="bi bi-activity accent-text"></i> الذروات القادمة (Upcoming Peaks)</h6>
+    <div id="forecast-peaks-section" class="text-gray" style="font-size:.8rem">جارِ الحساب...</div>
+  </div>
+  <div class="wonder-card mb-4"><h6 class="fw-bold mb-1"><i class="bi bi-graph-down accent-text"></i> حيوانات بتوقع وزن تنازلي</h6>
+    <div id="forecast-weight-table">${renderDataTableWrapper({title:'',headers:['الحيوان','الوزن الحالي','بعد ٧ أيام','بعد ٣٠ يوم','الثقة'],state:'loading',rowsHtml:''})}</div>
+  </div>
+  <div class="wonder-card mb-4"><h6 class="fw-bold mb-1"><i class="bi bi-shield-exclamation accent-text"></i> حيوانات بتوقع مخاطر صحية متصاعدة (٣٠ يوم)</h6>
+    <div id="forecast-health-table">${renderDataTableWrapper({title:'',headers:['الحيوان','الدرجة الحالية','الدرجة المتوقعة','الثقة','السبب'],state:'loading',rowsHtml:''})}</div>
+  </div>`;
+  renderForecastTabAsync();
+}
+
+async function renderForecastTabAsync() {
+  try {
+    const animals=_data.animals||[]; const health=_data.health||[];
+    const weightAlerts=_data.weightAlerts||[]; const production=_data.production||[];
+
+    // Sprint 12 (v1.5): Upcoming Peaks -- reuses predictVaccinationPressure()/
+    // predictTreatmentOverload() verbatim, no new calculation in this tab.
+    if (window.predictVaccinationPressure && window.predictTreatmentOverload) {
+      const [vaccP, taskP] = await Promise.all([window.predictVaccinationPressure(7), window.predictTreatmentOverload(7)]);
+      const peaksEl = document.getElementById('forecast-peaks-section');
+      if (peaksEl) {
+        const PRESSURE_LABEL = {normal:'طبيعي',elevated:'أعلى من المعتاد',high:'مرتفع'};
+        const PRESSURE_COLOR = {normal:'var(--green)',elevated:'var(--yellow)',high:'var(--red)'};
+        const lines = [];
+        if (vaccP) lines.push('<div><span style="color:'+PRESSURE_COLOR[vaccP.pressure]+'">●</span> ضغط التحصينات: '+PRESSURE_LABEL[vaccP.pressure]+' ('+ar(vaccP.upcomingCount)+' مقابل متوسط '+ar(vaccP.historicalAverage)+')</div>');
+        if (taskP) lines.push('<div><span style="color:'+PRESSURE_COLOR[taskP.pressure]+'">●</span> عبء المهام: '+PRESSURE_LABEL[taskP.pressure]+' ('+ar(taskP.upcomingCount)+' مقابل متوسط '+ar(taskP.historicalAverage)+')</div>');
+        peaksEl.innerHTML = lines.length ? lines.join('') : '<span class="text-gray">لا توجد بيانات كافية للمقارنة بعد</span>';
+      }
+    }
+
+    if (window.forecastFarmSummary) {
+      const summary = await window.forecastFarmSummary(animals, health, weightAlerts, production);
+      const c = document.getElementById('forecast-farm-summary-report');
+      if (c && summary) {
+        c.innerHTML = '<div class="row g-3 text-center">'+
+          [{l:'عبء متوقع (٧ أيام)',v:summary.expectedWorkload7},{l:'عبء متوقع (٣٠ يوم)',v:summary.expectedWorkload30},
+            {l:'مخاطر متوقعة',v:summary.expectedRisks},{l:'وزن متراجع متوقع',v:summary.expectedDecliningWeight}]
+            .map(k=>`<div class="col-6 col-md-3"><div class="fw-bold" style="font-size:1.2rem">${ar(k.v)}</div><small class="text-gray">${k.l}</small></div>`).join('')+
+        '</div>';
+      }
+    }
+
+    const activeHealthTags=new Set(health.filter(r=>r.status==='active').map(r=>r.animal_tag));
+    const activeWeightIds=new Set(weightAlerts.filter(a=>a.status==='active').map(a=>a.animal_id));
+    const producingIds=new Set(production.filter(p=>p.type==='milk'||p.type==='wool').map(p=>p.animal_id));
+    const candidates=animals.filter(a=>a.status!=='dead'&&(activeHealthTags.has(a.tag)||activeWeightIds.has(a._id)||producingIds.has(a._id)));
+
+    const decliningWeights=[], risingRisks=[];
+    for (const a of candidates) {
+      if (window.forecastWeight) {
+        const wf = await window.forecastWeight(a._id, a.tag);
+        if (wf && wf.trend==='declining') decliningWeights.push(wf);
+      }
+      if (window.forecastHealthRisk) {
+        const hf = await window.forecastHealthRisk(a._id, a.tag, a.barn, 30);
+        if (hf && hf.projectedScore > hf.currentScore) risingRisks.push(hf);
+      }
+    }
+
+    const wTable=document.getElementById('forecast-weight-table');
+    if (wTable) wTable.innerHTML = renderDataTableWrapper({
+      title:'', headers:['الحيوان','الوزن الحالي','بعد ٧ أيام','بعد ٣٠ يوم','الثقة'], state: decliningWeights.length?'ready':'empty',
+      rowsHtml: decliningWeights.map(w=>`<tr><td class="fw-bold"><a href="animal-detail.html?id=${w.animalId}">${w.animalTag}</a></td><td>${ar(w.currentWeight)} كجم</td><td class="text-gray">${ar(w.projected7)} كجم</td><td style="color:var(--red)">${ar(w.projected30)} كجم</td><td class="text-gray">${w.confidence==='high'?'عالية':'متوسطة'}</td></tr>`).join('')
+    });
+
+    const hTable=document.getElementById('forecast-health-table');
+    if (hTable) hTable.innerHTML = renderDataTableWrapper({
+      title:'', headers:['الحيوان','الدرجة الحالية','الدرجة المتوقعة','الثقة','السبب'], state: risingRisks.length?'ready':'empty',
+      rowsHtml: risingRisks.map(h=>`<tr><td class="fw-bold"><a href="animal-detail.html?id=${h.animalId}">${h.animalTag}</a></td><td>${ar(h.currentScore)}</td><td style="color:var(--yellow)">${ar(h.projectedScore)}</td><td class="text-gray">${h.confidence==='high'?'عالية':'متوسطة'}</td><td class="text-gray">${h.evidence[0]||''}</td></tr>`).join('')
+    });
+  } catch(e) {}
+}
+
+// ════════════════ TAB 8: INVENTORY (v1.7) ═══════════════════
+function renderInventoryTab(el, m) {
+  const meds=_data.meds||[], feeds=_data.feeds||[], consumption=_data.feedConsumption||[], txns=_data.inventoryTransactions||[];
+  const lowStock = meds.filter(x=>+x.quantity<=+x.min_quantity&&+x.min_quantity>0).length + feeds.filter(x=>+x.quantity<=+x.min_quantity&&+x.min_quantity>0).length;
+  const outOfStock = meds.filter(x=>+x.quantity<=0).length + feeds.filter(x=>+x.quantity<=0).length;
+  const totalFeedCost = feeds.reduce((s,f)=>s+((+f.quantity||0)*(+f.cost_per_unit||0)),0);
+  const monthPrefix = new Date().toISOString().slice(0,7);
+  const monthConsumptionKg = consumption.filter(c=>(c.date||'').startsWith(monthPrefix)).reduce((s,c)=>s+(+c.quantity_kg||0),0);
+  el.innerHTML=`
+  <div class="row g-3 mb-4">
+    ${[{l:'أصناف بمخزون منخفض',v:ar(lowStock),status:lowStock?'watch':'normal'},
+       {l:'أصناف نافدة',v:ar(outOfStock),status:outOfStock?'alert':'normal'},
+       {l:'قيمة مخزون العلف',v:totalFeedCost.toLocaleString('ar-EG')+' '+m.curr,status:'normal'},
+       {l:'استهلاك الشهر (كجم)',v:ar(Math.round(monthConsumptionKg)),status:'normal'}]
+      .map(k=>`<div class="col-6 col-md-3">${renderKPICard({ label:k.l, value:k.v, status:k.status })}</div>`).join('')}
+  </div>
+  <div class="row g-3 mb-4">
+    <div class="col-md-6">${renderDataTableWrapper({title:'مستويات المخزون — أدوية', headers:['الصنف','الكمية','الحد الأدنى','المورّد','الحالة'], state:meds.length?'ready':'empty',
+      rowsHtml: meds.map(x=>`<tr><td class="fw-bold">${x.name}</td><td>${ar(x.quantity)} ${x.unit||''}</td><td class="text-gray">${ar(x.min_quantity||0)}</td><td class="text-gray">${x.supplier||'—'}</td><td>${(+x.quantity<=0)?'<span class="type-badge badge-danger">نافد</span>':(+x.quantity<=+x.min_quantity&&+x.min_quantity>0)?'<span class="type-badge badge-yellow">منخفض</span>':'<span class="type-badge badge-tarbiya">جيد</span>'}</td></tr>`).join('')})}</div>
+    <div class="col-md-6">${renderDataTableWrapper({title:'مستويات المخزون — علف', headers:['الصنف','الكمية','الحد الأدنى','التكلفة/وحدة','الحالة'], state:feeds.length?'ready':'empty',
+      rowsHtml: feeds.map(x=>`<tr><td class="fw-bold">${x.name}</td><td>${ar(x.quantity)} ${x.unit||''}</td><td class="text-gray">${ar(x.min_quantity||0)}</td><td class="text-gray">${(+x.cost_per_unit||0).toLocaleString('ar-EG')}</td><td>${(+x.quantity<=0)?'<span class="type-badge badge-danger">نافد</span>':(+x.quantity<=+x.min_quantity&&+x.min_quantity>0)?'<span class="type-badge badge-yellow">منخفض</span>':'<span class="type-badge badge-tarbiya">جيد</span>'}</td></tr>`).join('')})}</div>
+  </div>
+  <div class="mb-4">${renderDataTableWrapper({title:'آخر حركات المخزون (Transactions)', headers:['التاريخ','الصنف','السبب','التغيّر','قبل','بعد'],
+    rowsHtml: txns.slice().sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||'')).slice(0,15).map(t=>`<tr><td class="text-gray">${t.date||'—'}</td><td class="fw-bold">${t.item_name}</td><td class="text-gray">${{treatment:'علاج',vaccination:'تحصين',feeding:'تغذية',purchase:'شراء',manual_adjustment:'تعديل يدوي'}[t.reason]||t.reason}</td><td class="${t.actual_delta<0?'red-text':'green-text'}">${t.actual_delta>0?'+':''}${ar(Math.round(t.actual_delta*100)/100)}</td><td class="text-gray">${ar(t.quantity_before)}</td><td class="text-gray">${ar(t.quantity_after)}</td></tr>`).join('')})}</div>
+  <div class="mb-4">${renderDataTableWrapper({title:'سجل استهلاك العلف', headers:['التاريخ','الجمالون','العلف','الكمية (كجم)'],
+    rowsHtml: consumption.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,15).map(c=>`<tr><td class="text-gray">${c.date||'—'}</td><td>${c.barn||'—'}</td><td class="fw-bold">${c.feed_name}</td><td>${ar(c.quantity_kg)}</td></tr>`).join('')})}</div>`;
+}
+
+// ════════════════ TAB 7: WORKFLOW HISTORY (v1.4) ═══════════
+// Read-only view of workflow_history (written exclusively by
+// window.completeWorkflow(), shared.js). This tab computes nothing --
+// every column is a direct field from a record already written elsewhere.
+function renderWorkflowsTab(el, m) {
+  const wf = (_data.workflowHistory||[]).slice().sort((a,b)=>(b.completed_at||'').localeCompare(a.completed_at||''));
+  const successCount = wf.filter(w=>w.outcome==='success').length;
+  const errorCount = wf.filter(w=>w.outcome==='error').length;
+  const totalResolved = wf.reduce((t,w)=>t+(+w.resolved_task_count||0),0);
+  const WORKFLOW_TYPE_LABEL = {birth:'ولادة',vaccination:'تحصين',medication:'علاج',weight:'وزن',production:'إنتاج',health:'صحة',sale:'بيع',death:'نفوق'};
+  el.innerHTML=`
+  <div class="row g-3 mb-4">
+    ${[{l:'مسارات مُنفَّذة',v:ar(wf.length),status:'normal'},
+       {l:'نجحت',v:ar(successCount),status:'normal'},
+       {l:'أخطاء',v:ar(errorCount),status:errorCount?'alert':'normal'},
+       {l:'تذكيرات أُغلقت تلقائيًا',v:ar(totalResolved),status:'normal'}]
+      .map(k=>`<div class="col-6 col-md-3">${renderKPICard({ label:k.l, value:k.v, status:k.status })}</div>`).join('')}
+  </div>
+  ${renderDataTableWrapper({
+    title:'سجل العمليات (Operational History)', headers:['اكتمل في','النوع','الحيوان','المدة','المنفّذ','تذكيرات مُغلقة','التوصية','النتيجة'],
+    state: wf.length?'ready':'empty',
+    rowsHtml: wf.slice(0,50).map(w=>`<tr><td class="text-gray">${(w.completed_at||'').slice(0,16).replace('T',' ')}</td><td class="fw-bold">${WORKFLOW_TYPE_LABEL[w.workflow_type]||w.workflow_type}</td><td>${w.animal_tag||'—'}</td><td class="text-gray">${w.duration_ms!==undefined?ar(w.duration_ms)+' ms':'—'}</td><td class="text-gray">${w.actor||'—'}</td><td>${ar(w.resolved_task_count||0)}</td><td class="text-gray" style="max-width:220px;white-space:normal">${w.recommendation_text||'—'}</td><td>${w.outcome==='success'?'<span class="type-badge badge-tarbiya">نجح</span>':'<span class="type-badge badge-danger" title="'+(w.error_message||'')+'">خطأ</span>'}</td></tr>`).join('')
+  })}`;
+}
+
 // ════════════════ EXCEL EXPORT ════════════════════════════
-window.shareWhatsApp = function() {
+window.shareWhatsApp = async function() {
   var d = _data;
   if (!d || !d.animals) { toast('البيانات لم تُحمَّل بعد','error'); return; }
   var s = d.s || getSettings();
@@ -343,6 +582,12 @@ window.shareWhatsApp = function() {
     return cnt > 0 ? '  • '+b+': '+cnt+' رأس' : null;
   }).filter(Boolean).join('%0A');
 
+  var wAlerts = (d.weightAlerts||[]).filter(function(a){return a.status==='active';});
+  var pAlerts = (d.productionAlerts||[]).filter(function(a){return a.status==='active';});
+  var unreadN = (d.notifications||[]).filter(function(n){return !n.read;});
+  var lowStockCount = (d.meds||[]).filter(function(x){return +x.quantity<=+x.min_quantity&&+x.min_quantity>0;}).length + (d.feeds||[]).filter(function(x){return +x.quantity<=+x.min_quantity&&+x.min_quantity>0;}).length;
+  var taskFc7Preview = window.forecastTaskWorkload ? await window.forecastTaskWorkload(7) : null;
+
   var text = [
     '🐐 *تقرير مزرعة '+s.farmName+'*',
     '📅 '+todayAr(),
@@ -356,6 +601,10 @@ window.shareWhatsApp = function() {
     '',
     '🤰 *حوامل حالياً:* '+ar(preg.length)+' رأس',
     (active.length ? '💊 *قيد العلاج:* '+ar(active.length)+' رأس' : '✅ لا توجد حالات علاج نشطة'),
+    ((wAlerts.length+pAlerts.length) ? '⚠️ *يحتاج متابعة (وزن/إنتاج):* '+ar(wAlerts.length+pAlerts.length)+' حالة' : '✅ لا توجد تنبيهات وزن أو إنتاج نشطة'),
+    (unreadN.length ? '🔔 *إشعارات غير مقروءة:* '+ar(unreadN.length) : ''),
+    (taskFc7Preview&&taskFc7Preview.totalExpectedWorkload>0 ? '📅 *عبء متوقع (٧ أيام):* '+ar(taskFc7Preview.totalExpectedWorkload)+' مهمة/موعد' : ''),
+    (lowStockCount ? '📦 *أصناف مخزون منخفض/نافد:* '+ar(lowStockCount) : ''),
     '',
     '💰 *الإيرادات:* '+inc.toLocaleString('ar-EG')+' '+s.currency,
     '💸 *المصروفات:* '+exp.toLocaleString('ar-EG')+' '+s.currency,
@@ -380,6 +629,54 @@ window.exportAllExcel = async function() {
   const ws4=XLSX.utils.aoa_to_sheet([['الأنثى','السلالة','الفحل','التقريع','الولادة المتوقعة','الحالة','المواليد','توائم'],...(d.breeding||[]).map(r=>[r.female_tag||r.mother_tag||'',r.female_breed||'',r.male_tag||'',r.mating_date||'',r.expected_birth||'',{pregnant:'حامل',born:'ولدت',failed:'فشل',pending:'انتظار'}[r.status]||r.status||'',r.offspring_count||0,r.offspring_count>=2?'نعم':'لا'])]);ws4['!cols']=Array(8).fill({wch:14});XLSX.utils.book_append_sheet(wb,ws4,'التكاثر');
   const ws5=XLSX.utils.aoa_to_sheet([['التحصين','القسم','العدد','الحالة','الموعد','تاريخ التنفيذ','الإنجاز','نفّذها'],...(d.vaccines||[]).map(v=>[v.name||'',v.target_section||'',+v.count||0,{done:'تم',pending:'انتظار',overdue:'متأخر'}[v.status]||v.status||'',v.scheduled_date||'',v.done_date||'',v.progress||0,v.executed_by||''])]);ws5['!cols']=Array(8).fill({wch:14});XLSX.utils.book_append_sheet(wb,ws5,'التحصين');
   const ws6=XLSX.utils.aoa_to_sheet([['النوع','الصنف','الكمية','الوحدة','الحد الأدنى','تاريخ الانتهاء','الحالة'],...(d.meds||[]).map(m2=>['دواء',m2.name||'',+m2.quantity||0,m2.unit||'',+m2.min_quantity||0,m2.expiry||'',m2.expiry&&Math.ceil((new Date(m2.expiry)-new Date())/86400000)<=30?'قارب الانتهاء':'جيد']),...(d.feeds||[]).map(f=>['علف',f.name||'',+f.quantity||0,f.unit||'',+f.min_quantity||0,'',+f.quantity<=+f.min_quantity&&+f.min_quantity>0?'عند الحد الأدنى':'كافٍ'])]);ws6['!cols']=Array(7).fill({wch:14});XLSX.utils.book_append_sheet(wb,ws6,'المخزون');
+  // Sprint 8: 7th sheet, reusing window.evaluateOperationalPriority()
+  // verbatim -- no scoring logic duplicated here, only formatted for export.
+  if (window.evaluateOperationalPriority) {
+    const activeHealthTags=new Set((d.health||[]).filter(r=>r.status==='active').map(r=>r.animal_tag));
+    const activeWeightIds=new Set((d.weightAlerts||[]).filter(a=>a.status==='active').map(a=>a.animal_id));
+    const producingIds=new Set((d.production||[]).filter(p=>p.type==='milk'||p.type==='wool').map(p=>p.animal_id));
+    const candidates=(d.animals||[]).filter(a=>a.status!=='dead'&&(activeHealthTags.has(a.tag)||activeWeightIds.has(a._id)||producingIds.has(a._id)));
+    const intelResults=[];
+    for (const a of candidates) { const p=await window.evaluateOperationalPriority(a._id,a.tag,a.barn); if(p) intelResults.push(p); }
+    const rankedIntel = window.rankOperationalPriorities ? window.rankOperationalPriorities(intelResults) : intelResults;
+    const LEVEL_LABEL_XL={critical:'حرج',high:'مرتفع',medium:'متوسط',low:'منخفض'};
+    const ws7=XLSX.utils.aoa_to_sheet([['الحيوان','الأولوية','الدرجة','الثقة','المحركات المساهمة'],...rankedIntel.map(r=>[r.animalTag||r.animalId,LEVEL_LABEL_XL[r.level]||r.level,r.score,r.confidence==='high'?'عالية':'متوسطة',r.contributingEngines.join('، ')])]);
+    ws7['!cols']=Array(5).fill({wch:16});XLSX.utils.book_append_sheet(wb,ws7,'الذكاء التشغيلي');
+  }
+  // Sprint 9: 8th sheet, notification summary -- same collection
+  // notifications.html reads, no new calculation duplicated here.
+  const allNotifs=d.notifications||[];
+  if(allNotifs.length){
+    const ws8=XLSX.utils.aoa_to_sheet([['العنوان','الفئة','الأولوية','الحيوان','الحالة','التاريخ'],
+      ...allNotifs.map(n=>[n.title||'',n.cat||'',{danger:'عالية',warning:'متوسطة',info:'منخفضة'}[n.type]||n.type||'',n.animal_tag||'—',n.read?'مُطالَعة':'غير مقروءة',n.date||''])]);
+    ws8['!cols']=Array(6).fill({wch:16});XLSX.utils.book_append_sheet(wb,ws8,'الإشعارات');
+  }
+  // v1.2: 9th sheet, forecast report -- reuses window.forecastWeight()/
+  // forecastHealthRisk() verbatim, no new calculation.
+  if (window.forecastWeight && window.forecastHealthRisk) {
+    const activeHealthTagsF=new Set((d.health||[]).filter(r=>r.status==='active').map(r=>r.animal_tag));
+    const activeWeightIdsF=new Set((d.weightAlerts||[]).filter(a=>a.status==='active').map(a=>a.animal_id));
+    const producingIdsF=new Set((d.production||[]).filter(p=>p.type==='milk'||p.type==='wool').map(p=>p.animal_id));
+    const candidatesF=(d.animals||[]).filter(a=>a.status!=='dead'&&(activeHealthTagsF.has(a.tag)||activeWeightIdsF.has(a._id)||producingIdsF.has(a._id)));
+    const forecastRows=[];
+    for (const a of candidatesF) {
+      const wf=await window.forecastWeight(a._id,a.tag);
+      if(wf&&wf.trend) forecastRows.push([a.tag,'وزن',wf.trend==='declining'?'تنازلي':wf.trend==='rising'?'تصاعدي':'مستقر',wf.currentWeight||'',wf.projected30||'',wf.confidence==='high'?'عالية':'متوسطة']);
+      const hf=await window.forecastHealthRisk(a._id,a.tag,a.barn,30);
+      if(hf&&hf.projectedScore>hf.currentScore) forecastRows.push([a.tag,'صحة','متصاعد',hf.currentScore,hf.projectedScore,hf.confidence==='high'?'عالية':'متوسطة']);
+    }
+    if(forecastRows.length){
+      const ws9=XLSX.utils.aoa_to_sheet([['الحيوان','النوع','الاتجاه','الحالي','المتوقع (٣٠ يوم)','الثقة'],...forecastRows]);
+      ws9['!cols']=Array(6).fill({wch:14});XLSX.utils.book_append_sheet(wb,ws9,'التوقعات');
+    }
+  }
+  // Sprint 14 (v1.7): 10th sheet, inventory -- direct SSOT rows, no calculation.
+  const medsRows=(d.meds||[]).map(x=>[x.name,'دواء',x.quantity,x.unit||'',x.min_quantity||0,x.supplier||'',x.expiry||'']);
+  const feedsRows=(d.feeds||[]).map(x=>[x.name,'علف',x.quantity,x.unit||'',x.min_quantity||0,'',x.cost_per_unit||'']);
+  if(medsRows.length||feedsRows.length){
+    const ws10=XLSX.utils.aoa_to_sheet([['الصنف','النوع','الكمية','الوحدة','الحد الأدنى','المورّد/التكلفة','ملاحظة'],...medsRows,...feedsRows]);
+    ws10['!cols']=Array(7).fill({wch:14});XLSX.utils.book_append_sheet(wb,ws10,'المخزون');
+  }
   XLSX.writeFile(wb,`farm-report-${todayStr()}.xlsx`);
   toast('تم تصدير التقرير الشامل ✓');
   await logActivity('export','reports','تصدير تقرير Excel شامل — '+(d.animals||[]).length+' حيوان');

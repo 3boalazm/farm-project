@@ -88,6 +88,9 @@ async function loadNotifications(){
   const el=document.getElementById('content');
   renderLoading(el);
   try{
+    // Sprint 9: silent, one-time cleanup of old, already-read notifications
+    // before displaying the list. Never touches unread notifications.
+    if(window.NS&&NS.expireOld) await NS.expireOld();
     allNotifs=await fbGet('notifications');
     allNotifs.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
   }catch(e){toast('خطأ: '+e.message,'error');}
@@ -158,9 +161,12 @@ function renderNotifPage(){
 }
 
 window.markRead=async function(id,href){
-  try{await fbPatch('notifications',id,{read:true});}catch(e){}
+  // Sprint 9: also stamp read_at, needed for a real (not fabricated)
+  // average-response-time statistic in reports. Backward-compatible --
+  // older records simply lack this field, correctly excluded from that average.
+  try{await fbPatch('notifications',id,{read:true,read_at:new Date().toISOString()});}catch(e){}
   if(href&&href!=='#')location.href=href;
-  else{allNotifs=allNotifs.map(n=>n._id===id?{...n,read:true}:n);renderNotifPage();}
+  else{allNotifs=allNotifs.map(n=>n._id===id?{...n,read:true,read_at:new Date().toISOString()}:n);renderNotifPage();}
 };
 window.deleteNotif=async function(id){
   try{await fbDelete('notifications',id);allNotifs=allNotifs.filter(n=>n._id!==id);renderNotifPage();}

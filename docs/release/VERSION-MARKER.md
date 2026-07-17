@@ -1,22 +1,18 @@
 # VERSION-MARKER.md
 
-```
-Repository:  farm-bayan (بيان المزرعة)
-Version:     v1.0.0-rc1
-Commit:      d19aa06 (chore(release): prepare v1.0.0-rc1)
-Tag:         v1.0.0-rc1
-Date:        2026-07-17
-Status:      Release Candidate
-```
+**Version**: v1.7.0
+**Codename**: Inventory & Feed Management Certification
+**Release date**: 2026-07-17
+**Baseline**: v1.0.0-rc1
 
-## What This Checkpoint Represents
-The first official Release Candidate, per `docs/release/VERSION-CERTIFICATION-v1.0.0-rc1.md`. Built on the certified engineering baseline (`baseline-v2-production-candidate`) plus six product sprints (Task Automation, Weight/Health/Production Intelligence, the Unified Decision Engine, and the Executive Dashboard consolidation) and this release-hardening cycle (Sprint 7).
+## Resolving the Exact Commit
+This file is part of the same commit the `v1.7.0` tag points to. Because a commit's hash is a function of its own content, this file intentionally does not embed its own commit's hash (a self-referential value cannot be correctly embedded in the content it hashes). The authoritative way to resolve it, at any time after this release: `git rev-parse v1.7.0`. The tag itself, not a hardcoded hash in this file, is the stable identifier -- and per this release's own explicit rule, `v1.7.0` is never moved once created.
 
-## Predecessor Chain
-`e655e2b` (Engineering Baseline Merge) -> `4b1e8cf`/`8be77dd` (Baseline Hardening, tagged `baseline-v2-production-candidate`) -> `33e42e3`...`aa04674` (Sprints 1-6) -> this release-hardening commit -> `v1.0.0-rc1`.
+## What This Marks
+The certified state of the repository after Sprint 14 (Inventory & Feed Management) and this release sprint's own full verification pass -- Repository Discovery, Architecture Verification, Performance Certification, Security Audit, UI/UX Certification, Full Regression, Release Documentation, Release Package verification, and Production Certification.
 
-## Known Items Carried Forward Honestly
-See `docs/release/KNOWN-LIMITATIONS.md` for the complete, current list -- client-trusted permissions, no automated Firebase backup, `fbGet()` pagination, and a handful of smaller, explicitly-deferred items. None are release blockers for this application's current deployment context.
+## Test Suite State at This Version
+189/189 passing, 0 CRITICAL from scripts/safety-scan.js, 116/116 clean UI/UX sweep.
 
-## Status Going Forward
-This tag is the safe rollback point for any future work. `docs/release/ROLLBACK-PLAN.md` (from the original certification) remains the correct mechanism -- unchanged by six sprints of purely additive functionality.
+## Tag
+v1.7.0, applied to this exact commit, never moved.

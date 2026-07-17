@@ -1,4 +1,32 @@
 'use strict';
+
+// ── CHART.JS LOADER/WRAPPER (moved from pages/reports.js, v1.3) ────
+// Relocated so the new analytics.html page can reuse this exact same
+// wrapper instead of a second copy -- see
+// docs/features/ANALYTICS-ARCHITECTURE.md. Byte-identical logic to
+// what pages/reports.js used before the move; only the file changed.
+function loadChartJS(cb) {
+  if (window.Chart) { cb(); return; }
+  var s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js';
+  s.onload = cb;
+  s.onerror = function() { console.warn('Chart.js failed'); cb(); };
+  document.head.appendChild(s);
+}
+
+var CHART_COLORS = ['#ff6b35','#00e676','#2196f3','#9c27b0','#ffc107','#f44336','#00bcd4','#8bc34a','#ff9800','#e91e63'];
+var isDark   = function(){ return !document.documentElement.classList.contains('light-mode'); };
+var textClr  = function(){ return isDark() ? '#b0b0b0' : '#64748b'; };
+var gridClr  = function(){ return isDark() ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'; };
+var _charts  = {};
+
+function mkChart(id, cfg) {
+  if (_charts[id]) _charts[id].destroy();
+  var ctx = document.getElementById(id);
+  if (!ctx || !window.Chart) return null;
+  return (_charts[id] = new Chart(ctx, cfg));
+}
+
 // ── TOAST ─────────────────────────────────────────────────
 function toast(msg,type='success'){
   let wrap=document.getElementById('toast-wrap');
@@ -142,6 +170,9 @@ function renderNavbar(activePage=''){
   <div id="toast-wrap"></div>
   <div id="modal-root"></div>`;
   document.body.insertAdjacentHTML('afterbegin', html);
+  // Sprint 9: populate the bell badge that's now on every page, not just
+  // notifications.html -- fire-and-forget, never blocks page render.
+  if(window.updateGlobalBellBadge) window.updateGlobalBellBadge();
 }
 
 // ── Theme Toggle ────────────────────────────────────────
@@ -1578,4 +1609,784 @@ window.rankOperationalPriorities = function(priorityResults){
     if(b.contributingEngines.length!==a.contributingEngines.length) return b.contributingEngines.length-a.contributingEngines.length;
     return (a.animalTag||'').localeCompare(b.animalTag||'');
   });
+};
+
+// ══════════════════════════════════════════════════════════════
+//  NOTIFICATION CENTER SUPPORT (Sprint 9, v1.1 -- reuses the
+//  existing notifications-service.js/notifications.html system,
+//  does NOT create a parallel one. This one small helper is the
+//  single source of truth for "how many unread notifications does
+//  this user have" -- both the global bell badge below and
+//  notifications-service.js's own NS.updateBadge() call this same
+//  function, so the counting logic exists in exactly one place.
+// ══════════════════════════════════════════════════════════════
+window.getUnreadNotificationCount = async function(){
+  try{
+    const u=getUser(); if(!u) return 0;
+    const notifs=await fbGet('notifications');
+    return (notifs||[]).filter(n=>!n.read&&(!n.for_role||n.for_role===u.role||u.role==='admin')).length;
+  }catch(e){ return 0; }
+};
+
+// Updates the #bell-badge element that already exists on every page
+// (rendered by renderNavbar() below) -- called once, globally, right
+// after the navbar is inserted, on every page, not just notifications.html.
+// This is intentionally lightweight: one fbGet + one filter, not the
+// full NS.checkAll() generation/polling machinery, which stays scoped
+// to notifications.html as before (a real behavioral expansion of that
+// heavier polling to every page was judged out of this sprint's scope).
+window.updateGlobalBellBadge = async function(){
+  try{
+    const count = await window.getUnreadNotificationCount();
+    const b=document.getElementById('bell-badge');
+    if(!b) return;
+    if(count>0){ b.style.display='flex'; b.textContent=count>9?'9+':count; }
+    else { b.style.display='none'; }
+  }catch(e){}
+};
+
+// ══════════════════════════════════════════════════════════════
+//  PREDICTIVE INTELLIGENCE ENGINE (v1.2 -- statistical and
+//  rule-based forecasting ONLY. No machine learning, no new data
+//  source, no new architecture. Every forecast either reuses an
+//  existing engine's output directly, extrapolates linearly from
+//  existing history, or counts already-scheduled future dates.
+//  Full formulas: docs/features/FORECAST-MODEL.md
+// ══════════════════════════════════════════════════════════════
+
+var FORECAST_WEIGHT_STABLE_THRESHOLD = 0.03; // 30-day projected change within 3% of current = "stable"
+
+// 1. Weight Forecast -- linear extrapolation from the SAME certified
+// Weight SSOT evaluateWeightAlert() already reads. No new data source.
+window.forecastWeight = async function(animalId, animalTag){
+  try{
+    if(!animalId) return null;
+    var history = await fbGet('animals/'+animalId+'/weights') || [];
+    var sorted = history.slice().sort(function(a,b){return b.date.localeCompare(a.date);});
+    if(sorted.length < 2) return { animalId:animalId, animalTag:animalTag, confidence:'low', trend:null, evidence:['بيانات وزن غير كافية للتنبؤ (يلزم سجلان على الأقل)'] };
+
+    var latest = sorted[0];
+    var oldest = sorted[sorted.length-1];
+    var daysSpan = (new Date(latest.date) - new Date(oldest.date)) / 86400000;
+    if(daysSpan <= 0) return { animalId:animalId, animalTag:animalTag, confidence:'low', trend:null, evidence:['لا يوجد فارق زمني كافٍ بين السجلات'] };
+
+    var dailyRate = (latest.weight - oldest.weight) / daysSpan;
+    var projected7 = Math.round((latest.weight + dailyRate*7)*10)/10;
+    var projected14 = Math.round((latest.weight + dailyRate*14)*10)/10;
+    var projected30 = Math.round((latest.weight + dailyRate*30)*10)/10;
+    var pctChange30 = latest.weight>0 ? (dailyRate*30)/latest.weight : 0;
+    var trend = Math.abs(pctChange30) < FORECAST_WEIGHT_STABLE_THRESHOLD ? 'stable' : (dailyRate>0?'rising':'declining');
+    var confidence = sorted.length>=4 ? 'high' : 'medium';
+
+    return {
+      animalId:animalId, animalTag:animalTag, currentWeight:latest.weight, dailyRate:Math.round(dailyRate*100)/100,
+      trend:trend, projected7:projected7, projected14:projected14, projected30:projected30,
+      confidence:confidence, dataPoints:sorted.length,
+      evidence:[ 'معدل التغيّر اليومي المُلاحَظ: '+(dailyRate>=0?'+':'')+Math.round(dailyRate*100)/100+' كجم/يوم عبر '+ar(sorted.length)+' سجل وزن خلال '+ar(Math.round(daysSpan))+' يوم' ],
+    };
+  }catch(e){ return null; }
+};
+
+// 2. Production Forecast -- REUSES evaluateProductionKPIs() verbatim.
+// Zero new calculation; only relabels the existing trend for a
+// forecast-facing context.
+window.forecastProduction = async function(animalId, animalTag, type){
+  try{
+    if(!window.evaluateProductionKPIs) return null;
+    var kpi = await window.evaluateProductionKPIs(animalId, animalTag, type);
+    if(!kpi) return null;
+    var classification = kpi.trend==='rising' ? 'improving' : kpi.trend==='declining' ? 'declining' : 'stable';
+    var confidence = kpi.consistency!=null ? (kpi.consistency<0.3?'high':'medium') : 'medium';
+    return {
+      animalId:animalId, animalTag:animalTag, type:type, classification:classification,
+      trendPct:kpi.trendPct, recentAverage:kpi.recentAverage, confidence:confidence,
+      evidence:[ 'اتجاه '+(type==='milk'?'الحليب':'الصوف')+' الأسبوعي: '+(kpi.trendPct>=0?'+':'')+Math.round(kpi.trendPct*100)+'٪ (من evaluateProductionKPIs، بلا إعادة حساب)' ],
+    };
+  }catch(e){ return null; }
+};
+
+// 3. Health Risk Forecast -- starts from evaluateHealthRisk()'s real
+// current score, adjusts ONLY for already-scheduled, knowable future
+// events (a pending vaccination that will become overdue within the
+// window) -- using the EXACT SAME weight Health Intelligence itself
+// assigns to a missed vaccination, not a new forecasting-only weight.
+window.forecastHealthRisk = async function(animalId, animalTag, barn, windowDays){
+  try{
+    windowDays = windowDays || 30;
+    if(!window.evaluateHealthRisk) return null;
+    var current = await window.evaluateHealthRisk(animalId, animalTag, barn);
+    var baseScore = current ? current.score : 0;
+
+    var today = new Date(); var todayStr = today.toISOString().slice(0,10);
+    var vacc = barn ? await fbGet('vaccinations') : [];
+    var upcoming = (vacc||[]).filter(function(v){
+      if(v.target_section!==barn || v.status!=='pending' || !v.scheduled_date) return false;
+      if(v.scheduled_date < todayStr) return false; // already overdue -- already counted in the CURRENT score
+      var daysUntil = (new Date(v.scheduled_date)-today)/86400000;
+      return daysUntil>=0 && daysUntil<=windowDays;
+    });
+
+    var evidence=[];
+    var futureDelta=0;
+    if(upcoming.length){
+      futureDelta = HEALTH_RISK_WEIGHTS.missedVaccination;
+      evidence.push(ar(upcoming.length)+' تحصين مجدول سيصبح متأخرًا خلال '+ar(windowDays)+' يوم إن لم يُنفَّذ: '+upcoming.map(function(v){return v.name;}).join('، '));
+    }
+    if(!evidence.length) evidence.push('لا تغييرات معروفة متوقعة خلال الفترة -- الدرجة الحالية هي أفضل تقدير متاح');
+
+    var projectedScore = Math.min(100, Math.max(0, baseScore+futureDelta));
+    var projectedLevel = projectedScore>=75?'critical':projectedScore>=50?'high':projectedScore>=25?'medium':'low';
+
+    return {
+      animalId:animalId, animalTag:animalTag, currentScore:baseScore, currentLevel:current?current.level:'low',
+      projectedScore:projectedScore, projectedLevel:projectedLevel, windowDays:windowDays,
+      confidence: upcoming.length?'medium':'low', evidence:evidence,
+    };
+  }catch(e){ return null; }
+};
+
+// 4. Task / Workload Forecast -- a window-count over already-scheduled
+// fields (daily_tasks.date, vaccinations.scheduled_date,
+// breeding.expected_birth). No new prediction, only counting what is
+// already known to be coming.
+window.forecastTaskWorkload = async function(windowDays){
+  try{
+    windowDays = windowDays || 7;
+    var today = new Date(); var todayStr = today.toISOString().slice(0,10);
+    var endDate = new Date(today); endDate.setDate(endDate.getDate()+windowDays);
+    var endStr = endDate.toISOString().slice(0,10);
+    var results = await Promise.all([fbGet('daily_tasks'), fbGet('vaccinations'), fbGet('breeding')]);
+    var tasks=results[0]||[], vacc=results[1]||[], breeding=results[2]||[];
+
+    var upcomingTasks = tasks.filter(function(t){return t.status!=='done'&&t.date&&t.date>=todayStr&&t.date<=endStr;});
+    var upcomingVacc = vacc.filter(function(v){return v.status==='pending'&&v.scheduled_date&&v.scheduled_date>=todayStr&&v.scheduled_date<=endStr;});
+    var upcomingBirths = breeding.filter(function(b){return b.status==='pregnant'&&b.expected_birth&&b.expected_birth>=todayStr&&b.expected_birth<=endStr;});
+
+    return {
+      windowDays:windowDays, existingTasks:upcomingTasks.length, expectedVaccinations:upcomingVacc.length,
+      expectedBirths:upcomingBirths.length,
+      totalExpectedWorkload: upcomingTasks.length+upcomingVacc.length+upcomingBirths.length,
+    };
+  }catch(e){ return { windowDays:windowDays||7, existingTasks:0, expectedVaccinations:0, expectedBirths:0, totalExpectedWorkload:0 }; }
+};
+
+// 5. Farm Forecast Summary -- pure composition over the four functions
+// above, for candidate animals (same candidate-selection pattern
+// established in Sprint 5/8/9: animals already showing a real signal,
+// not the whole herd). No new calculation of its own.
+window.forecastFarmSummary = async function(animals, health, weightAlertsRaw, productionRaw){
+  try{
+    var activeHealthTags = new Set((health||[]).filter(function(r){return r.status==='active';}).map(function(r){return r.animal_tag;}));
+    var activeWeightIds = new Set((weightAlertsRaw||[]).filter(function(a){return a.status==='active';}).map(function(a){return a.animal_id;}));
+    var producingIds = new Set((productionRaw||[]).filter(function(p){return p.type==='milk'||p.type==='wool';}).map(function(p){return p.animal_id;}));
+    var candidates = (animals||[]).filter(function(a){return a.status!=='dead'&&(activeHealthTags.has(a.tag)||activeWeightIds.has(a._id)||producingIds.has(a._id));});
+
+    var weightForecasts=[], healthForecasts=[];
+    for(var i=0;i<candidates.length;i++){
+      var a=candidates[i];
+      var wf=await window.forecastWeight(a._id,a.tag);
+      if(wf&&wf.trend==='declining') weightForecasts.push(wf);
+      var hf=await window.forecastHealthRisk(a._id,a.tag,a.barn,30);
+      if(hf&&(hf.projectedLevel==='high'||hf.projectedLevel==='critical')) healthForecasts.push(hf);
+    }
+    var taskForecast7 = await window.forecastTaskWorkload(7);
+    var taskForecast30 = await window.forecastTaskWorkload(30);
+
+    return {
+      expectedWorkload7:taskForecast7.totalExpectedWorkload, expectedWorkload30:taskForecast30.totalExpectedWorkload,
+      expectedRisks:healthForecasts.length, expectedDecliningWeight:weightForecasts.length,
+      expectedTreatments:taskForecast7.expectedVaccinations,
+      riskDetail:healthForecasts.slice(0,5), weightDetail:weightForecasts.slice(0,5),
+    };
+  }catch(e){ return null; }
+};
+
+// ══════════════════════════════════════════════════════════════
+//  FARM ANALYTICS ENGINE (v1.3 -- historical trend analysis.
+//  READ-ONLY consumer of certified engines and SSOT collections.
+//  Computes zero risk scores, zero classifications of its own --
+//  only counts/rates over real, already-timestamped records.
+//  Full architecture: docs/features/ANALYTICS-ARCHITECTURE.md
+// ══════════════════════════════════════════════════════════════
+
+var ANALYTICS_MONTH_NAMES=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+
+// Generalizes the single-purpose bucketing pattern buildMonthlyFin()/
+// buildMonthlyBreeding() (pages/reports.js) already established, into
+// one reusable utility any domain can use -- not a replacement for
+// those two (out of scope), just what every NEW trend calculation uses.
+window.bucketByPeriod = function(records, dateField, granularity, periodCount){
+  granularity = granularity||'month'; periodCount = periodCount||6;
+  var now=new Date(); var buckets=[];
+  for(var i=periodCount-1;i>=0;i--){
+    var start, end, label;
+    if(granularity==='week'){
+      end=new Date(now); end.setDate(end.getDate()-(i*7));
+      start=new Date(end); start.setDate(start.getDate()-6);
+      label='أسبوع '+ar(periodCount-i);
+    } else if(granularity==='quarter'){
+      var curQStartMonth=Math.floor(now.getMonth()/3)*3;
+      start=new Date(now.getFullYear(), curQStartMonth-(i*3), 1);
+      end=new Date(start.getFullYear(), start.getMonth()+3, 0);
+      label='Q'+(Math.floor(start.getMonth()/3)+1)+' '+start.getFullYear();
+    } else if(granularity==='year'){
+      // Sprint 13 (v1.6): additive branch on the EXISTING bucketing
+      // function -- not a second bucketing engine.
+      start=new Date(now.getFullYear()-i, 0, 1);
+      end=new Date(now.getFullYear()-i, 11, 31);
+      label=String(start.getFullYear());
+    } else {
+      start=new Date(now.getFullYear(), now.getMonth()-i, 1);
+      end=new Date(now.getFullYear(), now.getMonth()-i+1, 0);
+      label=ANALYTICS_MONTH_NAMES[start.getMonth()];
+    }
+    buckets.push({ label:label, start:start, end:end, records:[] });
+  }
+  (records||[]).forEach(function(r){
+    var d=r.__dateValue!==undefined?r.__dateValue:r[dateField];
+    if(!d) return;
+    var dt=new Date(d);
+    if(isNaN(dt.getTime())) return;
+    for(var j=0;j<buckets.length;j++){
+      if(dt>=buckets[j].start && dt<=buckets[j].end){ buckets[j].records.push(r); break; }
+    }
+  });
+  return buckets;
+};
+
+// The single analytics engine. Fetches every needed collection ONCE
+// (one Promise.all), then computes all 5 categories from the SAME
+// fetched data -- no per-category re-fetch.
+window.computeFarmAnalytics = async function(granularity, periodCount){
+  granularity = granularity||'month'; periodCount = periodCount||6;
+  try{
+    var results = await Promise.all([
+      fbGet('health'), fbGet('vaccinations'), fbGet('weight_alerts'),
+      fbGet('production_log'), fbGet('production_alerts'), fbGet('daily_tasks'),
+      fbGet('breeding'), fbGet('animals'),
+    ]);
+    var health=results[0]||[], vacc=results[1]||[], weightAlerts=results[2]||[],
+        production=results[3]||[], prodAlerts=results[4]||[], tasks=results[5]||[],
+        breeding=results[6]||[], animals=results[7]||[];
+
+    function bp(records, field, n){ return window.bucketByPeriod(records, field, granularity, n||periodCount); }
+
+    // ── Productivity Index: milk output + task completion, composed
+    // into one 0-100 index per period, weighted average (same
+    // methodology precedent as Sprint 5's Unified Decision Engine --
+    // coefficients summing to 1, no per-category invented weight).
+    var milkBuckets = bp(production.filter(function(p){return p.type==='milk';}), 'date');
+    var taskBuckets = bp(tasks, 'created_at');
+    var productivityIndex = milkBuckets.map(function(mb, idx){
+      var totalMilk = mb.records.reduce(function(s,r){return s+(+r.quantity||0);},0);
+      var tb = taskBuckets[idx];
+      var doneInPeriod = tb.records.filter(function(t){return t.status==='done';}).length;
+      var completionRate = tb.records.length ? doneInPeriod/tb.records.length : 0;
+      var milkScore = Math.min(100, totalMilk); // 1 point per liter, capped -- simple, explainable, not a fabricated formula
+      var index = Math.round(0.6*milkScore + 0.4*(completionRate*100));
+      return { label:mb.label, index:Math.min(100,index), totalMilk:Math.round(totalMilk*10)/10, taskCompletionRate:Math.round(completionRate*100) };
+    });
+
+    // ── Herd Health Trend: real event counts, never a re-run of evaluateHealthRisk().
+    var healthBuckets = bp(health, 'date');
+    var vaccDoneBuckets = bp(vacc.filter(function(v){return v.status==='done';}), 'done_date');
+    var herdHealthTrend = healthBuckets.map(function(hb, idx){
+      var recovered = hb.records.filter(function(h){return h.status!=='active';}).length;
+      var recoveryRate = hb.records.length ? recovered/hb.records.length : null;
+      return {
+        label:hb.label, healthRecordCount:hb.records.length,
+        recoveryRate: recoveryRate!==null?Math.round(recoveryRate*100):null,
+        vaccinationsCompleted: vaccDoneBuckets[idx].records.length,
+      };
+    });
+
+    // ── Production Trend: milk, wool, births, mortality, weight
+    // records added (a real proxy for "growth monitoring activity").
+    var woolBuckets = bp(production.filter(function(p){return p.type==='wool';}), 'date');
+    var birthBuckets = bp(breeding.filter(function(b){return b.status==='born'&&b.actual_birth;}), 'actual_birth');
+    var deathBuckets = bp(animals.filter(function(a){return a.status==='dead'&&a.died_at;}), 'died_at');
+    var weightRecordBuckets = bp(production.filter(function(p){return p.type==='weight';}), 'date');
+    var productionTrend = milkBuckets.map(function(mb, idx){
+      var milkTotal = mb.records.reduce(function(s,r){return s+(+r.quantity||0);},0);
+      var milkValues = mb.records.map(function(r){return +r.quantity||0;});
+      var mean = milkValues.length ? milkValues.reduce(function(a,b){return a+b;},0)/milkValues.length : 0;
+      var variance = milkValues.length ? milkValues.reduce(function(s,v){return s+Math.pow(v-mean,2);},0)/milkValues.length : 0;
+      var consistency = mean>0 ? Math.sqrt(variance)/mean : null;
+      return {
+        label:mb.label, milkTotal:Math.round(milkTotal*10)/10,
+        woolTotal:Math.round(woolBuckets[idx].records.reduce(function(s,r){return s+(+r.quantity||0);},0)*10)/10,
+        births:birthBuckets[idx].records.reduce(function(s,r){return s+(+r.offspring_count||0);},0),
+        deaths:deathBuckets[idx].records.length, weighInsRecorded:weightRecordBuckets[idx].records.length,
+        consistency: consistency!==null?Math.round(consistency*100)/100:null,
+      };
+    });
+
+    // ── Operational Efficiency: real completion/response data from daily_tasks.
+    var operationalEfficiency = taskBuckets.map(function(tb){
+      var done = tb.records.filter(function(t){return t.status==='done';});
+      var completionRate = tb.records.length ? done.length/tb.records.length : null;
+      var withResponseTime = done.filter(function(t){return t.completed_at&&t.created_at;});
+      var avgResponseHrs = withResponseTime.length
+        ? Math.round(withResponseTime.reduce(function(s,t){return s+(new Date(t.completed_at)-new Date(t.created_at));},0)/withResponseTime.length/3600000*10)/10
+        : null;
+      var autoCount = tb.records.filter(function(t){return t.auto_generated;}).length;
+      return {
+        label:tb.label, totalTasks:tb.records.length,
+        completionRate: completionRate!==null?Math.round(completionRate*100):null,
+        avgResponseHours: avgResponseHrs,
+        automationRate: tb.records.length?Math.round(autoCount/tb.records.length*100):null,
+      };
+    });
+
+    // ── Risk Trend: real alert-DETECTION events per period -- never a
+    // retroactive re-score. weight_alerts/production_alerts are the
+    // certified engines' own written record of when they flagged something.
+    var weightAlertBuckets = bp(weightAlerts, 'detected_at');
+    var prodAlertBuckets = bp(prodAlerts, 'detected_at');
+    var riskTrend = weightAlertBuckets.map(function(wb, idx){
+      var totalAlerts = wb.records.length + prodAlertBuckets[idx].records.length;
+      return { label:wb.label, weightAlerts:wb.records.length, productionAlerts:prodAlertBuckets[idx].records.length, totalAlerts:totalAlerts };
+    });
+    var highestRiskPeriod = riskTrend.reduce(function(max,p){return (!max||p.totalAlerts>max.totalAlerts)?p:max;}, null);
+
+    return {
+      granularity:granularity, periodCount:periodCount,
+      productivityIndex:productivityIndex, herdHealthTrend:herdHealthTrend,
+      productionTrend:productionTrend, operationalEfficiency:operationalEfficiency,
+      riskTrend:riskTrend, highestRiskPeriod: highestRiskPeriod&&highestRiskPeriod.totalAlerts>0?highestRiskPeriod:null,
+      computedAt:new Date().toISOString(),
+    };
+  }catch(e){ return null; }
+};
+
+// AI Insights -- template sentences, EVERY one gated on a real computed
+// comparison from computeFarmAnalytics()'s own output. No sentence is
+// ever generated without the specific numbers behind it also being
+// present in the evidence string -- exactly Sprint 6's Daily Briefing
+// discipline, applied here.
+window.generateAnalyticsInsights = function(analytics){
+  if(!analytics) return [];
+  var lines=[];
+  var hh=analytics.herdHealthTrend, pt=analytics.productionTrend, oe=analytics.operationalEfficiency, rt=analytics.riskTrend;
+
+  if(hh.length>=2){
+    var lastR=hh[hh.length-1].recoveryRate, prevR=hh[hh.length-2].recoveryRate;
+    if(lastR!==null&&prevR!==null){
+      if(lastR>prevR+5) lines.push({text:'معدل التعافي الصحي تحسّن من '+ar(prevR)+'٪ إلى '+ar(lastR)+'٪.', evidence:hh[hh.length-1].label+' مقابل '+hh[hh.length-2].label});
+      else if(lastR<prevR-5) lines.push({text:'معدل التعافي الصحي تراجع من '+ar(prevR)+'٪ إلى '+ar(lastR)+'٪.', evidence:hh[hh.length-1].label+' مقابل '+hh[hh.length-2].label});
+    }
+  }
+  if(pt.length>=2){
+    var lastM=pt[pt.length-1].milkTotal, prevM=pt[pt.length-2].milkTotal;
+    if(prevM>0){
+      var chg=(lastM-prevM)/prevM;
+      if(chg>0.1) lines.push({text:'إنتاج الحليب في تحسّن ('+ar(Math.round(chg*100))+'٪+).', evidence:ar(prevM)+' → '+ar(lastM)+' لتر'});
+      else if(chg<-0.1) lines.push({text:'إنتاج الحليب في تراجع ('+ar(Math.round(Math.abs(chg)*100))+'٪-).', evidence:ar(prevM)+' → '+ar(lastM)+' لتر'});
+    }
+  }
+  if(oe.length>=2){
+    var lastC=oe[oe.length-1].completionRate, prevC=oe[oe.length-2].completionRate;
+    if(lastC!==null&&prevC!==null){
+      if(lastC>prevC+5) lines.push({text:'إنجاز المهام في تحسّن ('+ar(prevC)+'٪ ← '+ar(lastC)+'٪).', evidence:oe[oe.length-1].label});
+    }
+  }
+  if(hh.length){
+    var lastVacc=hh[hh.length-1].vaccinationsCompleted;
+    var totalVaccAllPeriods=hh.reduce(function(s,h){return s+h.vaccinationsCompleted;},0);
+    if(totalVaccAllPeriods>0&&lastVacc>=Math.max.apply(null,hh.map(function(h){return h.vaccinationsCompleted;})))
+      lines.push({text:'تغطية التحصين في '+hh[hh.length-1].label+' هي الأعلى ضمن الفترة المعروضة.', evidence:ar(lastVacc)+' تحصين مكتمل'});
+  }
+  if(analytics.highestRiskPeriod){
+    lines.push({text:'أعلى فترة تنبيهات: '+analytics.highestRiskPeriod.label+'.', evidence:ar(analytics.highestRiskPeriod.totalAlerts)+' تنبيه إجمالي'});
+  }
+  return lines;
+};
+
+// ══════════════════════════════════════════════════════════════
+//  WORKFLOW ENGINE (v1.4 -- pure orchestration. Never a second task
+//  engine, never a second notification engine, never a second
+//  intelligence engine. Full architecture: docs/features/WORKFLOW-ARCHITECTURE.md
+//
+//  Discovery finding this engine exists to close (docs/features/
+//  WORKFLOW-DISCOVERY.md): three domains (birth, vaccination,
+//  medication) create a one-time reminder task via autoGenerateTask(),
+//  but nothing ever marked that task done when the reminded-about
+//  event actually completed. Sale/Death had zero automation at all.
+// ══════════════════════════════════════════════════════════════
+
+var WORKFLOW_RULES = {
+  birth: {
+    resolvesEvent: 'expected_birth_approaching',
+    recommend: function(ctx){ return { text:'سجّل الوزن الأولي وجدول أول تحصين للمولود', evidence:'ولادة جديدة: '+(ctx.animalTag||ctx.sourceId), actionable:true }; },
+  },
+  vaccination: {
+    resolvesEvent: 'vaccination_scheduled',
+    recommend: async function(ctx){
+      try{
+        var vacc = await fbGet('vaccinations');
+        var others = (vacc||[]).filter(function(v){return v.target_section===ctx.targetSection && v.status==='pending';});
+        if(others.length) return { text:'يوجد '+ar(others.length)+' تحصين آخر معلّق لنفس القسم', evidence:others.map(function(v){return v.name;}).join('، '), actionable:true };
+        return { text:'لا توجد تحصينات معلّقة أخرى لهذا القسم حاليًا', evidence:'', actionable:false };
+      }catch(e){ return null; }
+    },
+  },
+  medication: {
+    resolvesEvent: 'medication_followup',
+    recommend: async function(ctx){
+      try{
+        if(!window.evaluateHealthRisk||!ctx.animalId) return null;
+        var risk = await window.evaluateHealthRisk(ctx.animalId, ctx.animalTag, ctx.barn);
+        if(risk&&risk.level!=='low') return { text:'الحيوان لا يزال يُظهر مؤشرات خطورة ('+risk.level+') — يُنصح بمتابعة إضافية', evidence:'الدرجة '+risk.score+'/100', actionable:true };
+        return { text:'لا توجد مؤشرات خطورة متبقية على هذا الحيوان', evidence:'', actionable:false };
+      }catch(e){ return null; }
+    },
+  },
+  weight: {
+    resolvesEvent: null, // Weight Intelligence (Sprint 2) already self-resolves -- nothing stale to close
+    recommend: async function(ctx){
+      try{
+        if(!window.evaluateWeightAlert||!ctx.animalId) return null;
+        var alerts = await window.evaluateWeightAlert(ctx.animalId, ctx.animalTag, ctx.barn);
+        var active = (alerts||[]).find(function(a){return a.status==='active';});
+        if(active) return { text:'الوزن لا يزال يُظهر '+(active.rule_type==='weight_loss'?'فقدانًا':'عدم نمو')+' — يُنصح بمتابعة خلال أسبوع', evidence:active.detail||active.action||'', actionable:true };
+        return { text:'الوزن ضمن النطاق الطبيعي حاليًا', evidence:'', actionable:false };
+      }catch(e){ return null; }
+    },
+  },
+  production: {
+    resolvesEvent: null, // Production Intelligence (Sprint 4) already self-resolves
+    recommend: async function(ctx){
+      try{
+        if(!window.evaluateProductionKPIs||!ctx.animalId) return null;
+        var kpi = await window.evaluateProductionKPIs(ctx.animalId, ctx.animalTag, ctx.productionType||'milk');
+        if(kpi&&kpi.dropDetected) return { text:'الإنتاج لا يزال منخفضًا ('+Math.round(kpi.dropPct*100)+'٪ عن الأساس) — يُنصح بمراجعة التغذية', evidence:'المعدل الحالي '+(Math.round((kpi.recentAverage||0)*10)/10), actionable:true };
+        return { text:'الإنتاج مستقر حاليًا', evidence:'', actionable:false };
+      }catch(e){ return null; }
+    },
+  },
+  health: {
+    resolvesEvent: null, // a NEW health record has no prior reminder of its own to resolve
+    recommend: async function(ctx){
+      try{
+        if(!window.evaluateHealthRisk||!ctx.animalId) return null;
+        var risk = await window.evaluateHealthRisk(ctx.animalId, ctx.animalTag, ctx.barn);
+        if(risk&&(risk.level==='high'||risk.level==='critical')) return { text:'درجة الخطورة الحالية '+risk.level+' — يُنصح بمتابعة بيطرية', evidence:'الدرجة '+risk.score+'/100', actionable:true };
+        return { text:'لا توجد مؤشرات خطورة مرتفعة حاليًا', evidence:'', actionable:false };
+      }catch(e){ return null; }
+    },
+  },
+  sale: {
+    resolvesEvent:'ALL', // resolve every open task tied to this animal, regardless of event type
+    recommend: function(ctx){
+      var priceNote = ctx.salePrice ? ' — تم تسجيل إيراد '+ar(ctx.salePrice) : ' — لم يُسجَّل سعر، لن يظهر إيراد في المالية';
+      return { text:'أُغلقت كل التذكيرات المرتبطة بالحيوان المُباع'+priceNote, evidence:ctx.animalTag||ctx.sourceId, actionable:true };
+    },
+  },
+  death: {
+    resolvesEvent:'ALL',
+    recommend: function(ctx){ return { text:'أُغلقت كل التذكيرات المرتبطة بالحيوان النافق', evidence:ctx.animalTag||ctx.sourceId, actionable:true }; },
+  },
+};
+
+// Single, generic entry point. validate -> resolve -> engine+recommend -> log -> finish.
+// ctx: { sourceId, animalId, animalTag, barn, targetSection, productionType }
+window.completeWorkflow = async function(workflowType, ctx){
+  var startedAt = new Date().toISOString();
+  var t0 = Date.now();
+  try{
+    // Step 1: validate
+    ctx = ctx||{};
+    var rule = WORKFLOW_RULES[workflowType];
+    if(!rule || !ctx.sourceId){
+      return { workflowType:workflowType, outcome:'invalid', error:'نوع مسار عمل غير معروف أو معرّف مصدر مفقود' };
+    }
+
+    // Step 2: resolve stale reminder(s) -- reuses the EXACT dedup key
+    // pattern autoGenerateTask() already writes, only reading+patching,
+    // never reimplementing task-creation logic.
+    var resolvedCount = 0;
+    var allTasks = await fbGet('daily_tasks');
+    if(rule.resolvesEvent==='ALL'){
+      var mine = (allTasks||[]).filter(function(t){return t.status!=='done' && (t.related_tag===ctx.animalTag);});
+      for(var i=0;i<mine.length;i++){ await fbPatch('daily_tasks', mine[i]._id, {status:'done', completed_at:new Date().toISOString(), resolved_by_workflow:workflowType}); resolvedCount++; }
+    } else if(rule.resolvesEvent){
+      var dedupKey = rule.resolvesEvent+':'+ctx.sourceId;
+      var stale = (allTasks||[]).find(function(t){return t.auto_dedup_key===dedupKey && t.status!=='done';});
+      if(stale){ await fbPatch('daily_tasks', stale._id, {status:'done', completed_at:new Date().toISOString(), resolved_by_workflow:workflowType}); resolvedCount=1; }
+    }
+
+    // Step 3+4: consult the relevant existing engine (inside rule.recommend
+    // itself, per-type -- never reimplemented here) and produce ONE
+    // recommendation from its real output.
+    var recommendation = null;
+    try{ recommendation = typeof rule.recommend==='function' ? await rule.recommend(ctx) : null; }catch(e){ recommendation=null; }
+
+    var durationMs = Date.now()-t0;
+    var record = {
+      workflow_type:workflowType, source_id:ctx.sourceId, animal_tag:ctx.animalTag||null,
+      started_at:startedAt, completed_at:new Date().toISOString(), duration_ms:durationMs,
+      actor:(getUser()&&getUser().name)||'—', resolved_task_count:resolvedCount,
+      recommendation_text:recommendation?recommendation.text:null, recommendation_evidence:recommendation?recommendation.evidence:null,
+      outcome:'success',
+    };
+    // Step 5: log to the new, purely additive, read-only-elsewhere history collection.
+    try{ await fbPost('workflow_history', record); }catch(e){}
+
+    return { workflowType:workflowType, sourceId:ctx.sourceId, resolvedTaskCount:resolvedCount, recommendation:recommendation, durationMs:durationMs, outcome:'success' };
+  }catch(e){
+    var durationMsErr = Date.now()-t0;
+    try{ await fbPost('workflow_history', { workflow_type:workflowType, source_id:(ctx&&ctx.sourceId)||null, started_at:startedAt, completed_at:new Date().toISOString(), duration_ms:durationMsErr, actor:(getUser()&&getUser().name)||'—', outcome:'error', error_message:String(e&&e.message||e) }); }catch(e2){}
+    return { workflowType:workflowType, outcome:'error', error:String(e&&e.message||e) };
+  }
+};
+
+// ══════════════════════════════════════════════════════════════
+//  PREDICTIVE INTELLIGENCE / FARM INSIGHTS (v1.5). 100% read-only --
+//  no function below ever calls fbPost/fbPatch/fbDelete. Per
+//  docs/features/PREDICTIVE-DISCOVERY.md, 3 of the 6 requested
+//  predict*() functions are thin aliases to the ALREADY-CERTIFIED
+//  forecast*() layer built earlier -- calling them again here would
+//  duplicate a certified engine, which this sprint's own rules forbid.
+//  Full reasoning: docs/features/FORECAST-ARCHITECTURE.md
+// ══════════════════════════════════════════════════════════════
+
+// -- Aliases: zero new calculation, just the name this sprint's own
+// spec asked for, delegating to the existing, tested implementation. --
+window.predictWeightRisk = function(animalId, animalTag){ return window.forecastWeight(animalId, animalTag); };
+window.predictMilkTrend = function(animalId, animalTag){ return window.forecastProduction(animalId, animalTag, 'milk'); };
+window.predictTaskLoad = function(windowDays){ return window.forecastTaskWorkload(windowDays); };
+
+var PREDICTION_PRESSURE_THRESHOLDS = { elevated:0.5, high:1.0 }; // fraction ABOVE historical average
+
+// Herd-wide "is this normal" -- reuses forecastTaskWorkload()'s own
+// counting (never re-implemented) for the upcoming figure, and
+// computeFarmAnalytics() (Sprint 10, itself read-only) for the
+// historical baseline. No new bucketing logic.
+async function _predictPressure(windowDays, upcomingCountFn, historicalFieldExtractor){
+  try{
+    windowDays = windowDays||7;
+    var upcoming = await upcomingCountFn(windowDays);
+    var analytics = await window.computeFarmAnalytics('week', 8); // 8 real past weeks as the baseline sample
+    if(!analytics) return null;
+    var pastValues = analytics.operationalEfficiency.length ? historicalFieldExtractor(analytics) : [];
+    var pastAvg = pastValues.length ? pastValues.reduce(function(a,b){return a+b;},0)/pastValues.length : 0;
+    var pressure = 'normal';
+    var ratio = pastAvg>0 ? (upcoming-pastAvg)/pastAvg : (upcoming>0?1:0);
+    if(ratio>=PREDICTION_PRESSURE_THRESHOLDS.high) pressure='high';
+    else if(ratio>=PREDICTION_PRESSURE_THRESHOLDS.elevated) pressure='elevated';
+    return { windowDays:windowDays, upcomingCount:upcoming, historicalAverage:Math.round(pastAvg*10)/10, pressure:pressure, ratioAboveAverage:Math.round(ratio*100)/100 };
+  }catch(e){ return null; }
+}
+
+// Treatment overload: "upcoming" is the herd's total scheduled task
+// load (forecastTaskWorkload()'s own existingTasks figure) -- a real,
+// honest proxy for operational pressure, since medication/health
+// follow-up tasks are themselves a real subset of daily_tasks, not a
+// separately-tracked category. No new fetch, no new counting logic.
+window.predictTreatmentOverload = async function(windowDays){
+  return _predictPressure(windowDays, async function(wd){
+    var wf = await window.forecastTaskWorkload(wd);
+    return wf ? wf.existingTasks : 0;
+  }, function(analytics){
+    return analytics.operationalEfficiency.map(function(o){ return o.totalTasks||0; });
+  });
+};
+
+// Vaccination pressure: upcoming = forecastTaskWorkload()'s own
+// expectedVaccinations count. Baseline = Sprint 10's own
+// vaccinationsCompleted-per-period history.
+window.predictVaccinationPressure = async function(windowDays){
+  return _predictPressure(windowDays, async function(wd){
+    var wf = await window.forecastTaskWorkload(wd);
+    return wf ? wf.expectedVaccinations : 0;
+  }, function(analytics){
+    return analytics.herdHealthTrend.map(function(h){ return h.vaccinationsCompleted||0; });
+  });
+};
+
+// predictBreedingWindow: the one genuinely new prediction. Derives
+// EACH dam's own historical inter-birth interval from her own real
+// birth records -- never a species-wide assumption. Fewer than 2
+// historical births for a dam = no prediction for her, same honesty
+// standard forecastWeight() already applies.
+window.predictBreedingWindow = async function(animals, breedingRaw){
+  try{
+    var animalsList = animals || await fbGet('animals');
+    var breeding = breedingRaw || await fbGet('breeding');
+    var bornRecords = (breeding||[]).filter(function(b){return b.status==='born'&&b.actual_birth&&b.mother_tag;});
+    var byDam = {};
+    bornRecords.forEach(function(b){ (byDam[b.mother_tag]=byDam[b.mother_tag]||[]).push(b.actual_birth); });
+
+    var currentlyPregnantTags = new Set((breeding||[]).filter(function(b){return b.status==='pregnant';}).map(function(b){return b.female_tag||b.mother_tag;}));
+    var predictions = [];
+    for(var tag in byDam){
+      if(currentlyPregnantTags.has(tag)) continue; // already pregnant -- expected_birth_approaching (Sprint 1) already covers her
+      var dates = byDam[tag].slice().sort();
+      if(dates.length<2) continue; // insufficient history -- no fabricated prediction
+      var intervals=[];
+      for(var i=1;i<dates.length;i++){ intervals.push((new Date(dates[i])-new Date(dates[i-1]))/86400000); }
+      var avgInterval = intervals.reduce(function(a,b){return a+b;},0)/intervals.length;
+      var lastBirth = new Date(dates[dates.length-1]);
+      var predictedDate = new Date(lastBirth.getTime()+avgInterval*86400000);
+      var daysUntil = Math.round((predictedDate-new Date())/86400000);
+      var animal = (animalsList||[]).find(function(a){return a.tag===tag;});
+      if(animal&&animal.status==='alive'){
+        predictions.push({ animalTag:tag, avgIntervalDays:Math.round(avgInterval), predictedDate:predictedDate.toISOString().slice(0,10), daysUntil:daysUntil, birthCount:dates.length, confidence:dates.length>=3?'medium':'low' });
+      }
+    }
+    predictions.sort(function(a,b){return a.daysUntil-b.daysUntil;});
+    return predictions;
+  }catch(e){ return []; }
+};
+
+// generateFarmInsights: PURE COMPOSITION. Every field below traces to
+// one of the four calls, never a new number computed in this function.
+window.generateFarmInsights = async function(animals, health, weightAlertsRaw, productionRaw){
+  try{
+    var insights = [];
+    var summary = await window.forecastFarmSummary(animals, health, weightAlertsRaw, productionRaw);
+    if(summary){
+      if(summary.expectedRisks>0){
+        insights.push({
+          text:'خلال الأسبوع القادم، '+ar(summary.expectedRisks)+' حيوان متوقع أن يحتاج مراجعة صحية إضافية',
+          evidence:'مبني على forecastHealthRisk() لكل حيوان مُرشَّح', confidence: summary.riskDetail&&summary.riskDetail.length>=2?'high':'medium',
+          impactedAnimals: (summary.riskDetail||[]).map(function(r){return r.animalTag;}),
+          suggestedAction:'جدولة زيارة بيطرية استباقية',
+        });
+      }
+      if(summary.expectedDecliningWeight>0){
+        insights.push({
+          text:ar(summary.expectedDecliningWeight)+' حيوان متوقع استمرار انخفاض الوزن',
+          evidence:'مبني على forecastWeight() -- استقراء خطي من السجل الفعلي', confidence:'medium',
+          impactedAnimals:(summary.weightDetail||[]).map(function(w){return w.animalTag;}),
+          suggestedAction:'إعادة وزن خلال ٧ أيام لتأكيد الاتجاه',
+        });
+      }
+    }
+    var vaccPressure = await window.predictVaccinationPressure(7);
+    if(vaccPressure&&vaccPressure.pressure!=='normal'){
+      insights.push({
+        text:'الأسبوع القادم يحتوي ضغط تحصينات '+(vaccPressure.pressure==='high'?'مرتفعًا':'أعلى من المعتاد')+' ('+ar(vaccPressure.upcomingCount)+' مقابل متوسط '+ar(vaccPressure.historicalAverage)+')',
+        evidence:'مقارنة بمتوسط ٨ أسابيع سابقة (computeFarmAnalytics)', confidence: vaccPressure.pressure==='high'?'high':'medium',
+        impactedAnimals:[], suggestedAction:'التأكد من توفر جرعات كافية وتنسيق الطاقم مسبقًا',
+      });
+    }
+    var taskPressure = await window.predictTreatmentOverload(7);
+    if(taskPressure&&taskPressure.pressure!=='normal'){
+      insights.push({
+        text:'معدل المهام اليومية المتوقع أعلى من المعتاد الأسبوع القادم ('+ar(taskPressure.upcomingCount)+' مقابل متوسط '+ar(taskPressure.historicalAverage)+')',
+        evidence:'مقارنة بمتوسط ٨ أسابيع سابقة (computeFarmAnalytics)', confidence: taskPressure.pressure==='high'?'high':'medium',
+        impactedAnimals:[], suggestedAction:'مراجعة توزيع المهام على الطاقم',
+      });
+    }
+    var breedingWindows = await window.predictBreedingWindow(animals, null);
+    var soon = (breedingWindows||[]).filter(function(b){return b.daysUntil>=0&&b.daysUntil<=14;});
+    if(soon.length){
+      insights.push({
+        text:ar(soon.length)+' أنثى متوقع دخولها نافذة تكاثر خلال أسبوعين، بناءً على تاريخها الفعلي',
+        evidence:soon.map(function(b){return b.animalTag+' (~'+ar(b.avgIntervalDays)+' يوم دورة)';}).join('، '),
+        confidence: soon.some(function(b){return b.confidence==='medium';})?'medium':'low',
+        impactedAnimals:soon.map(function(b){return b.animalTag;}), suggestedAction:'مراجعة جاهزية التقريع لهذه الإناث',
+      });
+    }
+    return insights;
+  }catch(e){ return []; }
+};
+
+// ══════════════════════════════════════════════════════════════
+//  FARM FINANCE ENGINE (v1.6). 100% read-only. Reuses the certified
+//  `finance` collection, INCOME_CATS/EXPENSE_CATS (pages/finance.js),
+//  and window.bucketByPeriod() (Sprint 10, extended with 'year' above)
+//  verbatim. No new collection, no new category scheme, no stored KPI.
+//  Full formulas: docs/features/FINANCE-KPIS.md
+// ══════════════════════════════════════════════════════════════
+
+var FINANCE_CATEGORY_FEED = 'أعلاف ومواد تغذية';
+var FINANCE_CATEGORY_MEDICINE = 'أدوية وتحصينات';
+
+window.computeFinanceKPIs = async function(startDate, endDate){
+  try{
+    var results = await Promise.all([fbGet('finance'), fbGet('animals')]);
+    var finance = results[0]||[], animals = results[1]||[];
+    var inRange = finance.filter(function(f){ return f.date && (!startDate||f.date>=startDate) && (!endDate||f.date<=endDate); });
+    var incomeRecs = inRange.filter(function(f){return f.type==='income';});
+    var expenseRecs = inRange.filter(function(f){return f.type==='expense';});
+    var revenue = incomeRecs.reduce(function(s,f){return s+(+f.amount||0);},0);
+    var expenses = expenseRecs.reduce(function(s,f){return s+(+f.amount||0);},0);
+    var netProfit = revenue-expenses;
+    var aliveCount = animals.filter(function(a){return a.status==='alive';}).length;
+    var feedTotal = expenseRecs.filter(function(f){return f.category===FINANCE_CATEGORY_FEED;}).reduce(function(s,f){return s+(+f.amount||0);},0);
+    var medTotal = expenseRecs.filter(function(f){return f.category===FINANCE_CATEGORY_MEDICINE;}).reduce(function(s,f){return s+(+f.amount||0);},0);
+
+    var categoryBreakdown = {};
+    expenseRecs.forEach(function(f){ var c=f.category||'غير مصنّف'; categoryBreakdown[c]=(categoryBreakdown[c]||0)+(+f.amount||0); });
+
+    return {
+      revenue:Math.round(revenue*100)/100, expenses:Math.round(expenses*100)/100, netProfit:Math.round(netProfit*100)/100,
+      profitMargin: revenue>0 ? Math.round((netProfit/revenue)*1000)/1000 : null,
+      roi: expenses>0 ? Math.round((netProfit/expenses)*1000)/1000 : null,
+      avgCostPerAnimal: aliveCount>0 ? Math.round((expenses/aliveCount)*100)/100 : null,
+      avgRevenuePerAnimal: aliveCount>0 ? Math.round((revenue/aliveCount)*100)/100 : null,
+      feedCostPct: expenses>0 ? Math.round((feedTotal/expenses)*1000)/1000 : null,
+      medicineCostPct: expenses>0 ? Math.round((medTotal/expenses)*1000)/1000 : null,
+      categoryBreakdown:categoryBreakdown, recordCount:inRange.length,
+    };
+  }catch(e){ return null; }
+};
+
+window.computeFinanceTrend = async function(granularity, periodCount){
+  try{
+    granularity = granularity||'month'; periodCount = periodCount||6;
+    var finance = await fbGet('finance');
+    var buckets = window.bucketByPeriod(finance, 'date', granularity, periodCount);
+    return buckets.map(function(b){
+      var revenue = b.records.filter(function(f){return f.type==='income';}).reduce(function(s,f){return s+(+f.amount||0);},0);
+      var expenses = b.records.filter(function(f){return f.type==='expense';}).reduce(function(s,f){return s+(+f.amount||0);},0);
+      return { label:b.label, revenue:Math.round(revenue*100)/100, expenses:Math.round(expenses*100)/100, profit:Math.round((revenue-expenses)*100)/100 };
+    });
+  }catch(e){ return []; }
+};
+
+// ══════════════════════════════════════════════════════════════
+//  INVENTORY TRANSACTION ENGINE (v1.7). One new collection
+//  (inventory_transactions, purely additive, write-once). Deduction
+//  NEVER blocks the underlying medical/feeding action -- matches this
+//  project's own "Best Effort" precedent (BUSINESS_RULES.md, Birth).
+//  Reuses the SAME name-based item linking feed_consumption already
+//  established (docs/features/INVENTORY-DISCOVERY.md) -- not a new
+//  ID-based scheme.
+// ══════════════════════════════════════════════════════════════
+
+var INVENTORY_COLLECTION = { meds:'inventory_meds', feeds:'inventory_feeds' };
+
+window.recordInventoryTransaction = async function(itemType, itemName, deltaQty, reason, sourceId){
+  try{
+    var table = INVENTORY_COLLECTION[itemType];
+    if(!table || !itemName || !deltaQty) return null;
+    var items = await fbGet(table);
+    var item = (items||[]).find(function(i){return i.name===itemName;});
+    if(!item) return { matched:false, itemName:itemName }; // no matching stock item -- best effort, not an error
+
+    var before = +item.quantity||0;
+    var after = Math.max(0, before+deltaQty); // negative PREVENTED by clamping, never by rejecting the action
+    var itemUpdate = {quantity:after};
+    if(reason==='purchase' && deltaQty>0) itemUpdate.last_purchase = todayStr();
+    await fbPatch(table, item._id, itemUpdate);
+
+    var record = {
+      item_type:itemType, item_name:itemName, requested_delta:deltaQty, actual_delta:after-before,
+      reason:reason, source_id:sourceId||null, quantity_before:before, quantity_after:after,
+      date:todayStr(), created_at:new Date().toISOString(), actor:(getUser()&&getUser().name)||'—',
+    };
+    await fbPost('inventory_transactions', record);
+
+    // Purchase -> Finance linking (closes a confirmed gap, feeds only,
+    // since only inventory_feeds carries cost_per_unit today).
+    if(reason==='purchase' && itemType==='feeds' && deltaQty>0 && item.cost_per_unit>0){
+      try{
+        await fbPost('finance', { date:todayStr(), type:'expense', category:'أعلاف ومواد تغذية', amount:Math.round(deltaQty*item.cost_per_unit*100)/100, description:'شراء '+itemName+' — '+ar(deltaQty)+' '+(item.unit||''), added_by:(getUser()&&getUser().name)||null });
+      }catch(e){}
+    }
+    return { matched:true, before:before, after:after, actualDelta:after-before, clamped:(after-before)!==deltaQty };
+  }catch(e){ return null; }
 };

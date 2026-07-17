@@ -130,10 +130,13 @@ const NS = {
   async checkAll(){
     if(!initFirebase())return;
     try{
-      const [vaccines,breeding,health,meds,feeds,loginN]=await Promise.all([
+      const [vaccines,breeding,health,meds,feeds,loginN,animals,weightAlertsRaw,productionRaw]=await Promise.all([
         fbGet('vaccinations'), fbGet('breeding'), fbGet('health'),
         fbGet('inventory_meds'), fbGet('inventory_feeds'),
-        fbGet('login_notifications')
+        fbGet('login_notifications'),
+        fbGet('animals').catch(()=>[]),        // Sprint 9: candidate selection for operational-priority check
+        fbGet('weight_alerts').catch(()=>[]),  // Sprint 9: same candidate-selection input Sprint 8's report tab uses
+        fbGet('production_log').catch(()=>[]), // Sprint 9: same candidate-selection input Sprint 8's report tab uses
       ]);
       const t=new Date(), today=todayStr();
       const u=getUser();
@@ -187,6 +190,19 @@ const NS = {
         NS.save(n); NS.push('علف منخفض: '+f.name, 'متبقي '+f.quantity+' '+(f.unit||''), '🌾', n.id, 'inventory.html');
       });
 
+      // 5b. Out of Stock (Sprint 14, v1.7) -- distinct danger-severity
+      // trigger alongside the EXISTING Low Stock warning above, never
+      // replacing it. Fires only at quantity<=0, a strictly narrower
+      // condition than quantity<=min_quantity.
+      meds.filter(m=>+m.quantity<=0).forEach(m=>{
+        const n={type:'danger',cat:'المخزن',icon:'bi-capsule',title:'نفاد كامل: '+m.name,msg:'الكمية صفر — يلزم إعادة تخزين فورية',href:'inventory.html',id:'med-out-'+m._id+'-'+today};
+        NS.save(n); NS.push('🚨 نفاد كامل: '+m.name, 'الكمية صفر', '🚨', n.id, n.href, 'danger');
+      });
+      feeds.filter(f=>+f.quantity<=0).forEach(f=>{
+        const n={type:'danger',cat:'المخزن',icon:'bi-bag-fill',title:'نفاد كامل: '+f.name,msg:'الكمية صفر — يلزم إعادة تخزين فورية',href:'inventory.html',id:'feed-out-'+f._id+'-'+today};
+        NS.save(n); NS.push('🚨 نفاد كامل: '+f.name, 'الكمية صفر', '🚨', n.id, n.href, 'danger');
+      });
+
       // 6. Expiring medicines
       meds.filter(m=>m.expiry).forEach(m=>{
         const d=Math.ceil((new Date(m.expiry)-t)/86400000);
@@ -195,7 +211,94 @@ const NS = {
           NS.save(n);
           if(d<=7)NS.push('انتهاء صلاحية: '+m.name, 'ينتهي بعد '+ar(d)+' يوم', '⚠️', n.id, 'inventory.html');
         }
+        // Sprint 14 (v1.7): Expired -- a real, distinct case (d<0) the
+        // existing block above never covered (its own condition
+        // requires d>=0). Not a modification of the existing trigger.
+        if(d<0){
+          const n={type:'danger',cat:'المخزن',icon:'bi-capsule',title:'دواء منتهي الصلاحية: '+m.name,msg:'انتهى منذ '+ar(Math.abs(d))+' يوم — يجب إزالته من الاستخدام',href:'inventory.html',id:'med-expired-'+m._id+'-'+today};
+          NS.save(n); NS.push('⛔ منتهي: '+m.name, 'منذ '+ar(Math.abs(d))+' يوم', '⛔', n.id, n.href, 'danger');
+        }
       });
+
+      // 6b. Operational Priority (Sprint 9) -- reuses window.evaluateOperationalPriority()
+      // and window.rankOperationalPriorities() VERBATIM (Sprint 5's engines). This
+      // notification check computes NOTHING itself beyond the SAME candidate-selection
+      // filter Sprint 8's report tab already established -- no scoring logic duplicated.
+      // Deterministic id (animal+level+today) means this re-fires at most once per day
+      // per animal per level, not every 5-minute poll, even while the condition persists.
+      if(window.evaluateOperationalPriority){
+        try{
+          const activeHealthTags=new Set(health.filter(r=>r.status==='active').map(r=>r.animal_tag));
+          const activeWeightIds=new Set((weightAlertsRaw||[]).filter(a=>a.status==='active').map(a=>a.animal_id));
+          const producingIds=new Set((productionRaw||[]).filter(p=>p.type==='milk'||p.type==='wool').map(p=>p.animal_id));
+          const candidates=(animals||[]).filter(a=>a.status!=='dead'&&(activeHealthTags.has(a.tag)||activeWeightIds.has(a._id)||producingIds.has(a._id)));
+          for(const a of candidates){
+            const p=await window.evaluateOperationalPriority(a._id,a.tag,a.barn);
+            if(p&&(p.level==='high'||p.level==='critical')){
+              const priToType={critical:'danger',high:'danger',medium:'warning',low:'info'};
+              const n={
+                type:priToType[p.level]||'warning', priorityLevel:p.level, cat:'الذكاء التشغيلي',
+                icon:'bi-stars', title:'أولوية تشغيلية '+(p.level==='critical'?'حرجة':'مرتفعة')+': '+(a.tag||a._id),
+                msg:'الدرجة '+p.score+'/100 — '+p.contributingEngines.join('، '),
+                href:'animal-detail.html?id='+a._id, animal_id:a._id, animal_tag:a.tag,
+                id:'opri-'+a._id+'-'+p.level+'-'+today,
+              };
+              NS.save(n);
+              if(p.level==='critical')NS.push('أولوية حرجة: '+(a.tag||a._id), 'الدرجة '+p.score+'/100', '🚨', n.id, n.href,'danger');
+            }
+          }
+        }catch(e){console.warn('NS operational-priority check:',e);}
+      }
+
+      // 6d. Finance alerts (Sprint 13, v1.6) -- reuses
+      // window.computeFinanceTrend()/computeFinanceKPIs() verbatim.
+      // NOTE: "Budget Overrun" from the original brief is NOT
+      // implemented -- confirmed via direct search, zero budget-setting
+      // mechanism exists anywhere in this app, and inventing an
+      // arbitrary threshold with no real basis would contradict this
+      // project's own evidence-first discipline. Documented honestly in
+      // docs/features/FINANCE-DISCOVERY.md rather than fabricated here.
+      if(window.computeFinanceTrend && isAdmin){
+        try{
+          var finTrend = await window.computeFinanceTrend('month', 3);
+          if(finTrend.length>=2){
+            var lastP=finTrend[finTrend.length-1], prevP=finTrend[finTrend.length-2];
+            // Monthly loss: this month's net is negative.
+            if(lastP.profit<0){
+              var n1={type:'danger',cat:'المالية',icon:'bi-graph-down-arrow',title:'خسارة شهرية: '+lastP.label,msg:'صافي '+ar(Math.round(lastP.profit))+' — راجع بنود المصروفات',href:'reports.html',id:'fin-loss-'+lastP.label+'-'+today,for_role:'admin'};
+              NS.save(n1); NS.push('⚠️ خسارة شهرية', lastP.label, '💸', n1.id, n1.href, 'danger');
+            }
+            // Expense spike: this month's expenses real jump vs last month (>30%).
+            if(prevP.expenses>0 && (lastP.expenses-prevP.expenses)/prevP.expenses>0.3){
+              var pctUp=Math.round(((lastP.expenses-prevP.expenses)/prevP.expenses)*100);
+              var n2={type:'warning',cat:'المالية',icon:'bi-arrow-up-circle-fill',title:'ارتفاع مصروفات: '+lastP.label,msg:'+'+ar(pctUp)+'٪ عن '+prevP.label,href:'reports.html',id:'fin-exp-spike-'+lastP.label+'-'+today,for_role:'admin'};
+              NS.save(n2);
+            }
+            // Profit decline: real drop vs last month (>20%), both months profitable.
+            if(prevP.profit>0 && lastP.profit>=0 && (prevP.profit-lastP.profit)/prevP.profit>0.2){
+              var pctDown=Math.round(((prevP.profit-lastP.profit)/prevP.profit)*100);
+              var n3={type:'warning',cat:'المالية',icon:'bi-graph-down',title:'انخفاض الأرباح: '+lastP.label,msg:'-'+ar(pctDown)+'٪ عن '+prevP.label,href:'reports.html',id:'fin-profit-drop-'+lastP.label+'-'+today,for_role:'admin'};
+              NS.save(n3);
+            }
+          }
+        }catch(e){}
+      }
+
+      // 6c. Predictive Farm Insights (Sprint 12, v1.5) -- fires ONLY for
+      // high-confidence insights, per this sprint's own explicit rule.
+      // Reuses window.generateFarmInsights() verbatim, no new
+      // calculation. Deterministic id (date-scoped) means at most one
+      // notification per insight-type per day, same dedup discipline
+      // every other trigger already follows.
+      if(window.generateFarmInsights){
+        try{
+          var farmInsights = await window.generateFarmInsights(animals, health, weightAlertsRaw, productionRaw);
+          farmInsights.filter(function(ins){return ins.confidence==='high';}).forEach(function(ins, idx){
+            var n={type:'warning',cat:'التوقعات',icon:'bi-graph-up-arrow',title:'توقع: '+ins.text,msg:ins.suggestedAction+(ins.evidence?' — '+ins.evidence:''),href:'reports.html',id:'insight-'+idx+'-'+today};
+            NS.save(n);
+          });
+        }catch(e){}
+      }
 
       // 7. Login notifications → admin only (once per session using sessionStorage)
       if(isAdmin){
@@ -252,10 +355,12 @@ const NS = {
   async updateBadge(){
     try{
       const u=getUser();if(!u)return;
-      const notifs=await fbGet('notifications');
-      const unread=notifs.filter(n=>!n.read&&(!n.for_role||n.for_role===u.role||u.role==='admin')).length;
+      // Sprint 9: reuses the shared counting helper (shared.js) instead
+      // of re-filtering here -- same logic, one place, exactly what
+      // window.updateGlobalBellBadge() (called on every other page) uses too.
+      const count = window.getUnreadNotificationCount ? await window.getUnreadNotificationCount() : 0;
       const b=document.getElementById('bell-badge');
-      if(b){if(unread>0){b.style.display='flex';b.textContent=unread>9?'9+':unread;}else b.style.display='none';}
+      if(b){if(count>0){b.style.display='flex';b.textContent=count>9?'9+':count;}else b.style.display='none';}
     }catch(e){}
   },
 
@@ -268,6 +373,24 @@ const NS = {
       }
       NS.updateBadge();
     }catch(e){}
+  },
+
+  // ── Expire old, already-read notifications (Sprint 9) ──────
+  // Simple, real cleanup: read AND older than EXPIRE_DAYS. Unread
+  // notifications are NEVER auto-expired, regardless of age -- a user
+  // has not yet acted on them. Called once per notifications.html load,
+  // not on a background timer (this is a static app with no server-side
+  // scheduling capability).
+  EXPIRE_DAYS: 30,
+  async expireOld(){
+    try{
+      const notifs=await fbGet('notifications');
+      const cutoff=new Date(); cutoff.setDate(cutoff.getDate()-NS.EXPIRE_DAYS);
+      const cutoffStr=cutoff.toISOString().slice(0,10);
+      const toExpire=notifs.filter(n=>n.read&&n.date&&n.date<cutoffStr);
+      for(const n of toExpire){ await fbDelete('notifications',n._id); }
+      return toExpire.length;
+    }catch(e){ return 0; }
   }
 };
 

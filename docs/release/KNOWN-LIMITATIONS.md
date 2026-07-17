@@ -1,21 +1,30 @@
-# KNOWN-LIMITATIONS.md — v1.0.0-rc1
+# KNOWN-LIMITATIONS.md -- v1.7.0 (Updated)
 
-**Every item below is a genuine, evidence-backed, carried-forward limitation -- none are new to this release cycle unless stated.**
+**Consolidates every genuine, evidence-backed limitation carried forward since v1.0.0-rc1, plus everything newly found or deferred through Sprints 9-14 and this release's own certification pass. Nothing below is invented; every item traces to a real discovery made and documented at the time.**
 
-## Structural (Pre-Existing, Accepted)
-- **Client-trusted permission model.** `can()` reads `localStorage` directly; there is no server-side authorization layer. This is the single largest architectural constraint in the codebase, by design (custom PIN auth, not Firebase Auth). Documented extensively in `docs/architecture/PRODUCTION-ARCHITECTURE-REVIEW.md`.
-- **No automated Firebase backup mechanism.** `sync-to-excel.js` is a manual, DevTools-console export tool, not a scheduled backup. Named as the most consequential open item at the original engineering certification; still open.
-- **Service Worker is built but deliberately inactive.** `sw.js`/`sw-register.js` are complete and correct but never registered -- a formal, documented decision, not an oversight.
-- **`bayan.html` and `activity.html`** remain outside the page-level permission-enforcement pass (the former has an unconfirmed init pattern; the latter is a confirmed pre-existing 0-byte file).
+## Structural (Pre-Existing, Accepted, Unchanged by This Release)
+- Client-trusted permission model. can() reads localStorage directly; no server-side authorization layer exists. Every permission check added across Sprints 9-14 (can('finance'), can('reports') on new pages/sections) uses this same, unchanged model -- not newly introduced by this release, not fixed by it either.
+- No automated Firebase backup mechanism. Still the most consequential structural gap, unchanged since the original certification.
+- Service Worker is built but deliberately inactive. Unchanged.
+- bayan.html and activity.html remain outside the page-level permission-enforcement pass. Unchanged.
+- fbGet() has no pagination. Still true; every new engine this release added (Analytics, Finance, Inventory) reads full collections, consistent with this pre-existing pattern, not a new instance of the limitation.
 
-## New This Release Cycle (Sprints 1-6)
-- **`fbGet()` has no pagination.** Every read fetches an entire collection. Harmless at current data volume; a real constraint if any single farm's history grows substantially over years (see `docs/architecture/SCALABILITY-REVIEW.md`).
-- **No compound cross-engine recommendations yet.** The Unified Decision Engine composes Health/Production/Task signals into one score, but does not yet generate a single narrative recommendation combining multiple engines' specific findings (e.g., "declining producer with an active weight-loss alert") -- each engine's evidence is listed separately, not synthesized into one sentence. Noted as a natural next step in `docs/features/UNIFIED-DECISION-ENGINE.md`.
-- **Ranking loops (dashboard "highest priority" lists) iterate over candidate animals sequentially**, not in parallel, and are only bounded by how many animals currently show a real signal (not the full herd) -- acceptable at current scale, worth revisiting if a farm's active-issue count grows into the hundreds.
-- **`media/logo.png` is 1.5MB**, unusually large for a web logo. Not fixed this cycle (image optimization was judged speculative cleanup, outside this release-hardening sprint's narrow mandate) -- flagged for a future, dedicated pass.
+## Newly Confirmed and Fixed by This Release
+- production.html/tasks.html unreachable navigation -- found and fixed (docs/release/REPOSITORY-DISCOVERY-v1.7.0.md).
+- import.html page-breaking syntax error -- a limitation named in VERIFIED_BACKLOG.md from an earlier session, re-confirmed still present, and fixed in this release (docs/release/UI-UX-CERTIFICATION-v1.7.0.md).
+
+## Newly Found, Documented, Deliberately Not Fixed (Real, Not Hidden)
+- A proven-dead backup file remains tracked in git: farm-apk/www/animal-detail.html.bak. Confirmed unreferenced anywhere in live code, for a second time across two separate sessions. Not removed in this release -- removing a tracked file is treated as a real repository change, and this release's own mandate was "no changes unless a real production blocker is proven." A stray, unreferenced file does not block production use. Flagged as the clearest candidate for a small, dedicated cleanup commit in a future cycle.
+- clearAllNotifs() bypasses the firebase.js abstraction, using a raw fetch() call with an always-undefined FB_SECRET. Functions correctly today only because Firebase rules are permissive regardless. Found in Sprint 9, unchanged since.
+- Notification deduplication is client-side and localStorage-based, not server-side -- a cleared browser or a different device could theoretically see a re-sent notification. Found and named in Sprint 9, unchanged since.
+- feed_consumption links to inventory_feeds by name, not ID. A pre-existing, deliberately deferred decision (confirmed via the code's own engineering comment) that Sprint 14 built its new stock-deduction logic to work with, not reverse.
+- No genuine per-animal feed cost or feed-efficiency ratio exists. feed_consumption is barn-level only; Sprint 13/14's Animal Detail sections say so explicitly in their own UI text rather than presenting an attribution the data cannot support.
+- No PDF export exists anywhere in this application. Confirmed absent as far back as Sprint 9, reconfirmed never added through Sprint 14. Excel and WhatsApp (and, for inventory specifically, CSV) remain the only real export mechanisms.
+- No budget-setting mechanism exists, so Sprint 13's finance notifications and Sprint 14's inventory notifications do not include a "budget overrun" trigger -- there is no budget anywhere to overrun. Confirmed absent, not silently worked around.
+- media/logo.png is 1.5MB. Unchanged since the original certification; still judged out of scope for a dedicated fix.
 
 ## Testing
-No automated tests exist for genuinely offline browser scenarios (network loss mid-write, browser restart with pending IndexedDB writes) -- these require live browser observation this sandboxed environment cannot provide, a limitation stated as far back as the original certification and still true.
+No automated tests exist for genuinely offline browser scenarios or real, network-connected Firebase behavior -- every test in this repository, across all 14+ sprints, runs against mocked fbGet/fbPost/fbPatch. This has been true since the original certification and remains true through this release.
 
 ## Recommendation
-None of the above are release blockers for the current single-farm, staff-operated deployment context this application was built for. Each is either a deliberate, reasoned tradeoff or a genuinely low-current-impact item with a clear, already-documented path forward.
+None of the above are release blockers for this application's single-farm, staff-operated deployment context. Each is either a deliberate, reasoned tradeoff, a genuinely low-current-impact item, or (for the two items fixed in this release) already resolved.

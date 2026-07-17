@@ -347,7 +347,7 @@ function renderDetail(s){
   // Render weights section after innerHTML
   var wSection=document.getElementById('weights-section');
   if(wSection){
-    var wHtml='<div id="unified-priority-detail-section"></div><div id="production-intelligence-detail-section"></div><div id="health-risk-section"></div><div id="weight-alerts-section"></div>';
+    var wHtml='<div id="animal-consumption-section"></div><div id="animal-financial-section"></div><div id="animal-forecast-section"></div><div id="animal-notifications-section"></div><div id="unified-priority-detail-section"></div><div id="production-intelligence-detail-section"></div><div id="health-risk-section"></div><div id="weight-alerts-section"></div>';
     wHtml+='<div class="d-flex justify-content-between align-items-center mb-3">'+
       '<h5 class="fw-bold mb-0"><i class="bi bi-speedometer2 me-2" style="color:var(--blue)"></i>متابعة الوزن ('+ar(weights.length)+')</h5>'+
       (can('animals')&&animal.status!=='dead'?'<button class="action-btn primary sm" onclick="openAddWeight()"><i class="bi bi-plus-lg"></i> إضافة وزن</button>':'')+
@@ -365,6 +365,14 @@ function renderDetail(s){
     // Sprint 5, Epic 5: ONE consolidated operational summary at the top,
     // composing the three sections above -- never recomputing them.
     if(window.renderUnifiedPriorityDetail) window.renderUnifiedPriorityDetail(animalId, animal.tag, animal.barn);
+    // Sprint 9: recent notifications for this specific animal.
+    if(window.renderAnimalNotifications) window.renderAnimalNotifications(animalId, animal.tag);
+    // v1.2: forecast section for this animal.
+    if(window.renderAnimalForecast) window.renderAnimalForecast(animalId, animal.tag, animal.barn);
+    // Sprint 13 (v1.6): financial history, admin-only (matches can('finance')).
+    if(window.renderAnimalFinancialHistory) window.renderAnimalFinancialHistory(animal);
+    // Sprint 14 (v1.7): feed & treatment consumption for this animal.
+    if(window.renderAnimalConsumption) window.renderAnimalConsumption(animal);
   }
 }
 
@@ -375,6 +383,159 @@ function renderDetail(s){
 // explicit line, per this sprint's own Phase 5 requirement) -- never
 // calls evaluateWeightAlert() itself, since that WRITES, and a passive
 // detail-page render must never trigger a write as a side effect.
+// Sprint 9: recent notifications for this specific animal. Only
+// notification types that carry structured animal_id/animal_tag fields
+// can be filtered this way -- honestly, that's currently just the
+// Operational Priority trigger (notifications-service.js). Older
+// trigger types (vaccination, breeding, inventory) embed the animal
+// reference in free text, not a structured field, and correctly won't
+// appear here -- not a bug, a real, named scope boundary.
+// v1.2: forecast section for this animal -- Weight, Health Risk, and
+// Production (where applicable) forecasts, each showing trend,
+// confidence, and the exact evidence the forecast functions themselves
+// return. No explanation is added here beyond what those functions
+// already provide -- no fabricated narrative.
+// Sprint 13 (v1.6): Financial History for this animal, admin-only
+// (mirrors can('finance') everywhere else in the app). Honest about a
+// real limitation confirmed in docs/features/FINANCE-DISCOVERY.md:
+// finance expense records carry no animal-level link, only barn --
+// so per-animal feed/medical cost is shown as a clearly-labeled
+// barn-level ESTIMATE, never presented as a precise per-animal figure.
+// Revenue (sold_price) is real and direct, not estimated.
+// Sprint 14 (v1.7): Feed & Treatment Consumption for this animal.
+// Treatments are real, per-animal (health.animal_tag is a real field).
+// Feed is honestly shown at the barn level -- feed_consumption carries
+// no animal-level link (docs/features/INVENTORY-DISCOVERY.md), so this
+// section says "for this barn," never implying per-animal precision
+// the data cannot support.
+window.renderAnimalConsumption=async function(animal){
+  var container=document.getElementById('animal-consumption-section');
+  if(!container) return;
+  try{
+    var results = await Promise.all([fbGet('health'), fbGet('feed_consumption')]);
+    var health=results[0]||[], consumption=results[1]||[];
+    var myTreatments = health.filter(function(h){return h.animal_tag===animal.tag;})
+      .sort(function(a,b){return (b.date||'').localeCompare(a.date||'');}).slice(0,5);
+    var barnConsumption = animal.barn ? consumption.filter(function(c){return c.barn===animal.barn;}) : [];
+    var thisMonth = new Date().toISOString().slice(0,7);
+    var barnMonthKg = barnConsumption.filter(function(c){return (c.date||'').startsWith(thisMonth);}).reduce(function(s,c){return s+(+c.quantity_kg||0);},0);
+    if(!myTreatments.length && !barnMonthKg) { container.innerHTML=''; return; }
+    var html='<div class="wonder-card p-3 mb-3"><h6 class="fw-bold mb-2"><i class="bi bi-clipboard2-pulse me-2" style="color:var(--orange)"></i>استهلاك العلف والعلاج</h6>';
+    if(myTreatments.length){
+      html+='<div class="mb-2"><small class="text-gray d-block mb-1">آخر العلاجات المُسجَّلة لهذا الحيوان</small>'+
+        myTreatments.map(function(h){return '<div style="font-size:.78rem">'+h.date+' — '+(h.medication||'—')+'</div>';}).join('')+'</div>';
+    }
+    if(animal.barn){
+      html+='<div class="text-gray" style="font-size:.78rem">استهلاك علف جمالون '+animal.barn+' هذا الشهر: '+ar(Math.round(barnMonthKg))+' كجم (على مستوى الجمالون بأكمله، لا يوجد تتبّع مباشر لكل حيوان)</div>';
+    }
+    html+='</div>';
+    container.innerHTML=html;
+  }catch(e){ container.innerHTML=''; }
+};
+
+window.renderAnimalFinancialHistory=async function(animal){
+  var container=document.getElementById('animal-financial-section');
+  if(!container||!can('finance')) return;
+  try{
+    var results = await Promise.all([fbGet('finance'), fbGet('animals')]);
+    var finance=results[0]||[], allAnimals=results[1]||[];
+    var revenue = animal.status==='sold' && animal.sold_price ? (+animal.sold_price) : null;
+
+    var barnAnimalCount = animal.barn ? allAnimals.filter(function(a){return a.barn===animal.barn && a.status==='alive';}).length : 0;
+    var barnExpenses = animal.barn ? finance.filter(function(f){return f.type==='expense' && f.barn===animal.barn;}) : [];
+    var barnFeedTotal = barnExpenses.filter(function(f){return f.category==='أعلاف ومواد تغذية';}).reduce(function(s,f){return s+(+f.amount||0);},0);
+    var barnMedTotal = barnExpenses.filter(function(f){return f.category==='أدوية وتحصينات';}).reduce(function(s,f){return s+(+f.amount||0);},0);
+    var estFeedPerAnimal = barnAnimalCount>0 ? barnFeedTotal/barnAnimalCount : null;
+    var estMedPerAnimal = barnAnimalCount>0 ? barnMedTotal/barnAnimalCount : null;
+    var estTotalCost = (estFeedPerAnimal||0)+(estMedPerAnimal||0);
+    var profitEstimate = revenue!==null ? revenue-estTotalCost : null;
+    var curr = (getSettings&&getSettings().currency)||'ج.م';
+
+    var fmt=function(v){return v===null?'—':ar(Math.round(v*100)/100).toLocaleString('ar-EG')+' '+curr;};
+    container.innerHTML='<div class="wonder-card p-3 mb-3"><h6 class="fw-bold mb-2"><i class="bi bi-cash-stack me-2" style="color:var(--green)"></i>التاريخ المالي</h6>'+
+      '<div class="row g-2 text-center mb-2">'+
+        '<div class="col-6 col-md-3"><small class="text-gray d-block">إيراد مُسجَّل</small><span class="fw-bold" style="color:var(--green)">'+fmt(revenue)+'</span></div>'+
+        '<div class="col-6 col-md-3"><small class="text-gray d-block">تقدير تكلفة علف (للجمالون)</small><span class="fw-bold">'+fmt(estFeedPerAnimal)+'</span></div>'+
+        '<div class="col-6 col-md-3"><small class="text-gray d-block">تقدير تكلفة دواء (للجمالون)</small><span class="fw-bold">'+fmt(estMedPerAnimal)+'</span></div>'+
+        '<div class="col-6 col-md-3"><small class="text-gray d-block">تقدير الربح</small><span class="fw-bold" style="color:'+(profitEstimate!==null&&profitEstimate<0?'var(--red)':'var(--green)')+'">'+fmt(profitEstimate)+'</span></div>'+
+      '</div>'+
+      '<div class="text-gray" style="font-size:.72rem">الإيراد رقم حقيقي (سعر البيع المُسجَّل). تكاليف العلف/الدواء تقديرية بمتوسط مصروفات الجمالون على عدد حيواناته -- لا يوجد تتبّع تكلفة مباشر لكل حيوان في السجلات المالية الحالية.</div>'+
+    '</div>';
+  }catch(e){ container.innerHTML=''; }
+};
+
+window.renderAnimalForecast=async function(animalId, animalTag, barn){
+  var container=document.getElementById('animal-forecast-section');
+  if(!container) return;
+  try{
+    var TREND_LABEL={rising:'تصاعدي',declining:'تنازلي',stable:'مستقر',improving:'تحسّن'};
+    var TREND_COLOR={rising:'var(--green)',declining:'var(--red)',stable:'var(--gray)',improving:'var(--green)'};
+    var CONF_LABEL={high:'عالية',medium:'متوسطة',low:'منخفضة'};
+    var sections=[];
+
+    if(window.forecastWeight){
+      var wf=await window.forecastWeight(animalId, animalTag);
+      if(wf&&wf.trend){
+        var wc=TREND_COLOR[wf.trend]||'var(--gray)';
+        sections.push('<div class="wonder-card p-3 mb-2" style="border-inline-start:3px solid '+wc+'">'+
+          '<div class="d-flex justify-content-between align-items-center"><strong style="font-size:.88rem">توقع الوزن</strong>'+
+          '<span class="type-badge" style="background:'+wc+'22;color:'+wc+';font-size:.68rem">'+(TREND_LABEL[wf.trend]||wf.trend)+' — ثقة '+(CONF_LABEL[wf.confidence]||wf.confidence)+'</span></div>'+
+          '<div class="text-gray mt-1" style="font-size:.78rem">بعد ٧ أيام: '+ar(wf.projected7)+' كجم | ١٤ يوم: '+ar(wf.projected14)+' كجم | ٣٠ يوم: '+ar(wf.projected30)+' كجم</div>'+
+          '<div class="text-gray mt-1" style="font-size:.72rem">'+wf.evidence.join(' — ')+'</div></div>');
+      }
+    }
+    if(window.forecastHealthRisk){
+      var hf=await window.forecastHealthRisk(animalId, animalTag, barn, 30);
+      if(hf&&hf.projectedScore>hf.currentScore){
+        sections.push('<div class="wonder-card p-3 mb-2" style="border-inline-start:3px solid var(--yellow)">'+
+          '<div class="d-flex justify-content-between align-items-center"><strong style="font-size:.88rem">توقع المخاطر الصحية (٣٠ يوم)</strong>'+
+          '<span class="type-badge" style="background:var(--yellow)22;color:var(--yellow);font-size:.68rem">ثقة '+(CONF_LABEL[hf.confidence]||hf.confidence)+'</span></div>'+
+          '<div class="text-gray mt-1" style="font-size:.78rem">الدرجة الحالية '+ar(hf.currentScore)+' ← المتوقعة '+ar(hf.projectedScore)+'/100</div>'+
+          '<div class="text-gray mt-1" style="font-size:.72rem">'+hf.evidence.join(' — ')+'</div></div>');
+      }
+    }
+    // Sprint 12 (v1.5): breeding-window prediction, reuses
+    // predictBreedingWindow() verbatim -- filters its herd-wide output
+    // for this specific animal, no new calculation.
+    if(window.predictBreedingWindow){
+      var allPreds = await window.predictBreedingWindow(null, null);
+      var mine = (allPreds||[]).find(function(p){return p.animalTag===animalTag;});
+      if(mine && mine.daysUntil>=0 && mine.daysUntil<=30){
+        sections.push('<div class="wonder-card p-3 mb-2" style="border-inline-start:3px solid var(--purple)">'+
+          '<div class="d-flex justify-content-between align-items-center"><strong style="font-size:.88rem">نافذة تكاثر متوقعة</strong>'+
+          '<span class="type-badge" style="background:var(--purple)22;color:var(--purple);font-size:.68rem">ثقة '+(CONF_LABEL[mine.confidence]||mine.confidence)+'</span></div>'+
+          '<div class="text-gray mt-1" style="font-size:.78rem">متوقع خلال '+ar(mine.daysUntil)+' يوم ('+mine.predictedDate+')، بناءً على متوسط دورة '+ar(mine.avgIntervalDays)+' يوم عبر '+ar(mine.birthCount)+' ولادات سابقة</div></div>');
+      }
+    }
+    container.innerHTML = sections.length ? '<div class="mb-3"><h6 class="fw-bold mb-2"><i class="bi bi-graph-up-arrow me-2" style="color:var(--blue)"></i>التوقعات</h6>'+sections.join('')+'</div>' : '';
+  }catch(e){ container.innerHTML=''; }
+};
+
+window.renderAnimalNotifications=async function(animalId, animalTag){
+  var container=document.getElementById('animal-notifications-section');
+  if(!container) return;
+  try{
+    var all=await fbGet('notifications');
+    var mine=(all||[]).filter(function(n){return n.animal_id===animalId||n.animal_tag===animalTag;})
+      .sort(function(a,b){return (b.created_at||'').localeCompare(a.created_at||'');});
+    if(!mine.length){ container.innerHTML=''; return; }
+    var TYPE_COLOR={danger:'var(--red)',warning:'var(--yellow)',info:'var(--blue)'};
+    var html='<div class="mb-3"><h6 class="fw-bold mb-2"><i class="bi bi-bell-fill me-2" style="color:var(--orange)"></i>الإشعارات الأخيرة ('+ar(mine.length)+')</h6>';
+    html+=mine.slice(0,5).map(function(n){
+      var c=TYPE_COLOR[n.type]||'var(--gray)';
+      return '<div class="wonder-card p-2 mb-2" style="border-inline-start:3px solid '+c+';opacity:'+(n.read?'.65':'1')+'">'+
+        '<div class="d-flex justify-content-between align-items-center">'+
+          '<span class="fw-bold" style="font-size:.82rem">'+(n.title||'—')+'</span>'+
+          (n.read?'<span class="type-badge badge-tarbiya" style="font-size:.6rem">مقروء</span>':'<span class="type-badge badge-yellow" style="font-size:.6rem">جديد</span>')+
+        '</div>'+
+        '<div class="text-gray mt-1" style="font-size:.74rem">'+(n.msg||'')+'</div>'+
+      '</div>';
+    }).join('');
+    html+='</div>';
+    container.innerHTML=html;
+  }catch(e){ container.innerHTML=''; }
+};
+
 window.renderUnifiedPriorityDetail=async function(animalId, animalTag, barn){
   var container=document.getElementById('unified-priority-detail-section');
   if(!container||!window.evaluateOperationalPriority) return;
@@ -677,6 +838,9 @@ window.submitAddWeight=async function(){
     // Sprint 2, Epic 2: attach weight intelligence -- additive only,
     // does not change the weight write or sync above. Never blocks on failure.
     if(window.evaluateWeightAlert){window.evaluateWeightAlert(animalId, animal.tag, animal.barn).catch(function(){});}
+    // Sprint 11 (v1.4): recommendation only -- Weight Intelligence (Sprint 2)
+    // already self-resolves, so there is no stale reminder to close here.
+    if(window.completeWorkflow){window.completeWorkflow('weight',{sourceId:animalId, animalId:animalId, animalTag:animal.tag, barn:animal.barn}).then(function(r){if(r&&r.recommendation&&r.recommendation.text&&r.recommendation.actionable!==false)toast('💡 '+r.recommendation.text,'info');}).catch(function(){});}
     renderDetail(getSettings());
   }catch(e){toast('فشل: '+e.message,'error');}
 };
@@ -726,15 +890,24 @@ window.submitAddMedication=async function(){
 function openRemoveAnimal(){
   showModal(`<div class="farm-modal" onclick="event.stopPropagation()">
     <h4 style="color:var(--red)"><i class="bi bi-exclamation-triangle"></i> إخراج الحيوان من القطيع</h4>
-    <label>سبب الإخراج</label><select class="field" id="r-reason"><option value="sale">بيع</option><option value="slaughter">ذبح</option><option value="death">نفوق</option></select>
+    <label>سبب الإخراج</label><select class="field" id="r-reason" onchange="window._toggleRemovePriceField()"><option value="sale">بيع</option><option value="slaughter">ذبح</option><option value="death">نفوق</option></select>
     <label>التاريخ</label><input type="date" class="field" id="r-date" value="${todayStr()}">
-    <label>ملاحظات (سعر البيع مثلاً)</label><textarea class="field" id="r-notes" rows="2"></textarea>
+    <div id="r-price-wrap"><label>سعر البيع (${getSettings().currency||'ج.م'})</label><input type="number" class="field" id="r-price" min="0" step="0.01" placeholder="0.00"></div>
+    <label>ملاحظات</label><textarea class="field" id="r-notes" rows="2"></textarea>
     <div class="alert-warning mt-3">⚠️ هذا الإجراء لا يمكن التراجع عنه. سيتم تحديث حالة الحيوان وفقاً للسبب المحدد.</div>
     <div class="d-flex gap-2 justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إلغاء</button><button class="action-btn danger" onclick="submitRemoveAnimal()">تأكيد الإخراج</button></div>
   </div>`);
 }
+// Sprint 13 (v1.6): dynamic show/hide, matching pages/finance.js's own
+// updateFinCats() pattern -- price is only meaningful for a real sale.
+window._toggleRemovePriceField=function(){
+  var wrap=document.getElementById('r-price-wrap');
+  if(wrap) wrap.style.display = document.getElementById('r-reason').value==='sale' ? '' : 'none';
+};
 window.submitRemoveAnimal=async function(){
   const reason=document.getElementById('r-reason').value;const date=document.getElementById('r-date').value;const notes=document.getElementById('r-notes').value.trim();
+  const priceInput = document.getElementById('r-price');
+  const price = (reason==='sale' && priceInput) ? (parseFloat(priceInput.value)||0) : 0;
   closeModal();toast('جاري الحفظ...','info');
   try{
     // Sale Source-of-Truth fix (Repository 5, Priority 1 follow-up): the
@@ -744,13 +917,29 @@ window.submitRemoveAnimal=async function(){
     // and slaughter keep their exact original update shape, untouched.
     var updates;
     if(reason==='sale'){
-      updates={status:'sold',sold_date:date,sold_price:null,sold_to:null,sold_notes:notes||null};
+      updates={status:'sold',sold_date:date,sold_price:price>0?price:null,sold_to:null,sold_notes:notes||null};
     }else{
       updates={status:'dead',removed_at:date,removal_reason:reason,removal_notes:notes};
       if(reason==='death')updates.died_at=date;
     }
     await fbPatch('animals',animalId,updates);
+    // Sprint 13 (v1.6): confirmed real gap (docs/features/FINANCE-DISCOVERY.md)
+    // -- this exact write path created no finance record at all, unlike
+    // animals.html's own sale flows. Same collection, same shape, same
+    // category constant those flows already use -- no new structure.
+    if(reason==='sale' && price>0){
+      await fbPost('finance',{date:date,type:'income',category:'بيع حيوانات',amount:price,description:'بيع '+(animal.tag||animalId)+(notes?' | '+notes:''),added_by:getUser()?.name||null});
+    }
     await logActivity('remove','animals',`إخراج #${animal.tag||animalId} — ${reason==='sale'?'بيع':reason==='slaughter'?'ذبح':'نفوق'}`);
+    // Sprint 11 (v1.4): closes EVERY open reminder task tied to this
+    // animal (vaccination/medication/birth follow-ups it may still have
+    // pending) -- confirmed as a genuine, complete automation gap
+    // (docs/features/WORKFLOW-DISCOVERY.md: sale/death had zero hooks
+    // before this sprint). Awaited directly (not fire-and-forget) since
+    // this page navigates away shortly after.
+    if(window.completeWorkflow){
+      try{ await window.completeWorkflow(reason==='sale'?'sale':'death', { sourceId:animalId, animalTag:animal.tag, salePrice:price>0?price:null }); }catch(e){}
+    }
     toast('تم إخراج الحيوان');
     setTimeout(()=>location.href='animals.html',1500);
   }catch(e){toast('فشل: '+e.message,'error');}
