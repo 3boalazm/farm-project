@@ -155,9 +155,9 @@ const ROLES={
 const ROLE_PERMS={
   admin:      ()=>true,
   supervisor: p=>!['users','finance','activity'].includes(p),
-  vet:        p=>['health','vaccine','breeding','dash','notifications','bayan'].includes(p),
+  vet:        p=>['health','breeding','dash','notifications','bayan'].includes(p),
   worker:     p=>['dash','animals','notifications','bayan'].includes(p),
-  visitor:    p=>['dash','animals','goats','sheep','bayan'].includes(p),
+  visitor:    p=>['dash','animals','bayan'].includes(p),
 };
 
 function can(page){

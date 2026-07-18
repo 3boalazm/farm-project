@@ -765,6 +765,7 @@ window.execBulk=async function(action,extra){
 // execBulkDo becomes a thin wrapper the same way execBulk's branches
 // did, without redesigning anything new.
 async function performBulkDelete(ids){
+  if(!can('admin')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return 0;}
   var ok=0;
   for(var i=0;i<ids.length;i++){try{await fbDelete('animals',ids[i]);ok++;}catch(e){}}
   await logActivity('delete','animals','حذف جماعي '+ar(ok)+' حيوان');
@@ -1110,6 +1111,7 @@ window.submitDeathSingle=async function(id){
   }catch(e){toast('فشل: '+e.message,'error');}
 };
 window.deleteAnimalFull=async function(id,labelEnc){
+  if(!can('admin')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return;}
   var lbl=decodeURIComponent(labelEnc);
   if(!confirm('حذف نهائي: '+lbl+'؟'))return;
   try{
@@ -1145,6 +1147,7 @@ window.openResetModal=function(){
   }));
 };
 window.submitReset=async function(){
+  if(!can('admin')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return;}
   if(document.getElementById('reset-all')?.checked){
     if(!confirm('مسح كل بيانات المزرعة نهائياً؟'))return;
     var conf=prompt('اكتب "تأكيد" للمتابعة:');

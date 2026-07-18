@@ -608,6 +608,7 @@ window.submitProd = async function() {
 };
 
 window.delProdRec = async function(id) {
+  if (!can('animals')) { toast('ليس لديك صلاحية لتنفيذ هذا الإجراء', 'error'); return; }
   if (!id || !confirm('حذف هذا السجل نهائياً؟')) return;
   try {
     await fbDelete('production_log', id);

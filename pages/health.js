@@ -162,6 +162,7 @@ window.completeHealth=async function(id){
 };
 
 window.delHealth=async function(id){
+  if(!can('admin')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return;}
   if(!confirm('حذف هذا السجل؟'))return;
   try{await fbDelete('health',id);await logActivity('delete','health','حذف سجل صحي');toast('تم الحذف');healthRecs=healthRecs.filter(r=>r._id!==id);renderHealthPage(getSettings());}
   catch(e){toast('فشل: '+e.message,'error');}

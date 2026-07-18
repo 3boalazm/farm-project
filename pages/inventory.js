@@ -308,6 +308,7 @@ window.submitInv=async function(type){
 };
 
 window.delInv=async function(type,id){
+  if(!can('inventory')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return;}
   if(!confirm('حذف هذا العنصر؟'))return;
   const fbTable={meds:'inventory_meds',feeds:'inventory_feeds',equip:'inventory_equipment'}[type];
   try{await fbDelete(fbTable,id);await logActivity('delete','inventory','حذف من المخزن');toast('تم الحذف');await loadInventory();renderInventoryPage(getSettings());}
@@ -501,6 +502,7 @@ window.logConsumption = async function() {
 };
 
 window.delConsumption = async function(id) {
+  if (!can('inventory')) { toast('ليس لديك صلاحية لتنفيذ هذا الإجراء', 'error'); return; }
   if (!id || !confirm('حذف هذا السجل؟')) return;
   try {
     await fbDelete('feed_consumption', id);

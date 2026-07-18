@@ -409,6 +409,7 @@ window.openResetDead=function(){
 };
 
 window.submitResetDead=async function(){
+  if(!can('admin')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return;}
   var opt=document.querySelector('input[name="reset-opt"]:checked');
   if(!opt){toast('اختر عملية أولاً','error');return;}
   var action=opt.value;

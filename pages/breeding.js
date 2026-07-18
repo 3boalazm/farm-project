@@ -129,6 +129,7 @@ window.markBorn=function(id){
 };
 
 window.delBreeding=async function(id){
+  if(!can('breeding')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return;}
   if(!confirm('حذف هذا السجل؟'))return;
   try{await fbDelete('breeding',id);await logActivity('delete','breeding','حذف سجل تكاثر');toast('تم الحذف');breedingRecs=breedingRecs.filter(r=>r._id!==id);renderBreedingPage(getSettings());}
   catch(e){toast('فشل: '+e.message,'error');}

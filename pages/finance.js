@@ -174,6 +174,7 @@ window.submitFin=async function(){
 };
 
 window.delFin=async function(id){
+  if(!can('finance')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return;}
   if(!confirm('حذف هذه المعاملة؟'))return;
   try{await fbDelete('finance',id);await logActivity('delete','finance','حذف معاملة مالية');toast('تم الحذف');finRecs=finRecs.filter(r=>r._id!==id);renderFinancePage(getSettings());}
   catch(e){toast('فشل: '+e.message,'error');}

@@ -845,6 +845,7 @@ window.submitAddWeight=async function(){
   }catch(e){toast('فشل: '+e.message,'error');}
 };
 window.delWeightByIdx=async function(idx){
+  if(!can('animals')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return;}
   var w=weights[idx];if(!w)return;
   try{
     await fbDelete('animals/'+animalId+'/weights',w._id);toast('تم الحذف');
@@ -856,6 +857,7 @@ window.delWeightByIdx=async function(idx){
   catch(e){toast('فشل','error');}
 };
 window.delWeight=async function(id){
+  if(!can('animals')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return;}
   try{
     await fbDelete('animals/'+animalId+'/weights',id);toast('تم الحذف');
     weights=weights.filter(function(w){return w._id!==id;});

@@ -104,7 +104,10 @@
 
     "activity_log": {
       ".read":  true,
-      ".write": true
+      ".write": true,
+      "$id": {
+        ".validate": "!data.exists()"
+      }
     },
 
     // ── Sensitive: Finance — write-only validated ─────────────

@@ -129,6 +129,7 @@ window.markDone=async function(id){
 };
 
 window.delVacc=async function(id){
+  if(!can('admin')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return;}
   if(!confirm('حذف هذا التحصين؟'))return;
   try{
     await fbDelete('vaccinations',id);
@@ -365,6 +366,7 @@ window.saveNewTpl = async function() {
 };
 
 window.deleteTpl = async function(btn) {
+  if(!can('health')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return;}
   var id = btn && btn.dataset ? btn.dataset.id : btn;
   if (!id || !confirm('حذف هذا القالب؟')) return;
   try { await fbDelete('vaccination_templates',id); toast('تم الحذف'); openTemplates(); }
