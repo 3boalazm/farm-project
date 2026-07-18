@@ -81,8 +81,8 @@ async function renderUsers(){
             <small class="text-gray">أُضيف ${u.created||'—'}</small>
           </div>
           <div class="d-flex gap-1">
-            <button class="icon-btn edit" onclick="event.stopPropagation();openEditUser('${u.id}')"><i class="bi bi-pencil"></i></button>
-            ${u.id!=='admin1'?`<button class="icon-btn del" onclick="event.stopPropagation();delUser('${u.id}')"><i class="bi bi-trash"></i></button>`:''}
+            <button class="icon-btn edit" onclick="event.stopPropagation();openEditUser('${u.id}')" aria-label="تعديل" title="تعديل"><i class="bi bi-pencil"></i></button>
+            ${u.id!=='admin1'?`<button class="icon-btn del" onclick="event.stopPropagation();delUser('${u.id}')" aria-label="حذف" title="حذف"><i class="bi bi-trash"></i></button>`:''}
           </div>
         </div>
       </div>

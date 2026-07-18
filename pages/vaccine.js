@@ -94,8 +94,8 @@ function renderVaccPage(s){
         </div>
         <div class="d-flex gap-2 flex-wrap flex-shrink-0">
           ${v.status!=='done'&&can('health')?`<button class="action-btn primary sm" aria-label="تعليم كمنجز" onclick="markDone('${v._id}')"><i class="bi bi-check-lg"></i> تنفيذ</button>`:''}
-          ${can('health')?`<button class="action-btn sm" onclick="openVaccModal('${v._id}')"><i class="bi bi-pencil"></i></button>`:''}
-          ${can('admin')?`<button class="action-btn danger sm" onclick="delVacc('${v._id}')"><i class="bi bi-trash"></i></button>`:''}
+          ${can('health')?`<button class="action-btn sm" onclick="openVaccModal('${v._id}')" aria-label="تعديل" title="تعديل"><i class="bi bi-pencil"></i></button>`:''}
+          ${can('admin')?`<button class="action-btn danger sm" onclick="delVacc('${v._id}')" aria-label="حذف" title="حذف"><i class="bi bi-trash"></i></button>`:''}
         </div>
       </div>
     </div>`;
@@ -232,7 +232,7 @@ window.openTemplates = async function() {
     next.setMonth(next.getMonth() + (t.interval_months||6));
     var nextStr = next.toISOString().slice(0,10);
     var delBtn = t.custom
-      ? '<button class="action-btn sm danger" data-id="' + (t._id||'') + '" onclick="deleteTpl(this)" style="padding:3px 8px"><i class="bi bi-trash"></i></button>'
+      ? '<button class="action-btn sm danger" data-id="' + (t._id||'') + '" onclick="deleteTpl(this)" style="padding:3px 8px" aria-label="حذف" title="حذف"><i class="bi bi-trash"></i></button>'
       : '';
     return '<div class="wonder-card mb-2 p-3">' +
       '<div class="d-flex justify-content-between align-items-start gap-2">' +

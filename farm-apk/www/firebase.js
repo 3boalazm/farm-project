@@ -292,7 +292,7 @@ async function fbGetSingle(path){
 }
 
 // جلب الطقس
-const WEATHER_API_KEY='2b08987a3d184056b13210204261205';
+const WEATHER_API_KEY=FARM_CONFIG.weatherApiKey;
 const FARM_LAT=30.95, FARM_LON=29.797;
 
 async function getWeather(){

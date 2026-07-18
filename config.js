@@ -29,4 +29,8 @@ const FARM_CONFIG = {
   pregnancyDays: 150,
   vaccinationAlertDays: 7,
   weaningDays: 60,
+
+  // مفتاح API للطقس (weatherapi.com / openweathermap.org)
+  // نقطة الحقن الوحيدة لهذا المفتاح — عدّل هنا فقط عند التدوير في الإنتاج
+  weatherApiKey: '2b08987a3d184056b13210204261205',
 };

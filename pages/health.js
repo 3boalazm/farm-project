@@ -117,7 +117,7 @@ function renderHealthPage(s){
           <small class="text-gray">${r.date||'—'} ${r.barn?`• ${r.barn}`:''}</small>
         </div>
         <div class="d-flex gap-2 flex-shrink-0">
-          ${r.status==='active'&&can('health')?`<button class="action-btn primary sm" onclick="event.stopPropagation();completeHealth('${r._id}')"><i class="bi bi-check-lg"></i></button>`:''}
+          ${r.status==='active'&&can('health')?`<button class="action-btn primary sm" onclick="event.stopPropagation();completeHealth('${r._id}')"><i class="bi bi-check-lg" aria-hidden="true"></i><span class="visually-hidden">إكمال العلاج</span></button>`:''}
           ${can('health')?`<button class="action-btn sm" onclick="event.stopPropagation();openHealthModal('${r._id}')"><i class="bi bi-pencil" aria-hidden="true"></i><span class="visually-hidden">تعديل</span></button>`:''}
           ${can('admin')?`<button class="action-btn danger sm" onclick="event.stopPropagation();delHealth('${r._id}')"><i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">حذف</span></button>`:''}
         </div>

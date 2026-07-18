@@ -186,7 +186,7 @@ function renderSpeciesSection(sp, icon, title, color, births, breedList){
       '<i class="bi bi-list-ul"></i> عرض القائمة</a>';
     if(can('admin')){
       html+='<button class="action-btn sm" style="background:rgba(33,150,243,.1);border-color:rgba(33,150,243,.35);color:var(--blue)" '+
-        'onclick="openBirthBreedEdit(\''+sp+'\',\''+encodeURIComponent(breed)+'\')">'+
+        'onclick="openBirthBreedEdit(\''+sp+'\',\''+encodeURIComponent(breed)+'\')" aria-label="تعديل" title="تعديل">'+
         '<i class="bi bi-pencil-square"></i></button>';
     }
     html+='</div>';

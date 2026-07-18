@@ -1,12 +1,14 @@
 # CONFIGURATION-SECURITY-REVIEW.md
 
-## The Known Finding — `firebase.js:399`
+## The Known Finding — `firebase.js:399` (relocated to `config.js` in the Phase 2 hygiene pass)
 
 ```
 const WEATHER_API_KEY='...' (redacted in this document; present in source as of this checkpoint)
 ```
 
 Used for two third-party calls: `weatherapi.com` and `openweathermap.org` (`firebase.js:405-406`), for the in-app weather display.
+
+**Update (Phase 2 quick win):** the literal key no longer lives inline in `firebase.js`. It has been moved into `FARM_CONFIG.weatherApiKey` in `config.js` (and its `farm-apk/www/config.js` mirror) — the same existing configuration mechanism already used for Firebase config, farm name, and breed lists. `firebase.js` now reads `WEATHER_API_KEY=FARM_CONFIG.weatherApiKey`. This is the "single configuration location" quick win, not the server-side proxy migration described below — that remains future work.
 
 ### Decision: **SAFE NOW**
 

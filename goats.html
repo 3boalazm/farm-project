@@ -116,7 +116,7 @@ function renderPage(){
     html+='<div class="d-flex gap-2 mt-2">';
     html+='<a href="animals.html?species=goat&breed='+encodeURIComponent(breed)+'" class="action-btn sm flex-grow-1" style="justify-content:center"><i class="bi bi-list-ul"></i> عرض القائمة</a>';
     if(can('admin')){
-      html+='<button class="action-btn sm" style="background:rgba(33,150,243,.1);border-color:rgba(33,150,243,.35);color:var(--blue)" onclick="openBreedEdit(\'goat\',\''+encodeURIComponent(breed)+'\')"><i class="bi bi-pencil-square"></i></button>';
+      html+='<button class="action-btn sm" style="background:rgba(33,150,243,.1);border-color:rgba(33,150,243,.35);color:var(--blue)" onclick="openBreedEdit(\'goat\',\''+encodeURIComponent(breed)+'\')" aria-label="تعديل السلالة" title="تعديل السلالة"><i class="bi bi-pencil-square"></i></button>';
     }
     html+='</div></div></div>';
   });

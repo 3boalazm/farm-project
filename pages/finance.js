@@ -93,8 +93,8 @@ function renderFinancePage(s){
       <td class="text-gray">${r.barn||'—'}</td>
       <td class="fw-bold ${r.type==='income'?'green-text':'accent-text'}">${r.type==='income'?'+':'-'}${(+r.amount||0).toLocaleString('ar-EG')}</td>
       <td><div class="d-flex gap-1">
-        <button class="icon-btn edit" onclick="openFinModal('${r._id}')"><i class="bi bi-pencil"></i></button>
-        <button class="icon-btn del" onclick="delFin('${r._id}')"><i class="bi bi-trash"></i></button>
+        <button class="icon-btn edit" onclick="openFinModal('${r._id}')" aria-label="تعديل" title="تعديل"><i class="bi bi-pencil"></i></button>
+        <button class="icon-btn del" onclick="delFin('${r._id}')" aria-label="حذف" title="حذف"><i class="bi bi-trash"></i></button>
       </div></td>
     </tr>`).join(''),
     paginationHtml: `<span class="text-gray" style="font-size:var(--text-xs)">الإجمالي المعروض: <span class="green-text fw-bold">+${recs.filter(r=>r.type==='income').reduce((t,r)=>t+(+r.amount||0),0).toLocaleString('ar-EG')}</span> / <span class="accent-text fw-bold">-${recs.filter(r=>r.type==='expense').reduce((t,r)=>t+(+r.amount||0),0).toLocaleString('ar-EG')}</span></span>`

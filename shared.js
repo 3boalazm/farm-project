@@ -124,7 +124,7 @@ function renderNavbar(activePage=''){
         <div><div class="fw-bold" style="font-size:1rem">${s.farmName}</div>
         <small style="color:${ROLES[u?.role||'admin']?.color}">${ROLES[u?.role||'admin']?.label}</small></div>
       </div>
-      <button class="sidebar-close" onclick="closeSidebar()"><i class="bi bi-x-lg"></i></button>
+      <button class="sidebar-close" onclick="closeSidebar()" aria-label="إغلاق القائمة" title="إغلاق القائمة"><i class="bi bi-x-lg"></i></button>
     </div>
     <nav class="sidebar-nav">
       <div class="sidebar-section-label">التنقل</div>
@@ -163,7 +163,7 @@ function renderNavbar(activePage=''){
         <button id="undo-btn" onclick="undoLast()" title="تراجع عن آخر عملية" style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:20px;color:var(--text-muted);padding:5px 12px;cursor:pointer;font-size:.8rem;display:flex;align-items:center;gap:5px;font-family:Cairo,sans-serif;transition:.2s;white-space:nowrap;opacity:0.5" id="undo-btn">
           <i class="bi bi-arrow-counterclockwise"></i>
         </button>
-        <button class="menu-btn" onclick="openSidebar()"><i class="bi bi-list"></i></button>
+        <button class="menu-btn" onclick="openSidebar()" aria-label="القائمة" title="القائمة"><i class="bi bi-list"></i></button>
       </div>
     </div>
   </nav>
@@ -678,7 +678,7 @@ window.openNotificationsPopup = async function(){
     '<div class="farm-modal wide" onclick="event.stopPropagation()" style="max-width:560px;max-height:88vh;overflow-y:auto">'+
       '<div class="d-flex justify-content-between align-items-center mb-3">'+
         '<h4 class="mb-0"><i class="bi bi-bell-fill accent-text me-2"></i>الإشعارات الذكية</h4>'+
-        '<button class="action-btn sm" onclick="closeModal()"><i class="bi bi-x-lg"></i></button>'+
+        '<button class="action-btn sm" onclick="closeModal()" aria-label="إغلاق" title="إغلاق"><i class="bi bi-x-lg"></i></button>'+
       '</div>'+
       '<div id="notif-modal-body" class="text-center py-4"><div class="spinner"></div></div>'+
     '</div>'

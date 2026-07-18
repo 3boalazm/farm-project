@@ -108,8 +108,8 @@ function renderBreedingPage(s){
           '</div>'+
           '<div class="d-flex gap-2 flex-shrink-0">'+
             (r.status==='pregnant'?'<button class="action-btn primary sm" onclick="markBorn(\''+r._id+'\')"><i class="bi bi-stars"></i> ولادة</button>':'')+
-            '<button class="action-btn sm" onclick="openBModal(\''+r._id+'\')"><i class="bi bi-pencil"></i></button>'+
-            '<button class="action-btn danger sm" onclick="delBreeding(\''+r._id+'\')"><i class="bi bi-trash"></i></button>'+
+            '<button class="action-btn sm" onclick="openBModal(\''+r._id+'\')" aria-label="تعديل" title="تعديل"><i class="bi bi-pencil"></i></button>'+
+            '<button class="action-btn danger sm" onclick="delBreeding(\''+r._id+'\')" aria-label="حذف" title="حذف"><i class="bi bi-trash"></i></button>'+
           '</div>'+
         '</div>'+
       '</div>';
