@@ -1,6 +1,6 @@
 {
   "name": "farm-bayan",
-  "version": "1.0.0",
+  "version": "1.7.0",
   "description": "نظام إدارة المزرعة — بيان",
   "engines": {
     "node": "24.x"

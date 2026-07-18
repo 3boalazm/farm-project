@@ -39,7 +39,6 @@ var FARM_NAV = [
     {href:'notifications.html', icon:'bi-bell-fill',        label:'الإشعارات'},
     {href:'tasks.html',         icon:'bi-check2-square',    label:'المهام'},
     {href:'assistant.html',     icon:'bi-robot',             label:'المساعد الذكي'},
-    {href:'activity.html',      icon:'bi-clock-history',    label:'سجل الأنشطة',         perm:'admin'},
     {href:'users.html',         icon:'bi-people-fill',      label:'المستخدمون',           perm:'users'},
     {href:'settings.html',      icon:'bi-gear-fill',        label:'الإعدادات'},
     {href:'farm-profile.html',  icon:'bi-building',         label:'ملف المزرعة'},

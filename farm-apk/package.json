@@ -1,6 +1,6 @@
 {
   "name": "farm-bayan-android",
-  "version": "1.0.0",
+  "version": "1.7.0",
   "description": "تطبيق بيان المزرعة — نسخة Android APK",
   "scripts": {
     "sync": "npx cap sync android",

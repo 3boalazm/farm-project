@@ -15,7 +15,7 @@ const FIREBASE_CONFIG = {
 // ── Firebase REST API (بدون أي library) ──────────────────
 const AR=['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
 const ar=n=>String(n??'').replace(/\d/g,d=>AR[+d]);
-const todayStr=()=>new Date().toISOString().slice(0,10);
+const todayStr=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
 function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
 
 // ── AUTH ─────────────────────────────────────────────────
