@@ -127,7 +127,7 @@ html.light-mode, html.light-mode, body.light-mode {
   --orange:#047857; --green:#065f46; --blue:#1d4ed8; --red:#b91c1c; --yellow:#b45309; --purple:#7c3aed; --gray:#4b5563;
   --card-bg:rgba(255,255,255,.72); --card-shadow:0 8px 24px rgba(15,23,42,.08);
   --nav-bg:rgba(255,255,255,.97); --nav-border:#e3e8f0;
-  --sb-bg:linear-gradient(180deg,#022c22,#065f46); --sb-border:#0a3d2c; --sb-hover:rgba(5,150,105,.07);
+  --sb-bg:linear-gradient(180deg,#fffde7,#fff9c4); --sb-border:#e6dfa0; --sb-hover:rgba(5,150,105,.07);
   --input-bg:#f4f6fb; --input-border:#d1d9e6;
   --modal-bg:#ffffff; --modal-backdrop:rgba(0,0,0,.5);
   --scroll-thumb:#c1c8d0; --toast-bg:#ffffff;
@@ -545,4 +545,3 @@ button:not([aria-label]):not([aria-labelledby]) > i:only-child::after {
 /* Animal Card (block layout — distinct from the existing flex-row .animal-row) */
 .animal-card-v2{background:var(--card-bg)!important;border:1px solid var(--border);border-radius:var(--radius-lg);padding:var(--space-3);box-shadow:var(--card-shadow);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);transition:.2s}
 .animal-card-v2:hover{border-color:var(--border-2);transform:translateY(-2px)}
-
