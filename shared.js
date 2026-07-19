@@ -224,14 +224,21 @@ function renderNavbarV2(activePage=''){
     if(!visible.length)return'';
     const hasActive=visible.some(function(p){return p.href===activePage;});
     const icon=_sectionIconsV2[section.section]||'bi-circle';
-    const links=visible.map(function(p){
+    const flyoutLinks=visible.map(function(p){
       return '<a href="'+p.href+'" class="rail-v2__flyout-link'+(activePage===p.href?' active':'')+'"><i class="bi '+p.icon+'"></i> '+p.label+'</a>';
+    }).join('');
+    const expandedLinks=visible.map(function(p){
+      return '<a href="'+p.href+'" class="rail-v2__expanded-link'+(activePage===p.href?' active':'')+'"><i class="bi '+p.icon+'"></i><span>'+p.label+'</span></a>';
     }).join('');
     return '<div class="rail-v2__item'+(hasActive?' has-active':'')+'" data-rail-section="'+i+'">'+
       '<button type="button" class="rail-v2__btn" onclick="toggleRailFlyout('+i+')" aria-label="'+section.section+'" title="'+section.section+'" data-hint="'+section.section+'"><i class="bi '+icon+'"></i></button>'+
       '<div class="rail-v2__flyout" id="rail-flyout-'+i+'">'+
         '<div class="rail-v2__flyout-label">'+section.section+'</div>'+
-        links+
+        flyoutLinks+
+      '</div>'+
+      '<div class="rail-v2__expanded-group">'+
+        '<div class="rail-v2__expanded-label">'+section.section+'</div>'+
+        expandedLinks+
       '</div>'+
     '</div>';
   }).join('');
@@ -246,7 +253,10 @@ function renderNavbarV2(activePage=''){
   <div class="rail-v2-backdrop" id="railV2Backdrop"></div>
 
   <aside class="rail-v2" aria-label="التنقل الرئيسي">
-    <div class="rail-v2__logo">${logoHtml}</div>
+    <div class="rail-v2__logo-row">
+      <button type="button" class="rail-v2__logo" onclick="revealRailExpandBtn()" aria-label="${s.farmName}">${logoHtml}</button>
+      <button type="button" class="rail-v2__expand-btn" id="railExpandBtn" onclick="toggleRailExpanded()" aria-label="توسيع القائمة" title="توسيع القائمة" data-hint="توسيع القائمة" hidden><i class="bi bi-chevron-double-left" id="railExpandIcon"></i></button>
+    </div>
     <nav class="rail-v2__nav">${railSections}</nav>
     <div class="rail-v2__bottom">
       <button class="rail-v2__btn" onclick="toggleTheme()" id="theme-toggle-btn" title="تبديل المظهر" data-hint="تبديل المظهر"><i class="bi bi-circle-half" id="theme-icon"></i></button>
@@ -288,6 +298,18 @@ document.addEventListener('click',function(e){
     document.querySelectorAll('.rail-v2__item.is-open').forEach(function(o){o.classList.remove('is-open');});
   }
 });
+
+function revealRailExpandBtn(){
+  var btn=document.getElementById('railExpandBtn');
+  if(btn) btn.hidden=!btn.hidden;
+}
+function toggleRailExpanded(){
+  var expanded=document.documentElement.getAttribute('data-rail-expanded')==='true';
+  document.documentElement.setAttribute('data-rail-expanded', expanded?'false':'true');
+  var icon=document.getElementById('railExpandIcon');
+  if(icon) icon.className='bi '+(expanded?'bi-chevron-double-left':'bi-chevron-double-right');
+  document.querySelectorAll('.rail-v2__item.is-open').forEach(function(o){o.classList.remove('is-open');});
+}
 
 function _isMobileNavV2(){ return window.matchMedia('(max-width:991px)').matches; }
 function closeRailDrawersMobileV2(){
