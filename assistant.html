@@ -83,7 +83,7 @@
       <div class="chat-messages" id="chat-messages">
         <div class="msg msg-system">
           مرحباً! أنا مساعدك الذكي 🐐 — أعرف بيانات مزرعتك الحقيقية وأستطيع الإجابة عليها.<br>
-          <span style="color:var(--yellow)">أضف مفتاح Grok (xAI) أولاً 🔑 ثم تحدث أو اكتب.</span>
+          <span style="color:var(--yellow)">أضف مفتاح Groq أولاً 🔑 ثم تحدث أو اكتب.</span>
         </div>
       </div>
 
@@ -122,13 +122,18 @@ var _farmData     = { animals:[], breeding:[], health:[], vaccines:[], finance:[
 var _farmContext  = '';  // built once, sent with every message
 var _shortcutsOpen = false;
 
-// ── xAI Grok config ──────────────────────────────────────
-// Model is overridable from the 🔑 modal and stored in localStorage:
-// xAI retires model slugs periodically, so a hardcoded-only name would
-// eventually break the assistant with no way for the user to fix it.
-var GROK_DEFAULT_MODEL = 'grok-4.5';
-var GROK_DIRECT_URL    = 'https://api.x.ai/v1/chat/completions';
-var GROK_PROXY_URL     = '/api/grok';
+// ── Groq (GroqCloud) config ──────────────────────────────
+// NOTE: Groq (console.groq.com — fast inference for open models),
+// NOT Groq. Similar names, different companies.
+// llama-3.3-70b-versatile is on Groq's PRODUCTION model list (not the
+// preview list, which they warn can be discontinued at short notice) and
+// is the strongest multilingual option there — this app's prompts and
+// user input are entirely Arabic, so multilingual quality matters more
+// than raw speed. Overridable from the 🔑 modal because Groq deprecates
+// model IDs over time.
+var GROQ_DEFAULT_MODEL = 'llama-3.3-70b-versatile';
+var GROQ_DIRECT_URL    = 'https://api.groq.com/openai/v1/chat/completions';
+var GROQ_PROXY_URL     = '/api/groq';
 
 // ── Boot ─────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async function() {
@@ -155,10 +160,10 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   // API key check
-  var savedKey = localStorage.getItem('farm_grok_key');
+  var savedKey = localStorage.getItem('farm_groq_key');
   var btn = document.getElementById('api-btn');
   if (savedKey && btn) { btn.style.background='rgba(0,230,118,.1)'; btn.style.borderColor='rgba(0,230,118,.3)'; btn.style.color='var(--green)'; }
-  if (!savedKey) setTimeout(function(){ addMsg('system','⚙️ أضف مفتاح Grok (xAI) بالضغط على 🔑 أعلاه للبدء.'); }, 800);
+  if (!savedKey) setTimeout(function(){ addMsg('system','⚙️ أضف مفتاح Groq بالضغط على 🔑 أعلاه للبدء.'); }, 800);
 
   buildShortcuts(s);
 });
@@ -364,11 +369,11 @@ window.sendMessage = async function() {
   var typing = addTyping();
 
   var s      = getSettings();
-  var apiKey = localStorage.getItem('farm_grok_key');
+  var apiKey = localStorage.getItem('farm_groq_key');
 
   if (!apiKey) {
     removeTyping();
-    addMsg('bot','⚙️ يرجى إضافة مفتاح Grok (xAI) — اضغط 🔑 أعلاه.');
+    addMsg('bot','⚙️ يرجى إضافة مفتاح Groq — اضغط 🔑 أعلاه.');
     return;
   }
 
@@ -405,39 +410,57 @@ window.sendMessage = async function() {
   _history.push({ role: 'user', content: text });
 
   try {
-    // xAI Grok — OpenAI-compatible /chat/completions.
-    // _history is ALREADY in {role,content} shape, so unlike Gemini it needs
-    // no per-message mapping; the system prompt is just the first message.
+    // Groq is OpenAI-compatible. _history is ALREADY in {role,content}
+    // shape, so unlike Gemini it needs no per-message mapping.
     var payload = {
-      model:       localStorage.getItem('farm_grok_model') || GROK_DEFAULT_MODEL,
+      model:       localStorage.getItem('farm_groq_model') || GROQ_DEFAULT_MODEL,
       messages:    [{ role: 'system', content: system }].concat(_history),
       max_tokens:  1000,
-      temperature: 0.1
+      temperature: 0.1,
+      // Groq supports OpenAI-style JSON mode. This prompt already demands
+      // JSON-only, and open models are markedly less disciplined about that
+      // than Gemini was, so enforcing it at the API level is worth it.
+      // Retried without this below if the selected model doesn't support it.
+      response_format: { type: 'json_object' }
     };
 
-    // Try the direct browser call first (mirrors how Gemini worked). If the
-    // browser blocks it (CORS shows up as a TypeError, NOT an HTTP status),
-    // retry through the same-origin Vercel proxy at /api/grok.js, which
-    // follows the existing api/claude.js pattern already in this repo.
-    var resp, usedProxy = false;
-    try {
-      resp = await fetch(GROK_DIRECT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
-        body: JSON.stringify(payload)
-      });
-    } catch (netErr) {
-      usedProxy = true;
-      resp = await fetch(GROK_PROXY_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-user-key': apiKey },
-        body: JSON.stringify(payload)
-      });
+    // Direct browser call first (mirrors how Gemini worked). If the browser
+    // blocks it — CORS surfaces as a TypeError, NOT an HTTP status — retry
+    // through the same-origin Vercel proxy at /api/groq.js, which follows
+    // the existing api/claude.js pattern already in this repo.
+    var usedProxy = false;
+    async function _send(p) {
+      var r;
+      try {
+        r = await fetch(GROQ_DIRECT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+          body: JSON.stringify(p)
+        });
+      } catch (netErr) {
+        usedProxy = true;
+        r = await fetch(GROQ_PROXY_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-user-key': apiKey },
+          body: JSON.stringify(p)
+        });
+      }
+      return { resp: r, data: await r.json() };
     }
 
-    var data = await resp.json();
+    var out = await _send(payload);
+
+    // If this model rejects JSON mode, drop it and try once more rather than
+    // failing outright — the regex extraction below already handles free text.
+    if (!out.resp.ok && /response_format|json_object|json mode/i.test(JSON.stringify(out.data && out.data.error || ''))) {
+      delete payload.response_format;
+      out = await _send(payload);
+    }
+
+    var resp = out.resp, data = out.data;
+
     // Status must be folded into the message BEFORE throwing: the error
-    // handler below matches on codes like 401/404/429, and xAI's own
+    // handler below matches on codes like 401/404/429, and Groq's own
     // error text does not always contain them.
     if (!resp.ok || data.error) {
       var em = (data.error && (data.error.message || data.error)) || 'unknown error';
@@ -468,17 +491,17 @@ window.sendMessage = async function() {
     var m = (e && e.message) ? e.message : String(e);
     var msg = '❌ ';
     if (/401|Unauthorized|incorrect.*api.*key|invalid.*api.*key|api.*key.*invalid/i.test(m))
-      msg += 'مفتاح Grok غلط أو منتهي — اضغط 🔑 وأدخل المفتاح الصحيح';
-    else if (/403|does not have access|not enabled/i.test(m))
-      msg += 'المفتاح مالوش صلاحية على الموديل ده — غيّر اسم الموديل من 🔑 أو فعّله من console.x.ai';
-    else if (/404|model.*not found|does not exist/i.test(m))
-      msg += 'اسم الموديل غلط أو اتشال — افتح 🔑 وغيّره (مثلاً grok-4.5 أو grok-4.3)';
-    else if (/429|rate.?limit|quota/i.test(m))
-      msg += 'تجاوزت حد الاستخدام. استنى شوية وحاول تاني.';
-    else if (/credit|billing|payment/i.test(m))
-      msg += 'رصيد حساب xAI خلص — اشحن من console.x.ai';
+      msg += 'مفتاح Groq غلط أو منتهي — اضغط 🔑 وأدخل المفتاح الصحيح';
+    else if (/403|does not have access|not enabled|permission/i.test(m))
+      msg += 'المفتاح مالوش صلاحية على الموديل ده — غيّر اسم الموديل من 🔑';
+    else if (/404|model.*not found|does not exist|decommissioned|deprecated/i.test(m))
+      msg += 'اسم الموديل غلط أو اتشال — افتح 🔑 وغيّره (مثلاً llama-3.3-70b-versatile أو openai/gpt-oss-120b)';
+    else if (/429|rate.?limit|quota|too many requests/i.test(m))
+      msg += 'تجاوزت حد الاستخدام المجاني. استنى شوية وحاول تاني.';
+    else if (/credit|billing|payment|insufficient/i.test(m))
+      msg += 'رصيد حساب Groq خلص — راجع console.groq.com';
     else if (/Failed to fetch|NetworkError|CORS/i.test(m))
-      msg += 'الاتصال بـ Grok اتمنع من المتصفح، والوسيط /api/grok مش متاح. ارفع api/grok.js على Vercel أو تأكد من الإنترنت.';
+      msg += 'الاتصال بـ Groq اتمنع من المتصفح، والوسيط /api/groq مش متاح. ارفع api/groq.js على Vercel أو تأكد من الإنترنت.';
     else msg += 'خطأ: ' + m;
     addMsg('bot', msg);
   }
@@ -687,24 +710,26 @@ window.showFarmContext = function() {
 };
 
 window.openApiSettings = function() {
-  var current = localStorage.getItem('farm_grok_key') || '';
-  var model   = localStorage.getItem('farm_grok_model') || GROK_DEFAULT_MODEL;
+  var current = localStorage.getItem('farm_groq_key') || '';
+  var model   = localStorage.getItem('farm_groq_model') || GROQ_DEFAULT_MODEL;
   showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:480px">' +
-    '<h4><i class="bi bi-key-fill" style="color:var(--yellow)"></i> مفتاح Grok API (xAI)</h4>' +
+    '<h4><i class="bi bi-key-fill" style="color:var(--yellow)"></i> مفتاح Groq API</h4>' +
     '<div class="mb-3 p-3" style="background:rgba(255,193,7,.07);border:1px solid rgba(255,193,7,.25);border-radius:10px;font-size:.83rem">' +
-      '<div class="fw-bold mb-2" style="color:var(--yellow)"><i class="bi bi-credit-card-fill me-1"></i>خدمة مدفوعة — بالاستهلاك</div>' +
+      '<div class="fw-bold mb-2" style="color:var(--yellow)"><i class="bi bi-lightning-charge-fill me-1"></i>فيه باقة مجانية — وسريع جداً</div>' +
       '<ol style="margin:0;padding-right:18px;line-height:2">' +
-        '<li>افتح <a href="https://console.x.ai" target="_blank" style="color:var(--blue)">console.x.ai</a></li>' +
-        '<li>اضغط <strong>API Keys</strong> ثم <strong>Create API key</strong></li>' +
+        '<li>افتح <a href="https://console.groq.com/keys" target="_blank" style="color:var(--blue)">console.groq.com/keys</a></li>' +
+        '<li>اضغط <strong>Create API Key</strong></li>' +
         '<li>انسخ المفتاح والصقه هنا</li>' +
       '</ol>' +
     '</div>' +
-    '<label>مفتاح Grok API</label>' +
-    '<input class="field" id="grok-key-input" type="password" value="' + current + '" placeholder="xai-...">' +
+    '<label>مفتاح Groq API</label>' +
+    '<input class="field" id="groq-key-input" type="password" value="' + current + '" placeholder="gsk_...">' +
     '<label class="mt-3">اسم الموديل</label>' +
-    '<input class="field" id="grok-model-input" type="text" value="' + model + '" placeholder="' + GROK_DEFAULT_MODEL + '">' +
+    '<input class="field" id="groq-model-input" type="text" value="' + model + '" placeholder="' + GROQ_DEFAULT_MODEL + '">' +
     '<div style="font-size:.75rem;color:var(--text-muted);margin-top:6px;line-height:1.6">' +
-      'xAI بتغيّر أسماء الموديلات من وقت للتاني. لو ظهرت رسالة إن الموديل مش موجود، غيّر الاسم هنا (مثلاً grok-4.5 أو grok-4.3) — راجع console.x.ai للقائمة الحالية.' +
+      'الافتراضي <strong>llama-3.3-70b-versatile</strong> — أفضل موديل إنتاجي على Groq للعربي. ' +
+      'بدائل: <strong>openai/gpt-oss-120b</strong> (أسرع وأرخص) أو <strong>llama-3.1-8b-instant</strong> (الأسرع، أقل دقة). ' +
+      'Groq بتوقف موديلات قديمة أحياناً — لو ظهرت رسالة إن الموديل مش موجود، غيّر الاسم هنا وراجع console.groq.com/docs/models.' +
     '</div>' +
     '<div class="d-flex gap-2 justify-content-end mt-3">' +
       '<button class="action-btn" onclick="closeModal()">إلغاء</button>' +
@@ -713,15 +738,15 @@ window.openApiSettings = function() {
 };
 
 window.saveApiKey = function() {
-  var key = document.getElementById('grok-key-input').value.trim();
+  var key = document.getElementById('groq-key-input').value.trim();
   if (!key) { toast('أدخل المفتاح','error'); return; }
-  var model = document.getElementById('grok-model-input').value.trim() || GROK_DEFAULT_MODEL;
-  localStorage.setItem('farm_grok_key', key);
-  localStorage.setItem('farm_grok_model', model);
+  var model = document.getElementById('groq-model-input').value.trim() || GROQ_DEFAULT_MODEL;
+  localStorage.setItem('farm_groq_key', key);
+  localStorage.setItem('farm_groq_model', model);
   closeModal();
   var btn = document.getElementById('api-btn');
   if (btn) { btn.style.background='rgba(0,230,118,.1)'; btn.style.borderColor='rgba(0,230,118,.3)'; btn.style.color='var(--green)'; }
-  toast('✅ تم حفظ مفتاح Grok');
+  toast('✅ تم حفظ مفتاح Groq');
 };
 
 window.showExamples = function() {
