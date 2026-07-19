@@ -118,7 +118,7 @@ var _history      = [];
 var _isRecording  = false;
 var _recognition  = null;
 var _pendingAction= null;
-var _farmData     = { animals:[], breeding:[], health:[], vaccines:[], finance:[], meds:[], feeds:[] };
+var _farmData     = { animals:[], breeding:[], health:[], vaccines:[], finance:[], meds:[], feeds:[], equipment:[], tasks:[], production:[] };
 var _farmContext  = '';  // built once, sent with every message
 var _shortcutsOpen = false;
 
@@ -147,12 +147,20 @@ document.addEventListener('DOMContentLoaded', async function() {
 
   // Load farm data
   try {
-    var [animals, breeding, health, vaccines, meds, feeds] = await Promise.all([
+    var _ok = function(p){ return p.catch(function(){ return []; }); };
+    var [animals, breeding, health, vaccines, meds, feeds, equipment, finance, tasks, production] = await Promise.all([
       fbGet('animals'), fbGet('breeding'), fbGet('health'),
-      fbGet('vaccinations'), fbGet('inventory_meds').catch(function(){return[];}),
-      fbGet('inventory_feeds').catch(function(){return[];})
+      fbGet('vaccinations'), _ok(fbGet('inventory_meds')),
+      _ok(fbGet('inventory_feeds')),
+      // Added: these were never fetched, which is why the assistant could not
+      // answer about stocked medicines, equipment, money, tasks or production.
+      // 'finance' was even declared in _farmData but never populated.
+      _ok(fbGet('inventory_equipment')), _ok(fbGet('finance')),
+      _ok(fbGet('daily_tasks')), _ok(fbGet('production_log'))
     ]);
-    _farmData = { animals:animals||[], breeding:breeding||[], health:health||[], vaccines:vaccines||[], meds:meds||[], feeds:feeds||[] };
+    _farmData = { animals:animals||[], breeding:breeding||[], health:health||[], vaccines:vaccines||[],
+                  meds:meds||[], feeds:feeds||[], equipment:equipment||[], finance:finance||[],
+                  tasks:tasks||[], production:production||[] };
     _farmContext = buildFarmContext(s);
     renderContextBar(s);
   } catch(e) {
@@ -208,15 +216,81 @@ function buildFarmContext(s) {
   var lowMeds  = d.meds.filter(function(m){ return +m.quantity <= +m.min_quantity && +m.min_quantity > 0; });
   var lowFeeds = d.feeds.filter(function(f){ return +f.quantity <= +f.min_quantity && +f.min_quantity > 0; });
 
+  // ── Itemised lists ────────────────────────────────────
+  // The previous version only ever named items that were BELOW minimum, so
+  // with healthy stock the model received the literal string "المخزن جيد"
+  // and no item names at all -- which is exactly why it could not answer
+  // "which medicine do we have for this diagnosis?". Caps keep the context
+  // bounded on a large farm; the model is told when a list was truncated.
+  var CAP = 60;
+  function _cap(arr, fmt) {
+    if (!arr || !arr.length) return 'لا يوجد';
+    var shown = arr.slice(0, CAP).map(fmt).join(' | ');
+    return shown + (arr.length > CAP ? ' … (' + (arr.length - CAP) + ' عنصر إضافي غير معروض)' : '');
+  }
+
+  var medsList = _cap(d.meds, function(m){
+    var d2 = m.expiry ? Math.ceil((new Date(m.expiry) - new Date()) / 86400000) : null;
+    return m.name
+      + ': ' + (m.quantity != null ? m.quantity : '?') + (m.unit ? ' ' + m.unit : '')
+      + (m.purpose ? ' — لـ' + m.purpose : '')
+      + (m.expiry ? ' — ينتهي ' + m.expiry + (d2 !== null && d2 < 0 ? ' (منتهي!)' : d2 !== null && d2 <= 30 ? ' (قارب الانتهاء)' : '') : '')
+      + (m.barn ? ' — ' + m.barn : '');
+  });
+
+  var feedsList = _cap(d.feeds, function(f){
+    return f.name + ': ' + (f.quantity != null ? f.quantity : '?') + (f.unit ? ' ' + f.unit : '')
+      + (f.cost_per_unit ? ' — ' + f.cost_per_unit + '/' + (f.unit || 'وحدة') : '');
+  });
+
+  var equipList = _cap(d.equipment, function(e){
+    var st = { working:'يعمل', broken:'معطل', maintenance:'صيانة' }[e.status] || e.status || '—';
+    return e.name + ' (' + st + ')' + (e.next_maintenance ? ' — صيانة قادمة ' + e.next_maintenance : '');
+  });
+
+  // Active treatments, with the actual diagnosis + medication used
+  var healthList = _cap(activeHealth, function(r){
+    return (r.animal_tag || r.animal_breed || '—')
+      + ': ' + (r.diagnosis || 'بدون تشخيص')
+      + (r.medication ? ' — دواء: ' + r.medication : '')
+      + (r.dosage ? ' (' + r.dosage + ')' : '')
+      + (r.withdrawal_end ? ' — سحب حتى ' + r.withdrawal_end : '');
+  });
+
+  // Pending tasks
+  var openTasks = d.tasks.filter(function(t){ return t.status !== 'done' && t.status !== 'completed'; });
+  var tasksList = _cap(openTasks, function(t){
+    return (t.title || '—') + (t.date ? ' (' + t.date + ')' : '') + (t.priority ? ' [' + t.priority + ']' : '');
+  });
+
+  // Production totals by type
+  var prodByType = {};
+  d.production.forEach(function(p){
+    if (!p.type) return;
+    prodByType[p.type] = (prodByType[p.type] || 0) + (+p.quantity || 0);
+  });
+  var prodList = Object.keys(prodByType).length
+    ? Object.keys(prodByType).map(function(k){ return k + ': ' + prodByType[k]; }).join(' | ')
+    : 'لا يوجد';
+
   // Finance
-  var inc = 0, exp = 0;
-  // (skip for brevity — not critical for chat)
+  var inc = d.finance.filter(function(r){ return r.type === 'income';  }).reduce(function(t,r){ return t + (+r.amount || 0); }, 0);
+  var exp = d.finance.filter(function(r){ return r.type === 'expense'; }).reduce(function(t,r){ return t + (+r.amount || 0); }, 0);
+  var expByCat = {};
+  d.finance.filter(function(r){ return r.type === 'expense'; }).forEach(function(r){
+    if (r.category) expByCat[r.category] = (expByCat[r.category] || 0) + (+r.amount || 0);
+  });
+  var expCatList = Object.keys(expByCat).length
+    ? Object.keys(expByCat).sort(function(a,b){ return expByCat[b] - expByCat[a]; })
+        .slice(0, 8).map(function(k){ return k + ': ' + expByCat[k]; }).join(' | ')
+    : 'لا يوجد';
 
   var ctx = [
     '=== بيانات المزرعة الحقيقية (محدّثة) ===',
     'اسم المزرعة: ' + s.farmName,
     'المالك: ' + (s.ownerName || '—'),
     'العملة: ' + s.currency,
+    'تاريخ اليوم: ' + today,
     '',
     '--- القطيع الحالي ---',
     'الإجمالي الأحياء: ' + alive.length + ' رأس',
@@ -232,14 +306,34 @@ function buildFarmContext(s) {
     upcomingBirths.length ? 'ولادات قادمة خلال 14 يوم: ' + upcomingBirths.length + ' (' + upcomingBirths.map(function(r){return (r.female_tag||r.female_breed||'—')+' في '+r.expected_birth;}).join(' | ') + ')' : 'لا توجد ولادات قريبة',
     '',
     '--- الصحة ---',
-    'قيد العلاج حالياً: ' + activeHealth.length + ' رأس' + (activeHealth.length ? ' (' + activeHealth.slice(0,3).map(function(r){return r.animal_tag||r.animal_breed||'—';}).join('، ') + ')' : ''),
+    'قيد العلاج حالياً: ' + activeHealth.length + ' رأس',
+    'تفاصيل الحالات النشطة: ' + healthList,
     withdrawal.length ? 'في فترة سحب علاج: ' + withdrawal.length + ' رأس — لا يجوز بيعها أو ذبحها' : 'لا توجد فترات سحب',
     '',
-    '--- التحصين والمخزن ---',
+    '--- التحصين ---',
     vaccOverdue.length  ? 'تحصينات متأخرة: ' + vaccOverdue.map(function(v){return v.name;}).join('، ')  : 'لا تحصينات متأخرة',
     vaccPending.length  ? 'تحصينات قادمة 7 أيام: ' + vaccPending.map(function(v){return v.name+' ('+v.scheduled_date+')';}).join('، ') : 'لا مواعيد قريبة',
-    lowMeds.length  ? 'أدوية عند الحد الأدنى: ' + lowMeds.map(function(m){return m.name;}).join('، ')  : 'المخزن جيد',
-    lowFeeds.length ? 'أعلاف عند الحد الأدنى: ' + lowFeeds.map(function(f){return f.name;}).join('، ') : '',
+    '',
+    '--- الصيدلية / الأدوية المتاحة بالمخزن (القائمة الكاملة) ---',
+    medsList,
+    lowMeds.length ? 'تنبيه — أدوية عند الحد الأدنى: ' + lowMeds.map(function(m){return m.name;}).join('، ') : 'كل الأدوية فوق الحد الأدنى',
+    '',
+    '--- الأعلاف بالمخزن (القائمة الكاملة) ---',
+    feedsList,
+    lowFeeds.length ? 'تنبيه — أعلاف عند الحد الأدنى: ' + lowFeeds.map(function(f){return f.name;}).join('، ') : 'كل الأعلاف فوق الحد الأدنى',
+    '',
+    '--- المعدات ---',
+    equipList,
+    '',
+    '--- الإنتاج (إجماليات حسب النوع) ---',
+    prodList,
+    '',
+    '--- المهام المفتوحة ---',
+    tasksList,
+    '',
+    '--- المالية ---',
+    'إجمالي الإيرادات: ' + inc + ' ' + s.currency + ' | إجمالي المصروفات: ' + exp + ' ' + s.currency + ' | الصافي: ' + (inc - exp) + ' ' + s.currency,
+    'أكبر بنود المصروفات: ' + expCatList,
     '',
     '--- السلالات المتاحة ---',
     'ماعز: ' + (s.goatBreeds||[]).join('، '),
@@ -272,12 +366,17 @@ window.refreshFarmData = async function() {
   document.getElementById('farm-ctx-bar').innerHTML = '<span class="text-gray"><div class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block"></div> جاري التحديث...</span>';
   var s = getSettings();
   try {
-    var [animals, breeding, health, vaccines, meds, feeds] = await Promise.all([
+    var _ok2 = function(p){ return p.catch(function(){ return []; }); };
+    var [animals, breeding, health, vaccines, meds, feeds, equipment, finance, tasks, production] = await Promise.all([
       fbGet('animals',true), fbGet('breeding',true), fbGet('health',true),
-      fbGet('vaccinations',true), fbGet('inventory_meds',true).catch(function(){return[];}),
-      fbGet('inventory_feeds',true).catch(function(){return[];})
+      fbGet('vaccinations',true), _ok2(fbGet('inventory_meds',true)),
+      _ok2(fbGet('inventory_feeds',true)),
+      _ok2(fbGet('inventory_equipment',true)), _ok2(fbGet('finance',true)),
+      _ok2(fbGet('daily_tasks',true)), _ok2(fbGet('production_log',true))
     ]);
-    _farmData = { animals:animals||[], breeding:breeding||[], health:health||[], vaccines:vaccines||[], meds:meds||[], feeds:feeds||[] };
+    _farmData = { animals:animals||[], breeding:breeding||[], health:health||[], vaccines:vaccines||[],
+                  meds:meds||[], feeds:feeds||[], equipment:equipment||[], finance:finance||[],
+                  tasks:tasks||[], production:production||[] };
     _farmContext = buildFarmContext(s);
     renderContextBar(s);
     toast('تم تحديث بيانات المزرعة');
