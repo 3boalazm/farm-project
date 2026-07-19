@@ -34,6 +34,7 @@
 .diary-tbl th.sub-f{color:var(--orange);font-size:.7rem;font-weight:700}
 .diary-tbl .row-tarbiya td{background:rgba(0,230,118,.025)}
 .diary-tbl .row-tasmeen td{background:rgba(255,107,53,.025)}
+.diary-tbl .row-births td{background:rgba(255,193,7,.05)}
 .diary-tbl .row-total td{background:rgba(255,107,53,.07);font-weight:800}
 .diary-tbl td.v-m{color:var(--blue);font-weight:600}
 .diary-tbl td.v-f{color:var(--orange);font-weight:600}
@@ -71,57 +72,62 @@
 // ── State ────────────────────────────────────────────
 var _allAnimals=[], _mode='view', _edits={};
 
-// ── Column schema (mirrors Excel exactly) ────────────
-// SHEEP cols: برقي | دودبر | ميت ماستر | مواليد(ولدات)
-// GOAT  cols: بور   | شامي  | بلدي      | مواليد(ولدات)
-// Each = {sp, breed, isBirths}
-var SHEEP_COLS=[
-  {sp:'sheep',breed:'برقي',      births:false},
-  {sp:'sheep',breed:'دودبر',     births:false},
-  {sp:'sheep',breed:'ميت ماستر', births:false},
-  {sp:'sheep',breed:'مواليد',    births:true},
-];
-var GOAT_COLS=[
-  {sp:'goat',breed:'بور',    births:false},
-  {sp:'goat',breed:'شامي',   births:false},
-  {sp:'goat',breed:'بلدي',   births:false},
-  {sp:'goat',breed:'مواليد', births:true},
-];
-var ALL_COLS=SHEEP_COLS.concat(GOAT_COLS);
+// ── Column schema ────────────────────────────────────
+// Breeds come from Settings (s.sheepBreeds / s.goatBreeds) rather than being
+// hardcoded here. The previous hardcoded list had 'دودبر' while Settings has
+// 'دوربر' — a two-letter transposition that silently sent every animal of
+// that breed into no column at all, which is why the grid total (٤٣٨) did
+// not match the real herd total (٤٤١).
+//
+// 'أخرى' is a read-only catch-all for any live animal whose breed is not in
+// Settings (renamed breeds, typos, legacy breed='مواليد' records). It exists
+// so the grid can never again silently hide animals. It is NOT editable,
+// because writing to it would create animals with a literal breed of 'أخرى'.
+var SHEEP_COLS=[], GOAT_COLS=[], ALL_COLS=[];
+function buildCols(s){
+  SHEEP_COLS=(s.sheepBreeds||[]).map(function(b){return {sp:'sheep',breed:b,other:false};});
+  SHEEP_COLS.push({sp:'sheep',breed:'أخرى',other:true});
+  GOAT_COLS=(s.goatBreeds||[]).map(function(b){return {sp:'goat',breed:b,other:false};});
+  GOAT_COLS.push({sp:'goat',breed:'أخرى',other:true});
+  ALL_COLS=SHEEP_COLS.concat(GOAT_COLS);
+}
+function knownBreeds(sp){
+  var cols=(sp==='sheep'?SHEEP_COLS:GOAT_COLS);
+  return cols.filter(function(c){return !c.other;}).map(function(c){return c.breed;});
+}
 
-// Purposes in Excel = تربية (row6) and تسمين (row7)
-// ولدات/مواليد animals (purpose='birth') are included in تربية row
-// (In Excel: ولدات col + تربية row = births for breeding, + تسمين row = births for fattening)
+// Rows are purpose-based. 'مواليد' used to be a COLUMN, which forced every
+// newborn to lose its breed. Moving it to a row (purpose='birth', which is
+// what it always was in the data) lets every breed show its own newborns
+// split into ذكور/إناث — and makes the row axis consistently "purpose".
 var ROWS=[
-  {id:'tarbiya', label:'تربية',  purposes:['tarbiya','birth'], cls:'row-tarbiya'},
-  {id:'tasmeen', label:'تسمين',  purposes:['tasmeen'],         cls:'row-tasmeen'},
+  {id:'tarbiya', label:'تربية',  purposes:['tarbiya'], cls:'row-tarbiya'},
+  {id:'tasmeen', label:'تسمين',  purposes:['tasmeen'], cls:'row-tasmeen'},
+  {id:'birth',   label:'مواليد', purposes:['birth'],   cls:'row-births'},
 ];
 
 // ── Helpers ──────────────────────────────────────────
 function alive(){return _allAnimals.filter(function(a){return a.status==='alive';});}
 
-// Count animals matching criteria (for regular breeds)
+// Count animals matching criteria.
 function count(sp, breed, purposeArr, gender){
-  if(breed==='مواليد'){
-    // مواليد column = purpose='birth' OR breed='مواليد'
+  if(breed==='أخرى'){
+    var known=knownBreeds(sp);
     return alive().filter(function(a){
       return a.species===sp &&
-             (a.breed==='مواليد' || a.purpose==='birth') &&
+             known.indexOf(a.breed)<0 &&
              purposeArr.indexOf(a.purpose)>=0 &&
              a.gender===gender;
     }).length;
   }
-  // For regular breeds: EXCLUDE purpose='birth' animals
-  // (birth animals go to مواليد column regardless of breed)
   return alive().filter(function(a){
     return a.species===sp && a.breed===breed &&
            purposeArr.indexOf(a.purpose)>=0 &&
-           a.purpose!=='birth' &&
            a.gender===gender;
   }).length;
 }
 
-// For footer/cards: count ALL مواليد animals (purpose='birth' OR breed='مواليد')
+// For footer/cards: count ALL مواليد animals (purpose='birth' OR legacy breed='مواليد')
 function countBirths(sp, gender){
   return alive().filter(function(a){
     return a.species===sp &&
@@ -191,6 +197,7 @@ function render(){
   var el=document.getElementById('diary-main');
   if(!el)return;
   var isEdit=_mode==='edit';
+  buildCols(getSettings());
 
   // ── Build the <table> ────────────────────────────
   var html='<div class="wonder-card">';
@@ -224,9 +231,8 @@ function render(){
   // Row 2: breed names
   html+='<tr>';
   ALL_COLS.forEach(function(col){
-    var cls=col.births?'hd-births':(col.sp==='sheep'?'hd-sheep':'hd-goat');
-    var label=col.births?'مواليد':col.breed;
-    html+='<th colspan="2" class="'+cls+'">'+label+'</th>';
+    var cls=col.other?'hd-births':(col.sp==='sheep'?'hd-sheep':'hd-goat');
+    html+='<th colspan="2" class="'+cls+'"'+(col.other?' title="سلالات غير مسجّلة في الإعدادات — للعرض فقط"':'')+'>'+col.breed+'</th>';
   });
   html+='</tr>';
   // Row 3: ذكور / إناث
@@ -236,7 +242,7 @@ function render(){
   });
   html+='</tr></thead><tbody>';
 
-  // ── Data rows: تربية & تسمين ────────────────────
+  // ── Data rows: تربية / تسمين / مواليد ───────────
   ROWS.forEach(function(row){
     var rowTotalM=0, rowTotalF=0;
     html+='<tr class="'+row.cls+'"><td class="v-label">'+row.label+'</td>';
@@ -246,7 +252,9 @@ function render(){
       rowTotalM+=vm; rowTotalF+=vf;
       var km=col.sp+'|'+col.breed+'|'+row.purposes.join(',')+'|male';
       var kf=col.sp+'|'+col.breed+'|'+row.purposes.join(',')+'|female';
-      if(isEdit){
+      // 'أخرى' stays read-only even in edit mode: an edit there would post a
+      // new animal with breed literally set to 'أخرى'.
+      if(isEdit && !col.other){
         html+='<td><input type="number" class="dc-inp'+(  _edits[km]!==undefined?' changed':'')+'" min="0" value="'+vm+'" data-key="'+km+'" onchange="onEdit(this)" oninput="onEdit(this)"></td>';
         html+='<td><input type="number" class="dc-inp'+(  _edits[kf]!==undefined?' changed':'')+'" min="0" value="'+vf+'" data-key="'+kf+'" onchange="onEdit(this)" oninput="onEdit(this)"></td>';
       } else {
@@ -257,21 +265,15 @@ function render(){
     html+='<td class="v-total">'+(rowTotal>0?ar(rowTotal):'—')+'</td></tr>';
   });
 
-  // ── إجمالي row = SUM(تربية+تسمين) per column ───
+  // ── إجمالي row = SUM(تربية+تسمين+مواليد) per column ───
   html+='<tr class="row-total"><td class="v-label">الإجمالي</td>';
   var grandTotal=0;
   ALL_COLS.forEach(function(col){
     var totalM=0, totalF=0;
-    if(col.births){
-      // مواليد column: sum all purpose='birth' + breed='مواليد' animals
-      totalM=countBirths(col.sp,'male');
-      totalF=countBirths(col.sp,'female');
-    } else {
-      ROWS.forEach(function(row){
-        totalM+=val(col.sp,col.breed,row.purposes,'male');
-        totalF+=val(col.sp,col.breed,row.purposes,'female');
-      });
-    }
+    ROWS.forEach(function(row){
+      totalM+=val(col.sp,col.breed,row.purposes,'male');
+      totalF+=val(col.sp,col.breed,row.purposes,'female');
+    });
     grandTotal+=totalM+totalF;
     html+='<td class="'+(totalM>0?'v-m':'v-zero')+'">'+(totalM>0?ar(totalM):'—')+'</td>';
     html+='<td class="'+(totalF>0?'v-f':'v-zero')+'">'+(totalF>0?ar(totalF):'—')+'</td>';
