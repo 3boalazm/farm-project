@@ -23,7 +23,7 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="page-wrap">
+<div class="page-wrap rail-v2-content">
   <div id="page-header"></div>
   <div id="push-permission-bar" style="display:none;background:rgba(255,193,7,.1);border:1px solid rgba(255,193,7,.3);border-radius:12px;padding:12px 18px;margin-bottom:16px">
     <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
@@ -55,7 +55,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   const s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
-  renderNavbar('notifications.html');
+  renderNavbarV2('notifications.html');
 
   // Check push permission status
   if('Notification' in window && Notification.permission==='default'){

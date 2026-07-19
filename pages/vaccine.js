@@ -6,13 +6,13 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   // SECURITY FIX (Phase 6 hardening): nav.js grants perm:'health', unenforced until now.
   if (!can('health')) {
     document.getElementById('content').innerHTML='<div class="empty-state"><i class="bi bi-shield-x"></i><p>غير مصرح بالوصول لبيانات التحصين</p></div>';
-    renderNavbar('vaccine.html');
+    renderNavbarV2('vaccine.html');
     return;
   }
   const s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
-  renderNavbar('vaccine.html');
+  renderNavbarV2('vaccine.html');
 
   // FAB for mobile
   addFAB('تحصين جديد', function(){ openVaccModal(); }, 'bi-bandaid-fill');

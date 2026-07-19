@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const s = getSettings();
   document.getElementById('footer-year').textContent = ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent = s.farmName;
-  renderNavbar('tasks.html');
+  renderNavbarV2('tasks.html');
   renderPageHeader(
     '<i class="bi bi-list-check accent-text"></i> المهام اليومية',
     'إدارة وتعيين المهام للعاملين',

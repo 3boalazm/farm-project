@@ -7,13 +7,13 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   // until now -- same bug class as vaccine.js, breeding.js, inventory.js.
   if (!can('health')) {
     document.getElementById('content').innerHTML='<div class="empty-state"><i class="bi bi-shield-x"></i><p>غير مصرح بالوصول لبيانات الصحة</p></div>';
-    renderNavbar('health.html');
+    renderNavbarV2('health.html');
     return;
   }
   const s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
-  renderNavbar('health.html');
+  renderNavbarV2('health.html');
 
   // FAB for mobile
   addFAB('تسجيل سجل صحي جديد', function(){ openAddHealth(); });

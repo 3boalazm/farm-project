@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const s = getSettings();
   document.getElementById('footer-year').textContent = ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent = s.farmName;
-  renderNavbar('analytics.html');
+  renderNavbarV2('analytics.html');
   renderRelatedLinks('analytics.js');
   renderPageHeaderV2({
     title: '<i class="bi bi-bar-chart-line-fill accent-text"></i> التحليلات',

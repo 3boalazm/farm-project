@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   const s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
-  renderNavbar('breeding.html');
+  renderNavbarV2('breeding.html');
 
   // FAB for mobile
   addFAB('تسجيل تقريع جديد', function(){

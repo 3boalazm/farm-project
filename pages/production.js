@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const s = getSettings();
   document.getElementById('footer-year').textContent = ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent = s.farmName;
-  renderNavbar('production.html');
+  renderNavbarV2('production.html');
   renderPageHeaderV2({
     title: '<i class="bi bi-droplet-fill accent-text"></i> إدارة الإنتاج',
     description: 'الحليب • الصوف • الأوزان',

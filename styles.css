@@ -446,6 +446,21 @@ html.light-mode .rail-v2__badge--peach{background:#fed7aa;color:#9a3412}
 .rail-v2-panel__avatar{width:44px;height:44px;border-radius:50%;background:#34d399;color:#022c22;display:flex;align-items:center;justify-content:center;font-weight:800;flex-shrink:0}
 .rail-v2-panel__actions{display:flex;gap:8px;margin-bottom:16px}
 
+.rail-v2-panel__info{background:var(--bg-3);border-radius:14px;padding:12px 14px;margin-bottom:18px;display:flex;flex-direction:column;gap:8px}
+.rail-v2-panel__info-row{display:flex;align-items:center;gap:9px;font-size:var(--text-sm);color:var(--text-sub)}
+.rail-v2-panel__info-row i{color:var(--text-muted);font-size:.95rem;flex-shrink:0}
+.rail-v2-panel__info-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.rail-v2-panel__section-label{font-size:var(--text-xs);color:var(--text-muted);font-weight:700;margin-bottom:8px;padding-inline-start:4px}
+.rail-v2-panel__links{display:flex;flex-direction:column;gap:3px;margin-bottom:20px}
+.rail-v2-panel__link{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;color:var(--text-sub);text-decoration:none;font-size:var(--text-sm);transition:background .2s,color .2s}
+.rail-v2-panel__link i{flex-shrink:0;font-size:.95rem}
+.rail-v2-panel__link:hover{background:var(--bg-hover);color:var(--text)}
+
+.rail-v2-panel__logout{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:10px;border-radius:12px;border:1px solid transparent;background:transparent;color:var(--red);font-family:'Cairo',sans-serif;font-size:var(--text-sm);font-weight:600;cursor:pointer;transition:background .2s,border-color .2s}
+.rail-v2-panel__logout:hover{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.3)}
+.rail-v2-panel__link:focus-visible,.rail-v2-panel__logout:focus-visible{outline:2px solid #34d399;outline-offset:2px}
+
 .rail-v2-backdrop{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:998;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .25s,visibility .25s}
 
 /* Light mode: var(--sb-bg) is a pale-yellow gradient designed for the

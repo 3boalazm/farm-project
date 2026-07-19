@@ -28,7 +28,7 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="page-wrap">
+<div class="page-wrap rail-v2-content">
   <div id="page-header"></div>
   <div id="content"></div>
   <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
@@ -54,7 +54,7 @@ document.addEventListener('DOMContentLoaded',async ()=>{
   const s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
-  renderNavbar('users.html');
+  renderNavbarV2('users.html');
   renderPageHeaderV2({
     title: '<i class="bi bi-people-fill accent-text"></i> إدارة المستخدمين',
     breadcrumb: [{label:'الرئيسية', href:'dashboard.html'}, {label:'المستخدمون'}],

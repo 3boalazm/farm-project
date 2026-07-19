@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const s = getSettings();
   document.getElementById('footer-year').textContent = ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent  = s.farmName;
-  renderNavbar('reports.html');
+  renderNavbarV2('reports.html');
   renderRelatedLinks('reports.js');
   renderPageHeaderV2({
     title: '<i class="bi bi-graph-up accent-text"></i> التقارير والإحصائيات',

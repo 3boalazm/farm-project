@@ -32,7 +32,7 @@
 <script src="shared.js"></script>
 </head>
 <body>
-<div class="page-wrap">
+<div class="page-wrap rail-v2-content">
   <div id="page-header"></div>
   <div id="content"></div>
 
@@ -42,7 +42,7 @@
 document.addEventListener('DOMContentLoaded', function(){
   if(!requireAuth())return;
   var s=getSettings();
-  renderNavbar('settings.html');
+  renderNavbarV2('settings.html');
   renderPageHeaderV2({
     title: '<i class="bi bi-gear-fill accent-text"></i> الإعدادات',
     breadcrumb: [{label:'الرئيسية', href:'dashboard.html'}, {label:'الإعدادات'}]

@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   const s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
-  renderNavbar('inventory.html');
+  renderNavbarV2('inventory.html');
 
   // FAB for mobile
   addFAB('إضافة للمخزن', function(){ openAddInv(); }, 'bi-plus-square-fill');

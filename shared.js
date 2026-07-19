@@ -250,6 +250,19 @@ function renderNavbarV2(activePage=''){
     '</div>';
   }).join('');
 
+  // Panel quick-links: a small, fixed shortlist of high-traffic
+  // destinations. Filtered through the SAME can() check the rail uses,
+  // and looked up FROM FARM_NAV rather than re-typed, so labels/icons
+  // can never drift out of sync with nav.js.
+  const _quickHrefs=['animals.html','births.html','health.html','tasks.html'];
+  const _navFlat=FARM_NAV.reduce(function(acc,sec){return acc.concat(sec.items);},[]);
+  const quickLinks=_quickHrefs.map(function(href){
+    const p=_navFlat.find(function(x){return x.href===href;});
+    if(!p) return '';
+    if(p.perm && !can(p.perm)) return '';
+    return '<a href="'+p.href+'" class="rail-v2-panel__link"><i class="bi '+_railStrokeIcon(p.icon)+'"></i><span>'+p.label+'</span></a>';
+  }).join('');
+
   const html=`
   <div class="rail-v2-mobile-bar">
     <button class="menu-btn" onclick="toggleRailDrawerMobile()" aria-label="القائمة" title="القائمة" data-hint="القائمة" id="railV2MobileMenuBtn"><i class="bi bi-list"></i></button>
@@ -282,9 +295,16 @@ function renderNavbarV2(activePage=''){
       <button id="undo-btn" onclick="undoLast()" title="تراجع عن آخر عملية" data-hint="تراجع عن آخر عملية" class="action-btn sm" style="flex:1;justify-content:center;opacity:.5"><i class="bi bi-arrow-counterclockwise"></i> تراجع</button>
     </div>
     <a href="assistant.html" class="action-btn primary sm" style="width:100%;justify-content:center;margin-bottom:16px" data-hint="اسأل المساعد الذكي"><i class="bi bi-robot"></i> المساعد الذكي</a>
-    <div style="font-size:.75rem;color:var(--text-muted);line-height:1.6">
-      هذه أول نسخة تجريبية من اللوحة الجانبية على لوحة التحكم فقط — محتوى إضافي قادم بعد المراجعة.
+
+    <div class="rail-v2-panel__info">
+      <div class="rail-v2-panel__info-row"><i class="bi bi-house-door"></i><span>${s.farmName}</span></div>
+      <div class="rail-v2-panel__info-row"><i class="bi bi-calendar3"></i><span>${todayAr()}</span></div>
     </div>
+
+    <div class="rail-v2-panel__section-label">اختصارات سريعة</div>
+    <div class="rail-v2-panel__links">${quickLinks}</div>
+
+    <button onclick="logout()" class="rail-v2-panel__logout" data-hint="تسجيل الخروج"><i class="bi bi-box-arrow-right"></i> تسجيل الخروج</button>
   </aside>
 
   <div id="toast-wrap"></div>

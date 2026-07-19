@@ -48,7 +48,7 @@
 </style>
 </head>
 <body>
-<div class="page-wrap" style="padding-bottom:0">
+<div class="page-wrap rail-v2-content" style="padding-bottom:0">
   <div id="page-header"></div>
 
   <div style="max-width:760px;margin:0 auto">
@@ -129,7 +129,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   var s = getSettings();
   document.getElementById('footer-year') && (document.getElementById('footer-year').textContent = ar(new Date().getFullYear()));
   document.getElementById('footer-farm') && (document.getElementById('footer-farm').textContent = s.farmName);
-  renderNavbar('assistant.html');
+  renderNavbarV2('assistant.html');
   renderPageHeader('<i class="bi bi-robot accent-text"></i> مساعد المزرعة الذكي', 'يقرأ بيانات مزرعتك ويساعدك في إدارتها', '');
 
   // Load farm data

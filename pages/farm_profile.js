@@ -4,7 +4,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   const s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
-  renderNavbar('farm-profile.html');
+  renderNavbarV2('farm-profile.html');
   const [animals,users]=await Promise.all([fbGet('animals'),fbGet('users')]);
   renderFarmProfile(s,animals,users);
 });

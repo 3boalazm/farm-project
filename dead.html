@@ -23,7 +23,7 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="page-wrap">
+<div class="page-wrap rail-v2-content">
   <div id="page-header"></div>
   <div id="content"><div class="text-center py-5"><div class="spinner"></div></div></div>
   <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
@@ -53,7 +53,7 @@ document.addEventListener('DOMContentLoaded', async function(){
   var s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
-  renderNavbar('dead.html');
+  renderNavbarV2('dead.html');
   renderPageHeader(
     '<i class="bi bi-x-octagon-fill" style="color:var(--red)"></i> النافق',
     'سجل حيوانات المزرعة النافقة',

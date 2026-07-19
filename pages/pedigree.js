@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const s = getSettings();
   document.getElementById('footer-year').textContent = ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent = s.farmName;
-  renderNavbar('pedigree.html');
+  renderNavbarV2('pedigree.html');
   renderPageHeader(
     '<i class="bi bi-diagram-3-fill accent-text"></i> شجرة النسب',
     'تتبع نسب الحيوانات — الأجداد والأبناء',
