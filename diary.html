@@ -22,39 +22,59 @@
 <link rel="apple-touch-icon" href="media/apple-touch-icon.png">
 <link rel="stylesheet" href="styles.css">
 <style>
-.diary-wrap{overflow-x:auto}
-.diary-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:.8rem;text-align:center;direction:rtl;min-width:700px}
-.diary-tbl th,.diary-tbl td{border:1px solid var(--border);padding:7px 8px;white-space:nowrap}
+/* This page only: the app-wide .page-wrap caps at 1200px, which was
+   cramping a table this wide (up to ~18 columns with 8 configured breeds).
+   Overriding just here — not touching styles.css — keeps every other page's
+   layout untouched. Source order (this tag loads after styles.css) plus
+   equal specificity means this wins without !important. */
+.page-wrap{max-width:1900px}
+
+.diary-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:16px}
+.diary-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:.83rem;text-align:center;direction:rtl;min-width:700px}
+.diary-tbl th,.diary-tbl td{border-left:1px solid var(--border);border-bottom:1px solid var(--border);padding:10px 12px;white-space:nowrap;transition:background .15s}
+.diary-tbl th{border-top:1px solid var(--border)}
+.diary-tbl tr th:first-child,.diary-tbl tr td:first-child{border-right:1px solid var(--border)}
+.diary-wrap{border-radius:16px;overflow:hidden}
 .diary-tbl thead th{background:var(--bg-3);font-weight:700;color:var(--text)}
-.diary-tbl th.hd-sheep{background:rgba(33,150,243,.1);color:var(--blue)}
-.diary-tbl th.hd-goat{background:rgba(0,230,118,.1);color:var(--green)}
+.diary-tbl th.hd-sheep{background:rgba(33,150,243,.1);color:var(--blue);font-size:.92rem}
+.diary-tbl th.hd-goat{background:rgba(0,230,118,.1);color:var(--green);font-size:.92rem}
+/* Visually separates the two species blocks beyond the shared 1px grid,
+   since these columns are otherwise easy to lose track of at this width. */
+.diary-tbl .col-boundary{border-right:2px solid var(--border-2)}
 .diary-tbl th.hd-births{background:rgba(255,193,7,.1);color:var(--yellow);font-weight:800}
 /* Each breed and its paired مواليد column share a tint, so a pair reads as
-   one group -- the same visual grouping the source Excel uses. */
+   one group -- the same visual grouping the source Excel uses. Carried down
+   into the body (not just the header) so scanning a row stays legible. */
 .diary-tbl th.hd-tint0{background:rgba(120,144,156,.13);color:var(--text-sub)}
 .diary-tbl th.hd-tint1{background:rgba(33,150,243,.11);color:var(--blue)}
 .diary-tbl th.hd-tint2{background:rgba(0,230,118,.11);color:var(--green)}
 .diary-tbl th.hd-tint3{background:rgba(255,193,7,.11);color:var(--yellow)}
-.diary-tbl th.hd-births-col{font-size:.66rem;font-weight:800;opacity:.95}
-.diary-tbl th.hd-total{background:rgba(255,107,53,.1);color:var(--orange)}
-.diary-tbl th.sub-m{color:var(--blue);font-size:.7rem;font-weight:700}
-.diary-tbl th.sub-f{color:var(--orange);font-size:.7rem;font-weight:700}
-.diary-tbl .row-tarbiya td{background:rgba(0,230,118,.025)}
-.diary-tbl .row-tasmeen td{background:rgba(255,107,53,.025)}
-.diary-tbl .row-total td{background:rgba(255,107,53,.07);font-weight:800}
+.diary-tbl td.bd-tint0{background:rgba(120,144,156,.045)}
+.diary-tbl td.bd-tint1{background:rgba(33,150,243,.04)}
+.diary-tbl td.bd-tint2{background:rgba(0,230,118,.04)}
+.diary-tbl td.bd-tint3{background:rgba(255,193,7,.045)}
+.diary-tbl th.hd-births-col{font-size:.68rem;font-weight:800;opacity:.95}
+.diary-tbl th.hd-total{background:rgba(255,107,53,.12);color:var(--orange)}
+.diary-tbl th.sub-m{color:var(--blue);font-size:.72rem;font-weight:700}
+.diary-tbl th.sub-f{color:var(--orange);font-size:.72rem;font-weight:700}
+.diary-tbl tbody tr:hover td{background-color:var(--bg-hover)}
+.diary-tbl .row-tarbiya td{background:rgba(0,230,118,.03)}
+.diary-tbl .row-tasmeen td{background:rgba(255,107,53,.03)}
+.diary-tbl .row-total td{background:rgba(255,107,53,.09);font-weight:800;border-top:2px solid rgba(255,107,53,.3)}
 .diary-tbl td.v-m{color:var(--blue);font-weight:600}
 .diary-tbl td.v-f{color:var(--orange);font-weight:600}
 .diary-tbl td.v-zero{color:var(--border-2)}
-.diary-tbl td.v-total{color:var(--orange);font-weight:800;font-size:.9rem}
-.diary-tbl td.v-label{text-align:right;font-weight:700;min-width:55px}
+.diary-tbl td.v-total,.diary-tbl th.hd-total{font-size:1rem}
+.diary-tbl td.v-total{color:var(--orange);font-weight:800;background:rgba(255,107,53,.05)}
+.diary-tbl td.v-label{text-align:right;font-weight:700;min-width:60px}
 /* Edit inputs */
-.dc-inp{width:44px;background:rgba(33,150,243,.08);border:1px solid rgba(33,150,243,.35);border-radius:6px;padding:3px 4px;color:var(--text);font-family:'Lexend',sans-serif;font-size:.82rem;text-align:center;outline:none}
+.dc-inp{width:48px;background:rgba(33,150,243,.08);border:1px solid rgba(33,150,243,.35);border-radius:7px;padding:4px 5px;color:var(--text);font-family:'Lexend',sans-serif;font-size:.84rem;text-align:center;outline:none}
 .dc-inp:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(33,150,243,.15)}
 .dc-inp.changed{background:rgba(255,193,7,.12);border-color:var(--yellow)}
 /* Summary cards */
-.diary-cards{display:flex;flex-wrap:wrap;gap:12px;margin-top:16px;justify-content:center}
-.diary-card{background:var(--card-bg);border:1px solid var(--border);border-radius:14px;padding:14px 20px;text-align:center;flex:1;min-width:140px;box-shadow:var(--card-shadow)}
-@media print{.no-print{display:none!important}.diary-tbl{font-size:.68rem}.page-wrap{padding:0}}
+.diary-cards{display:flex;flex-wrap:wrap;gap:14px;margin-top:20px;justify-content:center}
+.diary-card{background:var(--card-bg);border:1px solid var(--border);border-radius:16px;padding:18px 26px;text-align:center;flex:1;min-width:160px;box-shadow:var(--card-shadow)}
+@media print{.no-print{display:none!important}.diary-tbl{font-size:.68rem}.page-wrap{padding:0;max-width:none}}
 </style>
 </head>
 <body>
@@ -182,9 +202,10 @@ function val(sp, breed, isBirths, row, gender){
   return _edits[k]!==undefined ? _edits[k] : count(sp,breed,isBirths,row,gender);
 }
 
-function disp(v, cls){
-  if(v===0||v==='-'||v===null||v===undefined)return '<td class="v-zero">—</td>';
-  return '<td class="'+cls+'">'+ar(v)+'</td>';
+function disp(v, cls, extraCls){
+  extraCls = extraCls ? ' '+extraCls : '';
+  if(v===0||v==='-'||v===null||v===undefined)return '<td class="v-zero'+extraCls+'">—</td>';
+  return '<td class="'+cls+extraCls+'">'+ar(v)+'</td>';
 }
 
 // ── Init ─────────────────────────────────────────────
@@ -270,16 +291,18 @@ function render(){
   html+='</tr>';
   // Row 2: breed names — each breed followed by its own مواليد pair
   html+='<tr>';
-  ALL_COLS.forEach(function(col){
-    var cls='hd-tint'+col.tint+(col.births?' hd-births-col':'');
+  ALL_COLS.forEach(function(col,i){
+    var isFirstGoat=(i===SHEEP_COLS.length);
+    var cls='hd-tint'+col.tint+(col.births?' hd-births-col':'')+(isFirstGoat?' col-boundary':'');
     var label=(col.births?'مواليد ':'')+col.breed;
     html+='<th colspan="2" class="'+cls+'"'+(col.breed==='أخرى'?' title="سلالات غير مسجّلة في الإعدادات — للعرض فقط"':'')+'>'+label+'</th>';
   });
   html+='</tr>';
   // Row 3: ذكور / إناث
   html+='<tr>';
-  ALL_COLS.forEach(function(){
-    html+='<th class="sub-m">ذكور</th><th class="sub-f">إناث</th>';
+  ALL_COLS.forEach(function(col,i){
+    var b=(i===SHEEP_COLS.length)?' col-boundary':'';
+    html+='<th class="sub-m'+b+'">ذكور</th><th class="sub-f">إناث</th>';
   });
   html+='</tr></thead><tbody>';
 
@@ -287,19 +310,21 @@ function render(){
   ROWS.forEach(function(row){
     var rowTotalM=0, rowTotalF=0;
     html+='<tr class="'+row.cls+'"><td class="v-label">'+row.label+'</td>';
-    ALL_COLS.forEach(function(col){
+    ALL_COLS.forEach(function(col,i){
       var vm=val(col.sp,col.breed,col.births,row,'male');
       var vf=val(col.sp,col.breed,col.births,row,'female');
       rowTotalM+=vm; rowTotalF+=vf;
       var base=col.sp+'|'+col.breed+'|'+(col.births?'b':'n')+'|'+row.id+'|';
       var km=base+'male', kf=base+'female';
+      var tint='bd-tint'+col.tint;
+      var bMale=(i===SHEEP_COLS.length)?' col-boundary':'';
       // 'أخرى' stays read-only even in edit mode: an edit there would post a
       // new animal with breed literally set to 'أخرى'.
       if(isEdit && col.breed!=='أخرى'){
-        html+='<td><input type="number" class="dc-inp'+(  _edits[km]!==undefined?' changed':'')+'" min="0" value="'+vm+'" data-key="'+km+'" onchange="onEdit(this)" oninput="onEdit(this)"></td>';
-        html+='<td><input type="number" class="dc-inp'+(  _edits[kf]!==undefined?' changed':'')+'" min="0" value="'+vf+'" data-key="'+kf+'" onchange="onEdit(this)" oninput="onEdit(this)"></td>';
+        html+='<td class="'+tint+bMale+'"><input type="number" class="dc-inp'+(  _edits[km]!==undefined?' changed':'')+'" min="0" value="'+vm+'" data-key="'+km+'" onchange="onEdit(this)" oninput="onEdit(this)"></td>';
+        html+='<td class="'+tint+'"><input type="number" class="dc-inp'+(  _edits[kf]!==undefined?' changed':'')+'" min="0" value="'+vf+'" data-key="'+kf+'" onchange="onEdit(this)" oninput="onEdit(this)"></td>';
       } else {
-        html+=disp(vm,'v-m')+disp(vf,'v-f');
+        html+=disp(vm,'v-m',tint+bMale)+disp(vf,'v-f',tint);
       }
     });
     var rowTotal=rowTotalM+rowTotalF;
@@ -309,14 +334,15 @@ function render(){
   // ── إجمالي row = SUM(تربية+تسمين) per column ───
   html+='<tr class="row-total"><td class="v-label">الإجمالي</td>';
   var grandTotal=0;
-  ALL_COLS.forEach(function(col){
+  ALL_COLS.forEach(function(col,i){
     var totalM=0, totalF=0;
     ROWS.forEach(function(row){
       totalM+=val(col.sp,col.breed,col.births,row,'male');
       totalF+=val(col.sp,col.breed,col.births,row,'female');
     });
     grandTotal+=totalM+totalF;
-    html+='<td class="'+(totalM>0?'v-m':'v-zero')+'">'+(totalM>0?ar(totalM):'—')+'</td>';
+    var b=(i===SHEEP_COLS.length)?' col-boundary':'';
+    html+='<td class="'+(totalM>0?'v-m':'v-zero')+b+'">'+(totalM>0?ar(totalM):'—')+'</td>';
     html+='<td class="'+(totalF>0?'v-f':'v-zero')+'">'+(totalF>0?ar(totalF):'—')+'</td>';
   });
   html+='<td class="v-total" style="font-size:1rem">'+ar(grandTotal)+'</td></tr>';
@@ -338,12 +364,12 @@ function render(){
   var goatCols=GOAT_COLS.length*2;
   html+='<tr style="background:rgba(0,230,118,.07);font-weight:700">';
   html+='<td></td>';
-  html+='<td colspan="'+sheepCols+'" style="text-align:center;padding:9px;color:var(--blue)">';
+  html+='<td colspan="'+sheepCols+'" style="text-align:center;padding:12px;color:var(--blue)">';
   html+='إجمالي الأغنام: <strong style="font-size:1rem">'+ar(sheepTotal)+'</strong>';
   html+='&nbsp;|&nbsp; المواليد: <strong style="color:var(--yellow)">'+ar(sheepBirthsM+sheepBirthsF)+'</strong>';
   html+='<span style="font-size:.72rem;color:var(--text-muted);margin-right:4px">(ذ: '+ar(sheepBirthsM)+' | إ: '+ar(sheepBirthsF)+')</span>';
   html+='</td>';
-  html+='<td colspan="'+goatCols+'" style="text-align:center;padding:9px;color:var(--green)">';
+  html+='<td colspan="'+goatCols+'" class="col-boundary" style="text-align:center;padding:12px;color:var(--green)">';
   html+='إجمالي الماعز: <strong style="font-size:1rem">'+ar(goatTotal)+'</strong>';
   html+='&nbsp;|&nbsp; المواليد: <strong style="color:var(--yellow)">'+ar(goatBirthsM+goatBirthsF)+'</strong>';
   html+='<span style="font-size:.72rem;color:var(--text-muted);margin-right:4px">(ذ: '+ar(goatBirthsM)+' | إ: '+ar(goatBirthsF)+')</span>';
