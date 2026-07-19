@@ -238,38 +238,12 @@ function renderNavbarV2(activePage=''){
 
   const html=`
   <div class="rail-v2-mobile-bar">
-    <button class="menu-btn" onclick="openSidebar()" aria-label="القائمة" title="القائمة" data-hint="القائمة"><i class="bi bi-list"></i></button>
+    <button class="menu-btn" onclick="toggleRailDrawerMobile()" aria-label="القائمة" title="القائمة" data-hint="القائمة" id="railV2MobileMenuBtn"><i class="bi bi-list"></i></button>
     <span class="fw-bold">${s.farmName}</span>
-    <a href="notifications.html" class="bell-btn" id="bell-btn" style="text-decoration:none" title="الإشعارات" data-hint="الإشعارات"><i class="bi bi-bell-fill"></i><span class="bell-badge" id="bell-badge" style="display:none">0</span></a>
+    <button class="menu-btn" onclick="toggleRailPanel()" aria-label="لوحة المستخدم" title="لوحة المستخدم" data-hint="لوحة المستخدم" id="railV2MobilePanelBtn"><i class="bi bi-person-circle"></i></button>
   </div>
 
-  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
-  <aside class="sidebar-menu" id="sidebarMenu">
-    <div class="sidebar-header">
-      <div class="d-flex align-items-center gap-2">
-        <div class="farm-logo-sm">${logoHtml}</div>
-        <div><div class="fw-bold" style="font-size:1rem">${s.farmName}</div>
-        <small style="color:${ROLES[u?.role||'admin']?.color}">${ROLES[u?.role||'admin']?.label}</small></div>
-      </div>
-      <button class="sidebar-close" onclick="closeSidebar()" aria-label="إغلاق القائمة" title="إغلاق القائمة" data-hint="إغلاق القائمة"><i class="bi bi-x-lg"></i></button>
-    </div>
-    <nav class="sidebar-nav">
-      <div class="sidebar-section-label">التنقل</div>
-      ${NAV_PAGES.filter(p=>!p.perm||can(p.perm)).map(p=>`
-        <a href="${p.href}" class="sidebar-item${activePage===p.href?' active':''}">
-          <i class="bi ${p.icon}"></i> ${p.label}</a>`).join('')}
-      <div class="sidebar-divider"></div>
-      <button class="sidebar-item" onclick="logout()" style="color:var(--red)">
-        <i class="bi bi-box-arrow-left"></i> تسجيل الخروج</button>
-    </nav>
-    <div class="sidebar-footer">
-      <div class="d-flex align-items-center gap-3">
-        <div class="user-avatar">${(u?.name||'م').slice(0,1)}</div>
-        <div><div class="fw-bold">${u?.name||'مدير'}</div>
-        <small class="green-text"><i class="bi bi-circle-fill" style="font-size:7px"></i> متصل</small></div>
-      </div>
-    </div>
-  </aside>
+  <div class="rail-v2-backdrop" id="railV2Backdrop"></div>
 
   <aside class="rail-v2" aria-label="التنقل الرئيسي">
     <div class="rail-v2__logo">${logoHtml}</div>
@@ -288,7 +262,7 @@ function renderNavbarV2(activePage=''){
       <small style="color:${ROLES[u?.role||'admin']?.color}">${ROLES[u?.role||'admin']?.label}</small></div>
     </div>
     <div class="rail-v2-panel__actions">
-      <a href="notifications.html" class="action-btn sm" style="flex:1;justify-content:center" data-hint="الإشعارات"><i class="bi bi-bell-fill"></i> الإشعارات</a>
+      <a href="notifications.html" class="action-btn sm" style="flex:1;justify-content:center" data-hint="الإشعارات"><i class="bi bi-bell-fill"></i> الإشعارات<span class="bell-badge" id="bell-badge" style="display:none;position:static;margin-right:4px">0</span></a>
       <button id="undo-btn" onclick="undoLast()" title="تراجع عن آخر عملية" data-hint="تراجع عن آخر عملية" class="action-btn sm" style="flex:1;justify-content:center;opacity:.5"><i class="bi bi-arrow-counterclockwise"></i> تراجع</button>
     </div>
     <div style="font-size:.75rem;color:var(--text-muted);line-height:1.6">
@@ -314,15 +288,39 @@ document.addEventListener('click',function(e){
     document.querySelectorAll('.rail-v2__item.is-open').forEach(function(o){o.classList.remove('is-open');});
   }
 });
-document.addEventListener('keydown',function(e){
-  if(e.key==='Escape'){
-    document.querySelectorAll('.rail-v2__item.is-open').forEach(function(o){o.classList.remove('is-open');});
-  }
-});
+
+function _isMobileNavV2(){ return window.matchMedia('(max-width:991px)').matches; }
+function closeRailDrawersMobileV2(){
+  document.documentElement.setAttribute('data-rail-v2-mobile','closed');
+  document.documentElement.setAttribute('data-panel-v2-mobile','closed');
+}
+function toggleRailDrawerMobile(){
+  var open=document.documentElement.getAttribute('data-rail-v2-mobile')==='open';
+  closeRailDrawersMobileV2();
+  if(!open) document.documentElement.setAttribute('data-rail-v2-mobile','open');
+}
 function toggleRailPanel(){
+  if(_isMobileNavV2()){
+    var openM=document.documentElement.getAttribute('data-panel-v2-mobile')==='open';
+    closeRailDrawersMobileV2();
+    if(!openM) document.documentElement.setAttribute('data-panel-v2-mobile','open');
+    return;
+  }
   var open=document.documentElement.getAttribute('data-panel-v2')!=='closed';
   document.documentElement.setAttribute('data-panel-v2', open?'closed':'open');
 }
+document.addEventListener('click',function(e){
+  if(e.target && e.target.id==='railV2Backdrop') closeRailDrawersMobileV2();
+});
+window.addEventListener('resize',function(){
+  if(!_isMobileNavV2()) closeRailDrawersMobileV2();
+});
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'){
+    document.querySelectorAll('.rail-v2__item.is-open').forEach(function(o){o.classList.remove('is-open');});
+    closeRailDrawersMobileV2();
+  }
+});
 
 // ── Theme Toggle ────────────────────────────────────────
 // ── Lightweight notification badge ─────────────────────
