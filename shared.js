@@ -214,7 +214,8 @@ function renderNavbar(activePage=''){
 // var(--green) -- that variable is exactly what caused that bug
 // on this same permanently-dark rail surface.
 // ══════════════════════════════════════════════════════
-var _sectionIconsV2={'القطيع':'bi-list-ul','الصحة والإنتاج':'bi-heart-pulse-fill','المالية':'bi-wallet2','النظام':'bi-gear-fill'};
+var _sectionIconsV2={'القطيع':'bi-list-ul','الصحة والإنتاج':'bi-heart-pulse','المالية':'bi-wallet2','النظام':'bi-gear'};
+function _railStrokeIcon(icon){ return (icon||'').replace(/-fill$/,''); }
 function renderNavbarV2(activePage=''){
   const s=getSettings();const u=getUser();
   const logoHtml=s.logoUrl==='media/logo-icon.svg'?`<img class="logo-for-light" src="media/logo-icon.svg" alt=""><img class="logo-for-dark" src="media/logo-icon-dark.svg" alt="">`:s.logoUrl?`<img src="${s.logoUrl}" alt="">`:'🐐';
@@ -222,17 +223,29 @@ function renderNavbarV2(activePage=''){
   const railSections=FARM_NAV.map(function(section,i){
     const visible=section.items.filter(function(p){return !p.perm||can(p.perm);});
     if(!visible.length)return'';
+    const hasActive=visible.some(function(p){return p.href===activePage;});
+    const sectionIcon=_railStrokeIcon(_sectionIconsV2[section.section]||'bi-circle');
     const iconLinks=visible.map(function(p){
-      return '<a href="'+p.href+'" class="rail-v2__icon-link'+(activePage===p.href?' active':'')+'" aria-label="'+p.label+'" title="'+p.label+'" data-hint="'+p.label+'"><i class="bi '+p.icon+'"></i></a>';
+      return '<a href="'+p.href+'" class="rail-v2__icon-link'+(activePage===p.href?' active':'')+'" aria-label="'+p.label+'" title="'+p.label+'" data-hint="'+p.label+'"'+(activePage===p.href?' aria-current="page"':'')+'><i class="bi '+_railStrokeIcon(p.icon)+'"></i></a>';
     }).join('');
-    const expandedLinks=visible.map(function(p){
-      return '<a href="'+p.href+'" class="rail-v2__expanded-link'+(activePage===p.href?' active':'')+'"><i class="bi '+p.icon+'"></i><span>'+p.label+'</span></a>';
+    const childLinks=visible.map(function(p){
+      const isActive=activePage===p.href;
+      const badge=p.href==='notifications.html'?'<span class="rail-v2__badge rail-v2__badge--mint" id="railTreeBellBadge" style="display:none">0</span>':'';
+      return '<a href="'+p.href+'" class="rail-v2__child'+(isActive?' active':'')+'"'+(isActive?' aria-current="page"':'')+'>'+
+        '<i class="bi '+_railStrokeIcon(p.icon)+'"></i><span>'+p.label+'</span>'+badge+
+      '</a>';
     }).join('');
-    return '<div class="rail-v2__section" data-rail-section="'+i+'">'+
+    return '<div class="rail-v2__section'+(hasActive?' is-expanded':'')+'" data-rail-section="'+i+'">'+
       '<div class="rail-v2__icon-group">'+iconLinks+'</div>'+
       '<div class="rail-v2__expanded-group">'+
-        '<div class="rail-v2__expanded-label">'+section.section+'</div>'+
-        expandedLinks+
+        '<button type="button" class="rail-v2__parent" onclick="toggleRailSection('+i+')" aria-expanded="'+(hasActive?'true':'false')+'" aria-controls="rail-tree-'+i+'">'+
+          '<i class="bi '+sectionIcon+' rail-v2__parent-icon"></i>'+
+          '<span class="rail-v2__parent-label">'+section.section+'</span>'+
+          '<i class="bi bi-chevron-down rail-v2__parent-arrow"></i>'+
+        '</button>'+
+        '<div class="rail-v2__tree-wrap" id="rail-tree-'+i+'">'+
+          '<div class="rail-v2__tree-inner">'+childLinks+'</div>'+
+        '</div>'+
       '</div>'+
     '</div>';
   }).join('');
@@ -285,6 +298,15 @@ function toggleRailExpanded(){
   document.documentElement.setAttribute('data-rail-expanded', expanded?'false':'true');
 }
 
+function toggleRailSection(i){
+  var el=document.querySelector('.rail-v2__section[data-rail-section="'+i+'"]');
+  if(!el) return;
+  var btn=el.querySelector('.rail-v2__parent');
+  var willExpand=!el.classList.contains('is-expanded');
+  el.classList.toggle('is-expanded', willExpand);
+  if(btn) btn.setAttribute('aria-expanded', willExpand?'true':'false');
+}
+
 function _isMobileNavV2(){ return window.matchMedia('(max-width:991px)').matches; }
 function closeRailDrawersMobileV2(){
   document.documentElement.setAttribute('data-rail-v2-mobile','closed');
@@ -310,7 +332,7 @@ document.addEventListener('click',function(e){
   // Every nav link (collapsed icon, expanded label, or flyout-free mobile
   // list) closes any open mobile drawer immediately on click, rather than
   // relying solely on the page navigation that follows to make it "go away".
-  if(e.target.closest && e.target.closest('.rail-v2__icon-link, .rail-v2__expanded-link')) closeRailDrawersMobileV2();
+  if(e.target.closest && e.target.closest('.rail-v2__icon-link, .rail-v2__child')) closeRailDrawersMobileV2();
 });
 window.addEventListener('resize',function(){
   if(!_isMobileNavV2()) closeRailDrawersMobileV2();
@@ -1784,10 +1806,13 @@ window.getUnreadNotificationCount = async function(){
 window.updateGlobalBellBadge = async function(){
   try{
     const count = await window.getUnreadNotificationCount();
-    const b=document.getElementById('bell-badge');
-    if(!b) return;
-    if(count>0){ b.style.display='flex'; b.textContent=count>9?'9+':count; }
-    else { b.style.display='none'; }
+    const targets=['bell-badge','railTreeBellBadge'];
+    targets.forEach(function(id){
+      const b=document.getElementById(id);
+      if(!b) return;
+      if(count>0){ b.style.display='flex'; b.textContent=count>9?'9+':count; }
+      else { b.style.display='none'; }
+    });
   }catch(e){}
 };
 
