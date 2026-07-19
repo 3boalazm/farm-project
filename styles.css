@@ -370,7 +370,7 @@ html.light-mode, body.light-mode .farm-toast{box-shadow:0 6px 28px rgba(0,0,0,.1
 @keyframes slideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
 /* HINT */
 [data-hint]{cursor:help;position:relative}
-[data-hint]:hover::after{content:attr(data-hint);position:absolute;bottom:calc(100%+6px);right:50%;transform:translateX(50%);background:var(--bg-2);color:var(--text);padding:6px 10px;border-radius:8px;font-size:var(--text-xs);white-space:normal;max-width:220px;z-index:9999;pointer-events:none;border:1px solid var(--border);box-shadow:var(--card-shadow);line-height:1.5}
+[data-hint]:hover::after,[data-hint]:focus-visible::after{content:attr(data-hint);position:absolute;bottom:calc(100%+6px);right:50%;transform:translateX(50%);background:var(--bg-2);color:var(--text);padding:6px 10px;border-radius:8px;font-size:var(--text-xs);white-space:normal;max-width:220px;z-index:9999;pointer-events:none;border:1px solid var(--border);box-shadow:var(--card-shadow);line-height:1.5}
 
 /* ── PWA Install Button ────────────────────────────────── */
 #pwa-install-btn{display:none;align-items:center;gap:8px;padding:6px 14px;border-radius:9px;border:1px solid var(--green);background:rgba(52,211,153,.1);color:var(--green);cursor:pointer;font-size:var(--text-sm);font-weight:600;transition:.2s}
