@@ -222,20 +222,14 @@ function renderNavbarV2(activePage=''){
   const railSections=FARM_NAV.map(function(section,i){
     const visible=section.items.filter(function(p){return !p.perm||can(p.perm);});
     if(!visible.length)return'';
-    const hasActive=visible.some(function(p){return p.href===activePage;});
-    const icon=_sectionIconsV2[section.section]||'bi-circle';
-    const flyoutLinks=visible.map(function(p){
-      return '<a href="'+p.href+'" class="rail-v2__flyout-link'+(activePage===p.href?' active':'')+'"><i class="bi '+p.icon+'"></i> '+p.label+'</a>';
+    const iconLinks=visible.map(function(p){
+      return '<a href="'+p.href+'" class="rail-v2__icon-link'+(activePage===p.href?' active':'')+'" aria-label="'+p.label+'" title="'+p.label+'" data-hint="'+p.label+'"><i class="bi '+p.icon+'"></i></a>';
     }).join('');
     const expandedLinks=visible.map(function(p){
       return '<a href="'+p.href+'" class="rail-v2__expanded-link'+(activePage===p.href?' active':'')+'"><i class="bi '+p.icon+'"></i><span>'+p.label+'</span></a>';
     }).join('');
-    return '<div class="rail-v2__item'+(hasActive?' has-active':'')+'" data-rail-section="'+i+'">'+
-      '<button type="button" class="rail-v2__btn" onclick="toggleRailFlyout('+i+')" aria-label="'+section.section+'" title="'+section.section+'" data-hint="'+section.section+'"><i class="bi '+icon+'"></i></button>'+
-      '<div class="rail-v2__flyout" id="rail-flyout-'+i+'">'+
-        '<div class="rail-v2__flyout-label">'+section.section+'</div>'+
-        flyoutLinks+
-      '</div>'+
+    return '<div class="rail-v2__section" data-rail-section="'+i+'">'+
+      '<div class="rail-v2__icon-group">'+iconLinks+'</div>'+
       '<div class="rail-v2__expanded-group">'+
         '<div class="rail-v2__expanded-label">'+section.section+'</div>'+
         expandedLinks+
@@ -254,8 +248,7 @@ function renderNavbarV2(activePage=''){
 
   <aside class="rail-v2" aria-label="التنقل الرئيسي">
     <div class="rail-v2__logo-row">
-      <button type="button" class="rail-v2__logo" onclick="revealRailExpandBtn()" aria-label="${s.farmName}">${logoHtml}</button>
-      <button type="button" class="rail-v2__expand-btn" id="railExpandBtn" onclick="toggleRailExpanded()" aria-label="توسيع القائمة" title="توسيع القائمة" data-hint="توسيع القائمة" hidden><i class="bi bi-chevron-double-left" id="railExpandIcon"></i></button>
+      <button type="button" class="rail-v2__logo" onclick="toggleRailExpanded()" aria-label="${s.farmName} — توسيع/طي القائمة" title="توسيع/طي القائمة" data-hint="توسيع/طي القائمة">${logoHtml}</button>
     </div>
     <nav class="rail-v2__nav">${railSections}</nav>
     <div class="rail-v2__bottom">
@@ -287,29 +280,9 @@ function renderNavbarV2(activePage=''){
   if(window.updateGlobalBellBadge) window.updateGlobalBellBadge();
 }
 
-function toggleRailFlyout(i){
-  var el=document.querySelector('.rail-v2__item[data-rail-section="'+i+'"]');
-  if(!el)return;
-  var wasOpen=el.classList.contains('is-open');
-  document.querySelectorAll('.rail-v2__item.is-open').forEach(function(o){o.classList.remove('is-open');});
-  if(!wasOpen)el.classList.add('is-open');
-}
-document.addEventListener('click',function(e){
-  if(!e.target.closest||!e.target.closest('.rail-v2__item')){
-    document.querySelectorAll('.rail-v2__item.is-open').forEach(function(o){o.classList.remove('is-open');});
-  }
-});
-
-function revealRailExpandBtn(){
-  var btn=document.getElementById('railExpandBtn');
-  if(btn) btn.hidden=false;
-}
 function toggleRailExpanded(){
   var expanded=document.documentElement.getAttribute('data-rail-expanded')==='true';
   document.documentElement.setAttribute('data-rail-expanded', expanded?'false':'true');
-  var icon=document.getElementById('railExpandIcon');
-  if(icon) icon.className='bi '+(expanded?'bi-chevron-double-left':'bi-chevron-double-right');
-  document.querySelectorAll('.rail-v2__item.is-open').forEach(function(o){o.classList.remove('is-open');});
 }
 
 function _isMobileNavV2(){ return window.matchMedia('(max-width:991px)').matches; }
@@ -334,13 +307,16 @@ function toggleRailPanel(){
 }
 document.addEventListener('click',function(e){
   if(e.target && e.target.id==='railV2Backdrop') closeRailDrawersMobileV2();
+  // Every nav link (collapsed icon, expanded label, or flyout-free mobile
+  // list) closes any open mobile drawer immediately on click, rather than
+  // relying solely on the page navigation that follows to make it "go away".
+  if(e.target.closest && e.target.closest('.rail-v2__icon-link, .rail-v2__expanded-link')) closeRailDrawersMobileV2();
 });
 window.addEventListener('resize',function(){
   if(!_isMobileNavV2()) closeRailDrawersMobileV2();
 });
 document.addEventListener('keydown',function(e){
   if(e.key==='Escape'){
-    document.querySelectorAll('.rail-v2__item.is-open').forEach(function(o){o.classList.remove('is-open');});
     closeRailDrawersMobileV2();
   }
 });
