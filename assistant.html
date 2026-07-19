@@ -83,7 +83,7 @@
       <div class="chat-messages" id="chat-messages">
         <div class="msg msg-system">
           مرحباً! أنا مساعدك الذكي 🐐 — أعرف بيانات مزرعتك الحقيقية وأستطيع الإجابة عليها.<br>
-          <span style="color:var(--yellow)">أضف مفتاح Gemini المجاني أولاً 🔑 ثم تحدث أو اكتب.</span>
+          <span style="color:var(--yellow)">أضف مفتاح Grok (xAI) أولاً 🔑 ثم تحدث أو اكتب.</span>
         </div>
       </div>
 
@@ -122,6 +122,14 @@ var _farmData     = { animals:[], breeding:[], health:[], vaccines:[], finance:[
 var _farmContext  = '';  // built once, sent with every message
 var _shortcutsOpen = false;
 
+// ── xAI Grok config ──────────────────────────────────────
+// Model is overridable from the 🔑 modal and stored in localStorage:
+// xAI retires model slugs periodically, so a hardcoded-only name would
+// eventually break the assistant with no way for the user to fix it.
+var GROK_DEFAULT_MODEL = 'grok-4.5';
+var GROK_DIRECT_URL    = 'https://api.x.ai/v1/chat/completions';
+var GROK_PROXY_URL     = '/api/grok';
+
 // ── Boot ─────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async function() {
   if (!requireAuth()) return;
@@ -147,10 +155,10 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   // API key check
-  var savedKey = localStorage.getItem('farm_gemini_key');
+  var savedKey = localStorage.getItem('farm_grok_key');
   var btn = document.getElementById('api-btn');
   if (savedKey && btn) { btn.style.background='rgba(0,230,118,.1)'; btn.style.borderColor='rgba(0,230,118,.3)'; btn.style.color='var(--green)'; }
-  if (!savedKey) setTimeout(function(){ addMsg('system','⚙️ أضف مفتاح Gemini API بالضغط على 🔑 أعلاه للبدء.'); }, 800);
+  if (!savedKey) setTimeout(function(){ addMsg('system','⚙️ أضف مفتاح Grok (xAI) بالضغط على 🔑 أعلاه للبدء.'); }, 800);
 
   buildShortcuts(s);
 });
@@ -356,11 +364,11 @@ window.sendMessage = async function() {
   var typing = addTyping();
 
   var s      = getSettings();
-  var apiKey = localStorage.getItem('farm_gemini_key');
+  var apiKey = localStorage.getItem('farm_grok_key');
 
   if (!apiKey) {
     removeTyping();
-    addMsg('bot','⚙️ يرجى إضافة مفتاح Gemini API — اضغط 🔑 أعلاه.');
+    addMsg('bot','⚙️ يرجى إضافة مفتاح Grok (xAI) — اضغط 🔑 أعلاه.');
     return;
   }
 
@@ -397,20 +405,48 @@ window.sendMessage = async function() {
   _history.push({ role: 'user', content: text });
 
   try {
-    var geminiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=' + apiKey;
-    var resp = await fetch(geminiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: system }] },
-        contents: _history.map(function(m){ return { role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.content }] }; }),
-        generationConfig: { maxOutputTokens: 1000, temperature: 0.1 }
-      })
-    });
+    // xAI Grok — OpenAI-compatible /chat/completions.
+    // _history is ALREADY in {role,content} shape, so unlike Gemini it needs
+    // no per-message mapping; the system prompt is just the first message.
+    var payload = {
+      model:       localStorage.getItem('farm_grok_model') || GROK_DEFAULT_MODEL,
+      messages:    [{ role: 'system', content: system }].concat(_history),
+      max_tokens:  1000,
+      temperature: 0.1
+    };
+
+    // Try the direct browser call first (mirrors how Gemini worked). If the
+    // browser blocks it (CORS shows up as a TypeError, NOT an HTTP status),
+    // retry through the same-origin Vercel proxy at /api/grok.js, which
+    // follows the existing api/claude.js pattern already in this repo.
+    var resp, usedProxy = false;
+    try {
+      resp = await fetch(GROK_DIRECT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+        body: JSON.stringify(payload)
+      });
+    } catch (netErr) {
+      usedProxy = true;
+      resp = await fetch(GROK_PROXY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-key': apiKey },
+        body: JSON.stringify(payload)
+      });
+    }
+
     var data = await resp.json();
-    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-    var raw = data.candidates && data.candidates[0] && data.candidates[0].content
-      ? data.candidates[0].content.parts[0].text : '';
+    // Status must be folded into the message BEFORE throwing: the error
+    // handler below matches on codes like 401/404/429, and xAI's own
+    // error text does not always contain them.
+    if (!resp.ok || data.error) {
+      var em = (data.error && (data.error.message || data.error)) || 'unknown error';
+      if (typeof em !== 'string') em = JSON.stringify(em);
+      throw new Error('HTTP ' + resp.status + ' — ' + em + (usedProxy ? ' (عبر الوسيط)' : ''));
+    }
+
+    var raw = data.choices && data.choices[0] && data.choices[0].message
+      ? (data.choices[0].message.content || '') : '';
 
     removeTyping();
     _history.push({ role: 'assistant', content: raw });
@@ -429,12 +465,21 @@ window.sendMessage = async function() {
 
   } catch(e) {
     removeTyping();
+    var m = (e && e.message) ? e.message : String(e);
     var msg = '❌ ';
-    if (e.message.includes('API_KEY_INVALID') || e.message.includes('invalid'))
-      msg += 'مفتاح Gemini غلط — اضغط 🔑 وأدخل المفتاح الصحيح';
-    else if (e.message.includes('quota') || e.message.includes('RATE_LIMIT'))
-      msg += 'تجاوزت الحد المجاني. انتظر قليلاً ثم أعد المحاولة.';
-    else msg += 'خطأ: ' + e.message;
+    if (/401|Unauthorized|incorrect.*api.*key|invalid.*api.*key|api.*key.*invalid/i.test(m))
+      msg += 'مفتاح Grok غلط أو منتهي — اضغط 🔑 وأدخل المفتاح الصحيح';
+    else if (/403|does not have access|not enabled/i.test(m))
+      msg += 'المفتاح مالوش صلاحية على الموديل ده — غيّر اسم الموديل من 🔑 أو فعّله من console.x.ai';
+    else if (/404|model.*not found|does not exist/i.test(m))
+      msg += 'اسم الموديل غلط أو اتشال — افتح 🔑 وغيّره (مثلاً grok-4.5 أو grok-4.3)';
+    else if (/429|rate.?limit|quota/i.test(m))
+      msg += 'تجاوزت حد الاستخدام. استنى شوية وحاول تاني.';
+    else if (/credit|billing|payment/i.test(m))
+      msg += 'رصيد حساب xAI خلص — اشحن من console.x.ai';
+    else if (/Failed to fetch|NetworkError|CORS/i.test(m))
+      msg += 'الاتصال بـ Grok اتمنع من المتصفح، والوسيط /api/grok مش متاح. ارفع api/grok.js على Vercel أو تأكد من الإنترنت.';
+    else msg += 'خطأ: ' + m;
     addMsg('bot', msg);
   }
 };
@@ -642,19 +687,25 @@ window.showFarmContext = function() {
 };
 
 window.openApiSettings = function() {
-  var current = localStorage.getItem('farm_gemini_key') || '';
+  var current = localStorage.getItem('farm_grok_key') || '';
+  var model   = localStorage.getItem('farm_grok_model') || GROK_DEFAULT_MODEL;
   showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:480px">' +
-    '<h4><i class="bi bi-key-fill" style="color:var(--yellow)"></i> مفتاح Gemini API (مجاني)</h4>' +
+    '<h4><i class="bi bi-key-fill" style="color:var(--yellow)"></i> مفتاح Grok API (xAI)</h4>' +
     '<div class="mb-3 p-3" style="background:rgba(255,193,7,.07);border:1px solid rgba(255,193,7,.25);border-radius:10px;font-size:.83rem">' +
-      '<div class="fw-bold mb-2" style="color:var(--yellow)"><i class="bi bi-gift-fill me-1"></i>100% مجاني — 1500 طلب/يوم</div>' +
+      '<div class="fw-bold mb-2" style="color:var(--yellow)"><i class="bi bi-credit-card-fill me-1"></i>خدمة مدفوعة — بالاستهلاك</div>' +
       '<ol style="margin:0;padding-right:18px;line-height:2">' +
-        '<li>افتح <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--blue)">aistudio.google.com/app/apikey</a></li>' +
-        '<li>اضغط <strong>Create API key</strong></li>' +
+        '<li>افتح <a href="https://console.x.ai" target="_blank" style="color:var(--blue)">console.x.ai</a></li>' +
+        '<li>اضغط <strong>API Keys</strong> ثم <strong>Create API key</strong></li>' +
         '<li>انسخ المفتاح والصقه هنا</li>' +
       '</ol>' +
     '</div>' +
-    '<label>مفتاح Gemini API</label>' +
-    '<input class="field" id="gemini-key-input" type="password" value="' + current + '" placeholder="AIzaSy...">' +
+    '<label>مفتاح Grok API</label>' +
+    '<input class="field" id="grok-key-input" type="password" value="' + current + '" placeholder="xai-...">' +
+    '<label class="mt-3">اسم الموديل</label>' +
+    '<input class="field" id="grok-model-input" type="text" value="' + model + '" placeholder="' + GROK_DEFAULT_MODEL + '">' +
+    '<div style="font-size:.75rem;color:var(--text-muted);margin-top:6px;line-height:1.6">' +
+      'xAI بتغيّر أسماء الموديلات من وقت للتاني. لو ظهرت رسالة إن الموديل مش موجود، غيّر الاسم هنا (مثلاً grok-4.5 أو grok-4.3) — راجع console.x.ai للقائمة الحالية.' +
+    '</div>' +
     '<div class="d-flex gap-2 justify-content-end mt-3">' +
       '<button class="action-btn" onclick="closeModal()">إلغاء</button>' +
       '<button class="action-btn primary" onclick="saveApiKey()"><i class="bi bi-check-lg"></i> حفظ</button>' +
@@ -662,13 +713,15 @@ window.openApiSettings = function() {
 };
 
 window.saveApiKey = function() {
-  var key = document.getElementById('gemini-key-input').value.trim();
+  var key = document.getElementById('grok-key-input').value.trim();
   if (!key) { toast('أدخل المفتاح','error'); return; }
-  localStorage.setItem('farm_gemini_key', key);
+  var model = document.getElementById('grok-model-input').value.trim() || GROK_DEFAULT_MODEL;
+  localStorage.setItem('farm_grok_key', key);
+  localStorage.setItem('farm_grok_model', model);
   closeModal();
   var btn = document.getElementById('api-btn');
   if (btn) { btn.style.background='rgba(0,230,118,.1)'; btn.style.borderColor='rgba(0,230,118,.3)'; btn.style.color='var(--green)'; }
-  toast('✅ تم حفظ مفتاح Gemini');
+  toast('✅ تم حفظ مفتاح Grok');
 };
 
 window.showExamples = function() {
