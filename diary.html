@@ -83,12 +83,23 @@ var _allAnimals=[], _mode='view', _edits={};
 // Settings (renamed breeds, typos, legacy breed='مواليد' records). It exists
 // so the grid can never again silently hide animals. It is NOT editable,
 // because writing to it would create animals with a literal breed of 'أخرى'.
+// 'أخرى' is a catch-all for live animals whose breed cannot be resolved to
+// any breed in Settings (not even via mother_breed). It is rendered ONLY when
+// something actually falls into it, so on clean data it disappears entirely
+// — but it can never silently hide animals from the totals again.
 var SHEEP_COLS=[], GOAT_COLS=[], ALL_COLS=[];
 function buildCols(s){
   SHEEP_COLS=(s.sheepBreeds||[]).map(function(b){return {sp:'sheep',breed:b,other:false};});
-  SHEEP_COLS.push({sp:'sheep',breed:'أخرى',other:true});
   GOAT_COLS=(s.goatBreeds||[]).map(function(b){return {sp:'goat',breed:b,other:false};});
-  GOAT_COLS.push({sp:'goat',breed:'أخرى',other:true});
+  ALL_COLS=SHEEP_COLS.concat(GOAT_COLS);
+  // knownBreeds() reads from these arrays, so they must be populated before
+  // effBreed() is called to decide whether an 'أخرى' column is needed.
+  ['sheep','goat'].forEach(function(sp){
+    var orphan=alive().some(function(a){ return a.species===sp && effBreed(a)===null; });
+    if(!orphan) return;
+    var col={sp:sp,breed:'أخرى',other:true};
+    if(sp==='sheep') SHEEP_COLS.push(col); else GOAT_COLS.push(col);
+  });
   ALL_COLS=SHEEP_COLS.concat(GOAT_COLS);
 }
 function knownBreeds(sp){
@@ -96,50 +107,60 @@ function knownBreeds(sp){
   return cols.filter(function(c){return !c.other;}).map(function(c){return c.breed;});
 }
 
-// Rows are purpose-based. 'مواليد' used to be a COLUMN, which forced every
-// newborn to lose its breed. Moving it to a row (purpose='birth', which is
-// what it always was in the data) lets every breed show its own newborns
-// split into ذكور/إناث — and makes the row axis consistently "purpose".
+// A newborn is identified the SAME way the footer/dashboard already do it:
+// breed==='مواليد' OR purpose==='birth'. Most newborns in this database were
+// stored with the placeholder breed 'مواليد' and purpose 'tarbiya', so keying
+// only on purpose==='birth' finds almost none of them.
+function isBirthAnimal(a){ return a.breed==='مواليد' || a.purpose==='birth'; }
+
+// A newborn saved with the placeholder breed still carries its mother's breed
+// (createOffspringAnimal stores mother_breed), so the real breed is
+// recoverable instead of being lost. Returns null only when genuinely unknown.
+function effBreed(a){
+  var known=knownBreeds(a.species);
+  if(known.indexOf(a.breed)>=0) return a.breed;
+  if(a.mother_breed && known.indexOf(a.mother_breed)>=0) return a.mother_breed;
+  return null;
+}
+
+// Rows partition EVERY live animal exactly once, so the grid total can never
+// drift from the real herd total again. تربية is the fallback bucket.
 var ROWS=[
-  {id:'tarbiya', label:'تربية',  purposes:['tarbiya'], cls:'row-tarbiya'},
-  {id:'tasmeen', label:'تسمين',  purposes:['tasmeen'], cls:'row-tasmeen'},
-  {id:'birth',   label:'مواليد', purposes:['birth'],   cls:'row-births'},
+  {id:'tarbiya', label:'تربية',  cls:'row-tarbiya', writePurpose:'tarbiya',
+   match:function(a){ return !isBirthAnimal(a) && a.purpose!=='tasmeen'; }},
+  {id:'tasmeen', label:'تسمين',  cls:'row-tasmeen', writePurpose:'tasmeen',
+   match:function(a){ return !isBirthAnimal(a) && a.purpose==='tasmeen'; }},
+  {id:'birth',   label:'مواليد', cls:'row-births',  writePurpose:'birth',
+   match:isBirthAnimal},
 ];
+function rowById(id){ for(var i=0;i<ROWS.length;i++){ if(ROWS[i].id===id) return ROWS[i]; } return null; }
 
 // ── Helpers ──────────────────────────────────────────
 function alive(){return _allAnimals.filter(function(a){return a.status==='alive';});}
 
-// Count animals matching criteria.
-function count(sp, breed, purposeArr, gender){
-  if(breed==='أخرى'){
-    var known=knownBreeds(sp);
-    return alive().filter(function(a){
-      return a.species===sp &&
-             known.indexOf(a.breed)<0 &&
-             purposeArr.indexOf(a.purpose)>=0 &&
-             a.gender===gender;
-    }).length;
-  }
+// Single predicate used by BOTH the display and the edit/save path, so the
+// two can never disagree about which animals a cell represents.
+function matchAnimals(sp, breed, row, gender){
   return alive().filter(function(a){
-    return a.species===sp && a.breed===breed &&
-           purposeArr.indexOf(a.purpose)>=0 &&
-           a.gender===gender;
-  }).length;
+    if(a.species!==sp || a.gender!==gender) return false;
+    if(!row.match(a)) return false;
+    var eb=effBreed(a);
+    return breed==='أخرى' ? eb===null : eb===breed;
+  });
 }
+function count(sp, breed, row, gender){ return matchAnimals(sp,breed,row,gender).length; }
 
-// For footer/cards: count ALL مواليد animals (purpose='birth' OR legacy breed='مواليد')
+// For footer/cards: count ALL مواليد animals
 function countBirths(sp, gender){
   return alive().filter(function(a){
-    return a.species===sp &&
-           (a.breed==='مواليد' || a.purpose==='birth') &&
-           a.gender===gender;
+    return a.species===sp && isBirthAnimal(a) && a.gender===gender;
   }).length;
 }
 
 // Get value from _edits or live count
-function val(sp, breed, purposeArr, gender){
-  var k=sp+'|'+breed+'|'+purposeArr.join(',')+  '|'+gender;
-  return _edits[k]!==undefined ? _edits[k] : count(sp,breed,purposeArr,gender);
+function val(sp, breed, row, gender){
+  var k=sp+'|'+breed+'|'+row.id+'|'+gender;
+  return _edits[k]!==undefined ? _edits[k] : count(sp,breed,row,gender);
 }
 
 function disp(v, cls){
@@ -247,11 +268,11 @@ function render(){
     var rowTotalM=0, rowTotalF=0;
     html+='<tr class="'+row.cls+'"><td class="v-label">'+row.label+'</td>';
     ALL_COLS.forEach(function(col){
-      var vm=val(col.sp,col.breed,row.purposes,'male');
-      var vf=val(col.sp,col.breed,row.purposes,'female');
+      var vm=val(col.sp,col.breed,row,'male');
+      var vf=val(col.sp,col.breed,row,'female');
       rowTotalM+=vm; rowTotalF+=vf;
-      var km=col.sp+'|'+col.breed+'|'+row.purposes.join(',')+'|male';
-      var kf=col.sp+'|'+col.breed+'|'+row.purposes.join(',')+'|female';
+      var km=col.sp+'|'+col.breed+'|'+row.id+'|male';
+      var kf=col.sp+'|'+col.breed+'|'+row.id+'|female';
       // 'أخرى' stays read-only even in edit mode: an edit there would post a
       // new animal with breed literally set to 'أخرى'.
       if(isEdit && !col.other){
@@ -271,8 +292,8 @@ function render(){
   ALL_COLS.forEach(function(col){
     var totalM=0, totalF=0;
     ROWS.forEach(function(row){
-      totalM+=val(col.sp,col.breed,row.purposes,'male');
-      totalF+=val(col.sp,col.breed,row.purposes,'female');
+      totalM+=val(col.sp,col.breed,row,'male');
+      totalF+=val(col.sp,col.breed,row,'female');
     });
     grandTotal+=totalM+totalF;
     html+='<td class="'+(totalM>0?'v-m':'v-zero')+'">'+(totalM>0?ar(totalM):'—')+'</td>';
@@ -338,10 +359,10 @@ function render(){
 // ── Edit helpers ─────────────────────────────────────
 window.onEdit=function(inp){
   var k=inp.dataset.key;
-  var parts=k.split('|'); // sp|breed|purposes|gender
-  var sp=parts[0], breed=parts[1], purposeArr=parts[2].split(','), gender=parts[3];
+  var parts=k.split('|'); // sp|breed|rowId|gender
+  var row=rowById(parts[2]); if(!row) return;
   var newVal=parseInt(inp.value)||0;
-  var current=count(sp,breed,purposeArr,gender);
+  var current=count(parts[0],parts[1],row,parts[3]);
   if(newVal!==current){_edits[k]=newVal;inp.classList.add('changed');}
   else{delete _edits[k];inp.classList.remove('changed');}
 };
@@ -353,8 +374,8 @@ window.saveEdits=async function(){
   var adds=0,removes=0;
   keys.forEach(function(k){
     var parts=k.split('|');
-    var current=count(parts[0],parts[1],parts[2].split(','),parts[3]);
-    var diff=_edits[k]-current;
+    var row=rowById(parts[2]); if(!row) return;
+    var diff=_edits[k]-count(parts[0],parts[1],row,parts[3]);
     if(diff>0)adds+=diff; else removes+=Math.abs(diff);
   });
 
@@ -365,25 +386,25 @@ window.saveEdits=async function(){
 
   for(var k in _edits){
     var parts=k.split('|');
-    var sp=parts[0], breed=parts[1], purposeArr=parts[2].split(','), gender=parts[3];
+    var sp=parts[0], breed=parts[1], gender=parts[3];
+    var row=rowById(parts[2]); if(!row) continue;
     var desired=_edits[k];
-    var current=count(sp,breed,purposeArr,gender);
+    var current=count(sp,breed,row,gender);
     var diff=desired-current;
-    var mainPurpose=purposeArr[0];
 
     if(diff>0){
       for(var i=0;i<diff;i++){
         try{
-          await fbPost('animals',{species:sp,breed:breed,gender:gender,purpose:mainPurpose,
+          await fbPost('animals',{species:sp,breed:breed,gender:gender,purpose:row.writePurpose,
             status:'alive',tag:null,barn:null,birth_date:todayStr(),
             added_by:getUser()?.name,notes:'تمت الإضافة من يومية المزرعة'});
           totalAdded++;
         }catch(e){console.error(e);}
       }
     } else if(diff<0){
-      var toRemove=alive().filter(function(a){
-        return a.species===sp&&a.breed===breed&&purposeArr.indexOf(a.purpose)>=0&&a.gender===gender;
-      }).slice(0,Math.abs(diff));
+      // Same predicate as the cell's own display -- an edit can only ever
+      // affect the exact animals that cell is counting.
+      var toRemove=matchAnimals(sp,breed,row,gender).slice(0,Math.abs(diff));
       for(var j=0;j<toRemove.length;j++){
         try{
           await fbPatch('animals',toRemove[j]._id,{status:'dead',died_at:todayStr(),death_reason:'تعديل من يومية المزرعة'});
