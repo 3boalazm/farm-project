@@ -202,6 +202,128 @@ function renderNavbar(activePage=''){
   if(window.updateGlobalBellBadge) window.updateGlobalBellBadge();
 }
 
+// ══════════════════════════════════════════════════════
+// NAV RAIL V2 — pilot (dashboard.html only, opt-in). Purely
+// additive: renderNavbar() above is completely untouched, so
+// every other page is at zero risk from this. Reuses the exact
+// same FARM_NAV/can() permission filtering and the exact same
+// mobile off-canvas sidebar markup+IDs as the original -- only
+// the desktop-width visual shell (icon rail + right panel)
+// differs. Section colors use the fixed #34d399/#022c22 pair
+// from THEME-SWITCH-SIDEBAR-ACTIVE.md's proven fix, not
+// var(--green) -- that variable is exactly what caused that bug
+// on this same permanently-dark rail surface.
+// ══════════════════════════════════════════════════════
+var _sectionIconsV2={'القطيع':'bi-list-ul','الصحة والإنتاج':'bi-heart-pulse-fill','المالية':'bi-wallet2','النظام':'bi-gear-fill'};
+function renderNavbarV2(activePage=''){
+  const s=getSettings();const u=getUser();
+  const logoHtml=s.logoUrl==='media/logo-icon.svg'?`<img class="logo-for-light" src="media/logo-icon.svg" alt=""><img class="logo-for-dark" src="media/logo-icon-dark.svg" alt="">`:s.logoUrl?`<img src="${s.logoUrl}" alt="">`:'🐐';
+
+  const railSections=FARM_NAV.map(function(section,i){
+    const visible=section.items.filter(function(p){return !p.perm||can(p.perm);});
+    if(!visible.length)return'';
+    const hasActive=visible.some(function(p){return p.href===activePage;});
+    const icon=_sectionIconsV2[section.section]||'bi-circle';
+    const links=visible.map(function(p){
+      return '<a href="'+p.href+'" class="rail-v2__flyout-link'+(activePage===p.href?' active':'')+'"><i class="bi '+p.icon+'"></i> '+p.label+'</a>';
+    }).join('');
+    return '<div class="rail-v2__item'+(hasActive?' has-active':'')+'" data-rail-section="'+i+'">'+
+      '<button type="button" class="rail-v2__btn" onclick="toggleRailFlyout('+i+')" aria-label="'+section.section+'" title="'+section.section+'" data-hint="'+section.section+'"><i class="bi '+icon+'"></i></button>'+
+      '<div class="rail-v2__flyout" id="rail-flyout-'+i+'">'+
+        '<div class="rail-v2__flyout-label">'+section.section+'</div>'+
+        links+
+      '</div>'+
+    '</div>';
+  }).join('');
+
+  const html=`
+  <div class="rail-v2-mobile-bar">
+    <button class="menu-btn" onclick="openSidebar()" aria-label="القائمة" title="القائمة" data-hint="القائمة"><i class="bi bi-list"></i></button>
+    <span class="fw-bold">${s.farmName}</span>
+    <a href="notifications.html" class="bell-btn" id="bell-btn" style="text-decoration:none" title="الإشعارات" data-hint="الإشعارات"><i class="bi bi-bell-fill"></i><span class="bell-badge" id="bell-badge" style="display:none">0</span></a>
+  </div>
+
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+  <aside class="sidebar-menu" id="sidebarMenu">
+    <div class="sidebar-header">
+      <div class="d-flex align-items-center gap-2">
+        <div class="farm-logo-sm">${logoHtml}</div>
+        <div><div class="fw-bold" style="font-size:1rem">${s.farmName}</div>
+        <small style="color:${ROLES[u?.role||'admin']?.color}">${ROLES[u?.role||'admin']?.label}</small></div>
+      </div>
+      <button class="sidebar-close" onclick="closeSidebar()" aria-label="إغلاق القائمة" title="إغلاق القائمة" data-hint="إغلاق القائمة"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="sidebar-section-label">التنقل</div>
+      ${NAV_PAGES.filter(p=>!p.perm||can(p.perm)).map(p=>`
+        <a href="${p.href}" class="sidebar-item${activePage===p.href?' active':''}">
+          <i class="bi ${p.icon}"></i> ${p.label}</a>`).join('')}
+      <div class="sidebar-divider"></div>
+      <button class="sidebar-item" onclick="logout()" style="color:var(--red)">
+        <i class="bi bi-box-arrow-left"></i> تسجيل الخروج</button>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="d-flex align-items-center gap-3">
+        <div class="user-avatar">${(u?.name||'م').slice(0,1)}</div>
+        <div><div class="fw-bold">${u?.name||'مدير'}</div>
+        <small class="green-text"><i class="bi bi-circle-fill" style="font-size:7px"></i> متصل</small></div>
+      </div>
+    </div>
+  </aside>
+
+  <aside class="rail-v2" aria-label="التنقل الرئيسي">
+    <div class="rail-v2__logo">${logoHtml}</div>
+    <nav class="rail-v2__nav">${railSections}</nav>
+    <div class="rail-v2__bottom">
+      <button class="rail-v2__btn" onclick="toggleTheme()" id="theme-toggle-btn" title="تبديل المظهر" data-hint="تبديل المظهر"><i class="bi bi-circle-half" id="theme-icon"></i></button>
+      <button class="rail-v2__avatar" onclick="toggleRailPanel()" aria-label="لوحة المستخدم" title="لوحة المستخدم" data-hint="لوحة المستخدم">${(u?.name||'م').slice(0,1)}</button>
+    </div>
+  </aside>
+
+  <button class="rail-v2-toggle" id="railV2ToggleBtn" onclick="toggleRailPanel()" aria-label="إخفاء/إظهار اللوحة الجانبية" title="إخفاء/إظهار اللوحة" data-hint="إخفاء/إظهار اللوحة"><i class="bi bi-layout-sidebar-inset"></i></button>
+  <aside class="rail-v2-panel" id="railV2Panel" aria-label="لوحة المستخدم">
+    <div class="rail-v2-panel__profile">
+      <div class="rail-v2-panel__avatar">${(u?.name||'م').slice(0,1)}</div>
+      <div><div class="fw-bold">${u?.name||'مدير'}</div>
+      <small style="color:${ROLES[u?.role||'admin']?.color}">${ROLES[u?.role||'admin']?.label}</small></div>
+    </div>
+    <div class="rail-v2-panel__actions">
+      <a href="notifications.html" class="action-btn sm" style="flex:1;justify-content:center" data-hint="الإشعارات"><i class="bi bi-bell-fill"></i> الإشعارات</a>
+      <button id="undo-btn" onclick="undoLast()" title="تراجع عن آخر عملية" data-hint="تراجع عن آخر عملية" class="action-btn sm" style="flex:1;justify-content:center;opacity:.5"><i class="bi bi-arrow-counterclockwise"></i> تراجع</button>
+    </div>
+    <div style="font-size:.75rem;color:var(--text-muted);line-height:1.6">
+      هذه أول نسخة تجريبية من اللوحة الجانبية على لوحة التحكم فقط — محتوى إضافي قادم بعد المراجعة.
+    </div>
+  </aside>
+
+  <div id="toast-wrap"></div>
+  <div id="modal-root"></div>`;
+  document.body.insertAdjacentHTML('afterbegin', html);
+  if(window.updateGlobalBellBadge) window.updateGlobalBellBadge();
+}
+
+function toggleRailFlyout(i){
+  var el=document.querySelector('.rail-v2__item[data-rail-section="'+i+'"]');
+  if(!el)return;
+  var wasOpen=el.classList.contains('is-open');
+  document.querySelectorAll('.rail-v2__item.is-open').forEach(function(o){o.classList.remove('is-open');});
+  if(!wasOpen)el.classList.add('is-open');
+}
+document.addEventListener('click',function(e){
+  if(!e.target.closest||!e.target.closest('.rail-v2__item')){
+    document.querySelectorAll('.rail-v2__item.is-open').forEach(function(o){o.classList.remove('is-open');});
+  }
+});
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'){
+    document.querySelectorAll('.rail-v2__item.is-open').forEach(function(o){o.classList.remove('is-open');});
+  }
+});
+function toggleRailPanel(){
+  var open=document.documentElement.getAttribute('data-panel-v2')!=='closed';
+  document.documentElement.setAttribute('data-panel-v2', open?'closed':'open');
+}
+
 // ── Theme Toggle ────────────────────────────────────────
 // ── Lightweight notification badge ─────────────────────
 // Uses cached data - no extra Firebase call on page load

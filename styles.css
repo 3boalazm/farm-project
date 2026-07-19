@@ -352,6 +352,71 @@ html.light-mode, body.light-mode .farm-toast{box-shadow:0 6px 28px rgba(0,0,0,.1
   .navbar-wonder .container{padding-right:calc(280px+16px)}
 }
 @media(max-width:991px){.menu-btn{display:inline-flex!important}}
+
+/* ══════════════════════════════════════════════════════
+   NAV RAIL V2 — pilot (dashboard.html only, opt-in via
+   renderNavbarV2()). Fully additive: does not modify any
+   .sidebar-*/.navbar-wonder rule above. Desktop only;
+   mobile keeps the existing off-canvas .sidebar-menu,
+   reused byte-for-byte inside renderNavbarV2().
+   Green-on-permanently-dark-surface uses the same fixed
+   #34d399/#022c22 pairing as THEME-SWITCH-SIDEBAR-ACTIVE.md's
+   fix (7.88:1 contrast, proven) — not var(--green), which is
+   exactly what caused that bug on this same dark sidebar surface.
+   ══════════════════════════════════════════════════════ */
+.rail-v2-mobile-bar{display:none}
+@media(max-width:991px){
+  .rail-v2-mobile-bar{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    position:fixed;top:0;right:0;left:0;height:56px;padding:0 14px;
+    background:var(--sb-bg);border-bottom:1px solid var(--sb-border);z-index:998
+  }
+  .rail-v2-mobile-bar .fw-bold{color:var(--text-sub);font-size:var(--text-sm)}
+  .page-wrap.rail-v2-content{padding-top:70px}
+}
+@media(min-width:992px){
+  .rail-v2{
+    position:fixed;top:0;right:0;width:80px;height:100vh;background:var(--sb-bg);
+    border-left:1px solid var(--sb-border);z-index:1000;display:flex;flex-direction:column;
+    align-items:center;padding:20px 0;gap:8px
+  }
+  .rail-v2__logo{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;font-size:1.4rem;flex-shrink:0;overflow:hidden}
+  .rail-v2__logo img{width:28px;height:28px}
+  .rail-v2__nav{display:flex;flex-direction:column;gap:6px;flex:1}
+  .rail-v2__item{position:relative}
+  .rail-v2__btn{width:48px;height:48px;border-radius:14px;border:none;background:transparent;color:var(--text-muted);display:flex;align-items:center;justify-content:center;font-size:1.15rem;cursor:pointer;transition:.2s}
+  .rail-v2__btn:hover{background:rgba(255,255,255,.06);color:var(--text-sub)}
+  .rail-v2__item.is-open .rail-v2__btn,.rail-v2__item.has-active .rail-v2__btn{background:#34d399;color:#022c22}
+  .rail-v2__bottom{display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:auto}
+  .rail-v2__avatar{width:38px;height:38px;border-radius:50%;background:#34d399;color:#022c22;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.95rem;border:none;cursor:pointer}
+
+  .rail-v2__flyout{
+    position:absolute;top:0;right:calc(100% + 10px);min-width:220px;background:var(--bg-2);
+    border:1px solid var(--border-2);border-radius:14px;padding:10px;box-shadow:0 12px 32px rgba(0,0,0,.35);
+    opacity:0;visibility:hidden;transform:translateX(8px);transition:.15s;z-index:1001
+  }
+  .rail-v2__item.is-open .rail-v2__flyout{opacity:1;visibility:visible;transform:translateX(0)}
+  .rail-v2__flyout-label{font-size:var(--text-xs);color:var(--text-muted);padding:4px 10px 8px;font-weight:700}
+  .rail-v2__flyout-link{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;color:var(--text-sub);text-decoration:none;font-size:var(--text-sm);transition:.15s}
+  .rail-v2__flyout-link:hover{background:var(--bg-hover);color:var(--text)}
+  .rail-v2__flyout-link.active{background:#34d399!important;color:#022c22;font-weight:700}
+
+  .rail-v2-toggle{position:fixed;top:18px;left:16px;z-index:1002;width:36px;height:36px;border-radius:10px;border:1px solid var(--border-2);background:var(--bg-2);color:var(--text-sub);display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .rail-v2-toggle:hover{background:var(--bg-hover)}
+  .rail-v2-panel{
+    position:fixed;top:0;left:0;width:300px;height:100vh;background:var(--bg-2);
+    border-right:1px solid var(--border-2);z-index:999;overflow-y:auto;padding:64px 20px 20px;
+    transition:transform .3s cubic-bezier(.4,0,.2,1)
+  }
+  html[data-panel-v2="closed"] .rail-v2-panel{transform:translateX(-100%)}
+  .rail-v2-panel__profile{display:flex;align-items:center;gap:12px;padding-bottom:16px;margin-bottom:16px;border-bottom:1px solid var(--border-3)}
+  .rail-v2-panel__avatar{width:44px;height:44px;border-radius:50%;background:#34d399;color:#022c22;display:flex;align-items:center;justify-content:center;font-weight:800;flex-shrink:0}
+  .rail-v2-panel__actions{display:flex;gap:8px;margin-bottom:16px}
+
+  .page-wrap.rail-v2-content{margin-right:80px;margin-left:300px;padding-top:24px;transition:margin .3s cubic-bezier(.4,0,.2,1)}
+  html[data-panel-v2="closed"] .page-wrap.rail-v2-content{margin-left:0}
+}
+
 /* MOBILE */
 @media(max-width:768px){
   .page-wrap{padding:14px 12px}
