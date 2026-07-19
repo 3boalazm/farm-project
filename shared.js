@@ -275,6 +275,7 @@ function renderNavbarV2(activePage=''){
       <a href="notifications.html" class="action-btn sm" style="flex:1;justify-content:center" data-hint="الإشعارات"><i class="bi bi-bell-fill"></i> الإشعارات<span class="bell-badge" id="bell-badge" style="display:none;position:static;margin-right:4px">0</span></a>
       <button id="undo-btn" onclick="undoLast()" title="تراجع عن آخر عملية" data-hint="تراجع عن آخر عملية" class="action-btn sm" style="flex:1;justify-content:center;opacity:.5"><i class="bi bi-arrow-counterclockwise"></i> تراجع</button>
     </div>
+    <a href="assistant.html" class="action-btn primary sm" style="width:100%;justify-content:center;margin-bottom:16px" data-hint="اسأل المساعد الذكي"><i class="bi bi-robot"></i> المساعد الذكي</a>
     <div style="font-size:.75rem;color:var(--text-muted);line-height:1.6">
       هذه أول نسخة تجريبية من اللوحة الجانبية على لوحة التحكم فقط — محتوى إضافي قادم بعد المراجعة.
     </div>
@@ -301,7 +302,7 @@ document.addEventListener('click',function(e){
 
 function revealRailExpandBtn(){
   var btn=document.getElementById('railExpandBtn');
-  if(btn) btn.hidden=!btn.hidden;
+  if(btn) btn.hidden=false;
 }
 function toggleRailExpanded(){
   var expanded=document.documentElement.getAttribute('data-rail-expanded')==='true';
