@@ -646,3 +646,16 @@ button:not([aria-label]):not([aria-labelledby]) > i:only-child::after {
 /* Animal Card (block layout — distinct from the existing flex-row .animal-row) */
 .animal-card-v2{background:var(--card-bg)!important;border:1px solid var(--border);border-radius:var(--radius-lg);padding:var(--space-3);box-shadow:var(--card-shadow);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);transition:.2s}
 .animal-card-v2:hover{border-color:var(--border-2);transform:translateY(-2px)}
+
+/* Dashboard tab-switcher (pilot, dashboard.html only). Active state uses
+   the fixed #34d399/#022c22 pair proven in THEME-SWITCH-SIDEBAR-ACTIVE.md
+   rather than var(--green) -- same reasoning: --green pairs correctly with
+   a theme-aware surface, not with fixed dark text on top of itself. */
+.dash-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
+.dash-tab{padding:9px 18px;border-radius:999px;border:1px solid var(--border);background:var(--bg-2);color:var(--text-sub);font-family:'Cairo',sans-serif;font-size:var(--text-sm);font-weight:600;cursor:pointer;transition:.2s}
+.dash-tab:hover{background:var(--bg-hover)}
+.dash-tab.is-active{background:#34d399;color:#022c22;border-color:transparent}
+@media(max-width:640px){
+  .dash-tabs{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px}
+  .dash-tab{flex-shrink:0}
+}

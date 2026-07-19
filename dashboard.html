@@ -323,6 +323,14 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
   `).join('');
 
   el.innerHTML = `
+    <div class="dash-tabs" role="tablist" aria-label="أقسام لوحة التحكم">
+      <button type="button" class="dash-tab is-active" role="tab" id="dash-tab-0" aria-selected="true" aria-controls="dash-panel-0" tabindex="0">نظرة عامة</button>
+      <button type="button" class="dash-tab" role="tab" id="dash-tab-1" aria-selected="false" aria-controls="dash-panel-1" tabindex="-1">الأولويات والتنبؤ</button>
+      <button type="button" class="dash-tab" role="tab" id="dash-tab-2" aria-selected="false" aria-controls="dash-panel-2" tabindex="-1">المؤشرات التنفيذية</button>
+      <button type="button" class="dash-tab" role="tab" id="dash-tab-3" aria-selected="false" aria-controls="dash-panel-3" tabindex="-1">التحليلات</button>
+      <button type="button" class="dash-tab" role="tab" id="dash-tab-4" aria-selected="false" aria-controls="dash-panel-4" tabindex="-1">السجلات والنشاط</button>
+    </div>
+    <div class="dash-tab-panel" id="dash-panel-0" role="tabpanel" aria-labelledby="dash-tab-0">
     ${(() => {
       // Sprint 6, Epic 6: Daily Briefing. Every sentence below is
       // conditional on a real, computed number -- nothing is a
@@ -408,6 +416,8 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
         </div>
       </div>`;
     })() : ''}
+    </div>
+    <div class="dash-tab-panel" id="dash-panel-1" role="tabpanel" aria-labelledby="dash-tab-1" hidden>
     <div id="inventory-exec-card" class="mb-4"></div>
     ${(() => {
       // Sprint 5, Epic 5: ONE unified "Operational Priorities" panel,
@@ -453,6 +463,8 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
       return `<div id="notif-summary-link" class="mb-3" style="font-size:.8rem"></div>`;
     })()}
     <div id="weather-widget" class="wonder-card mb-4 p-3"><div class="text-gray" style="font-size:.82rem"><i class="bi bi-cloud-sun me-2"></i>جاري تحميل حالة الطقس...</div></div>
+    </div>
+    <div class="dash-tab-panel" id="dash-panel-2" role="tabpanel" aria-labelledby="dash-tab-2" hidden>
     ${(() => {
       // Sprint 6, Epic 6: Executive KPI Strip. Every value below reuses
       // raw data this function already has as parameters -- no new
@@ -528,6 +540,8 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
         <div class="col-md-4">${renderKPICard({ label:'<a href="cost.html" style="color:inherit;text-decoration:none">صافي الربح/الخسارة</a>', value: (inc-exp>=0?'+':'')+(inc-exp).toLocaleString('ar-EG'), unit: s.currency, status: inc-exp>=0?'normal':'alert' })}</div>
       </div>
     ` : ''}
+    </div>
+    <div class="dash-tab-panel" id="dash-panel-3" role="tabpanel" aria-labelledby="dash-tab-3" hidden>
     <div class="row g-3 mb-4">
       <div class="col-md-5">${renderChartContainer({ title:'توزيع القطيع', subtitle:'حسب السلالة', chartHtml:'<div id="pie-container" class="text-center"></div>', state:'ready' })}</div>
       <div class="col-md-7">
@@ -572,7 +586,9 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
           return renderChartContainer({ title:'الإيرادات مقابل المصروفات', subtitle:'آخر 6 أشهر', chartHtml: svg||'', state: svg?'ready':'empty' }); })()}
       </div>
     </div>
+    </div>
 
+    <div class="dash-tab-panel" id="dash-panel-4" role="tabpanel" aria-labelledby="dash-tab-4" hidden>
     <!-- Sprint 6, Epic 6: Upcoming Tasks -- reuses the SAME
          renderDataTableWrapper component as Recent Records below, no
          new rendering component introduced. -->
@@ -608,14 +624,56 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
           entity: a.userName || '',
         }))) : `<div class="empty-state py-3"><i class="bi bi-clock-history"></i><p>لا يوجد نشاط مسجّل بعد</p></div>`}
     </div>
+    </div>
   `;
 
   renderPieChart(breedData, stats.total);
   getWeather().then(w => renderWeather(w));
+  initDashboardTabs();
 
   // Simulated Sync Check (based on user's manual observation)
   // In a real scenario, we'd compare against a 'diary_snapshot' in Firebase
   checkSync(stats);
+}
+
+// Dashboard tab-switcher (pilot): WAI-ARIA tablist pattern matching the
+// one already proven in the icon-rail's section flyouts -- roving
+// tabindex, real panel show/hide, arrow-key navigation. Arrow directions
+// are RTL-correct (ArrowLeft = next, ArrowRight = previous), since this
+// page is dir="rtl" unlike the LTR prototype this pattern first came from.
+function initDashboardTabs(){
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.dash-tab'));
+  var panels = document.querySelectorAll('.dash-tab-panel');
+  if(!tabs.length) return;
+  function activate(tab){
+    tabs.forEach(function(t){ t.classList.remove('is-active'); t.setAttribute('aria-selected','false'); t.setAttribute('tabindex','-1'); });
+    panels.forEach(function(p){ p.hidden = true; });
+    tab.classList.add('is-active');
+    tab.setAttribute('aria-selected','true');
+    tab.setAttribute('tabindex','0');
+    var panel = document.getElementById(tab.getAttribute('aria-controls'));
+    if(panel) panel.hidden = false;
+  }
+  tabs.forEach(function(tab){
+    tab.addEventListener('click', function(){ activate(tab); });
+  });
+  var tablist = document.querySelector('.dash-tabs');
+  if(tablist){
+    tablist.addEventListener('keydown', function(e){
+      var idx = tabs.indexOf(document.activeElement);
+      if(idx === -1) return;
+      var next = null;
+      if(e.key === 'ArrowLeft' || e.key === 'ArrowDown') next = (idx + 1) % tabs.length;
+      else if(e.key === 'ArrowRight' || e.key === 'ArrowUp') next = (idx - 1 + tabs.length) % tabs.length;
+      else if(e.key === 'Home') next = 0;
+      else if(e.key === 'End') next = tabs.length - 1;
+      if(next !== null){
+        e.preventDefault();
+        activate(tabs[next]);
+        tabs[next].focus();
+      }
+    });
+  }
 }
 
 // Sprint 3, Epic 3: rank animals by health risk for the dashboard's
