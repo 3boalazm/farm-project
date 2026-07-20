@@ -29,4 +29,25 @@ const FARM_CONFIG = {
   pregnancyDays: 150,
   vaccinationAlertDays: 7,
   weaningDays: 60,
+
+  // ── Life Stage thresholds (in months) ──────────────────
+  // Purely for computing an animal's current biological life stage from
+  // its birth_date -- see getLifeStage() in shared.js. Independent of
+  // production purpose (the existing tarbiya/tasmeen `purpose` field),
+  // which stays manual and is never touched by age.
+  // Thresholds must increase in sequence (newborn < weaning < adult) to
+  // match the requested progression: Newborn -> Weaned -> Growing -> Adult.
+  lifecycle: {
+    newborn_months: 2,   // below this -> "newborn" (still nursing).
+                         // Derived from the existing weaningDays (60 days
+                         // = ~2 months): that setting represents when
+                         // nursing/weaning happens, which is the END of
+                         // the newborn phase, not a separate later stage.
+    weaning_months: 3,   // below this -> "weaned" (just past nursing, still young)
+    adult_months: 12     // below this -> "growing"; at/above -> "adult"
+  },
+
+  // مفتاح API للطقس (weatherapi.com / openweathermap.org)
+  // نقطة الحقن الوحيدة لهذا المفتاح — عدّل هنا فقط عند التدوير في الإنتاج
+  weatherApiKey: '2b08987a3d184056b13210204261205',
 };

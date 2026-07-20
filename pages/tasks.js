@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const s = getSettings();
   document.getElementById('footer-year').textContent = ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent = s.farmName;
-  renderNavbar('tasks.html');
+  renderNavbarV2('tasks.html');
   renderPageHeader(
     '<i class="bi bi-list-check accent-text"></i> المهام اليومية',
     'إدارة وتعيين المهام للعاملين',
@@ -278,6 +278,11 @@ function renderTaskCard(t, today) {
   const statusLabel = { pending: 'في الانتظار', in_progress: 'قيد التنفيذ', done: 'منجزة' }[t.status] || t.status;
   const statusColor = { pending: 'var(--blue)', in_progress: 'var(--yellow)', done: 'var(--green)' }[t.status];
 
+  // Sprint 1, Epic 1: additive-only indicators for automatically generated
+  // tasks. Every existing element/branch above and below is unchanged.
+  const AUTO_EVENT_LABELS = { vaccination_scheduled:'تحصين مجدول', expected_birth_approaching:'ولادة متوقعة', medication_followup:'متابعة سحب دوائي' };
+  const autoBadge = t.auto_generated ? `<span class="type-badge" style="background:var(--purple)22;color:var(--purple);border:1px solid var(--purple)44;font-size:.62rem" title="مصدر الحدث: ${AUTO_EVENT_LABELS[t.auto_source_type]||t.auto_source_type||''}"><i class="bi bi-robot me-1"></i>مولّدة تلقائيًا — ${AUTO_EVENT_LABELS[t.auto_source_type]||''}</span>` : '';
+
   return `
   <div class="task-card ${statusClass}" role="article" aria-label="مهمة: ${t.title}">
     <div class="d-flex align-items-start gap-3">
@@ -299,7 +304,11 @@ function renderTaskCard(t, today) {
           </div>
         </div>
 
+        ${autoBadge ? `<div class="mt-1">${autoBadge}</div>` : ''}
+
         <div class="d-flex gap-3 mt-2 flex-wrap text-gray" style="font-size:.78rem">
+          <span><i class="bi bi-calendar-event me-1" aria-hidden="true"></i>${ar ? ar(t.date) : t.date}</span>
+          ${t.related_tag ? `<span><i class="bi bi-tag-fill me-1" aria-hidden="true"></i>${t.related_tag}</span>` : ''}
           ${t.barn ? `<span><i class="bi bi-building me-1" aria-hidden="true"></i>${t.barn}</span>` : ''}
           ${t.assigned_to_name ? `<span><i class="bi bi-person-fill me-1" aria-hidden="true"></i>${t.assigned_to_name}</span>` : ''}
           ${t.notes ? `<span><i class="bi bi-chat-left-text me-1" aria-hidden="true"></i>${t.notes}</span>` : ''}
@@ -371,6 +380,7 @@ window.setTaskStatus = async function(id, status) {
 };
 
 window.delTask = async function(id) {
+  if (!can('admin')) { toast('ليس لديك صلاحية لتنفيذ هذا الإجراء', 'error'); return; }
   if (!id || !confirm('حذف هذه المهمة نهائياً؟')) return;
   try {
     await fbDelete('daily_tasks', id);

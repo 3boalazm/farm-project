@@ -4,18 +4,21 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   const s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
-  renderNavbar('farm-profile.html');
+  renderNavbarV2('farm-profile.html');
   const [animals,users]=await Promise.all([fbGet('animals'),fbGet('users')]);
   renderFarmProfile(s,animals,users);
 });
 
 function renderFarmProfile(s,animals,users){
   const alive=animals.filter(a=>a.status==='alive');
-  const dead=animals.filter(a=>a.status==='dead');
+  const dead=animals.filter(a=>window.isRealDeath(a));
 
-  renderPageHeader('<i class="bi bi-building accent-text"></i> ملف المزرعة',s.farmAddress||'',
-    can('admin')?`<button class="action-btn" onclick="openEditProfile()"><i class="bi bi-pencil-fill"></i> تعديل</button>`:''
-  );
+  renderPageHeaderV2({
+    title: '<i class="bi bi-building accent-text"></i> ملف المزرعة',
+    description: s.farmAddress||'',
+    breadcrumb: [{label:'الرئيسية', href:'dashboard.html'}, {label:'ملف المزرعة'}],
+    primaryAction: can('admin')?`<button class="action-btn primary" onclick="openEditProfile()"><i class="bi bi-pencil-fill"></i> تعديل</button>`:''
+  });
   const el=document.getElementById('content');
 
   el.innerHTML=`

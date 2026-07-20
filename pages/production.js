@@ -12,12 +12,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   const s = getSettings();
   document.getElementById('footer-year').textContent = ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent = s.farmName;
-  renderNavbar('production.html');
-  renderPageHeader(
-    '<i class="bi bi-droplet-fill accent-text"></i> إدارة الإنتاج',
-    'الحليب • الصوف • الأوزان',
-    can('animals') ? `<button class="action-btn primary" onclick="openProdEntry()" aria-label="تسجيل إنتاج جديد"><i class="bi bi-plus-lg"></i> تسجيل إنتاج</button>` : ''
-  );
+  renderNavbarV2('production.html');
+  renderPageHeaderV2({
+    title: '<i class="bi bi-droplet-fill accent-text"></i> إدارة الإنتاج',
+    description: 'الحليب • الصوف • الأوزان',
+    breadcrumb: [{label:'الرئيسية', href:'dashboard.html'}, {label:'الإنتاج'}],
+    primaryAction: can('animals') ? `<button class="action-btn primary" onclick="openProdEntry()" aria-label="تسجيل إنتاج جديد"><i class="bi bi-plus-lg"></i> تسجيل إنتاج</button>` : ''
+  });
   await loadData();
   renderMain();
 });
@@ -41,25 +42,47 @@ async function loadData() {
 function renderMain() {
   const el = document.getElementById('content');
   const stats = computeStats();
+
+  // ── Analytics Row (Overview level) — NEW, was missing. ──
+  // The existing "Summary" tab already has monthly milk/wool trend and a
+  // breed-weight comparison, but both are Chart.js-based and hidden behind
+  // a tab click. This adds always-visible, at-a-glance equivalents right
+  // after the KPI row — matching dashboard.html/health.js's information
+  // architecture (KPIs, then Analytics, immediately visible) — using the
+  // exact SVG primitives named for reuse (renderLineChartSVG,
+  // renderGroupedBarSVG), NOT Chart.js. This does not replace, remove, or
+  // alter any of the existing tab-level Chart.js visualizations below.
+  const arMonthsP=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+  const nowP=new Date();
+  const trendMonths=[]; const compareMonths=[];
+  for(let i=5;i>=0;i--){
+    const d=new Date(nowP.getFullYear(),nowP.getMonth()-i,1);
+    const mStr=d.toISOString().slice(0,7);
+    const monthTotal=_prodData.filter(p=>(p.date||'').startsWith(mStr)).reduce((t,p)=>t+(+p.quantity||0),0);
+    trendMonths.push({ label: arMonthsP[d.getMonth()].slice(0,3), value: monthTotal });
+    const milkTotal=_prodData.filter(p=>p.type==='milk'&&(p.date||'').startsWith(mStr)).reduce((t,p)=>t+(+p.quantity||0),0);
+    const woolTotal=_prodData.filter(p=>p.type==='wool'&&(p.date||'').startsWith(mStr)).reduce((t,p)=>t+(+p.quantity||0),0);
+    compareMonths.push({ label: arMonthsP[d.getMonth()].slice(0,3), values:[milkTotal,woolTotal] });
+  }
+  const prodTrendSvg=renderLineChartSVG(trendMonths,{color:'#3b82f6'});
+  const prodCompareSvg=renderGroupedBarSVG(compareMonths,{colors:['#3b82f6','#f59e0b']});
+  const analyticsRowHtml = `<div class="row g-3 mb-4">
+    <div class="col-md-6">${renderChartContainer({ title:'اتجاه الإنتاج', subtitle:'إجمالي كل الأنواع — آخر 6 أشهر', chartHtml: prodTrendSvg||'', state: prodTrendSvg?'ready':'empty' })}</div>
+    <div class="col-md-6">${renderChartContainer({ title:'مقارنة الإنتاج', subtitle:'الحليب مقابل الصوف — آخر 6 أشهر', chartHtml: prodCompareSvg||'', state: prodCompareSvg?'ready':'empty' })}</div>
+  </div>`;
+
   el.innerHTML = `
-  <!-- KPI Row -->
+  <!-- KPI Row (Analytics Template) -->
   <div class="row g-3 mb-4">
-    ${[
-      { l:'إنتاج الحليب اليوم', v:ar(stats.milkToday.toFixed(1))+' ل', c:'var(--blue)',   i:'bi-droplet-fill' },
-      { l:'إجمالي الحليب (شهر)',v:ar(stats.milkMonth.toFixed(1))+' ل', c:'var(--blue)',   i:'bi-calendar-month' },
-      { l:'إنتاج الصوف (سنة)',  v:ar(stats.woolYear.toFixed(1))+' كجم',c:'var(--yellow)', i:'bi-scissors' },
-      { l:'متوسط الوزن',        v:stats.avgWeight ? ar(stats.avgWeight.toFixed(1))+' كجم' : '—', c:'var(--green)', i:'bi-rulers' },
-      { l:'الإناث المنتجة',     v:ar(stats.activeFemales),               c:'var(--purple)', i:'bi-gender-female' },
-      { l:'سجلات الإنتاج',      v:ar(_prodData.length),                  c:'var(--orange)', i:'bi-collection-fill' },
-    ].map(k => `
-      <div class="col-6 col-md-4 col-lg-2">
-        <div class="summary-card" role="region" aria-label="${k.l}">
-          <i class="bi ${k.i} d-block mb-2" style="color:${k.c};font-size:1.3rem" aria-hidden="true"></i>
-          <div style="font-size:.95rem;font-weight:700;color:${k.c};line-height:1.2">${k.v}</div>
-          <small class="text-gray">${k.l}</small>
-        </div>
-      </div>`).join('')}
+    <div class="col-6 col-md-4 col-lg-2">${renderKPICard({ label:'إنتاج الحليب اليوم', value: ar(stats.milkToday.toFixed(1)), unit:'ل', status:'normal' })}</div>
+    <div class="col-6 col-md-4 col-lg-2">${renderKPICard({ label:'إجمالي الحليب (شهر)', value: ar(stats.milkMonth.toFixed(1)), unit:'ل', status:'normal' })}</div>
+    <div class="col-6 col-md-4 col-lg-2">${renderKPICard({ label:'إنتاج الصوف (سنة)', value: ar(stats.woolYear.toFixed(1)), unit:'كجم', status:'normal' })}</div>
+    <div class="col-6 col-md-4 col-lg-2">${renderKPICard({ label:'متوسط الوزن', value: stats.avgWeight ? ar(stats.avgWeight.toFixed(1)) : '—', unit: stats.avgWeight ? 'كجم' : '', status:'normal' })}</div>
+    <div class="col-6 col-md-4 col-lg-2">${renderKPICard({ label:'الإناث المنتجة', value: ar(stats.activeFemales), status:'normal' })}</div>
+    <div class="col-6 col-md-4 col-lg-2">${renderKPICard({ label:'سجلات الإنتاج', value: ar(_prodData.length), status: _prodData.length===0?'watch':'normal' })}</div>
   </div>
+
+  ${analyticsRowHtml}
 
   <!-- Tab Navigation -->
   <div class="d-flex gap-2 flex-wrap mb-4" role="tablist" aria-label="فلاتر الإنتاج">
@@ -74,10 +97,26 @@ function renderMain() {
   <!-- Tab content -->
   <div id="prod-tab-content"></div>
 
+  <!-- Recent Activity (Analytics Template) — NEW, was missing. Reuses
+       renderTimeline/renderTimelineItem exactly as dashboard.html/health.js;
+       built from _prodData already loaded, no new Firebase call added. -->
+  <div class="wonder-card mt-4">
+    <h6 class="fw-bold mb-3" style="font-size:var(--text-lg)"><i class="bi bi-clock-history accent-text me-2"></i>النشاط الأخير</h6>
+    ${(function(){
+      const typeLabel={milk:'تسجيل حليب',wool:'تسجيل صوف',weight:'تسجيل وزن'};
+      const recent=[..._prodData].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,6);
+      return recent.length?renderTimeline(recent.map(p=>renderTimelineItem({
+        time: p.date||'',
+        eventType: typeLabel[p.type]||p.type,
+        entity: `${p.animal_breed||''}${p.animal_tag?' #'+p.animal_tag:''} — ${ar(+p.quantity||0)} ${p.unit==='liter'?'لتر':'كجم'}`,
+      }))):`<div class="empty-state py-3"><i class="bi bi-clock-history"></i><p>لا يوجد نشاط مسجّل بعد</p></div>`;
+    })()}
+  </div>
+
   <!-- FAB for mobile quick entry -->
   <button class="fab-btn" onclick="openProdEntry()" aria-label="تسجيل إنتاج سريع" title="تسجيل إنتاج"
     style="position:fixed;bottom:80px;left:20px;width:56px;height:56px;border-radius:50%;
-      background:var(--orange);color:#fff;border:none;box-shadow:0 8px 24px rgba(255,107,53,.5);
+      background:var(--orange);color:#fff;border:none;box-shadow:0 8px 24px rgba(16,185,129,.5);
       font-size:1.4rem;cursor:pointer;z-index:1000;display:none;align-items:center;justify-content:center">
     <i class="bi bi-plus-lg"></i>
   </button>
@@ -145,35 +184,29 @@ function renderMilkTab(el) {
   milk.forEach(p => { if (daily[p.date] !== undefined) daily[p.date] += +p.quantity || 0; });
 
   el.innerHTML = `
-  <div class="wonder-card mb-4">
-    <h6 class="fw-bold mb-3"><i class="bi bi-graph-up accent-text"></i> إنتاج الحليب — آخر 14 يوم</h6>
-    ${milk.length ?
-      `<div style="position:relative;height:220px"><canvas id="milk-chart" aria-label="مخطط إنتاج الحليب"></canvas></div>` :
-      `<div class="empty-state" style="padding:20px 0"><i class="bi bi-droplet" style="font-size:2rem;opacity:.3"></i><p style="font-size:.85rem">لا توجد سجلات حليب بعد — اضغط <strong>تسجيل إنتاج</strong></p></div>`
-    }
+  <div class="mb-4">
+    ${renderChartContainer({
+      title: 'إنتاج الحليب', subtitle: 'آخر 14 يوم',
+      chartHtml: `<div style="position:relative;height:220px"><canvas id="milk-chart" aria-label="مخطط إنتاج الحليب"></canvas></div>`,
+      state: milk.length ? 'ready' : 'empty',
+      emptyMsg: 'لا توجد سجلات حليب بعد — اضغط تسجيل إنتاج'
+    })}
   </div>
 
-  ${milk.length ? `
-  <div class="wonder-card">
-    <h6 class="fw-bold mb-3"><i class="bi bi-table accent-text"></i> سجلات الحليب الأخيرة</h6>
-    <div class="table-responsive">
-      <table class="tbl" aria-label="جدول سجلات إنتاج الحليب">
-        <thead><tr><th>التاريخ</th><th>الحيوان</th><th>السلالة</th><th>الكمية (لتر)</th><th>مسجّل بواسطة</th><th>ملاحظات</th><th></th></tr></thead>
-        <tbody>
-          ${milk.slice(0, 50).map(p => `
-            <tr>
-              <td class="text-gray">${p.date || '—'}</td>
-              <td class="fw-bold">${p.animal_tag || '—'}</td>
-              <td class="text-gray">${p.animal_breed || '—'}</td>
-              <td class="green-text fw-bold">${ar(+p.quantity || 0)} ل</td>
-              <td class="text-gray">${p.recorded_by || '—'}</td>
-              <td class="text-gray" style="font-size:.75rem">${p.notes || '—'}</td>
-              <td><button class="action-btn sm danger" onclick="delProdRec('${p._id}')" aria-label="حذف السجل" style="padding:3px 8px"><i class="bi bi-trash" aria-hidden="true"></i></button></td>
-            </tr>`).join('')}
-        </tbody>
-      </table>
-    </div>
-  </div>` : ''}`;
+  ${milk.length ? renderDataTableWrapper({
+    title: 'سجلات الحليب الأخيرة',
+    headers: ['التاريخ','الحيوان','السلالة','الكمية (لتر)','مسجّل بواسطة','ملاحظات',''],
+    rowsHtml: milk.slice(0, 50).map(p => `
+      <tr>
+        <td class="text-gray">${p.date || '—'}</td>
+        <td class="fw-bold">${p.animal_tag || '—'}</td>
+        <td class="text-gray">${p.animal_breed || '—'}</td>
+        <td class="green-text fw-bold">${ar(+p.quantity || 0)} ل</td>
+        <td class="text-gray">${p.recorded_by || '—'}</td>
+        <td class="text-gray" style="font-size:.75rem">${p.notes || '—'}</td>
+        <td><button class="action-btn sm danger" onclick="delProdRec('${p._id}')" aria-label="حذف السجل" style="padding:3px 8px"><i class="bi bi-trash" aria-hidden="true"></i></button></td>
+      </tr>`).join('')
+  }) : ''}`;
 
   // Draw chart
   if (milk.length) {
@@ -188,12 +221,12 @@ function renderMilkTab(el) {
           datasets: [{
             label: 'لتر/يوم',
             data: data,
-            borderColor: '#2196f3',
-            backgroundColor: 'rgba(33,150,243,0.15)',
+            borderColor: '#3b82f6',
+            backgroundColor: 'rgba(59,130,246,0.15)',
             fill: true,
             tension: 0.35,
             pointRadius: 4,
-            pointBackgroundColor: '#2196f3',
+            pointBackgroundColor: '#3b82f6',
           }],
         },
         options: {
@@ -230,58 +263,34 @@ function renderWoolTab(el) {
 
   el.innerHTML = `
   <div class="row g-3 mb-4">
-    <div class="col-md-4">
-      <div class="summary-card" role="region" aria-label="إجمالي الصوف">
-        <i class="bi bi-scissors d-block mb-2" style="color:var(--yellow);font-size:1.5rem" aria-hidden="true"></i>
-        <div class="summary-number" style="color:var(--yellow)">${ar(totalKg.toFixed(1))} كجم</div>
-        <small class="text-gray">إجمالي الصوف المنتج</small>
-      </div>
-    </div>
-    <div class="col-md-4">
-      <div class="summary-card" role="region" aria-label="عدد عمليات الجز">
-        <i class="bi bi-calendar-event d-block mb-2" style="color:var(--orange);font-size:1.5rem" aria-hidden="true"></i>
-        <div class="summary-number" style="color:var(--orange)">${ar(wool.length)}</div>
-        <small class="text-gray">عملية جز</small>
-      </div>
-    </div>
-    <div class="col-md-4">
-      <div class="summary-card" role="region" aria-label="متوسط الجز">
-        <i class="bi bi-rulers d-block mb-2" style="color:var(--green);font-size:1.5rem" aria-hidden="true"></i>
-        <div class="summary-number" style="color:var(--green)">${wool.length ? ar((totalKg/wool.length).toFixed(2)) : '0'} كجم</div>
-        <small class="text-gray">متوسط/عملية</small>
-      </div>
-    </div>
+    <div class="col-md-4">${renderKPICard({ label:'إجمالي الصوف المنتج', value: ar(totalKg.toFixed(1)), unit:'كجم', status:'normal' })}</div>
+    <div class="col-md-4">${renderKPICard({ label:'عملية جز', value: ar(wool.length), status:'normal' })}</div>
+    <div class="col-md-4">${renderKPICard({ label:'متوسط/عملية', value: wool.length ? ar((totalKg/wool.length).toFixed(2)) : '٠', unit:'كجم', status:'normal' })}</div>
   </div>
 
-  <div class="wonder-card mb-4">
-    <h6 class="fw-bold mb-3"><i class="bi bi-bar-chart-fill accent-text"></i> إنتاج الصوف الشهري</h6>
-    ${wool.length ?
-      `<div style="position:relative;height:220px"><canvas id="wool-chart" aria-label="مخطط إنتاج الصوف الشهري"></canvas></div>` :
-      `<div class="empty-state" style="padding:20px 0"><i class="bi bi-scissors" style="font-size:2rem;opacity:.3"></i><p style="font-size:.85rem">لا توجد سجلات صوف بعد</p></div>`
-    }
+  <div class="mb-4">
+    ${renderChartContainer({
+      title: 'إنتاج الصوف', subtitle: 'شهريًا',
+      chartHtml: `<div style="position:relative;height:220px"><canvas id="wool-chart" aria-label="مخطط إنتاج الصوف الشهري"></canvas></div>`,
+      state: wool.length ? 'ready' : 'empty',
+      emptyMsg: 'لا توجد سجلات صوف بعد'
+    })}
   </div>
 
-  ${wool.length ? `
-  <div class="wonder-card">
-    <h6 class="fw-bold mb-3"><i class="bi bi-table accent-text"></i> سجلات الصوف</h6>
-    <div class="table-responsive">
-      <table class="tbl" aria-label="جدول سجلات إنتاج الصوف">
-        <thead><tr><th>التاريخ</th><th>الحيوان</th><th>السلالة</th><th>الكمية (كجم)</th><th>مسجّل بواسطة</th><th>ملاحظات</th><th></th></tr></thead>
-        <tbody>
-          ${wool.slice(0, 50).map(p => `
-            <tr>
-              <td class="text-gray">${p.date || '—'}</td>
-              <td class="fw-bold">${p.animal_tag || '—'}</td>
-              <td class="text-gray">${p.animal_breed || '—'}</td>
-              <td style="color:var(--yellow);font-weight:700">${ar((+p.quantity||0).toFixed(1))} كجم</td>
-              <td class="text-gray">${p.recorded_by || '—'}</td>
-              <td class="text-gray" style="font-size:.75rem">${p.notes || '—'}</td>
-              <td><button class="action-btn sm danger" onclick="delProdRec('${p._id}')" aria-label="حذف السجل" style="padding:3px 8px"><i class="bi bi-trash" aria-hidden="true"></i></button></td>
-            </tr>`).join('')}
-        </tbody>
-      </table>
-    </div>
-  </div>` : ''}`;
+  ${wool.length ? renderDataTableWrapper({
+    title: 'سجلات الصوف',
+    headers: ['التاريخ','الحيوان','السلالة','الكمية (كجم)','مسجّل بواسطة','ملاحظات',''],
+    rowsHtml: wool.slice(0, 50).map(p => `
+      <tr>
+        <td class="text-gray">${p.date || '—'}</td>
+        <td class="fw-bold">${p.animal_tag || '—'}</td>
+        <td class="text-gray">${p.animal_breed || '—'}</td>
+        <td style="color:var(--yellow);font-weight:700">${ar((+p.quantity||0).toFixed(1))} كجم</td>
+        <td class="text-gray">${p.recorded_by || '—'}</td>
+        <td class="text-gray" style="font-size:.75rem">${p.notes || '—'}</td>
+        <td><button class="action-btn sm danger" onclick="delProdRec('${p._id}')" aria-label="حذف السجل" style="padding:3px 8px"><i class="bi bi-trash" aria-hidden="true"></i></button></td>
+      </tr>`).join('')
+  }) : ''}`;
 
   if (wool.length) {
     setTimeout(() => {
@@ -295,7 +304,7 @@ function renderWoolTab(el) {
         type: 'bar',
         data: {
           labels: labels,
-          datasets: [{ label: 'كجم', data: data, backgroundColor: 'rgba(255,193,7,0.75)', borderRadius: 5 }],
+          datasets: [{ label: 'كجم', data: data, backgroundColor: 'rgba(245,158,11,0.75)', borderRadius: 5 }],
         },
         options: {
           responsive: true, maintainAspectRatio: false,
@@ -330,35 +339,29 @@ function renderWeightTab(el) {
   })).sort((a,b) => b.count - a.count);
 
   el.innerHTML = `
-  <div class="wonder-card mb-4">
-    <h6 class="fw-bold mb-3"><i class="bi bi-bar-chart-fill accent-text"></i> متوسط الأوزان بالسلالة</h6>
-    ${breedAvg.length ?
-      `<div style="position:relative;height:240px"><canvas id="weight-chart" aria-label="مخطط متوسط الأوزان بالسلالة"></canvas></div>` :
-      `<div class="empty-state" style="padding:20px 0"><i class="bi bi-rulers" style="font-size:2rem;opacity:.3"></i><p style="font-size:.85rem">لا توجد سجلات أوزان بعد</p></div>`
-    }
+  <div class="mb-4">
+    ${renderChartContainer({
+      title: 'متوسط الأوزان', subtitle: 'حسب السلالة',
+      chartHtml: `<div style="position:relative;height:240px"><canvas id="weight-chart" aria-label="مخطط متوسط الأوزان بالسلالة"></canvas></div>`,
+      state: breedAvg.length ? 'ready' : 'empty',
+      emptyMsg: 'لا توجد سجلات أوزان بعد'
+    })}
   </div>
 
-  ${weight.length ? `
-  <div class="wonder-card">
-    <h6 class="fw-bold mb-3"><i class="bi bi-table accent-text"></i> سجلات الأوزان</h6>
-    <div class="table-responsive">
-      <table class="tbl" aria-label="جدول سجلات الأوزان">
-        <thead><tr><th>التاريخ</th><th>الحيوان</th><th>السلالة</th><th>الوزن (كجم)</th><th>مسجّل بواسطة</th><th>ملاحظات</th><th></th></tr></thead>
-        <tbody>
-          ${weight.slice(0, 60).map(p => `
-            <tr>
-              <td class="text-gray">${p.date || '—'}</td>
-              <td class="fw-bold">${p.animal_tag || '—'}</td>
-              <td class="text-gray">${p.animal_breed || '—'}</td>
-              <td class="green-text fw-bold">${ar((+p.quantity||0).toFixed(1))} كجم</td>
-              <td class="text-gray">${p.recorded_by || '—'}</td>
-              <td class="text-gray" style="font-size:.75rem">${p.notes || '—'}</td>
-              <td><button class="action-btn sm danger" onclick="delProdRec('${p._id}')" aria-label="حذف السجل" style="padding:3px 8px"><i class="bi bi-trash" aria-hidden="true"></i></button></td>
-            </tr>`).join('')}
-        </tbody>
-      </table>
-    </div>
-  </div>` : ''}`;
+  ${weight.length ? renderDataTableWrapper({
+    title: 'سجلات الأوزان',
+    headers: ['التاريخ','الحيوان','السلالة','الوزن (كجم)','مسجّل بواسطة','ملاحظات',''],
+    rowsHtml: weight.slice(0, 60).map(p => `
+      <tr>
+        <td class="text-gray">${p.date || '—'}</td>
+        <td class="fw-bold">${p.animal_tag || '—'}</td>
+        <td class="text-gray">${p.animal_breed || '—'}</td>
+        <td class="green-text fw-bold">${ar((+p.quantity||0).toFixed(1))} كجم</td>
+        <td class="text-gray">${p.recorded_by || '—'}</td>
+        <td class="text-gray" style="font-size:.75rem">${p.notes || '—'}</td>
+        <td><button class="action-btn sm danger" onclick="delProdRec('${p._id}')" aria-label="حذف السجل" style="padding:3px 8px"><i class="bi bi-trash" aria-hidden="true"></i></button></td>
+      </tr>`).join('')
+  }) : ''}`;
 
   if (breedAvg.length) {
     setTimeout(() => {
@@ -368,8 +371,8 @@ function renderWeightTab(el) {
         data: {
           labels: breedAvg.map(b => b.breed),
           datasets: [
-            { label: 'متوسط الوزن (كجم)', data: breedAvg.map(b => b.avg.toFixed(1)), backgroundColor: 'rgba(0,230,118,0.75)', borderRadius: 4 },
-            { label: 'عدد القياسات',      data: breedAvg.map(b => b.count),         backgroundColor: 'rgba(33,150,243,0.6)', borderRadius: 4, yAxisID: 'y1' },
+            { label: 'متوسط الوزن (كجم)', data: breedAvg.map(b => b.avg.toFixed(1)), backgroundColor: 'rgba(52,211,153,0.75)', borderRadius: 4 },
+            { label: 'عدد القياسات',      data: breedAvg.map(b => b.count),         backgroundColor: 'rgba(59,130,246,0.6)', borderRadius: 4, yAxisID: 'y1' },
           ],
         },
         options: {
@@ -416,32 +419,37 @@ function renderSummaryTab(el) {
   el.innerHTML = `
   <div class="row g-3 mb-4">
     <div class="col-md-6">
-      <div class="wonder-card h-100">
-        <h6 class="fw-bold mb-3"><i class="bi bi-trophy-fill accent-text"></i> أعلى منتجي الحليب</h6>
-        ${topMilk.length ? `
-          <table class="tbl" aria-label="قائمة أعلى منتجي الحليب">
-            <thead><tr><th>#</th><th>الحيوان</th><th>السلالة</th><th>إجمالي</th><th>متوسط/يوم</th></tr></thead>
-            <tbody>
-              ${topMilk.map((a, i) => `
-                <tr>
-                  <td class="fw-bold accent-text">${ar(i+1)}</td>
-                  <td class="fw-bold">${a.tag}</td>
-                  <td class="text-gray">${a.breed || '—'}</td>
-                  <td class="blue-text fw-bold">${ar(a.total.toFixed(1))} ل</td>
-                  <td class="text-gray">${ar((a.total/a.count).toFixed(2))} ل</td>
-                </tr>`).join('')}
-            </tbody>
-          </table>` :
-          '<div class="text-gray text-center py-3">لا توجد بيانات</div>'}
-      </div>
+      ${(function(){
+        // MIGRATED from a manual <table class="tbl"> inside renderSectionContainer
+        // to renderDataTableWrapper (Repository 3, Phase 3 — Table Governance).
+        // Verified before migrating: this table has no sorting, filtering,
+        // row actions, pagination, or export of its own — a static top-8
+        // ranked list — so renderDataTableWrapper's identical <table class="tbl">
+        // output plus its title/empty-state chrome preserves 100% of the
+        // existing behaviour, nothing is downgraded.
+        return renderDataTableWrapper({
+          title: 'أعلى منتجي الحليب',
+          headers: ['#','الحيوان','السلالة','إجمالي','متوسط/يوم'],
+          state: topMilk.length ? 'ready' : 'empty',
+          emptyMsg: 'لا توجد بيانات',
+          rowsHtml: topMilk.map((a, i) => `
+            <tr>
+              <td class="fw-bold accent-text">${ar(i+1)}</td>
+              <td class="fw-bold">${a.tag}</td>
+              <td class="text-gray">${a.breed || '—'}</td>
+              <td class="blue-text fw-bold">${ar(a.total.toFixed(1))} ل</td>
+              <td class="text-gray">${ar((a.total/a.count).toFixed(2))} ل</td>
+            </tr>`).join('')
+        });
+      })()}
     </div>
     <div class="col-md-6">
-      <div class="wonder-card h-100">
-        <h6 class="fw-bold mb-3"><i class="bi bi-bar-chart-fill accent-text"></i> الإنتاج الشهري (6 أشهر)</h6>
-        ${_prodData.length ?
-          `<div style="position:relative;height:240px"><canvas id="summary-chart"></canvas></div>` :
-          '<div class="text-gray text-center py-3">لا توجد بيانات</div>'}
-      </div>
+      ${renderChartContainer({
+        title: 'الإنتاج الشهري', subtitle: 'آخر 6 أشهر',
+        chartHtml: `<div style="position:relative;height:240px"><canvas id="summary-chart"></canvas></div>`,
+        state: _prodData.length ? 'ready' : 'empty',
+        emptyMsg: 'لا توجد بيانات'
+      })}
     </div>
   </div>`;
 
@@ -458,8 +466,8 @@ function renderSummaryTab(el) {
         data: {
           labels: labels,
           datasets: [
-            { label: 'الحليب (ل)', data: mKeys.map(k => monthly[k].milk),   borderColor: '#2196f3', backgroundColor: 'rgba(33,150,243,0.1)', fill: true, tension: 0.35 },
-            { label: 'الصوف (كجم)', data: mKeys.map(k => monthly[k].wool),   borderColor: '#ffc107', backgroundColor: 'rgba(255,193,7,0.1)',  fill: true, tension: 0.35 },
+            { label: 'الحليب (ل)', data: mKeys.map(k => monthly[k].milk),   borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', fill: true, tension: 0.35 },
+            { label: 'الصوف (كجم)', data: mKeys.map(k => monthly[k].wool),   borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)',  fill: true, tension: 0.35 },
           ],
         },
         options: {
@@ -574,6 +582,18 @@ window.submitProd = async function() {
     // Also update animal's current_weight if type=weight
     if (type === 'weight') {
       try { await fbPatch('animals', animal._id, { current_weight: qty, weight_updated: date }); } catch(e) {}
+      try { await fbPost('animals/'+animal._id+'/weights', { weight: qty, date: date, notes: notes || null }); } catch(e) {}
+      // Sprint 2, Epic 2: attach weight intelligence -- additive only,
+      // does not change the writes above. Never blocks on failure.
+      if (window.evaluateWeightAlert) { window.evaluateWeightAlert(animal._id, animal.tag, animal.barn).catch(function(){}); }
+    } else if (type === 'milk' || type === 'wool') {
+      // Sprint 4, Epic 4: attach production intelligence -- additive
+      // only, milk/wool exclusively (weight is Sprint 2's domain,
+      // handled in the branch above, never here). Never blocks on failure.
+      if (window.evaluateProductionAlert) { window.evaluateProductionAlert(animal._id, animal.tag, type, animal.barn).catch(function(){}); }
+      // Sprint 11 (v1.4): recommendation only -- Production Intelligence
+      // (Sprint 4) already self-resolves, so there is no stale reminder to close here.
+      if (window.completeWorkflow) { window.completeWorkflow('production', {sourceId:animal._id, animalId:animal._id, animalTag:animal.tag, barn:animal.barn, productionType:type}).then(function(r){ if(r&&r.recommendation&&r.recommendation.text&&r.recommendation.actionable!==false) toast('💡 '+r.recommendation.text,'info'); }).catch(function(){}); }
     }
 
     const typeLabel = { milk:'حليب', wool:'صوف', weight:'وزن' }[type];
@@ -588,6 +608,7 @@ window.submitProd = async function() {
 };
 
 window.delProdRec = async function(id) {
+  if (!can('animals')) { toast('ليس لديك صلاحية لتنفيذ هذا الإجراء', 'error'); return; }
   if (!id || !confirm('حذف هذا السجل نهائياً؟')) return;
   try {
     await fbDelete('production_log', id);

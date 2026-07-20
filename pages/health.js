@@ -3,10 +3,17 @@ let healthRecs=[], healthFilter='all', editHealthId=null;
 
 document.addEventListener('DOMContentLoaded', async ()=>{
   if(!requireAuth())return;
+  // SECURITY FIX (Phase 6 hardening): nav.js grants perm:'health', unenforced
+  // until now -- same bug class as vaccine.js, breeding.js, inventory.js.
+  if (!can('health')) {
+    document.getElementById('content').innerHTML='<div class="empty-state"><i class="bi bi-shield-x"></i><p>غير مصرح بالوصول لبيانات الصحة</p></div>';
+    renderNavbarV2('health.html');
+    return;
+  }
   const s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
-  renderNavbar('health.html');
+  renderNavbarV2('health.html');
 
   // FAB for mobile
   addFAB('تسجيل سجل صحي جديد', function(){ openAddHealth(); });
@@ -21,33 +28,73 @@ function renderHealthPage(s){
   const inWithdrawal=healthRecs.filter(r=>r.status==='active'&&r.withdrawal_end&&r.withdrawal_end>=t);
   const completed=healthRecs.filter(r=>r.status==='completed');
 
-  renderPageHeader('<i class="bi bi-heart-pulse-fill accent-text"></i> السجل الصحي',
-    `${ar(healthRecs.length)} سجل • ${ar(active.length)} قيد العلاج`,
-    can('health')?`<button class="action-btn primary" onclick="openHealthModal()"><i class="bi bi-plus-lg"></i> سجل جديد</button>`:''
-  );
+  renderPageHeaderV2({
+    title: '<i class="bi bi-heart-pulse-fill accent-text"></i> السجل الصحي',
+    description: `${ar(healthRecs.length)} سجل • ${ar(active.length)} قيد العلاج`,
+    breadcrumb: [{label:'الرئيسية', href:'dashboard.html'}, {label:'السجل الصحي'}],
+    primaryAction: can('health')?`<button class="action-btn primary" onclick="openHealthModal()"><i class="bi bi-plus-lg"></i> سجل جديد</button>`:'',
+    secondaryActions: `<button class="action-btn sm" onclick="exportHealthCSV()"><i class="bi bi-filetype-csv"></i> تصدير</button>`
+  });
   const el=document.getElementById('content');
 
-  // Withdrawal alert banner
-  const withdrawalAlert=inWithdrawal.length>0?`<div class="withdrawal-alert mb-4">
-    <div class="fw-bold mb-2 red-text"><i class="bi bi-exclamation-triangle-fill me-2"></i>تحذير: ${ar(inWithdrawal.length)} حيوان في تأثير العلاج — يُمنع البيع أو الذبح أو استخدام المنتجات</div>
-    ${inWithdrawal.map(r=>{const dLeft=Math.ceil((new Date(r.withdrawal_end)-new Date())/86400000);return`<div class="d-flex align-items-center gap-2 mt-2 flex-wrap">
-      <span class="type-badge badge-danger">${r.animal_tag||r.animal_breed}</span>
-      <small class="text-gray">${r.medication} — ينتهي ${r.withdrawal_end} <span style="color:var(--red)">(متبقي ${ar(Math.max(0,dLeft))} يوم)</span></small>
-    </div>`;}).join('')}
-  </div>`:'';
+  // KPI Summary (Analytics Template) — was 4 plain summary-cards, now the shared KPI Card component
+  const kpiHtml = `
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">${renderKPICard({ label:'قيد العلاج', value: ar(active.length), status: active.length>0?'watch':'normal' })}</div>
+    <div class="col-6 col-md-3">${renderKPICard({ label:'فترة سحب', value: ar(inWithdrawal.length), status: inWithdrawal.length>0?'alert':'normal' })}</div>
+    <div class="col-6 col-md-3">${renderKPICard({ label:'مكتملة', value: ar(completed.length), status:'normal' })}</div>
+    <div class="col-6 col-md-3">${renderKPICard({ label:'إجمالي', value: ar(healthRecs.length), status:'normal' })}</div>
+  </div>`;
+
+  // Chart Grid (Analytics Template) — status distribution, degrades gracefully if empty
+  const statusDonut = renderDonutSVG([
+    { label:'قيد العلاج', value: active.length, color:'#f59e0b' },
+    { label:'مكتمل', value: completed.length, color:'#10b981' },
+  ], { size:140 });
+
+  // Treatment Trend — NEW, was missing (module structure calls for it, per
+  // Repository 3 Phase 2). Reuses renderLineChartSVG exactly as dashboard.html
+  // does; built entirely from healthRecs already loaded on this page — no new
+  // Firebase call added.
+  const arMonthsH=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+  const nowH=new Date();
+  const treatmentTrend=[];
+  for(let i=5;i>=0;i--){
+    const d=new Date(nowH.getFullYear(),nowH.getMonth()-i,1);
+    const mStr=d.toISOString().slice(0,7);
+    const count=healthRecs.filter(r=>(r.date||'').startsWith(mStr)).length;
+    treatmentTrend.push({ label: arMonthsH[d.getMonth()].slice(0,3), value: count });
+  }
+  const trendSvg=renderLineChartSVG(treatmentTrend,{color:'#f59e0b'});
+
+  const analyticsHtml = `<div class="row g-3 mb-4">
+    <div class="col-md-5">${renderChartContainer({ title:'توزيع الحالات', subtitle:'قيد العلاج مقابل مكتمل', chartHtml: statusDonut||'', state: statusDonut?'ready':'empty' })}</div>
+    <div class="col-md-7">${renderChartContainer({ title:'اتجاه العلاجات', subtitle:'آخر 6 أشهر', chartHtml: trendSvg||'', state: trendSvg?'ready':'empty' })}</div>
+  </div>`;
+
+  // Withdrawal warnings — now individual Alert Cards (severity: critical) instead of one grouped banner
+  const withdrawalAlertsHtml = inWithdrawal.length>0 ? `
+    <div class="mb-4">
+      <div class="fw-bold mb-2" style="color:var(--red)"><i class="bi bi-exclamation-triangle-fill me-2"></i>تحذير: حيوانات في فترة تأثير العلاج</div>
+      ${inWithdrawal.map(r=>{
+        const dLeft=Math.ceil((new Date(r.withdrawal_end)-new Date())/86400000);
+        return renderAlertCard({ severity:'critical', icon:'bi-exclamation-triangle-fill',
+          title:`${r.animal_tag||r.animal_breed} — ${r.medication}`,
+          message:'يُمنع البيع أو الذبح أو استخدام المنتجات',
+          source:r.barn||'', deadline:`ينتهي ${r.withdrawal_end} (متبقي ${ar(Math.max(0,dLeft))} يوم)` });
+      }).join('')}
+    </div>` : '';
 
   let filtered=healthFilter==='all'?healthRecs:healthFilter==='active'?active:healthFilter==='withdrawal'?inWithdrawal:completed;
 
-  el.innerHTML=`
-  <div class="row g-3 mb-4">
-    ${[{l:'قيد العلاج',v:active.length,c:'var(--orange)',i:'bi-activity'},{l:'فترة سحب',v:inWithdrawal.length,c:'var(--red)',i:'bi-exclamation-triangle-fill'},{l:'مكتملة',v:completed.length,c:'var(--green)',i:'bi-check-circle-fill'},{l:'إجمالي',v:healthRecs.length,c:'var(--gray)',i:'bi-clipboard2-pulse-fill'}].map(s=>`<div class="col-6 col-md-3"><div class="summary-card"><i class="bi ${s.i} d-block mb-2" style="color:${s.c};font-size:1.3rem"></i><div class="summary-number" style="color:${s.c}">${ar(s.v)}</div><small class="text-gray">${s.l}</small></div></div>`).join('')}
-  </div>
-  ${withdrawalAlert}
+  // Filter Bar + Data list (Listing Template) — kept as record-cards, not forced into a literal <table>:
+  // health records carry rich per-record detail (diagnosis/medication/dosage/withdrawal/BCS) that
+  // compresses badly into narrow table columns, so the existing card-list is the better fit here.
+  el.innerHTML = kpiHtml + analyticsHtml + withdrawalAlertsHtml + `
   <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <div class="filter-bar">
       ${[{f:'all',l:'الكل',n:healthRecs.length},{f:'active',l:'قيد العلاج',n:active.length},{f:'withdrawal',l:'فترة سحب',n:inWithdrawal.length},{f:'completed',l:'مكتمل',n:completed.length}].map(x=>`<button class="filter-btn${healthFilter===x.f?' active':''}" onclick="healthFilter='${x.f}';renderHealthPage(getSettings())">${x.l} (${x.n})</button>`).join('')}
     </div>
-    <button class="action-btn sm" onclick="exportHealthCSV()"><i class="bi bi-filetype-csv"></i> تصدير</button>
   </div>
   ${filtered.length===0?`<div class="empty-state"><i class="bi bi-heart-pulse"></i><p>لا توجد سجلات</p></div>`:
   filtered.map(r=>{
@@ -70,21 +117,52 @@ function renderHealthPage(s){
           <small class="text-gray">${r.date||'—'} ${r.barn?`• ${r.barn}`:''}</small>
         </div>
         <div class="d-flex gap-2 flex-shrink-0">
-          ${r.status==='active'&&can('health')?`<button class="action-btn primary sm" onclick="event.stopPropagation();completeHealth('${r._id}')"><i class="bi bi-check-lg"></i></button>`:''}
+          ${r.status==='active'&&can('health')?`<button class="action-btn primary sm" onclick="event.stopPropagation();completeHealth('${r._id}')"><i class="bi bi-check-lg" aria-hidden="true"></i><span class="visually-hidden">إكمال العلاج</span></button>`:''}
           ${can('health')?`<button class="action-btn sm" onclick="event.stopPropagation();openHealthModal('${r._id}')"><i class="bi bi-pencil" aria-hidden="true"></i><span class="visually-hidden">تعديل</span></button>`:''}
           ${can('admin')?`<button class="action-btn danger sm" onclick="event.stopPropagation();delHealth('${r._id}')"><i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">حذف</span></button>`:''}
         </div>
       </div>
     </div>`;
-  }).join('')}`;
+  }).join('')}
+  ${(function(){
+    // Recent Activity (Analytics Template) — NEW, was missing. Reuses
+    // renderTimeline/renderTimelineItem exactly as dashboard.html's own
+    // "Recent Activity" section; built from healthRecs already loaded,
+    // no new Firebase call added.
+    const recent=[...healthRecs].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,6);
+    return `<div class="wonder-card mt-4">
+      <h6 class="fw-bold mb-3" style="font-size:var(--text-lg)"><i class="bi bi-clock-history accent-text me-2"></i>النشاط الأخير</h6>
+      ${recent.length?renderTimeline(recent.map(r=>renderTimelineItem({
+          time: r.date||'',
+          eventType: r.status==='active'?'سجل علاج جديد':'علاج مكتمل',
+          entity: `${r.animal_breed||''}${r.animal_tag?' #'+r.animal_tag:''} — ${r.diagnosis||''}`,
+        }))):`<div class="empty-state py-3"><i class="bi bi-clock-history"></i><p>لا يوجد نشاط مسجّل بعد</p></div>`}
+    </div>`;
+  })()}`;
 }
 
 window.completeHealth=async function(id){
-  try{await fbPatch('health',id,{status:'completed'});await logActivity('edit','health','إكمال علاج');toast('تم إكمال العلاج');healthRecs=await fbGet('health');renderHealthPage(getSettings());}
+  try{
+    const r=healthRecs.find(function(x){return x._id===id;});
+    await fbPatch('health',id,{status:'completed'});await logActivity('edit','health','إكمال علاج');toast('تم إكمال العلاج');
+    // Sprint 11 (v1.4): closes the ORIGINAL 'medication_followup' reminder
+    // task created when this same health record's withdrawal_end was
+    // first set -- discovered gap (docs/features/WORKFLOW-DISCOVERY.md).
+    // Recommendation reuses evaluateHealthRisk() live, never re-scores.
+    if(window.completeWorkflow && r){
+      const animals=await fbGet('animals');
+      const animal=animals.find(function(a){return a.tag===r.animal_tag;});
+      window.completeWorkflow('medication', { sourceId:id, animalId:animal?animal._id:null, animalTag:r.animal_tag, barn:animal?animal.barn:null }).then(function(res){
+        if(res&&res.recommendation&&res.recommendation.text&&res.recommendation.actionable!==false)toast('💡 '+res.recommendation.text,'info');
+      }).catch(function(){});
+    }
+    healthRecs=await fbGet('health');renderHealthPage(getSettings());
+  }
   catch(e){toast('فشل: '+e.message,'error');}
 };
 
 window.delHealth=async function(id){
+  if(!can('admin')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return;}
   if(!confirm('حذف هذا السجل؟'))return;
   try{await fbDelete('health',id);await logActivity('delete','health','حذف سجل صحي');toast('تم الحذف');healthRecs=healthRecs.filter(r=>r._id!==id);renderHealthPage(getSettings());}
   catch(e){toast('فشل: '+e.message,'error');}
@@ -181,8 +259,38 @@ window.submitHealth=async function(){
   const data={animal_tag:document.getElementById('h-tag').value.trim(),animal_breed:document.getElementById('h-breed').value,animal_species:document.getElementById('h-sp').value,barn:document.getElementById('h-barn').value,date:document.getElementById('h-date').value,vet_name:document.getElementById('h-vet').value.trim()||null,diagnosis:diag,medication:med,dosage:document.getElementById('h-dose').value.trim(),withdrawal_days:wdays,treatment_end:tend,withdrawal_end:withdrawal_end||null,bcs:document.getElementById('h-bcs').value||null,status:document.getElementById('h-stat').value,notes:document.getElementById('h-notes').value.trim()||null};
   closeModal();toast('جاري الحفظ...','info');
   try{
+    let healthId=editHealthId;
     if(editHealthId){await fbPatch('health',editHealthId,data);await logActivity('edit','health','تعديل سجل: '+diag);}
-    else{await fbPost('health',data);await logActivity('add','health','إضافة سجل: '+diag+' | '+med+(withdrawal_end?` | سحب حتى ${withdrawal_end}`:''));}
+    else{healthId=await fbPost('health',data);await logActivity('add','health','إضافة سجل: '+diag+' | '+med+(withdrawal_end?` | سحب حتى ${withdrawal_end}`:''));}
+    // Sprint 1, Epic 1: attach task automation -- additive only, does not
+    // change the health write above. Never blocks on failure.
+    if(data.withdrawal_end&&window.autoGenerateTask){
+      window.autoGenerateTask('medication_followup',{sourceId:healthId,animal_tag:data.animal_tag,withdrawal_end:data.withdrawal_end,barn:data.barn}).catch(function(){});
+    }
+    // Sprint 3, Epic 3: attach health risk evaluation -- health records
+    // carry animal_tag, not animal_id, so resolve it first. Fire-and-
+    // forget; never blocks on failure or delays the save above.
+    if(window.evaluateHealthRisk&&data.animal_tag){
+      fbGet('animals').then(function(allAnimals){
+        var match=(allAnimals||[]).find(function(a){return a.tag===data.animal_tag;});
+        if(match){
+          window.evaluateHealthRisk(match._id, match.tag, match.barn);
+          // Sprint 14 (v1.7): deduct medication stock -- Best Effort,
+          // never blocks the health record itself (already saved above).
+          if(window.recordInventoryTransaction&&data.medication&&!editHealthId){
+            window.recordInventoryTransaction('meds', data.medication, -1, 'treatment', healthId).catch(function(){});
+          }
+          // Sprint 11 (v1.4): recommendation only, reusing the SAME
+          // resolved animal (no duplicate fbGet('animals') lookup). A
+          // NEW health record has no prior reminder of its own to close.
+          if(window.completeWorkflow&&!editHealthId){
+            window.completeWorkflow('health',{sourceId:healthId, animalId:match._id, animalTag:match.tag, barn:match.barn}).then(function(r){
+              if(r&&r.recommendation&&r.recommendation.text&&r.recommendation.actionable!==false)toast('💡 '+r.recommendation.text,'info');
+            }).catch(function(){});
+          }
+        }
+      }).catch(function(){});
+    }
     toast(editHealthId?'تم التحديث':'تمت الإضافة');
     healthRecs=await fbGet('health');renderHealthPage(getSettings());
   }catch(e){toast('خطأ: '+e.message,'error');}

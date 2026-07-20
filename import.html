@@ -16,6 +16,10 @@
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="media/logo-icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="media/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="media/favicon-16.png">
+<link rel="apple-touch-icon" href="media/apple-touch-icon.png">
 <link rel="stylesheet" href="styles.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
@@ -34,7 +38,7 @@
 </style>
 </head>
 <body>
-<div class="page-wrap">
+<div class="page-wrap rail-v2-content">
   <div id="page-header"></div>
   <div id="content"><div class="text-center py-5"><div class="spinner"></div></div></div>
   <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
@@ -46,6 +50,7 @@
 <script src="firebase.js"></script>
 <script src="nav.js"></script>
 <script src="shared.js"></script>
+<script src="offline-sync.js" defer></script>
 <script src="pages/datepicker.js" defer></script>
 <script src="pages/tour.js" defer></script>
 <script src="import-data.js"></script>
@@ -64,7 +69,7 @@ document.addEventListener('DOMContentLoaded', function() {
   var s = getSettings();
   document.getElementById('footer-year').textContent = ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent  = s.farmName;
-  renderNavbar('');
+  renderNavbarV2('');
   renderPageHeader(
     '<i class="bi bi-database-fill-gear accent-text"></i> محرك الاستيراد والتصدير الذكي',
     'Smart Bulk-Data Engine', ''
@@ -406,8 +411,11 @@ window.startExcelImport = async function() {
   var bar    = document.getElementById('xl-bar');
   var pct    = document.getElementById('xl-pct');
 
+  var _importKnownAnimals=await fbGet('animals');
   for (var i = 0; i < total; i++) {
-    var data = Object.assign({}, validRows[i].data, {
+    var _rowData=validRows[i].data;
+    var data = Object.assign({}, _rowData, {
+      tag: _rowData.tag||await generateAnimalTag(_rowData.species,_importKnownAnimals),
       created_at:  new Date().toISOString(),
       imported_at: new Date().toISOString(),
     });
@@ -588,12 +596,12 @@ function renderInitialTab(el) {
   el.innerHTML =
     '<div class="wonder-card mb-4" style="background:rgba(244,67,54,.06);border-color:rgba(244,67,54,.3)">' +
       '<div class="fw-bold mb-2 red-text"><i class="bi bi-exclamation-triangle-fill me-2"></i>تحذير — استخدم مرة واحدة فقط</div>' +
-      '<p class="text-gray" style="font-size:.85rem;margin:0">يستورد <strong style="color:var(--orange)">٤٦٢ حيوان</strong> من بيانات المزرعة الأصلية. تأكد أن القطيع فارغ أولاً.</p>' +
+      '<p class="text-gray" style="font-size:.85rem;margin:0">يستورد <strong style="color:var(--orange)">٤٤٠ حيوان</strong> من بيانات المزرعة الأصلية. تأكد أن القطيع فارغ أولاً.</p>' +
     '</div>' +
     '<div class="wonder-card mb-4">' +
-      '<div class="fw-bold mb-3"><i class="bi bi-table accent-text me-2"></i>بيان الماعز والأغنام — ٢٠٢٦/٠٤/٠٤</div>' +
+      '<div class="fw-bold mb-3"><i class="bi bi-table accent-text me-2"></i>بيان الماعز والأغنام — ٢٠٢٦/٠٤/٢٤</div>' +
       '<div class="row g-3 mb-3">' +
-        [{l:'إجمالي الأغنام',v:'١٤٠',c:'var(--blue)',i:'bi-cloud-fill'},{l:'إجمالي الماعز',v:'٣٢٢',c:'var(--green)',i:'bi-tropical-storm'},{l:'الإجمالي الكلي',v:'٤٦٢',c:'var(--orange)',i:'bi-bar-chart-fill'}].map(function(k){return '<div class="col-4"><div class="summary-card text-center"><i class="bi '+k.i+' d-block mb-1" style="color:'+k.c+'"></i><div class="fw-bold" style="color:'+k.c+'">'+k.v+'</div><small class="text-gray">'+k.l+'</small></div></div>';}).join('') +
+        [{l:'إجمالي الأغنام',v:'١٢١',c:'var(--blue)',i:'bi-cloud-fill'},{l:'إجمالي الماعز',v:'٣١٩',c:'var(--green)',i:'bi-tropical-storm'},{l:'الإجمالي الكلي',v:'٤٤٠',c:'var(--orange)',i:'bi-bar-chart-fill'}].map(function(k){return '<div class="col-4"><div class="summary-card text-center"><i class="bi '+k.i+' d-block mb-1" style="color:'+k.c+'"></i><div class="fw-bold" style="color:'+k.c+'">'+k.v+'</div><small class="text-gray">'+k.l+'</small></div></div>';}).join('') +
       '</div>' +
       '<div id="init-progress" style="display:none;margin-bottom:16px">' +
         '<div class="d-flex justify-content-between mb-1"><span class="text-gray" style="font-size:.82rem" id="init-status">جاري الاستيراد...</span><span class="fw-bold" id="init-pct">0٪</span></div>' +
@@ -602,7 +610,7 @@ function renderInitialTab(el) {
       '<div id="init-result" style="display:none" class="mb-3"></div>' +
       '<div class="d-flex gap-2 flex-wrap align-items-center">' +
         '<button class="action-btn primary" onclick="startInitialImport()" id="init-btn" style="padding:12px 28px">' +
-          '<i class="bi bi-cloud-arrow-up-fill me-2"></i>بدء استيراد ٤٦٢ حيوان' +
+          '<i class="bi bi-cloud-arrow-up-fill me-2"></i>بدء استيراد ٤٤٠ حيوان' +
         '</button>' +
         '<a href="animals.html" class="action-btn"><i class="bi bi-list-ul me-1"></i>عرض القطيع</a>' +
       '</div>' +
@@ -610,7 +618,7 @@ function renderInitialTab(el) {
 }
 
 window.startInitialImport = async function() {
-  if (!confirm('هل أنت متأكد من استيراد ٤٦٢ حيوان؟\n\nتأكد أن قاعدة البيانات فارغة أو جديدة.')) return;
+  if (!confirm('هل أنت متأكد من استيراد ٤٤٠ حيوان؟\n\nتأكد أن قاعدة البيانات فارغة أو جديدة.')) return;
   var btn    = document.getElementById('init-btn');
   var prog   = document.getElementById('init-progress');
   var result = document.getElementById('init-result');
@@ -622,9 +630,11 @@ window.startInitialImport = async function() {
   btn.innerHTML = '<div class="spinner" style="width:18px;height:18px;border-width:2px;display:inline-block;margin-left:8px"></div> جاري الاستيراد...';
   prog.style.display = 'block';
 
+  var _seedKnownAnimals=await fbGet('animals');
   var ok = 0, failed = 0, total = FARM_ANIMALS.length;
   for (var i = 0; i < total; i++) {
     var a = Object.assign({}, FARM_ANIMALS[i], { created_at: new Date().toISOString(), imported_at: new Date().toISOString() });
+    if(!a.tag) a.tag = await generateAnimalTag(a.species, _seedKnownAnimals);
     try { await fbPost('animals', a); ok++; } catch(e) { failed++; }
     var p = Math.round((i+1)/total*100);
     bar.style.width = p + '%';
@@ -633,7 +643,7 @@ window.startInitialImport = async function() {
   }
   await logActivity('add', 'animals', 'استيراد بيانات المزرعة: ' + ar(ok) + ' حيوان (' + ar(failed) + ' فشل)');
   result.style.display = 'block';
-  result.innerHTML = '<div style="background:' + (ok===total?'rgba(0,230,118,.1)':'rgba(255,107,53,.1)') + ';border:1px solid ' + (ok===total?'rgba(0,230,118,.3)':'rgba(255,107,53,.3)') + ';border-radius:12px;padding:14px 18px;font-weight:700"><i class="bi bi-' + (ok===total?'check-circle-fill me-2" style="color:var(--green)'>✅':'exclamation-circle-fill me-2" style="color:var(--orange)">⚠️') + ' تم استيراد ' + ar(ok) + (failed?' من '+ar(total)+'<br><span class="text-gray fw-normal">فشل: '+ar(failed)+'</span>':'') + '</div>';
+  result.innerHTML = '<div style="background:' + (ok===total?'rgba(0,230,118,.1)':'rgba(255,107,53,.1)') + ';border:1px solid ' + (ok===total?'rgba(0,230,118,.3)':'rgba(255,107,53,.3)') + ';border-radius:12px;padding:14px 18px;font-weight:700"><i class="bi bi-' + (ok===total?'check-circle-fill':'exclamation-circle-fill') + ' me-2" style="color:' + (ok===total?'var(--green)':'var(--orange)') + '">' + (ok===total?'✅':'⚠️') + '</i>' + ' تم استيراد ' + ar(ok) + (failed?' من '+ar(total)+'<br><span class="text-gray fw-normal">فشل: '+ar(failed)+'</span>':'') + '</div>';
   btn.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i>تم الاستيراد';
   setTimeout(function(){ location.href = 'animals.html'; }, 2000);
 };

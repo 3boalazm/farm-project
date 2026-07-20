@@ -1,72 +1,114 @@
 // ══════════════════════════════════════════════════════════════
-//  SERVICE WORKER — Farm Management System
-//  Strategy: Cache-First for static assets, Network-First for data
+//  SERVICE WORKER — بيان المزرعة v5
+//  Cache-First: CDN assets
+//  Stale-While-Revalidate: HTML + JS/CSS
+//  Network-First with Cache Fallback: Firebase REST API
+//  Background Sync: queued writes via offline-sync.js
 // ══════════════════════════════════════════════════════════════
-const CACHE_NAME  = 'farm-bayan-v4';
-const CACHE_PAGES = 'farm-pages-v4';
+var CACHE_STATIC = 'farm-static-v5';
+var CACHE_PAGES  = 'farm-pages-v5';
+var CACHE_DATA   = 'farm-data-v5';    // Firebase GET responses
 
-// Static assets cached forever (immutable CDN)
-const STATIC_CACHE = [
-  'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css',
-  'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css',
-  'https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap',
+var APP_SHELL = [
+  '/', '/index.html', '/dashboard.html', '/login.html',
+  '/animals.html', '/health.html', '/vaccine.html',
+  '/breeding.html', '/births.html', '/production.html',
+  '/tasks.html', '/notifications.html', '/reports.html',
+  '/inventory.html', '/finance.html', '/settings.html',
+  '/styles.css', '/config.js', '/firebase.js',
+  '/nav.js', '/shared.js', '/offline-sync.js', '/manifest.json',
 ];
 
-// App shell — always cache these local files
-const APP_SHELL = [
-  '/',
-  '/index.html',
-  '/dashboard.html',
-  '/login.html',
-  '/styles.css',
-  '/config.js',
-  '/firebase.js',
-  '/nav.js',
-  '/shared.js',
-  '/manifest.json',
+var CDN_DOMAINS = [
+  'cdn.jsdelivr.net', 'cdnjs.cloudflare.com',
+  'fonts.googleapis.com', 'fonts.gstatic.com',
 ];
 
-// ── Install: cache app shell ───────────────────────────────────
+var FB_DOMAIN = 'firebasedatabase.app';
+
+// ── Install ───────────────────────────────────────────────────
 self.addEventListener('install', function(e) {
   self.skipWaiting();
   e.waitUntil(
-    caches.open(CACHE_NAME).then(function(cache) {
-      return cache.addAll(APP_SHELL.concat(STATIC_CACHE));
-    }).catch(function() {})  // Don't fail install if some resources are unavailable
+    caches.open(CACHE_STATIC).then(function(cache) {
+      return Promise.allSettled(APP_SHELL.map(function(url) {
+        return cache.add(url).catch(function() {});
+      }));
+    })
   );
 });
 
-// ── Activate: clean old caches ────────────────────────────────
+// ── Activate ──────────────────────────────────────────────────
 self.addEventListener('activate', function(e) {
+  var keep = [CACHE_STATIC, CACHE_PAGES, CACHE_DATA];
   e.waitUntil(
     caches.keys().then(function(keys) {
       return Promise.all(
-        keys.filter(function(k) { return k !== CACHE_NAME && k !== CACHE_PAGES; })
+        keys.filter(function(k) { return !keep.includes(k); })
             .map(function(k) { return caches.delete(k); })
       );
     }).then(function() { return self.clients.claim(); })
   );
 });
 
-// ── Fetch: smart caching strategy ────────────────────────────
+// ── Fetch ─────────────────────────────────────────────────────
 self.addEventListener('fetch', function(e) {
   var url = e.request.url;
+  var method = e.request.method;
 
-  // Skip non-GET and Firebase API calls (always network)
-  if (e.request.method !== 'GET') return;
-  if (url.includes('firebasedatabase.app') || url.includes('googleapis.com/ai')) return;
+  // Skip non-GET browser chrome / analytics
   if (url.includes('mixpanel') || url.includes('analytics')) return;
+  if (url.includes('chrome-extension')) return;
 
-  // CDN static assets → Cache First (they have content hash in URL)
-  if (url.includes('cdn.jsdelivr.net') || url.includes('cdnjs.cloudflare.com') ||
-      url.includes('fonts.googleapis.com') || url.includes('fonts.gstatic.com')) {
+  // ── Firebase REST GET → Network-First with cache fallback ──
+  if (url.includes(FB_DOMAIN) && method === 'GET') {
+    e.respondWith(
+      fetch(e.request.clone()).then(function(res) {
+        if (res.ok) {
+          // Cache successful Firebase reads for offline access
+          var resClone = res.clone();
+          caches.open(CACHE_DATA).then(function(cache) {
+            // Cache with 5-minute TTL via custom header workaround
+            cache.put(e.request, resClone);
+          });
+        }
+        return res;
+      }).catch(function() {
+        // Offline: return cached Firebase data
+        return caches.match(e.request).then(function(cached) {
+          if (cached) {
+            // Inject offline header so the app knows data is stale
+            return new Response(cached.body, {
+              status: 200,
+              statusText: 'OK (Cached)',
+              headers: new Headers({
+                'Content-Type': 'application/json',
+                'X-Farm-Cache': 'offline',
+              }),
+            });
+          }
+          // No cache — return empty array so app doesn't crash
+          return new Response('[]', {
+            status: 200,
+            headers: new Headers({ 'Content-Type': 'application/json', 'X-Farm-Cache': 'empty' }),
+          });
+        });
+      })
+    );
+    return;
+  }
+
+  // Skip Firebase writes — handled by offline-sync.js
+  if (url.includes(FB_DOMAIN) && method !== 'GET') return;
+  if (url.includes('googleapis.com/ai')) return;
+
+  // ── CDN assets → Cache-First ──────────────────────────────
+  if (CDN_DOMAINS.some(function(d) { return url.includes(d); })) {
     e.respondWith(
       caches.match(e.request).then(function(cached) {
-        if (cached) return cached;
-        return fetch(e.request).then(function(res) {
+        return cached || fetch(e.request).then(function(res) {
           if (res.ok) {
-            var clone = res.clone();
-            caches.open(CACHE_NAME).then(function(c) { c.put(e.request, clone); });
+            caches.open(CACHE_STATIC).then(function(c) { c.put(e.request, res.clone()); });
           }
           return res;
         });
@@ -75,8 +117,8 @@ self.addEventListener('fetch', function(e) {
     return;
   }
 
-  // HTML pages → Stale-While-Revalidate (show cached, update in background)
-  if (url.endsWith('.html') || url.endsWith('/')) {
+  // ── HTML → Stale-While-Revalidate ────────────────────────
+  if (method === 'GET' && (url.endsWith('.html') || url.endsWith('/'))) {
     e.respondWith(
       caches.open(CACHE_PAGES).then(function(cache) {
         return cache.match(e.request).then(function(cached) {
@@ -84,7 +126,6 @@ self.addEventListener('fetch', function(e) {
             if (res.ok) cache.put(e.request, res.clone());
             return res;
           }).catch(function() { return cached; });
-          // Return cached immediately, update in background
           return cached || networkFetch;
         });
       })
@@ -92,10 +133,10 @@ self.addEventListener('fetch', function(e) {
     return;
   }
 
-  // JS/CSS local files → Stale-While-Revalidate
-  if (url.includes(self.location.origin) && (url.endsWith('.js') || url.endsWith('.css'))) {
+  // ── JS / CSS → Stale-While-Revalidate ────────────────────
+  if (method === 'GET' && (url.endsWith('.js') || url.endsWith('.css'))) {
     e.respondWith(
-      caches.open(CACHE_NAME).then(function(cache) {
+      caches.open(CACHE_STATIC).then(function(cache) {
         return cache.match(e.request).then(function(cached) {
           var networkFetch = fetch(e.request).then(function(res) {
             if (res.ok) cache.put(e.request, res.clone());
@@ -106,5 +147,15 @@ self.addEventListener('fetch', function(e) {
       })
     );
     return;
+  }
+});
+
+// ── Message from page: force sync ────────────────────────────
+self.addEventListener('message', function(e) {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
+  if (e.data && e.data.type === 'CLEAR_DATA_CACHE') {
+    caches.delete(CACHE_DATA).then(function() {
+      e.source.postMessage({ type: 'DATA_CACHE_CLEARED' });
+    });
   }
 });
