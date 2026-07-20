@@ -225,11 +225,11 @@
       ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'"
     },
 
-    "diary_snapshot": {
-      ".read":  "auth != null",
-      ".write": "auth != null"
-    },
-
+    // Note: the old singular "diary_snapshot" path was removed here --
+    // dead since the diary history redesign moved to the dated
+    // "diary_snapshots" collection below; no code reads or writes it
+    // anymore (confirmed empty in production), so it's no longer worth
+    // a standing rule. See git history if it ever needs restoring.
     "diary_snapshots": {
       ".read":  "auth != null",
       ".write": "auth != null"
