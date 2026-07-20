@@ -2,21 +2,60 @@
   "rules": {
 
     // ══════════════════════════════════════════════════════════
-    //  بيان المزرعة — Firebase Security Rules (Practical)
-    //  التطبيق يستخدم PIN login مخصص (مش Firebase Auth)
-    //  لذلك الحماية بتعتمد على:
-    //  1. عدم كشف الـ databaseURL للعموم (Vercel env var)
-    //  2. منع القراءة الكاملة من غير Authenticated
-    //  3. الكتابة متاحة بس عبر الـ URL المعروف للتطبيق
+    //  بيان المزرعة — Firebase Security Rules (Hardened)
+    //
+    //  السابق: كل الكولكشنز كانت ".read": true / ".write": true للعموم
+    //  بالكامل، من غير أي auth — أي حد عنده الـ databaseURL (وهو موجود
+    //  بالكود المصدري اللي بيتحمل في متصفح أي زائر) يقدر يقرا ويعدّل
+    //  ويمسح بيانات المزرعة كاملة، بما فيها users/pin_hash.
+    //
+    //  الحل بيعتمد على البنية التحتية اللي firebase.js أصلاً بيعملها:
+    //  1. كل جلسة (حتى قبل تسجيل الدخول بالـPIN) بتاخد Firebase
+    //     Anonymous Auth token تلقائيًا (_signInAnonymouslyRestOnce)
+    //     → auth != null بقى مضمون لأي طلب حقيقي من التطبيق.
+    //  2. بعد نجاح الـPIN، signInWithFirebaseAuth() بتربط الجلسة
+    //     بهوية Firebase حقيقية خاصة بنفس المستخدم، وتكتب
+    //     uid_lookup/{firebaseUid} → {appUserId} عشان الـrules تقدر
+    //     تعرف "مين ده" وتجيب الدور بتاعه من users/{appUserId}/role.
+    //
+    //  إيه اللي اتغيّر هنا:
+    //  - كل الكولكشنز بقت محتاجة auth != null كحد أدنى (بتقفل أي طلب
+    //    REST مباشر من برا التطبيق من غير ما يعدّي حتى بـAnonymous Auth).
+    //  - finance / users / settings: الكتابة بقت مقصورة على admin فقط
+    //    (مطابق تمامًا لـROLE_PERMS في firebase.js: supervisor/vet/
+    //    worker/visitor كلهم مستبعدين من 'users' و'finance' أصلاً).
+    //  - قراءة finance سابت auth != null بس (مش admin-only) لأن
+    //    dashboard.html بيحسب ملخص الإيرادات/المصروفات اليومية لكل
+    //    الأدوار من غير فحص can('finance') — تقييدها كانت هتكسر
+    //    الداشبورد لغير الـadmin.
+    //  - uid_lookup: كل مستخدم يقرا/يكتب سطره الخاص بس (مش يقدر
+    //    يلعب في mapping حد تاني وينتحل دوره).
+    //  - أول تشغيل على قاعدة بيانات فاضية (Users.init() في firebase.js)
+    //    لسه شغّال: لو users/ لسه مش موجودة خالص بيسمح بإنشاء أول
+    //    admin حتى من غير auth دور admin (مفيش دور أصلاً وقتها).
+    //
+    //  ملحوظ ومهم — حدود الحل ده:
+    //  - الـPIN لسه 4 أرقام (10,000 احتمال) وSHA-256 hash بصيغة salt
+    //    معروفة في الكود المصدري نفسه؛ لو حد قدر يقرا users/ (حتى بعد
+    //    التقييد ده، auth != null سهل الحصول عليه بنفس الـapiKey
+    //    العام) يقدر يجرّب الـ10,000 احتمال offline بسرعة. تقوية
+    //    الـPIN نفسه (رقم أطول / rate-limit حقيقي) موضوع منفصل.
+    //  - الكتابة على باقي الكولكشنز (animals, health, breeding...) لسه
+    //    مسموحة لأي مستخدم auth != null (مش مقيدة بالدور بالكامل زي
+    //    ROLE_PERMS) — ده تقليل مخاطرة عملي من غير ما أخاطر أكسر
+    //    workflow حقيقي (زي vet بيكتب health, worker بيكتب animals)
+    //    من غير اختبار حي على قاعدة البيانات الفعلية. تضييق أدق لاحقًا
+    //    لو الفريق عايز دور-بدور enforcement كامل.
+    //
+    //  ⚠️ قبل النشر: جرّب الـrules دي في Firebase Console > Realtime
+    //  Database > Rules > Playground (أو `firebase database:rules
+    //  --instance ...`) على الأقل مع سيناريو تسجيل دخول كامل + كل
+    //  الأدوار، قبل ما تعمل publish على القاعدة الحقيقية.
     // ══════════════════════════════════════════════════════════
 
-    // ── Public Read but Restricted Write ─────────────────────
-    // القراءة متاحة (التطبيق مش بيبعت auth headers)
-    // الكتابة مفتوحة من نفس النطاق — محمية بإخفاء الـ URL
-
     "animals": {
-      ".read": true,
-      ".write": true,
+      ".read": "auth != null",
+      ".write": "auth != null",
       "$id": {
         ".validate": "newData.hasChild('species') && newData.hasChild('breed') && newData.hasChild('gender')",
         "species": { ".validate": "newData.val() === 'goat' || newData.val() === 'sheep'" },
@@ -25,34 +64,34 @@
     },
 
     "health": {
-      ".read":  true,
-      ".write": true,
+      ".read":  "auth != null",
+      ".write": "auth != null",
       "$id": {
         ".validate": "newData.hasChild('animal_tag') && newData.hasChild('diagnosis') && newData.hasChild('date')"
       }
     },
 
     "vaccinations": {
-      ".read":  true,
-      ".write": true
+      ".read":  "auth != null",
+      ".write": "auth != null"
     },
 
     "vaccination_templates": {
-      ".read":  true,
-      ".write": true
+      ".read":  "auth != null",
+      ".write": "auth != null"
     },
 
     "breeding": {
-      ".read":  true,
-      ".write": true,
+      ".read":  "auth != null",
+      ".write": "auth != null",
       "$id": {
         ".validate": "newData.hasChild('female_breed')"
       }
     },
 
     "production_log": {
-      ".read":  true,
-      ".write": true,
+      ".read":  "auth != null",
+      ".write": "auth != null",
       "$id": {
         ".validate": "newData.hasChild('type') && newData.hasChild('date') && newData.hasChild('quantity')",
         "type":     { ".validate": "newData.val() === 'milk' || newData.val() === 'wool' || newData.val() === 'weight'" },
@@ -61,8 +100,8 @@
     },
 
     "daily_tasks": {
-      ".read":  true,
-      ".write": true,
+      ".read":  "auth != null",
+      ".write": "auth != null",
       "$id": {
         ".validate": "newData.hasChild('title') && newData.hasChild('date')",
         "status": { ".validate": "!newData.exists() || newData.val() === 'pending' || newData.val() === 'in_progress' || newData.val() === 'done'" }
@@ -70,101 +109,83 @@
     },
 
     "inventory_meds": {
-      ".read":  true,
-      ".write": true
+      ".read":  "auth != null",
+      ".write": "auth != null"
     },
 
     "inventory_feeds": {
-      ".read":  true,
-      ".write": true
+      ".read":  "auth != null",
+      ".write": "auth != null"
     },
 
-    // ── Added: referenced by pages/inventory.js (fbTable mapping for
-    //    type 'equip') and animals.html's bulk-reset table list. Was
-    //    missing entirely -> every read/write fell through to $other
-    //    -> 401, which is the exact error reported. ──────────────────
     "inventory_equipment": {
-      ".read":  true,
-      ".write": true
+      ".read":  "auth != null",
+      ".write": "auth != null"
     },
 
-    // ── Added: write-once transaction log created by shared.js's
-    //    recordInventoryTransaction() (Inventory Transaction Engine
-    //    v1.7). Purely additive per its own header comment; was never
-    //    added to rules when that feature shipped. ──────────────────
     "inventory_transactions": {
-      ".read":  true,
-      ".write": true
+      ".read":  "auth != null",
+      ".write": "auth != null"
     },
 
     "feed_consumption": {
-      ".read":  true,
-      ".write": true
+      ".read":  "auth != null",
+      ".write": "auth != null"
     },
 
     "weight_log": {
-      ".read":  true,
-      ".write": true
+      ".read":  "auth != null",
+      ".write": "auth != null"
     },
 
-    // ── Added: settings.html's _deleteTable('weights') targets this
-    //    top-level path, but per DATA_MODEL.md the certified SSOT for
-    //    weight is the NESTED animals/{id}/weights, not a top-level
-    //    collection -- this path is very likely always empty in the
-    //    real database. Included for audit completeness (nothing in
-    //    the app should ever 401), but flagged here since the reset
-    //    button referencing it may itself be a naming leftover worth
-    //    a separate look -- not something this rules-only change
-    //    attempts to fix. ────────────────────────────────────────────
     "weights": {
-      ".read":  true,
-      ".write": true
+      ".read":  "auth != null",
+      ".write": "auth != null"
     },
 
-    // ── Added: the dashboard's Predictive Intelligence Engine reads
-    //    these three directly by name. All three were completely
-    //    absent from rules -> $other -> 401, matching the reported
-    //    console errors exactly. ───────────────────────────────────
     "weight_alerts": {
-      ".read":  true,
-      ".write": true
+      ".read":  "auth != null",
+      ".write": "auth != null"
     },
 
     "production_alerts": {
-      ".read":  true,
-      ".write": true
+      ".read":  "auth != null",
+      ".write": "auth != null"
     },
 
     "workflow_history": {
-      ".read":  true,
-      ".write": true
+      ".read":  "auth != null",
+      ".write": "auth != null"
     },
 
     "notifications": {
-      ".read":  true,
-      ".write": true
+      ".read":  "auth != null",
+      ".write": "auth != null"
     },
 
     "activity": {
-      ".read":  true,
-      ".write": true,
+      ".read":  "auth != null",
+      ".write": "auth != null",
       "$id": {
         ".validate": "newData.hasChild('action') && newData.hasChild('collection')"
       }
     },
 
     "activity_log": {
-      ".read":  true,
-      ".write": true,
+      ".read":  "auth != null",
+      ".write": "auth != null",
       "$id": {
         ".validate": "!data.exists()"
       }
     },
 
-    // ── Sensitive: Finance — write-only validated ─────────────
+    // ── Sensitive: Finance — read stays app-wide (dashboard shows
+    //    today's income/expense summary to every role, unconditionally),
+    //    write restricted to admin only, matching ROLE_PERMS exactly
+    //    (supervisor/vet/worker/visitor are never granted 'finance'). ──
     "finance": {
-      ".read":  true,
-      ".write": true,
+      ".read":  "auth != null",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".validate": "newData.hasChild('type') && newData.hasChild('amount') && newData.hasChild('date')",
         "type":   { ".validate": "newData.val() === 'income' || newData.val() === 'expense'" },
@@ -172,55 +193,51 @@
       }
     },
 
-    // ── Users: read needed for login ──────────────────────────
+    // ── Users: read needed for the PIN-login screen (matches by pin_hash
+    //    client-side); write restricted to admin only -- prevents any
+    //    signed-in session from granting itself 'role':'admin' or
+    //    overwriting another user's pin_hash. The `!data.exists()`
+    //    fallback keeps Users.init()'s one-time bootstrap (creates the
+    //    very first admin account on a brand-new, empty database) working
+    //    even before any admin identity exists yet. ────────────────────
     "users": {
-      ".read":  true,
-      ".write": true,
+      ".read":  "auth != null",
+      ".write": "(auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin') || !data.exists()",
       "$uid": {
         ".validate": "newData.hasChild('role') && newData.hasChild('name')"
       }
     },
 
-    // ── Added: firebase.js's own auth bootstrap writes here directly
-    //    (fbPut('uid_lookup', _authUid, {appUserId})) to map a
-    //    Firebase Anonymous-Auth UID to this app's own user id. This
-    //    is internal to the auth-token flow itself -- was missing
-    //    from rules, so this specific write was silently failing on
-    //    every login (caught by its own best-effort try/catch, so it
-    //    never surfaced as a visible error the way the dashboard's
-    //    reads did). ────────────────────────────────────────────────
+    // ── uid_lookup: each signed-in identity may only read/write its OWN
+    //    mapping entry -- stops one session from remapping another uid
+    //    and inheriting/spoofing that user's resolved role elsewhere. ──
     "uid_lookup": {
-      ".read":  true,
-      ".write": true
+      "$uid": {
+        ".read":  "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
     },
 
+    // ── Settings: farm-wide configuration, admin-managed page in the
+    //    app (settings.html isn't in any non-admin role's page list). ──
     "settings": {
-      ".read":  true,
-      ".write": true
+      ".read":  "auth != null",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'"
     },
 
     "diary_snapshot": {
-      ".read":  true,
-      ".write": true
+      ".read":  "auth != null",
+      ".write": "auth != null"
     },
 
-    // ── Added: the Farm Diary history redesign (this session) moved
-    //    off the single diary_snapshot object onto a real dated
-    //    collection, diary_snapshots/{YYYY-MM-DD}, written by
-    //    shared.js's saveDiarySnapshot() and read by
-    //    getLatestDiarySnapshot()/getDiarySnapshotByDate()/
-    //    getDiarySnapshotsBetweenDates(). The old singular entry
-    //    above is left as-is (harmless, matches whatever pre-existing
-    //    data may still be there) -- only this new plural collection
-    //    was actually missing. ──────────────────────────────────────
     "diary_snapshots": {
-      ".read":  true,
-      ".write": true
+      ".read":  "auth != null",
+      ".write": "auth != null"
     },
 
     "login_notifications": {
-      ".read":  true,
-      ".write": true
+      ".read":  "auth != null",
+      ".write": "auth != null"
     },
 
     // ── Block everything else not listed ─────────────────────
