@@ -51,6 +51,9 @@ var animals=[];
 var fSpecies='all', fPurpose='all', fStatus='alive', fSearch='', fBreed='all', fGender='all', fSort='newest';
 var _selected=new Set();
 var _selectMode=false;
+// List/cards toggle -- persisted the same way theme preference already is
+// elsewhere in the app, so the choice survives a reload.
+var _viewMode=localStorage.getItem('animals_view_mode')||'list';
 
 const params=new URLSearchParams(location.search);
 if(params.get('species'))fSpecies=params.get('species');
@@ -278,13 +281,18 @@ function renderAnimals(){
   var shown=list.slice(0,150);
   var countHtml='<div class="mb-2 d-flex justify-content-between align-items-center gap-2 flex-wrap">'+
     '<small class="text-gray">يُعرض '+ar(shown.length)+(list.length>shown.length?' من '+ar(list.length):'')+' حيوان (إجمالي: '+ar(animals.filter(function(a){return a.status==='alive';}).length)+')</small>'+
-    '<div class="d-flex gap-2">'+
+    '<div class="d-flex gap-2 align-items-center">'+
+      '<div class="view-toggle no-print" role="group" aria-label="طريقة العرض">'+
+        '<button type="button" class="view-toggle-btn'+(_viewMode==='list'?' active':'')+'" onclick="setViewMode(\'list\')" aria-label="عرض قائمة" aria-pressed="'+(_viewMode==='list')+'" data-hint="عرض قائمة"><i class="bi bi-list-ul"></i></button>'+
+        '<button type="button" class="view-toggle-btn'+(_viewMode==='cards'?' active':'')+'" onclick="setViewMode(\'cards\')" aria-label="عرض بطاقات" aria-pressed="'+(_viewMode==='cards')+'" data-hint="عرض بطاقات"><i class="bi bi-grid-3x3-gap-fill"></i></button>'+
+      '</div>'+
       '<button class="action-btn sm" onclick="toggleSelectMode()" aria-label="تفعيل وضع التحديد المتعدد" style="'+(  _selectMode?'background:rgba(33,150,243,.1);border-color:rgba(33,150,243,.4);color:var(--blue)':'')+'" data-hint="تحديد متعدد للعمليات الجماعية"><i class="bi bi-check2-square"></i> '+(_selectMode?ar(_selected.size)+' محدد':'تحديد')+'</button>'+
       '<div class="position-relative" id="data-menu-wrap"><button class="action-btn sm" onclick="toggleDataMenu()" data-hint="استيراد وتصدير البيانات"><i class="bi bi-database-fill-gear"></i> بيانات <i class="bi bi-chevron-down" style="font-size:.6rem"></i></button><div id="data-menu" style="display:none;position:absolute;left:0;top:110%;background:var(--bg-2);border:1px solid var(--border-2);border-radius:12px;padding:6px;min-width:200px;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,.35)"><button class="action-btn sm" style="width:100%;justify-content:flex-start;margin-bottom:4px" onclick="exportExcel()"><i class="bi bi-file-earmark-excel-fill" style="color:#4caf50"></i> تصدير Excel (.xlsx)</button><button class="action-btn sm" style="width:100%;justify-content:flex-start;margin-bottom:4px" onclick="exportCSV()" aria-label="تصدير CSV"><i class="bi bi-filetype-csv"></i> تصدير CSV</button><hr style="border-color:var(--border-3);margin:4px 0"><button class="action-btn sm" style="width:100%;justify-content:flex-start;margin-bottom:4px" onclick="openImportDialog()"><i class="bi bi-cloud-arrow-up-fill" style="color:var(--blue)"></i> استيراد من Excel</button><a href="import.html" class="action-btn sm" style="width:100%;justify-content:flex-start"><i class="bi bi-database-fill-add" style="color:var(--orange)"></i> محرك البيانات الكامل</a></div></div>'+
     '</div>'+
   '</div>';
 
   // Rows
+  var isCards=_viewMode==='cards';
   var rows=shown.map(function(a){
     var purposeLabel={tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[a.purpose]||a.purpose||'—';
     var purposeCls=a.purpose==='tasmeen'?'badge-tasmeen':a.purpose==='birth'?'badge-blue':'badge-tarbiya';
@@ -292,9 +300,32 @@ function renderAnimals(){
     var statusLabel=a.status==='alive'?'حي':'نافق';
     var sel=_selected.has(a._id);
     var rowStyle=sel?'border-color:rgba(33,150,243,.5);background:rgba(33,150,243,.05);':'';
-    var cb=_selectMode?'<label style="padding-left:4px;cursor:pointer;flex-shrink:0"><input type="checkbox" class="anim-cb" data-id="'+a._id+'" '+(sel?'checked':'')+' style="accent-color:var(--blue);width:17px;height:17px" onchange="toggleOne(\''+a._id+'\',this.checked)"></label>':'';
+    var cb=_selectMode?'<label style="padding-left:4px;cursor:pointer;flex-shrink:0" onclick="event.stopPropagation()"><input type="checkbox" class="anim-cb" data-id="'+a._id+'" '+(sel?'checked':'')+' style="accent-color:var(--blue);width:17px;height:17px" onchange="toggleOne(\''+a._id+'\',this.checked)"></label>':'';
     var menuBtn=can('admin')?
-      '<button class="icon-btn" onclick="event.stopPropagation();openAnimalMenu(\''+a._id+'\',\''+encodeURIComponent(a.breed||'')+'\',\''+encodeURIComponent(a.tag||'')+'\',\''+(a.status||'alive')+'\')" aria-label="خيارات" title="خيارات"><i class="bi bi-three-dots-vertical"></i></button>':'';
+      '<button class="icon-btn" onclick="event.preventDefault();event.stopPropagation();openAnimalMenu(\''+a._id+'\',\''+encodeURIComponent(a.breed||'')+'\',\''+encodeURIComponent(a.tag||'')+'\',\''+(a.status||'alive')+'\')" aria-label="خيارات" title="خيارات"><i class="bi bi-three-dots-vertical"></i></button>':'';
+    var badgesHtml=
+      (a.tag?'<span class="type-badge badge-gray">#'+a.tag+'</span>':'')+
+      '<span class="type-badge '+purposeCls+'">'+purposeLabel+'</span>'+
+      '<span class="type-badge '+(a.gender==='male'?'badge-blue':'badge-purple')+'" style="font-size:.68rem">'+(a.gender==='male'?'♂ ذكر':'♀ أنثى')+'</span>'+
+      (a.status!=='alive'?'<span class="type-badge '+statusCls+'">'+statusLabel+'</span>':'')+
+      (a.barn?'<span class="type-badge badge-gray" style="font-size:.68rem"><i class="bi bi-building me-1"></i>'+a.barn+'</span>':'');
+    var metaText=(a.species==='goat'?'ماعز':'أغنام')+(a.birth_date?' • مواليد: '+a.birth_date:' • غير محدد');
+
+    if(isCards){
+      return '<a href="animal-detail.html?id='+a._id+'" class="animal-row animal-card-v2" style="'+rowStyle+'text-decoration:none" onclick="if(_selectMode){event.preventDefault();toggleOne(\''+a._id+'\',!_selected.has(\''+a._id+'\'))}">'+
+        (cb||menuBtn?'<div class="animal-card-v2__corner">'+cb+menuBtn+'</div>':'')+
+        '<div class="animal-card-v2__top">'+
+          '<div class="animal-card-v2__avatar">'+(a.species==='goat'?'🐐':'🐑')+'</div>'+
+          '<div style="min-width:0;flex:1">'+
+            '<div class="animal-card-v2__name">'+(a.breed||'—')+'</div>'+
+            (!a.tag?'<div class="animal-card-v2__tag">غير مرقّم</div>':'')+
+          '</div>'+
+        '</div>'+
+        '<div class="animal-card-v2__badges">'+badgesHtml+'</div>'+
+        '<div class="animal-card-v2__meta"><span>'+metaText+'</span><i class="bi bi-chevron-left"></i></div>'+
+      '</a>';
+    }
+
     return '<div class="animal-row" style="'+rowStyle+'" onclick="'+(  _selectMode?'toggleOne(\''+a._id+'\',!_selected.has(\''+a._id+'\'))':'')+'">'+
       cb+
       '<a href="animal-detail.html?id='+a._id+'" style="text-decoration:none;display:flex;align-items:center;gap:12px;flex:1;min-width:0" onclick="if(_selectMode)event.preventDefault()">'+
@@ -302,13 +333,9 @@ function renderAnimals(){
         '<div class="flex-grow-1" style="min-width:0">'+
           '<div class="d-flex gap-2 flex-wrap align-items-center">'+
             '<span class="fw-bold">'+(a.breed||'—')+'</span>'+
-            (a.tag?'<span class="type-badge badge-gray">#'+a.tag+'</span>':'')+
-            '<span class="type-badge '+purposeCls+'">'+purposeLabel+'</span>'+
-            '<span class="type-badge '+(a.gender==='male'?'badge-blue':'badge-purple')+'" style="font-size:.68rem">'+(a.gender==='male'?'♂ ذكر':'♀ أنثى')+'</span>'+
-            (a.status!=='alive'?'<span class="type-badge '+statusCls+'">'+statusLabel+'</span>':'')+
-            (a.barn?'<span class="type-badge badge-gray" style="font-size:.68rem"><i class="bi bi-building me-1"></i>'+a.barn+'</span>':'')+
+            badgesHtml+
           '</div>'+
-          '<small class="text-gray">'+(a.species==='goat'?'ماعز':'أغنام')+(a.birth_date?' • مواليد: '+a.birth_date:' • غير محدد')+'</small>'+
+          '<small class="text-gray">'+metaText+'</small>'+
         '</div>'+
         '<i class="bi bi-chevron-left text-gray"></i>'+
       '</a>'+
@@ -316,9 +343,15 @@ function renderAnimals(){
     '</div>';
   }).join('');
 
-  el.innerHTML=countHtml+rows+
+  el.innerHTML=countHtml+(isCards?'<div class="animals-grid">'+rows+'</div>':rows)+
     (list.length>150?'<div class="text-center py-3 text-gray" style="font-size:.82rem"><i class="bi bi-info-circle me-1"></i>يُعرض أول '+ar(150)+' — استخدم الفلاتر لتضييق النتائج</div>':'');
 }
+
+window.setViewMode=function(mode){
+  _viewMode=mode;
+  localStorage.setItem('animals_view_mode',mode);
+  renderAnimals();
+};
 
 // ── Related Insights + Activity Timeline (Listing Template) ──
 // New sections, added per the Animals module migration to the

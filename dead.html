@@ -69,7 +69,7 @@ function renderPage(){
   var s=getSettings();
   var el=document.getElementById('content');
   var alive=_animals.filter(function(a){return a.status==='alive';});
-  var dead=_animals.filter(function(a){return a.status==='dead';});
+  var dead=_animals.filter(function(a){return window.isRealDeath(a);});
   var goatDead=dead.filter(function(a){return a.species==='goat';});
   var sheepDead=dead.filter(function(a){return a.species==='sheep';});
   var aliveCount=alive.length;

@@ -303,7 +303,7 @@ window.submitBirthBreedEdit=async function(){
       for(var j=0;j<toRemove.length;j++){
         try{
           await fbPatch('animals',toRemove[j]._id,{
-            status:'dead',died_at:todayStr(),death_reason:'تعديل من صفحة المواليد'
+            status:'dead',died_at:todayStr(),death_reason:'تعديل من صفحة المواليد',is_correction:true
           });
           removed++;
         }catch(e){}

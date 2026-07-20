@@ -1070,7 +1070,150 @@ window._ubUpdateBreeds=function(){
   if(sel)sel.innerHTML=breeds.map(b=>'<option>'+b+'</option>').join('');
 };
 
-// ── Wave B Commit 1/N: canonical single-offspring creation, shared by
+// ── Mortality-statistics correction marker ──────────────
+// A "count correction" happens when animals.html/diary.html/births.html/
+// goats.html/sheep.html's edit-mode reduces a displayed count -- there is no
+// real dead animal, just a bookkeeping adjustment. All four writers used to
+// do this via fbPatch(...,{status:'dead', death_reason:'تعديل من ...'}),
+// which is indistinguishable from a genuine death to every mortality
+// statistic in the app (dead.html's totals/rate/reasons breakdown,
+// dashboard.html's health-status KPI, reports.js, farm_profile.js, and the
+// AI assistant's own farm context all just filter status==='dead').
+//
+// Fix: status stays 'dead' (an animal really is being removed from the
+// active herd, so it is correctly NOT alive) but the four writers now also
+// set is_correction:true, and every STATISTICS computation excludes it via
+// isRealDeath(). Per-animal displays (badges, exports, "status: نافق" on the
+// animal's own page) are intentionally left alone -- the animal genuinely
+// isn't part of the active herd, so that label is not wrong, only "counted
+// as a cause-of-death" is.
+//
+// The death_reason fallback below is what makes this retroactive: it also
+// excludes every record already written by the bug before this fix, without
+// a migration script this sandbox has no way to run against the live DB.
+var _CORRECTION_REASONS=['تعديل من يومية المزرعة','تعديل من صفحة المواليد','تعديل من صفحة السلالة'];
+window.isMortalityCorrection=function(a){
+  return !!(a && (a.is_correction || (a.death_reason && _CORRECTION_REASONS.indexOf(a.death_reason)>=0)));
+};
+window.isRealDeath=function(a){
+  return !!(a && a.status==='dead' && !window.isMortalityCorrection(a));
+};
+
+// ── Historical breed-name spelling variants ─────────────
+// 'دودبر' is not a random typo: bayan.html's own static reference data (its
+// hardcoded breed list, and its data comment "أغنام: 19ذ/17أ... دودبر...")
+// confirms it was this farm's real working spelling for a long time. Every
+// animal added or corrected through diary.html before Settings switched to
+// 'دوربر' was written to real Firebase records with the OLD spelling as
+// literal data, not just a stale UI label. Resolving it here (rather than
+// only in diary.html) means any other page matching breeds against Settings
+// can reuse the same fix instead of re-discovering it.
+var _BREED_ALIASES={'دودبر':'دوربر'};
+window.resolveBreedAlias=function(breed){ return _BREED_ALIASES[breed]||breed; };
+
+// ══════════════════════════════════════════════════════
+// Farm Diary — historical snapshots
+// ══════════════════════════════════════════════════════
+// Collection: diary_snapshots/{YYYY-MM-DD} -- one entry per calendar day,
+// keyed by date so "get the snapshot for date X" is a single direct GET,
+// never a fetch-then-filter over the whole history.
+//
+// This replaces the old diary_snapshot (singular) object every save used
+// to overwrite. Direct inspection of that code found it was ALSO calling
+// fbPut(path, id, data) as fbPut(path, data) -- two arguments, not three --
+// so the counts object landed in the `id` slot and got string-coerced into
+// the URL itself (diary_snapshot/[object%20Object].json), while the body
+// sent was only {updated_at:...}; the real counts were never stored.
+// Independently, the read side used fbGet(), which always returns an
+// ARRAY -- so diarySnap.total/.goats/etc. were property reads on an array
+// and were always undefined. Together, the "sync conflict" UI has never
+// actually triggered once: not a history-loss bug alone, a non-functional
+// feature. Both issues are fixed here as part of adding real history.
+//
+// Both known writers (diary.html's saveEdits(), dashboard.html's
+// resolveSync()) now call saveDiarySnapshot() below, so this single fix
+// covers both call sites instead of just one.
+
+// Internal: builds a Firebase REST URL with arbitrary query params (unlike
+// fbUrl(), which only ever appends ?auth=). Kept local to this block
+// rather than broadening fbUrl()'s own signature, since fbUrl() is called
+// by fbGet/fbPost/fbPatch/fbPut/fbGetOne everywhere in the app -- changing
+// it is exactly the kind of unrelated-module ripple to avoid here.
+async function _diaryUrl(pathAndQuery){
+  var token=await _getValidAuthToken();
+  var sep=pathAndQuery.indexOf('?')>=0?'&':'?';
+  return token ? FB_URL+'/'+pathAndQuery+sep+'auth='+token : FB_URL+'/'+pathAndQuery;
+}
+function _orderByKeyQuery(extra){
+  return 'orderBy='+encodeURIComponent('"$key"')+(extra||'');
+}
+
+// Single most-recent snapshot. Uses Firebase's own orderBy+limitToLast
+// query (evaluated server-side by Firebase), so this is one small response
+// regardless of how many days of history exist -- not a fetch of the
+// whole collection. This is what dashboard.html's checkSync() should call
+// instead of the old fbGet('diary_snapshot').
+window.getLatestDiarySnapshot=async function(){
+  try{
+    var url=await _diaryUrl('diary_snapshots.json?'+_orderByKeyQuery('&limitToLast=1'));
+    var r=await fetch(url);
+    if(!r.ok)return null;
+    var data=await r.json();
+    if(!data)return null;
+    var keys=Object.keys(data);
+    if(!keys.length)return null;
+    return Object.assign({},data[keys[0]],{_id:keys[0]});
+  }catch(e){ console.error('getLatestDiarySnapshot failed',e); return null; }
+};
+
+// One specific day, by its exact date key -- a direct GET, not a scan.
+window.getDiarySnapshotByDate=async function(dateStr){
+  try{ return await fbGetOne('diary_snapshots',dateStr); }
+  catch(e){ return null; }
+};
+
+// Inclusive date range [startStr, endStr], both 'YYYY-MM-DD'. Still uses
+// Firebase's own startAt/endAt query (evaluated server-side), not a full-
+// collection fetch filtered client-side. Keys sort correctly as plain
+// strings because the format is zero-padded YYYY-MM-DD.
+window.getDiarySnapshotsBetweenDates=async function(startStr,endStr){
+  try{
+    var q='diary_snapshots.json?'+_orderByKeyQuery(
+      '&startAt='+encodeURIComponent('"'+startStr+'"')+
+      '&endAt='+encodeURIComponent('"'+endStr+'"'));
+    var url=await _diaryUrl(q);
+    var r=await fetch(url);
+    if(!r.ok)return [];
+    var data=await r.json();
+    if(!data)return [];
+    return Object.entries(data).map(function(e){return Object.assign({},e[1],{_id:e[0]});})
+      .sort(function(a,b){return a._id.localeCompare(b._id);});
+  }catch(e){ console.error('getDiarySnapshotsBetweenDates failed',e); return []; }
+};
+
+// Create-or-update TODAY's entry. Preserves the day's ORIGINAL created_at
+// if this is a second save on the same day (e.g. an edit made twice),
+// while updated_at always reflects the latest write -- so "when was this
+// day's entry first recorded" survives same-day corrections.
+window.saveDiarySnapshot=async function(counts){
+  var dateKey=todayStr();
+  var existing=null;
+  try{ existing=await fbGetOne('diary_snapshots',dateKey); }catch(e){ existing=null; }
+  var nowIso=new Date().toISOString();
+  var rec=Object.assign({
+    id:dateKey,
+    date:dateKey,
+    created_at:(existing&&existing.created_at)||nowIso,
+    updated_at:nowIso,
+    user:(typeof getUser==='function'&&getUser()&&getUser().name)||null,
+    notes:(existing&&existing.notes!=null)?existing.notes:null
+  },counts);
+  await fbPut('diary_snapshots',dateKey,rec);
+  fbCacheInvalidate('diary_snapshots');
+  return rec;
+};
+
+
 // _ubSubmit() and submitBreeding()'s markBorn path (D-02). Same fields,
 // same order, same weight-history behavior as the pre-existing inline
 // logic this replaces -- no behavior change for _ubSubmit's own callers.

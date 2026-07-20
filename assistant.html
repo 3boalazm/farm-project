@@ -180,7 +180,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 function buildFarmContext(s) {
   var d = _farmData;
   var alive   = d.animals.filter(function(a){ return a.status === 'alive'; });
-  var dead    = d.animals.filter(function(a){ return a.status === 'dead'; });
+  var dead    = d.animals.filter(function(a){ return window.isRealDeath(a); });
   var today   = todayStr();
 
   // Species breakdown

@@ -112,7 +112,7 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
     pregnant: breeding.filter(r => r.status === 'pregnant').length,
     goatBirths: alive.filter(a => a.species === 'goat' && isBirth(a)).length,
     sheepBirths: alive.filter(a => a.species === 'sheep' && isBirth(a)).length,
-    dead: animals.filter(a => a.status === 'dead').length
+    dead: animals.filter(a => window.isRealDeath(a)).length
   };
 
   // Finance
@@ -812,9 +812,16 @@ async function checkSync(actual, animals) {
   // Get diary snapshot if exists, or calculate it
   // Since diary.html calculates from the same animals list, they are technically always synced
   // UNLESS we define "Diary" as a manual target.
-  // Based on user request, let's look for a 'diary_snapshot' in Firebase which might store the "Correct" numbers
   try {
-    const diarySnap = await fbGet('diary_snapshot');
+    // getLatestDiarySnapshot() (shared.js) returns the newest dated record
+    // as a plain object. The previous fbGet('diary_snapshot') always
+    // returns an ARRAY (fbGet's own documented behavior), so every
+    // diarySnap.total/.goats/etc. read below was reading a property off
+    // an array and was always undefined -- meaning this conflict check
+    // had never actually fired, for any farm, ever. That silent failure
+    // is fixed by this one-line swap, not by touching the comparison
+    // logic itself.
+    const diarySnap = await getLatestDiarySnapshot();
     if (!diarySnap) {
       // If no snapshot, we assume sync is OK or we create one from current logic
       return;
@@ -856,13 +863,12 @@ window.resolveSync = async function(id, targetVal, source) {
       const animals = await fbGet('animals');
       const alive = animals.filter(a => a.status === 'alive');
       const isB = a => a.purpose === 'birth' || a.breed === 'مواليد';
-      await fbPut('diary_snapshot', {
+      await saveDiarySnapshot({
         total: alive.length,
         goats: alive.filter(a => a.species === 'goat').length,
         sheep: alive.filter(a => a.species === 'sheep').length,
         goatBirths: alive.filter(a => a.species === 'goat' && isB(a)).length,
-        sheepBirths: alive.filter(a => a.species === 'sheep' && isB(a)).length,
-        updated_at: new Date().toISOString()
+        sheepBirths: alive.filter(a => a.species === 'sheep' && isB(a)).length
       });
       toast('✅ تم اعتماد بيانات الداشبورد وتحديث اليومية', 'success');
     } catch(e) { toast('فشل التحديث: ' + e.message, 'error'); }

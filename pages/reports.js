@@ -57,7 +57,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ── Metrics ───────────────────────────────────────────────
 function computeMetrics(d) {
   const s = d.s; const curr = s.currency||'ج.م';
-  const all=d.animals||[]; const alive=all.filter(a=>a.status==='alive'); const dead=all.filter(a=>a.status==='dead');
+  const all=d.animals||[]; const alive=all.filter(a=>a.status==='alive'); const dead=all.filter(a=>window.isRealDeath(a));
   const goats=alive.filter(a=>a.species==='goat'&&a.purpose!=='birth');
   const sheep=alive.filter(a=>a.species==='sheep'&&a.purpose!=='birth');
   const births=alive.filter(a=>a.purpose==='birth');

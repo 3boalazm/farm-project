@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
 
 function renderFarmProfile(s,animals,users){
   const alive=animals.filter(a=>a.status==='alive');
-  const dead=animals.filter(a=>a.status==='dead');
+  const dead=animals.filter(a=>window.isRealDeath(a));
 
   renderPageHeaderV2({
     title: '<i class="bi bi-building accent-text"></i> ملف المزرعة',

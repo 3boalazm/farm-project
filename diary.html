@@ -553,17 +553,19 @@ window.saveEdits=async function(){
 
   await logActivity('edit','animals','تعديل يدوي من اليومية: +'+ar(totalAdded)+' ،—'+ar(totalRemoved));
   
-  // Save snapshot for Dashboard Sync
+  // Save today's snapshot for Dashboard Sync -- now a real historical
+  // record (diary_snapshots/{date}) via saveDiarySnapshot(), not the old
+  // fbPut('diary_snapshot', {...}) which (see shared.js) was silently
+  // writing only {updated_at} to a garbage sub-path.
   try {
     const aliveAnimals = _allAnimals.filter(a => a.status === 'alive');
     const isB = a => a.purpose === 'birth' || a.breed === 'مواليد';
-    await fbPut('diary_snapshot', {
+    await saveDiarySnapshot({
       total: aliveAnimals.length,
       goats: aliveAnimals.filter(a => a.species === 'goat').length,
       sheep: aliveAnimals.filter(a => a.species === 'sheep').length,
       goatBirths: aliveAnimals.filter(a => a.species === 'goat' && isB(a)).length,
-      sheepBirths: aliveAnimals.filter(a => a.species === 'sheep' && isB(a)).length,
-      updated_at: new Date().toISOString()
+      sheepBirths: aliveAnimals.filter(a => a.species === 'sheep' && isB(a)).length
     });
   } catch(e) { console.error('Failed to save sync snapshot', e); }
 
