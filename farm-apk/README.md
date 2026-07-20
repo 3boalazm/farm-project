@@ -1,1 +1,0 @@
-# bayan-farm-apk
