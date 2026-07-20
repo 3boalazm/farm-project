@@ -1,0 +1,6 @@
+include ':app'
+rootProject.name = "BayanFarm"
+
+def capacitorVersion = System.getenv("CAPACITOR_VERSION") ?: "6.+"
+include ':capacitor-android'
+project(':capacitor-android').projectDir = new File('../node_modules/@capacitor/android/capacitor')
