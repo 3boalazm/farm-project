@@ -295,14 +295,36 @@ window.submitInv=async function(type){
   const name=document.getElementById('i-name')?.value.trim();
   if(!name){toast('يرجى إدخال الاسم','error');return;}
   let data={name};
-  if(type==='meds'){data={...data,quantity:+document.getElementById('i-qty').value||0,unit:document.getElementById('i-unit').value.trim(),min_quantity:+document.getElementById('i-min').value||0,expiry:document.getElementById('i-exp').value||null,barn:document.getElementById('i-barn').value,purpose:document.getElementById('i-purpose').value.trim(),notes:document.getElementById('i-notes').value.trim()||null,supplier:document.getElementById('i-supplier')?.value.trim()||null,reorder_quantity:+document.getElementById('i-reorder')?.value||0,active:true};}
-  else if(type==='feeds'){data={...data,quantity:+document.getElementById('i-qty').value||0,unit:document.getElementById('i-unit').value.trim(),unit_weight:+document.getElementById('i-weight').value||50,min_quantity:+document.getElementById('i-min').value||0,cost_per_unit:+document.getElementById('i-cost').value||0,barn:document.getElementById('i-barn').value,purpose:document.getElementById('i-purpose').value};}
+  const newQty=+document.getElementById('i-qty')?.value||0;
+  if(type==='meds'){data={...data,unit:document.getElementById('i-unit').value.trim(),min_quantity:+document.getElementById('i-min').value||0,expiry:document.getElementById('i-exp').value||null,barn:document.getElementById('i-barn').value,purpose:document.getElementById('i-purpose').value.trim(),notes:document.getElementById('i-notes').value.trim()||null,supplier:document.getElementById('i-supplier')?.value.trim()||null,reorder_quantity:+document.getElementById('i-reorder')?.value||0,active:true};}
+  else if(type==='feeds'){data={...data,unit:document.getElementById('i-unit').value.trim(),unit_weight:+document.getElementById('i-weight').value||50,min_quantity:+document.getElementById('i-min').value||0,cost_per_unit:+document.getElementById('i-cost').value||0,barn:document.getElementById('i-barn').value,purpose:document.getElementById('i-purpose').value};}
   else{data={...data,type:document.getElementById('i-type').value.trim(),status:document.getElementById('i-status').value,next_maintenance:document.getElementById('i-maint').value||null,asset_number:document.getElementById('i-asset').value.trim(),notes:document.getElementById('i-notes').value.trim()||null};}
   closeModal();toast('جاري الحفظ...','info');
   const fbTable={meds:'inventory_meds',feeds:'inventory_feeds',equip:'inventory_equipment'}[type];
   try{
-    if(editInvId){await fbPatch(fbTable,editInvId,data);await logActivity('edit','inventory','تعديل: '+name);}
-    else{await fbPost(fbTable,data);await logActivity('add','inventory','إضافة: '+name);}
+    if(editInvId){
+      await fbPatch(fbTable,editInvId,data);
+      // quantity (meds/feeds only) is NOT part of the generic metadata
+      // patch above -- a changed value here means the admin is directly
+      // stating a corrected true quantity, which is exactly what
+      // inventoryCorrection() is for, not a raw field overwrite.
+      if(type==='meds'||type==='feeds'){
+        var current=(type==='meds'?meds:feeds).find(function(i){return i._id===editInvId;});
+        if(current && (+current.quantity||0)!==newQty){
+          await window.inventoryCorrection({itemType:type, itemName:name, newQuantity:newQty, sourceId:editInvId});
+        }
+      }
+      await logActivity('edit','inventory','تعديل: '+name);
+    }
+    else{
+      if(type==='meds'||type==='feeds'){
+        var r=await window.initialStock({itemType:type, name:name, quantity:newQty, fields:data});
+        if(!r.ok) throw new Error(r.error);
+      }else{
+        await fbPost(fbTable,data);
+        await logActivity('add','inventory','إضافة: '+name);
+      }
+    }
     editInvId=null;toast('تمت الإضافة');await loadInventory();renderInventoryPage(getSettings());
   }catch(e){toast('خطأ: '+e.message,'error');}
 };

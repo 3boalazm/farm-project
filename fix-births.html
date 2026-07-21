@@ -163,7 +163,8 @@ async function startFix() {
       var pct = 20 + Math.round((i / toFix.length) * 70);
       setProgress(pct, 'تصحيح ' + ar(i + 1) + ' من ' + ar(toFix.length) + '...');
       try {
-        await fbPatch('animals', a._id, { purpose: 'birth' });
+        const r = await window.setAnimalPurpose({animalId:a._id, purpose:'birth', allowBirthTarget:true});
+        if(!r.ok) throw new Error(r.error);
         fixed++;
         if (i < 5 || i === toFix.length - 1) {
           log('   ✔ ' + (a.species === 'sheep' ? 'أغنام' : 'ماعز') + ' — ' + (a.gender === 'male' ? 'ذكر' : 'أنثى') + (a.tag ? ' #' + a.tag : ''), 'var(--green)');

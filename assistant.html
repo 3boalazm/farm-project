@@ -685,8 +685,8 @@ window.executeAction = async function() {
     else if (parsed.action === 'mark_dead') {
       var toKill = _farmData.animals.filter(function(a){ return a.status==='alive' && (d.animal_tag ? a.tag===d.animal_tag : (a.breed===d.breed && a.gender===d.gender)); }).slice(0,1);
       if (toKill.length) {
-        await fbPatch('animals', toKill[0]._id, { status:'dead', died_at:d.died_at||todayStr(), death_cause:d.death_reason||null });
-        await logActivity('edit','animals','تسجيل نفوق: '+(d.animal_tag||d.breed));
+        const r=await window.markAnimalDead({animalId:toKill[0]._id, date:d.died_at||todayStr(), reason:d.death_reason||null});
+        if (!r.ok) { addMsg('bot','⚠️ '+r.error); return; }
         addMsg('system','✅ تم تسجيل النفوق');
       } else { addMsg('bot','⚠️ لم أجد الحيوان. تأكد من البيانات.'); return; }
     }
@@ -701,15 +701,18 @@ window.executeAction = async function() {
       addMsg('system','✅ تم تسجيل التحصين');
     }
     else if (parsed.action === 'add_weight') {
+      // Routed through the canonical Weight service (shared.js) -- this
+      // handler used to patch current_weight directly, in the wrong
+      // order (before the history record even existed) and with no
+      // comparison against the animal's existing weight history, so a
+      // backdated entry could silently overwrite a newer, correct value.
+      // The service now owns validation, resync, alerts, workflow, and
+      // activity-log -- this handler only resolves the target animal and
+      // reports the service's own result.
       var animal = _farmData.animals.find(function(a){ return a.tag === d.animal_tag || a.breed === d.animal_breed; });
-      if (animal) {
-        await fbPatch('animals', animal._id, { current_weight: d.weight, weight_updated: d.date||todayStr() });
-        await fbPost('animals/'+animal._id+'/weights', { weight: d.weight, date: d.date||todayStr(), notes: null });
-        // Sprint 2, Epic 2: attach weight intelligence -- additive only,
-        // does not change the writes above. Never blocks on failure.
-        if (window.evaluateWeightAlert) { window.evaluateWeightAlert(animal._id, animal.tag, animal.barn).catch(function(){}); }
-      }
-      await logActivity('add','animals','تسجيل وزن: '+(d.animal_tag||d.animal_breed)+' = '+d.weight+' كجم');
+      if (!animal) { addMsg('bot','⚠️ لم أجد الحيوان. تأكد من البيانات.'); return; }
+      var wr = await window.recordAnimalWeight({ animalId: animal._id, weight: d.weight, date: d.date||todayStr() });
+      if (!wr.ok) { addMsg('bot','⚠️ '+wr.error); return; }
       addMsg('system','✅ تم تسجيل الوزن: '+ar(d.weight)+' كجم');
     }
     else if (parsed.action === 'add_breeding') {
@@ -720,8 +723,8 @@ window.executeAction = async function() {
       addMsg('system','✅ تم تسجيل التقريع' + (expBirth ? ' — الولادة المتوقعة: '+expBirth : ''));
     }
     else if (parsed.action === 'add_finance' && can('finance')) {
-      await fbPost('finance', { type:d.type||'expense', category:d.category||'متنوع', description:d.description||'—', amount:d.amount||0, date:d.date||todayStr(), notes:'سُجِّل عبر المساعد الذكي' });
-      await logActivity('add','finance','تسجيل مالية: '+(d.description||'—'));
+      const fr = await window.manualEntry({ type:d.type||'expense', category:d.category||'متنوع', description:d.description||'—', amount:d.amount||0, date:d.date||todayStr(), source:'assistant' });
+      if (!fr.ok) { addMsg('bot','⚠️ '+fr.error); return; }
       addMsg('system','✅ تم تسجيل العملية المالية: '+ar(d.amount||0)+' '+s.currency);
     }
 

@@ -358,20 +358,10 @@ window.submitDead=async function(){
   toast('جاري تسجيل النفوق...','info');
 
   try{
-    var patch={
-      status:'dead',died_at:date,death_time:time||null,
-      death_reason:reason,death_autopsy:autopsy,
-      death_loss:loss||null,death_id:deathId,death_notes:notes
-    };
-
-    await fbPatch('animals',id,patch);
+    const r=await window.markAnimalDead({animalId:id, date:date, time:time, reason:reason, autopsy:autopsy, loss:loss, notes:notes, deathId:deathId});
+    if(!r.ok) throw new Error(r.error);
     if(loss>0){
-      await fbPost('finance',{
-        date:date,type:'loss',category:'نفوق حيوانات',
-        amount:loss,
-        description:'نفوق — '+deathId+(reason?' | '+reason:''),
-        added_by:getUser()?.name
-      });
+      await window.recordLoss({date:date,category:'نفوق حيوانات',amount:loss,description:'نفوق — '+deathId+(reason?' | '+reason:''),relatedAnimal:id,relatedModule:'animals'});
     }
     fbCacheInvalidate('animals');
     await logActivity('edit','animals','نفوق: '+deathId+' | '+label+' | '+reason+(autopsy?' | تشريح':''));
@@ -434,8 +424,8 @@ window.submitResetDead=async function(){
   } else {
     for(var i=0;i<dead.length;i++){
       try{
-        await fbPatch('animals',dead[i]._id,{status:'alive',died_at:null,death_reason:null});
-        ok++;
+        const r=await window.restoreAnimal({animalId:dead[i]._id});
+        if(r.ok)ok++;
       }catch(e){}
     }
     await logActivity('edit','animals','إعادة '+ar(ok)+' نافق للقطيع');

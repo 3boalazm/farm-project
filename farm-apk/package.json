@@ -3,10 +3,11 @@
   "version": "1.7.0",
   "description": "تطبيق بيان المزرعة — نسخة Android APK",
   "scripts": {
-    "sync": "npx cap sync android",
-    "build": "npx cap build android",
+    "sync-web": "node ../scripts/sync-apk-www.js",
+    "sync": "npm run sync-web && npx cap sync android",
+    "build": "npm run sync-web && npx cap build android",
     "open": "npx cap open android",
-    "run": "npx cap run android"
+    "run": "npm run sync-web && npx cap run android"
   },
   "dependencies": {
     "@capacitor/android": "^6.0.0",

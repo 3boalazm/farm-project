@@ -21,17 +21,61 @@
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="media/logo-icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="media/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="media/favicon-16.png">
+<link rel="apple-touch-icon" href="media/apple-touch-icon.png">
 <link rel="stylesheet" href="styles.css">
+<script src="config.js"></script>
+<script src="firebase.js"></script>
+<script src="nav.js"></script>
+<script src="shared.js"></script>
 </head>
 <body>
-<div class="page-wrap">
+<div class="page-wrap rail-v2-content">
   <div id="page-header"></div>
   <div id="content"></div>
 
-  <!-- ── RESET SECTION (Admin Only) ── -->
-    
-  
-  <!-- React-powered Features -->
+  <div id="admin-reset-section" style="display:none"></div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  if(!requireAuth())return;
+  var s=getSettings();
+  renderNavbarV2('settings.html');
+  renderPageHeaderV2({
+    title: '<i class="bi bi-gear-fill accent-text"></i> الإعدادات',
+    breadcrumb: [{label:'الرئيسية', href:'dashboard.html'}, {label:'الإعدادات'}]
+  });
+  renderAdminResetSection();
+});
+
+// Was a dangling reference before this fix: JS tried to show/hide #admin-reset-section
+// for admins, but no such element (or any content for it) existed anywhere in the file.
+function renderAdminResetSection(){
+  var el=document.getElementById('admin-reset-section');
+  if(!el)return;
+  var u=getUser();
+  if(!u||u.role!=='admin')return;
+  el.style.display='block';
+  el.innerHTML=renderSectionContainer({
+    title:'منطقة الحذف — للمدير فقط',
+    description:'كل إجراء هنا نهائي ولا يمكن التراجع عنه',
+    variant:'warning',
+    contentHtml:`
+      <div class="row g-2">
+        <div class="col-md-4"><button class="action-btn danger w-100" onclick="resetAnimals()"><i class="bi bi-trash"></i> مسح بيانات القطيع</button></div>
+        <div class="col-md-4"><button class="action-btn danger w-100" onclick="resetFinance()"><i class="bi bi-trash"></i> مسح البيانات المالية</button></div>
+        <div class="col-md-4"><button class="action-btn danger w-100" onclick="resetHealth()"><i class="bi bi-trash"></i> مسح الصحة والتكاثر</button></div>
+        <div class="col-md-4"><button class="action-btn danger w-100" onclick="resetActivity()"><i class="bi bi-trash"></i> مسح سجل الأنشطة</button></div>
+        <div class="col-md-4"><button class="action-btn danger w-100" onclick="resetNotifications()"><i class="bi bi-trash"></i> مسح الإشعارات</button></div>
+        <div class="col-md-4"><button class="action-btn danger w-100" style="background:var(--red);color:#fff" onclick="resetEverything()"><i class="bi bi-exclamation-octagon-fill"></i> مسح كل البيانات</button></div>
+      </div>`
+  });
+}
+</script>
+
+<!-- React-powered Features -->
   <div class="settings-section" style="border-color:rgba(33,150,243,.3)">
     <h6 class="fw-bold mb-3"><i class="bi bi-lightning-fill accent-text"></i> ميزات React المتقدمة</h6>
     <p class="text-gray mb-3" style="font-size:.82rem">مكونات React مدمجة مع التطبيق — تعمل دون الحاجة لإعادة تحميل الصفحة</p>
@@ -79,222 +123,84 @@
     </div>
   </div>
 
-<!-- Admin Reset -->
 
-  <div id="admin-reset-section" style="display:none">
-    <div class="settings-section" style="border-color:rgba(244,67,54,.4);background:rgba(244,67,54,.04)">
-      <h6 class="fw-bold mb-3 red-text"><i class="bi bi-exclamation-triangle-fill me-2"></i>إعادة تعيين وحذف البيانات (مدير فقط)</h6>
-      <p class="text-gray mb-3" style="font-size:.83rem">هذه العمليات لا يمكن التراجع عنها. تأكد من أخذ نسخة احتياطية أولاً.</p>
-      <div class="d-flex flex-wrap gap-3">
-        <button class="action-btn danger" onclick="resetAnimals()"><i class="bi bi-collection"></i> مسح بيانات القطيع</button>
-        <button class="action-btn" style="background:rgba(255,107,53,.1);border-color:rgba(255,107,53,.35);color:var(--orange)" onclick="resetFinance()"><i class="bi bi-wallet2"></i> مسح المالية</button>
-        <button class="action-btn" style="background:rgba(156,39,176,.1);border-color:rgba(156,39,176,.35);color:var(--purple)" onclick="resetHealth()"><i class="bi bi-heart-pulse-fill"></i> مسح الصحة والتحصين</button>
-        <button class="action-btn" style="background:rgba(33,150,243,.1);border-color:rgba(33,150,243,.35);color:var(--blue)" onclick="resetActivity()"><i class="bi bi-clock-history"></i> مسح سجل الأنشطة</button>
-        <button class="action-btn" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.35);color:var(--yellow)" onclick="resetNotifications()"><i class="bi bi-bell-slash-fill"></i> مسح الإشعارات</button>
-        <button class="action-btn danger" style="padding:10px 24px;font-size:.95rem" onclick="resetEverything()">
-          <i class="bi bi-trash-fill"></i> مسح كل بيانات المزرعة
+  <!-- Install App Section -->
+  <div class="settings-section" style="border-color:rgba(0,230,118,.3);background:rgba(0,230,118,.03)">
+    <h6 class="fw-bold mb-3">
+      <i class="bi bi-phone-fill me-1" style="color:var(--green)"></i>
+      تثبيت التطبيق على الجوال
+    </h6>
+
+    <!-- PWA Install Card -->
+    <div class="wonder-card mb-3 p-4" style="border-color:rgba(0,230,118,.3)">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div style="width:52px;height:52px;border-radius:14px;background:var(--green);display:flex;align-items:center;justify-content:center;font-size:1.6rem;flex-shrink:0">🐐</div>
+        <div>
+          <div class="fw-bold" style="font-size:1rem">بيان المزرعة</div>
+          <small class="text-gray">تثبيت كتطبيق على الشاشة الرئيسية</small>
+        </div>
+        <div id="pwa-installed-badge" style="display:none;margin-right:auto">
+          <span class="type-badge badge-tarbiya">✅ مثبّت</span>
+        </div>
+      </div>
+
+      <div class="d-flex gap-2 flex-wrap">
+        <!-- Main install button -->
+        <button id="pwa-install-btn" class="action-btn primary"
+          onclick="triggerPWAInstall()"
+          style="display:none"
+          aria-label="تثبيت التطبيق">
+          <i class="bi bi-download me-1"></i> تثبيت التطبيق
+        </button>
+
+        <!-- Manual instructions fallback -->
+        <button id="pwa-manual-btn" class="action-btn"
+          onclick="showPWAInstructions()"
+          aria-label="طريقة التثبيت اليدوي">
+          <i class="bi bi-question-circle me-1"></i> كيفية التثبيت
+        </button>
+      </div>
+
+      <!-- PWA Status message -->
+      <div id="pwa-status" class="mt-3" style="font-size:.82rem;color:var(--text-gray)">
+        <i class="bi bi-info-circle me-1"></i>
+        جاري التحقق من إمكانية التثبيت...
+      </div>
+
+      <!-- Manual steps (hidden by default) -->
+      <div id="pwa-manual-steps" style="display:none;margin-top:14px;background:var(--bg-3);border-radius:12px;padding:14px">
+        <div class="fw-bold mb-2" style="font-size:.85rem"><i class="bi bi-android2 me-1" style="color:#3ddc84"></i>على Android (Chrome):</div>
+        <div class="d-flex flex-column gap-1 mb-3" style="font-size:.8rem;color:var(--text-gray)">
+          <span>١. افتح الموقع في Chrome</span>
+          <span>٢. اضغط على القائمة <strong style="color:var(--text)">⋮</strong> (النقاط الثلاث)</span>
+          <span>٣. اختر <strong style="color:var(--green)">"إضافة إلى الشاشة الرئيسية"</strong></span>
+          <span>٤. اضغط "إضافة" — التطبيق سيظهر على شاشتك</span>
+        </div>
+        <div class="fw-bold mb-2" style="font-size:.85rem"><i class="bi bi-apple me-1"></i>على iPhone (Safari):</div>
+        <div class="d-flex flex-column gap-1" style="font-size:.8rem;color:var(--text-gray)">
+          <span>١. افتح الموقع في Safari</span>
+          <span>٢. اضغط على زر المشاركة <strong style="color:var(--text)">↑</strong></span>
+          <span>٣. اختر <strong style="color:var(--blue)">"Add to Home Screen"</strong></span>
+          <span>٤. اضغط "Add"</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- APK Card -->
+    <div class="wonder-card p-3" style="border-color:rgba(156,39,176,.25)">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <i class="bi bi-android2" style="font-size:1.3rem;color:#3ddc84"></i>
+        <div>
+          <div class="fw-bold">APK مستقل (للمطورين)</div>
+          <small class="text-gray">بناء APK حقيقي من مشروع Android Studio</small>
+        </div>
+        <button class="action-btn sm ms-auto" onclick="downloadAPKProject()" aria-label="تنزيل مشروع APK">
+          <i class="bi bi-download me-1"></i> تنزيل المشروع
         </button>
       </div>
     </div>
   </div>
-
-  <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
-    © <span id="footer-year"></span> <span id="footer-farm"></span><br>
-    <small style="font-size:.72rem;color:#555">إشراف: لواء أحمد رجب نوح &nbsp;|&nbsp; تطوير: جندي مصطفى محمد إبراهيم</small>
-  </footer>
-</div>
-<script src="config.js"></script>
-<script src="firebase.js"></script>
-<script src="nav.js"></script>
-<script src="shared.js"></script>
-<script src="pages/datepicker.js" defer></script>
-<script src="pages/tour.js" defer></script>
 <script>
-document.addEventListener('DOMContentLoaded',()=>{
-  if(!requireAuth())return;
-  initFirebase();
-  const s=getSettings();
-  document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
-  document.getElementById('footer-farm').textContent=s.farmName;
-  renderNavbar('settings.html');
-  renderPageHeader('<i class="bi bi-gear-fill accent-text"></i> الإعدادات','كل شيء قابل للتعديل',
-    `<button class="action-btn primary" onclick="saveAll()"><i class="bi bi-floppy-fill"></i> حفظ الكل</button>`);
-  renderSettings();
-});
-
-function renderSettings(){
-  const s=getSettings();
-  document.getElementById('content').innerHTML=`
-  <!-- Firebase Status -->
-  <div class="wonder-card mb-4" style="border-color:${FB_URL?'rgba(0,230,118,.3)':'rgba(244,67,54,.3)'}">
-    <div class="d-flex align-items-center gap-3">
-      <i class="bi bi-${FB_URL?'cloud-check-fill':'cloud-slash-fill'}" style="font-size:1.5rem;color:${FB_URL?'var(--green)':'var(--red)'}"></i>
-      <div>
-        <div class="fw-bold">${FB_URL?'Firebase متصل ✓':'Firebase غير مضبوط'}</div>
-        <small class="text-gray">${FB_URL||'أضف firebaseUrl في ملف config.js'}</small>
-      </div>
-    </div>
-  </div>
-
-  <!-- Theme & Display -->
-  <div class="settings-section">
-    <h6 class="fw-bold mb-3"><i class="bi bi-palette-fill accent-text"></i> المظهر والعرض</h6>
-    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
-      <div>
-        <div class="fw-bold mb-1">الوضع اللوني</div>
-        <small class="text-gray">تبديل بين الوضع الداكن والفاتح</small>
-      </div>
-      <button class="action-btn primary" onclick="toggleTheme()" id="settings-theme-btn">
-        <i class="bi bi-circle-half"></i> <span id="settings-theme-label">تبديل الوضع</span>
-      </button>
-    </div>
-    <div class="d-flex align-items-center justify-content-between">
-      <div>
-        <div class="fw-bold mb-1">صوت الإشعارات</div>
-        <small class="text-gray">تفعيل صوت عند وصول أي تنبيه</small>
-      </div>
-      <button class="action-btn" id="sound-toggle-btn" onclick="toggleNotifSound()">
-        <i class="bi bi-volume-up-fill" id="sound-icon"></i> <span id="sound-label">مفعّل</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- Farm Info -->
-  <div class="settings-section">
-    <h6 class="fw-bold mb-3"><i class="bi bi-building accent-text"></i> معلومات المزرعة</h6>
-    <div class="row g-3">
-      <div class="col-md-6"><label class="text-gray" style="font-size:.72rem;font-weight:600">اسم المزرعة</label><input class="field" id="set-farmName" value="${s.farmName}"></div>
-      <div class="col-md-6"><label class="text-gray" style="font-size:.72rem;font-weight:600">اسم المدير</label><input class="field" id="set-ownerName" value="${s.ownerName}"></div>
-      <div class="col-md-6"><label class="text-gray" style="font-size:.72rem;font-weight:600">عنوان المزرعة</label><input class="field" id="set-farmAddress" value="${s.farmAddress||''}"></div>
-      <div class="col-md-3"><label class="text-gray" style="font-size:.72rem;font-weight:600">العملة</label>
-        <select class="field" id="set-currency">${['ج.م','ر.س','د.إ','د.ك','د.ا','ل.ل','د.م'].map(c=>`<option ${s.currency===c?'selected':''}>${c}</option>`).join('')}</select></div>
-      <div class="col-md-3"><label class="text-gray" style="font-size:.72rem;font-weight:600">رابط الشعار</label><input class="field" id="set-logoUrl" value="${s.logoUrl||''}" placeholder="https://..." dir="ltr"></div>
-    </div>
-  </div>
-
-  <!-- Goat Breeds -->
-  <div class="settings-section">
-    <h6 class="fw-bold mb-3"><i class="bi bi-tropical-storm accent-text"></i> سلالات الماعز</h6>
-    <div id="goat-chips" class="mb-3">${s.goatBreeds.map(b=>`<span class="tag-chip">🐐 ${b}<button class="rm" onclick="removeBreed('goat','${b}')"><i class="bi bi-x-lg"></i></button></span>`).join('')}</div>
-    <div class="d-flex gap-2"><input class="field" id="new-goat" placeholder="أضف سلالة..." style="flex:1"><button class="action-btn primary" onclick="addBreed('goat')"><i class="bi bi-plus-lg"></i></button></div>
-  </div>
-
-  <!-- Breed Colors -->
-  <div class="settings-section">
-    <h6 class="fw-bold mb-3"><i class="bi bi-palette accent-text"></i> ألوان السلالات في الرسم البياني</h6>
-    <div id="breed-colors-grid" class="row g-2"></div>
-    <small class="text-gray d-block mt-2">اختر لون كل سلالة ليظهر في الرسم الدائري</small>
-    <button class="action-btn primary mt-2" onclick="saveBreedColors()"><i class="bi bi-floppy-fill"></i> حفظ الألوان</button>
-  </div>
-
-  <!-- Sheep Breeds -->
-  <div class="settings-section">
-    <h6 class="fw-bold mb-3"><i class="bi bi-cloud-fill accent-text"></i> سلالات الأغنام</h6>
-    <div id="sheep-chips" class="mb-3">${s.sheepBreeds.map(b=>`<span class="tag-chip" style="background:rgba(255,107,53,.09);border-color:rgba(255,107,53,.22);color:var(--orange)">🐑 ${b}<button class="rm" onclick="removeBreed('sheep','${b}')"><i class="bi bi-x-lg"></i></button></span>`).join('')}</div>
-    <div class="d-flex gap-2"><input class="field" id="new-sheep" placeholder="أضف سلالة..." style="flex:1"><button class="action-btn primary" onclick="addBreed('sheep')"><i class="bi bi-plus-lg"></i></button></div>
-  </div>
-
-  <!-- Variables -->
-  <div class="settings-section">
-    <h6 class="fw-bold mb-3"><i class="bi bi-sliders accent-text"></i> المتغيرات</h6>
-    <div class="row g-3">
-      <div class="col-md-4"><label class="text-gray" style="font-size:.72rem;font-weight:600">أيام الحمل</label><input type="number" class="field" id="set-pregnancyDays" value="${s.pregnancyDays}" min="100" max="200"></div>
-      <div class="col-md-4"><label class="text-gray" style="font-size:.72rem;font-weight:600">تنبيه التحصين قبل (أيام)</label><input type="number" class="field" id="set-vaccinationAlertDays" value="${s.vaccinationAlertDays}" min="1" max="30"></div>
-      <div class="col-md-4"><label class="text-gray" style="font-size:.72rem;font-weight:600">أيام الفطام</label><input type="number" class="field" id="set-weaningDays" value="${s.weaningDays}" min="30" max="180"></div>
-    </div>
-  </div>
-
-  <!-- Alert Thresholds -->
-  <div class="settings-section">
-    <h6 class="fw-bold mb-3"><i class="bi bi-bell-fill accent-text"></i> حدود التنبيهات</h6>
-    <p class="text-gray mb-3" style="font-size:.82rem">تحكم في متى تظهر التنبيهات — الأرقام بالأيام ما لم يُذكر غير ذلك</p>
-    <div class="row g-3">
-      <div class="col-md-4">
-        <label class="text-gray" style="font-size:.72rem;font-weight:600">تنبيه الولادة قبل (أيام)</label>
-        <input type="number" class="field" id="set-birthAlertDays" value="${s.birthAlertDays||7}" min="1" max="21">
-        <small class="text-gray" style="font-size:.68rem">الافتراضي: 7 أيام</small>
-      </div>
-      <div class="col-md-4">
-        <label class="text-gray" style="font-size:.72rem;font-weight:600">تنبيه انتهاء الدواء قبل (أيام)</label>
-        <input type="number" class="field" id="set-medExpiryAlertDays" value="${s.medExpiryAlertDays||30}" min="7" max="90">
-        <small class="text-gray" style="font-size:.68rem">الافتراضي: 30 يوم</small>
-      </div>
-      <div class="col-md-4">
-        <label class="text-gray" style="font-size:.72rem;font-weight:600">درجة حرارة التنبيه (°م)</label>
-        <input type="number" class="field" id="set-heatAlertTemp" value="${s.heatAlertTemp||35}" min="25" max="50">
-        <small class="text-gray" style="font-size:.68rem">الافتراضي: 35°م</small>
-      </div>
-      <div class="col-md-4">
-        <label class="text-gray" style="font-size:.72rem;font-weight:600">تنبيه المخزون المنخفض (%)</label>
-        <input type="number" class="field" id="set-lowStockPct" value="${s.lowStockPct||20}" min="5" max="50">
-        <small class="text-gray" style="font-size:.68rem">تنبيه عند الوصول لـ X% من الحد الأدنى</small>
-      </div>
-      <div class="col-md-4">
-        <label class="text-gray" style="font-size:.72rem;font-weight:600">تنبيه رجوع الشياع (أيام)</label>
-        <input type="number" class="field" id="set-heatReturnDays" value="${s.heatReturnDays||18}" min="14" max="25">
-        <small class="text-gray" style="font-size:.68rem">الافتراضي: 18 يوم بعد التقريع</small>
-      </div>
-      <div class="col-md-4">
-        <label class="text-gray" style="font-size:.72rem;font-weight:600">تنبيه البرودة (°م)</label>
-        <input type="number" class="field" id="set-coldAlertTemp" value="${s.coldAlertTemp||10}" min="0" max="20">
-        <small class="text-gray" style="font-size:.68rem">الافتراضي: 10°م</small>
-      </div>
-    </div>
-  </div>
-
-  <!-- Barn Capacity -->
-  <div class="settings-section">
-    <h6 class="fw-bold mb-3"><i class="bi bi-building accent-text"></i> سعة الجمالونات</h6>
-    <p class="text-gray mb-3" style="font-size:.82rem">حدد الطاقة الاستيعابية القصوى لكل جمالون — تُستخدم لحساب نسبة الإشغال في التقارير</p>
-    <div class="row g-3" id="barn-capacity-grid">
-      ${['ج١ع١','ج١ع٢','ج٢ع١','ج٢ع٢','ج٣ع١','ج٣ع٢','ج٤ع١','ج٤ع٢','ج٥ع١','ج٥ع٢'].map(function(barn){
-        var cap=(s.barnCapacity||{})[barn]||200;
-        return '<div class="col-6 col-md-3 col-lg-2"><label class="text-gray" style="font-size:.72rem;font-weight:600">'+barn+'</label>'+
-               '<input type="number" class="field" id="barn-cap-'+barn+'" value="'+cap+'" min="10" max="2000"></div>';
-      }).join('')}
-    </div>
-  </div>
-
-  <div class="d-flex justify-content-end mt-3">
-    <button class="action-btn primary" onclick="saveAll()" style="padding:10px 26px"><i class="bi bi-floppy-fill"></i> حفظ جميع الإعدادات</button>
-  </div>`;
-}
-
-function saveAll(){
-  const s=getSettings();
-  s.farmName=document.getElementById('set-farmName').value.trim()||s.farmName;
-  s.ownerName=document.getElementById('set-ownerName').value.trim()||s.ownerName;
-  s.farmAddress=document.getElementById('set-farmAddress').value.trim();
-  s.currency=document.getElementById('set-currency').value;
-  s.logoUrl=document.getElementById('set-logoUrl').value.trim();
-  s.pregnancyDays=parseInt(document.getElementById('set-pregnancyDays').value)||150;
-  s.vaccinationAlertDays=parseInt(document.getElementById('set-vaccinationAlertDays').value)||7;
-  s.weaningDays=parseInt(document.getElementById('set-weaningDays').value)||60;
-  // Alert thresholds
-  s.birthAlertDays=parseInt(document.getElementById('set-birthAlertDays')?.value)||7;
-  s.medExpiryAlertDays=parseInt(document.getElementById('set-medExpiryAlertDays')?.value)||30;
-  s.heatAlertTemp=parseInt(document.getElementById('set-heatAlertTemp')?.value)||35;
-  s.coldAlertTemp=parseInt(document.getElementById('set-coldAlertTemp')?.value)||10;
-  s.lowStockPct=parseInt(document.getElementById('set-lowStockPct')?.value)||20;
-  s.heatReturnDays=parseInt(document.getElementById('set-heatReturnDays')?.value)||18;
-  // Barn capacity
-  const barnCap={};
-  ['ج١ع١','ج١ع٢','ج٢ع١','ج٢ع٢','ج٣ع١','ج٣ع٢','ج٤ع١','ج٤ع٢','ج٥ع١','ج٥ع٢'].forEach(function(barn){
-    const el=document.getElementById('barn-cap-'+barn);
-    if(el)barnCap[barn]=parseInt(el.value)||200;
-  });
-  s.barnCapacity=barnCap;
-  saveSettings(s);
-  logActivity('edit','settings','تعديل إعدادات المزرعة');
-  toast('تم حفظ الإعدادات');
-  renderSettings();
-}
-window.addBreed=function(type){
-  const inp=document.getElementById(`new-${type}`);const val=inp.value.trim();if(!val)return;
-  const s=getSettings();const arr=type==='goat'?s.goatBreeds:s.sheepBreeds;
-  if(arr.includes(val)){toast('موجودة بالفعل','error');return;}
-  arr.push(val);saveSettings(s);inp.value='';renderSettings();toast('تمت الإضافة');
-};
 window.removeBreed=function(type,name){
   const s=getSettings();const arr=type==='goat'?s.goatBreeds:s.sheepBreeds;
   if(arr.length<=1){toast('يجب الإبقاء على سلالة واحدة','error');return;}
@@ -352,23 +258,22 @@ function toggleNotifSound(){
   if(lbl)lbl.textContent=off?'مكتوم':'مفعّل';
 })();
 
-// ── Admin Reset Section ──────────────────────────────
-(function(){
-  const u=getUser();
-  if(u&&u.role==='admin'){
-    const s=document.getElementById('admin-reset-section');
-    if(s)s.style.display='block';
-  }
-})();
+// Admin reset section is now rendered by renderAdminResetSection() in the init block above.
 
 async function _deleteTable(table){
   try{
     if(!FB_URL){toast('Firebase غير متصل','error');return false;}
-    const url=FB_URL+'/'+table+'.json';
-    const r=await fetch(url,{method:'DELETE'});
+    // BUG FIX: this used to build the URL manually (FB_URL+'/'+table+
+    // '.json'), bypassing fbUrl() entirely — meaning it never attached
+    // an auth token (would always fail once rules require auth != null)
+    // and, separately, always returned true without ever checking
+    // r.ok, so every caller (resetAnimals, resetFinance, resetHealth,
+    // resetActivity, resetNotifications, and the full-reset success
+    // counter) could report success even when the delete failed.
+    const r=await fetch(await fbUrl(table),{method:'DELETE'});
     fbCacheInvalidate(table);
     console.log('Deleted:',table,'status:',r.status);
-    return true; // Firebase DELETE returns 200 even for empty nodes
+    return r.ok;
   }catch(e){
     console.error('Delete failed:',table,e.message);
     return false;
@@ -387,30 +292,33 @@ window.resetAnimals=async function(){
 window.resetFinance=async function(){
   if(!confirm('مسح كل البيانات المالية؟'))return;
   toast('جاري المسح...','info');
-  await _deleteTable('finance');
+  const ok=await _deleteTable('finance');
   await logActivity('delete','system','مسح بيانات المالية');
-  toast('✅ تم مسح المالية');
+  toast(ok?'✅ تم مسح المالية':'⚠️ فشل المسح — تحقق من الاتصال', ok?'success':'error');
 };
 
 window.resetHealth=async function(){
   if(!confirm('مسح سجلات الصحة والتحصين والتكاثر؟'))return;
   toast('جاري المسح...','info');
-  await Promise.all([_deleteTable('health'),_deleteTable('vaccinations'),_deleteTable('breeding')]);
+  const results=await Promise.all([_deleteTable('health'),_deleteTable('vaccinations'),_deleteTable('breeding')]);
   await logActivity('delete','system','مسح الصحة والتحصين والتكاثر');
-  toast('✅ تم مسح الصحة والتحصين');
+  const allOk=results.every(Boolean);
+  toast(allOk?'✅ تم مسح الصحة والتحصين':'⚠️ المسح جزئي — تحقق من الاتصال', allOk?'success':'error');
 };
 
 window.resetActivity=async function(){
   if(!confirm('مسح كل سجل الأنشطة والإشعارات؟'))return;
   toast('جاري المسح...','info');
-  await Promise.all([_deleteTable('activity_log'),_deleteTable('login_notifications')]);
-  toast('✅ تم مسح سجل الأنشطة');
+  const results=await Promise.all([_deleteTable('activity_log'),_deleteTable('login_notifications')]);
+  const allOk=results.every(Boolean);
+  toast(allOk?'✅ تم مسح سجل الأنشطة':'⚠️ المسح جزئي — تحقق من الاتصال', allOk?'success':'error');
 };
 
 window.resetNotifications=async function(){
   if(!confirm('مسح كل الإشعارات؟'))return;
-  await Promise.all([_deleteTable('notifications'),_deleteTable('login_notifications')]);
-  toast('✅ تم مسح الإشعارات');
+  const results=await Promise.all([_deleteTable('notifications'),_deleteTable('login_notifications')]);
+  const allOk=results.every(Boolean);
+  toast(allOk?'✅ تم مسح الإشعارات':'⚠️ المسح جزئي — تحقق من الاتصال', allOk?'success':'error');
 };
 
 window.resetEverything=async function(){
@@ -429,7 +337,7 @@ window.resetEverything=async function(){
   Object.keys(localStorage).forEach(function(k){
     if(keysToKeep.indexOf(k)<0)localStorage.removeItem(k);
   });
-  toast('✅ تم مسح كل البيانات — يمكنك إعادة استيراد البيانات من صفحة الاستيراد');
+  toast(deleted===tables.length?'✅ تم مسح كل البيانات — يمكنك إعادة استيراد البيانات من صفحة الاستيراد':'⚠️ تم مسح '+deleted+' من '+tables.length+' — بعض البيانات لم يتم مسحها، تحقق من الاتصال', deleted===tables.length?'success':'error');
   setTimeout(function(){location.href='dashboard.html';},2000);
 };
 </script>
@@ -454,6 +362,105 @@ window.loadG2Charts = async function() {
     [animals, production] = await Promise.all([fbGet('animals'), fbGet('production_log').catch(function(){return[];})]);
   } catch(e) {}
   window.FarmReact.openG2Charts(animals, production);
+};
+
+
+// ── PWA Install Logic ────────────────────────────────────
+var _deferredPrompt = null;
+
+// Capture the install prompt event (Chrome fires this automatically)
+window.addEventListener('beforeinstallprompt', function(e) {
+  e.preventDefault();
+  _deferredPrompt = e;
+  showInstallButton();
+});
+
+// Fired when app is successfully installed
+window.addEventListener('appinstalled', function() {
+  _deferredPrompt = null;
+  hideInstallButton();
+  toast('✅ تم تثبيت التطبيق بنجاح على جهازك!');
+  var badge = document.getElementById('pwa-installed-badge');
+  if (badge) badge.style.display = 'block';
+  var status = document.getElementById('pwa-status');
+  if (status) status.textContent = '✅ التطبيق مثبَّت على هذا الجهاز';
+});
+
+function showInstallButton() {
+  var btn = document.getElementById('pwa-install-btn');
+  if (btn) btn.style.display = 'inline-flex';
+  var status = document.getElementById('pwa-status');
+  if (status) {
+    status.innerHTML = '<i class="bi bi-check-circle-fill me-1" style="color:var(--green)"></i>جاهز للتثبيت — اضغط الزرار الأخضر';
+    status.style.color = 'var(--green)';
+  }
+}
+
+function hideInstallButton() {
+  var btn = document.getElementById('pwa-install-btn');
+  if (btn) btn.style.display = 'none';
+}
+
+window.triggerPWAInstall = async function() {
+  if (!_deferredPrompt) {
+    toast('المتصفح لا يدعم التثبيت التلقائي — استخدم "كيفية التثبيت"', 'info');
+    showPWAInstructions();
+    return;
+  }
+  _deferredPrompt.prompt();
+  var result = await _deferredPrompt.userChoice;
+  if (result.outcome === 'accepted') {
+    toast('✅ شكراً! جاري تثبيت التطبيق...');
+  } else {
+    toast('تم إلغاء التثبيت', 'info');
+  }
+  _deferredPrompt = null;
+  hideInstallButton();
+};
+
+window.showPWAInstructions = function() {
+  var steps = document.getElementById('pwa-manual-steps');
+  if (steps) {
+    steps.style.display = steps.style.display === 'none' ? 'block' : 'none';
+  }
+};
+
+// Check if already installed
+(function checkInstalled() {
+  var isStandalone = window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true;
+  var status = document.getElementById('pwa-status');
+  if (isStandalone) {
+    if (status) {
+      status.innerHTML = '<i class="bi bi-check-circle-fill me-1" style="color:var(--green)"></i>التطبيق مثبَّت بالفعل على هذا الجهاز ✅';
+      status.style.color = 'var(--green)';
+    }
+    var badge = document.getElementById('pwa-installed-badge');
+    if (badge) badge.style.display = 'block';
+  } else if (status) {
+    // Not installed yet — show guidance
+    setTimeout(function() {
+      if (!_deferredPrompt) {
+        // Browser didn't fire beforeinstallprompt — show manual option
+        status.innerHTML = '<i class="bi bi-info-circle me-1"></i>اضغط "كيفية التثبيت" للتعليمات اليدوية';
+      }
+    }, 2000);
+  }
+})();
+
+window.downloadAPKProject = function() {
+  toast('جاري إعداد رابط التنزيل...', 'info');
+  // Show build steps
+  var steps = document.getElementById('apk-steps');
+  if (steps) steps.style.display = 'block';
+  // Link to the ZIP we prepared
+  setTimeout(function() {
+    var a = document.createElement('a');
+    a.href = 'farm-apk.zip';
+    a.download = 'bayan-farm-apk-project.zip';
+    a.click();
+    toast('✅ تم تنزيل مشروع APK — اتبع التعليمات في ملف BUILD_APK.md');
+  }, 500);
 };
 </script>
 </body>

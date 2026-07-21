@@ -579,13 +579,15 @@ window.submitProd = async function() {
       created_at:  new Date().toISOString(),
     });
 
-    // Also update animal's current_weight if type=weight
+    // Also update animal's current_weight if type=weight -- routed
+    // through the canonical Weight service (shared.js), which owns
+    // validation, resync, alerts, and workflow. This used to patch
+    // current_weight directly, before the history record even existed,
+    // with no comparison against existing weight history -- the same
+    // date-blind-overwrite bug the AI assistant's own handler had.
     if (type === 'weight') {
-      try { await fbPatch('animals', animal._id, { current_weight: qty, weight_updated: date }); } catch(e) {}
-      try { await fbPost('animals/'+animal._id+'/weights', { weight: qty, date: date, notes: notes || null }); } catch(e) {}
-      // Sprint 2, Epic 2: attach weight intelligence -- additive only,
-      // does not change the writes above. Never blocks on failure.
-      if (window.evaluateWeightAlert) { window.evaluateWeightAlert(animal._id, animal.tag, animal.barn).catch(function(){}); }
+      var wr = await window.recordAnimalWeight({animalId: animal._id, weight: qty, date: date, notes: notes || null});
+      if (!wr.ok) console.error('Weight-type production entry: weight sync failed:', wr.error);
     } else if (type === 'milk' || type === 'wool') {
       // Sprint 4, Epic 4: attach production intelligence -- additive
       // only, milk/wool exclusively (weight is Sprint 2's domain,

@@ -16,14 +16,21 @@
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="media/logo-icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="media/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="media/favicon-16.png">
+<link rel="apple-touch-icon" href="media/apple-touch-icon.png">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="page-wrap">
+<div class="page-wrap rail-v2-content">
   <div id="page-header"></div>
+  <div id="animals-kpi-row" class="mb-3"></div>
   <div id="filters-bar" class="wonder-card mb-3"></div>
   <div id="bulk-bar" style="display:none" class="mb-3"></div>
   <div id="content" role="main" aria-label="قائمة القطيع"><div class="text-center py-5"><div class="spinner"></div><div class="text-gray mt-2">جاري التحميل...</div></div></div>
+  <div id="animals-insights" class="mb-4"></div>
+  <div id="animals-timeline" class="mb-4"></div>
   <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
     <span id="footer-year"></span> &copy; <span id="footer-farm"></span><br>
     <small style="font-size:.72rem;color:var(--text-muted)">إشراف: لواء أحمد رجب نوح | تطوير: جندي مصطفى محمد إبراهيم</small>
@@ -34,6 +41,7 @@
 <script src="firebase.js"></script>
 <script src="nav.js"></script>
 <script src="shared.js"></script>
+<script src="offline-sync.js" defer></script>
 <script src="pages/datepicker.js" defer></script>
 <script src="pages/tour.js" defer></script>
 <script>
@@ -43,6 +51,9 @@ var animals=[];
 var fSpecies='all', fPurpose='all', fStatus='alive', fSearch='', fBreed='all', fGender='all', fSort='newest';
 var _selected=new Set();
 var _selectMode=false;
+// List/cards toggle -- persisted the same way theme preference already is
+// elsewhere in the app, so the choice survives a reload.
+var _viewMode=localStorage.getItem('animals_view_mode')||'list';
 
 const params=new URLSearchParams(location.search);
 if(params.get('species'))fSpecies=params.get('species');
@@ -55,13 +66,25 @@ if(params.get('search'))fSearch=params.get('search');
 // ── Init ─────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async function(){
   if(!requireAuth())return;
+  // SECURITY FIX (Phase 6 hardening): nav.js grants this page perm:'animals',
+  // but no can('animals') check enforced it -- same bug class already fixed
+  // elsewhere. A 'visitor'-role account can currently reach this page's
+  // bulk-action/edit/delete surface directly, despite the role model
+  // intending animals.html to require the 'animals' permission explicitly.
+  if (!can('animals')) {
+    document.body.innerHTML='<div class="page-wrap"><div class="empty-state" style="padding-top:100px"><i class="bi bi-shield-x" style="font-size:3rem;display:block;margin-bottom:10px;opacity:.4"></i><p>غير مصرح بالوصول</p><a href="dashboard.html" class="action-btn">الرئيسية</a></div></div>';
+    return;
+  }
   initFirebase();
   var s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
-  renderNavbar('animals.html');
+  renderNavbarV2('animals.html');
   addFAB('إضافة حيوان', function(){ openAddAnimal(); });
-  renderPageHeader('<i class="bi bi-list-ul accent-text"></i> إدارة القطيع','','');
+  renderPageHeaderV2({
+    title: '<i class="bi bi-list-ul accent-text"></i> إدارة القطيع',
+    breadcrumb: [{label:'الرئيسية', href:'dashboard.html'}, {label:'القطيع'}]
+  });
 
   try{
     animals=await fbGet('animals');
@@ -72,9 +95,27 @@ document.addEventListener('DOMContentLoaded', async function(){
     document.getElementById('content').innerHTML='<div class="empty-state"><i class="bi bi-wifi-off"></i><p>تعذر الاتصال بقاعدة البيانات</p><small class="text-gray">'+e.message+'</small><br><button class="action-btn primary mt-3" onclick="location.reload()">إعادة المحاولة</button></div>';
     return;
   }
+  renderAnimalsKPIs();
   renderFilters();
   renderAnimals();
+  renderAnimalsInsights();
 });
+
+// ── KPI Summary (Listing Template) — new, was previously missing on this page ──
+function renderAnimalsKPIs(){
+  var kpiEl=document.getElementById('animals-kpi-row');
+  if(!kpiEl)return;
+  var alive=animals.filter(function(a){return a.status==='alive';});
+  var goats=alive.filter(function(a){return a.species==='goat';}).length;
+  var sheep=alive.filter(function(a){return a.species==='sheep';}).length;
+  var underTreatment=(window._healthRecs||[]).filter(function(h){return h.status==='active';}).length;
+  kpiEl.innerHTML='<div class="row g-3">'+
+    '<div class="col-6 col-md-3">'+renderKPICard({ label:'إجمالي القطيع', value: ar(alive.length), status:'normal' })+'</div>'+
+    '<div class="col-6 col-md-3">'+renderKPICard({ label:'الماعز', value: ar(goats), status:'normal' })+'</div>'+
+    '<div class="col-6 col-md-3">'+renderKPICard({ label:'الأغنام', value: ar(sheep), status:'normal' })+'</div>'+
+    '<div class="col-6 col-md-3">'+renderKPICard({ label:'تحت العلاج', value: ar(underTreatment), status: underTreatment>0?'watch':'normal' })+'</div>'+
+  '</div>';
+}
 
 // ── Render Filters ───────────────────────────────────
 function renderFilters(){
@@ -148,8 +189,8 @@ function renderFilters(){
       '<div class="col-md-2 d-flex gap-2 flex-wrap">'+
         (can('animals')?
           '<button class="action-btn primary" onclick="openAddAnimal()"><i class="bi bi-plus-lg"></i> إضافة</button>'+
-      '<button class="action-btn" onclick="openBatchEntry()" style="background:rgba(33,150,243,.1);border-color:rgba(33,150,243,.35);color:var(--blue)" data-hint="إضافة بالجملة"><i class="bi bi-stack"></i></button>'+'<button class="action-btn" onclick="openUnifiedBirthModal(\'goat\')" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.3);color:var(--yellow)" data-hint="تسجيل مواليد"><i class="bi bi-stars"></i></button>'+'<button class="action-btn danger" onclick="openMarkDeath()" data-hint="تسجيل نفوق"><i class="bi bi-x-octagon"></i></button>':'')+
-        (can('admin')?'<button class="action-btn" onclick="openResetModal()" style="background:rgba(156,39,176,.1);border-color:rgba(156,39,176,.3);color:var(--purple)" data-hint="إعادة تعيين"><i class="bi bi-arrow-counterclockwise"></i></button>':'')+
+      '<button class="action-btn" onclick="openBatchEntry()" style="background:rgba(33,150,243,.1);border-color:rgba(33,150,243,.35);color:var(--blue)" data-hint="إضافة بالجملة" aria-label="إضافة بالجملة" title="إضافة بالجملة"><i class="bi bi-stack"></i></button>'+'<button class="action-btn" onclick="openUnifiedBirthModal(\'goat\')" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.3);color:var(--yellow)" data-hint="تسجيل مواليد" aria-label="تسجيل مواليد" title="تسجيل مواليد"><i class="bi bi-stars"></i></button>'+'<button class="action-btn danger" onclick="openMarkDeath()" data-hint="تسجيل نفوق" aria-label="تسجيل نفوق" title="تسجيل نفوق"><i class="bi bi-x-octagon"></i></button>':'')+
+        (can('admin')?'<button class="action-btn" onclick="openResetModal()" style="background:rgba(156,39,176,.1);border-color:rgba(156,39,176,.3);color:var(--purple)" data-hint="إعادة تعيين" aria-label="إعادة تعيين" title="إعادة تعيين"><i class="bi bi-arrow-counterclockwise"></i></button>':'')+
       '</div>'+
     '</div>';
 }
@@ -240,13 +281,18 @@ function renderAnimals(){
   var shown=list.slice(0,150);
   var countHtml='<div class="mb-2 d-flex justify-content-between align-items-center gap-2 flex-wrap">'+
     '<small class="text-gray">يُعرض '+ar(shown.length)+(list.length>shown.length?' من '+ar(list.length):'')+' حيوان (إجمالي: '+ar(animals.filter(function(a){return a.status==='alive';}).length)+')</small>'+
-    '<div class="d-flex gap-2">'+
+    '<div class="d-flex gap-2 align-items-center">'+
+      '<div class="view-toggle no-print" role="group" aria-label="طريقة العرض">'+
+        '<button type="button" class="view-toggle-btn'+(_viewMode==='list'?' active':'')+'" onclick="setViewMode(\'list\')" aria-label="عرض قائمة" aria-pressed="'+(_viewMode==='list')+'" data-hint="عرض قائمة"><i class="bi bi-list-ul"></i></button>'+
+        '<button type="button" class="view-toggle-btn'+(_viewMode==='cards'?' active':'')+'" onclick="setViewMode(\'cards\')" aria-label="عرض بطاقات" aria-pressed="'+(_viewMode==='cards')+'" data-hint="عرض بطاقات"><i class="bi bi-grid-3x3-gap-fill"></i></button>'+
+      '</div>'+
       '<button class="action-btn sm" onclick="toggleSelectMode()" aria-label="تفعيل وضع التحديد المتعدد" style="'+(  _selectMode?'background:rgba(33,150,243,.1);border-color:rgba(33,150,243,.4);color:var(--blue)':'')+'" data-hint="تحديد متعدد للعمليات الجماعية"><i class="bi bi-check2-square"></i> '+(_selectMode?ar(_selected.size)+' محدد':'تحديد')+'</button>'+
       '<div class="position-relative" id="data-menu-wrap"><button class="action-btn sm" onclick="toggleDataMenu()" data-hint="استيراد وتصدير البيانات"><i class="bi bi-database-fill-gear"></i> بيانات <i class="bi bi-chevron-down" style="font-size:.6rem"></i></button><div id="data-menu" style="display:none;position:absolute;left:0;top:110%;background:var(--bg-2);border:1px solid var(--border-2);border-radius:12px;padding:6px;min-width:200px;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,.35)"><button class="action-btn sm" style="width:100%;justify-content:flex-start;margin-bottom:4px" onclick="exportExcel()"><i class="bi bi-file-earmark-excel-fill" style="color:#4caf50"></i> تصدير Excel (.xlsx)</button><button class="action-btn sm" style="width:100%;justify-content:flex-start;margin-bottom:4px" onclick="exportCSV()" aria-label="تصدير CSV"><i class="bi bi-filetype-csv"></i> تصدير CSV</button><hr style="border-color:var(--border-3);margin:4px 0"><button class="action-btn sm" style="width:100%;justify-content:flex-start;margin-bottom:4px" onclick="openImportDialog()"><i class="bi bi-cloud-arrow-up-fill" style="color:var(--blue)"></i> استيراد من Excel</button><a href="import.html" class="action-btn sm" style="width:100%;justify-content:flex-start"><i class="bi bi-database-fill-add" style="color:var(--orange)"></i> محرك البيانات الكامل</a></div></div>'+
     '</div>'+
   '</div>';
 
   // Rows
+  var isCards=_viewMode==='cards';
   var rows=shown.map(function(a){
     var purposeLabel={tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[a.purpose]||a.purpose||'—';
     var purposeCls=a.purpose==='tasmeen'?'badge-tasmeen':a.purpose==='birth'?'badge-blue':'badge-tarbiya';
@@ -254,9 +300,32 @@ function renderAnimals(){
     var statusLabel=a.status==='alive'?'حي':'نافق';
     var sel=_selected.has(a._id);
     var rowStyle=sel?'border-color:rgba(33,150,243,.5);background:rgba(33,150,243,.05);':'';
-    var cb=_selectMode?'<label style="padding-left:4px;cursor:pointer;flex-shrink:0"><input type="checkbox" class="anim-cb" data-id="'+a._id+'" '+(sel?'checked':'')+' style="accent-color:var(--blue);width:17px;height:17px" onchange="toggleOne(\''+a._id+'\',this.checked)"></label>':'';
+    var cb=_selectMode?'<label style="padding-left:4px;cursor:pointer;flex-shrink:0" onclick="event.stopPropagation()"><input type="checkbox" class="anim-cb" data-id="'+a._id+'" '+(sel?'checked':'')+' style="accent-color:var(--blue);width:17px;height:17px" onchange="toggleOne(\''+a._id+'\',this.checked)"></label>':'';
     var menuBtn=can('admin')?
-      '<button class="icon-btn" onclick="event.stopPropagation();openAnimalMenu(\''+a._id+'\',\''+encodeURIComponent(a.breed||'')+'\',\''+encodeURIComponent(a.tag||'')+'\',\''+(a.status||'alive')+'\')"><i class="bi bi-three-dots-vertical"></i></button>':'';
+      '<button class="icon-btn" onclick="event.preventDefault();event.stopPropagation();openAnimalMenu(\''+a._id+'\',\''+encodeURIComponent(a.breed||'')+'\',\''+encodeURIComponent(a.tag||'')+'\',\''+(a.status||'alive')+'\')" aria-label="خيارات" title="خيارات"><i class="bi bi-three-dots-vertical"></i></button>':'';
+    var badgesHtml=
+      (a.tag?'<span class="type-badge badge-gray">#'+a.tag+'</span>':'')+
+      '<span class="type-badge '+purposeCls+'">'+purposeLabel+'</span>'+
+      '<span class="type-badge '+(a.gender==='male'?'badge-blue':'badge-purple')+'" style="font-size:.68rem">'+(a.gender==='male'?'♂ ذكر':'♀ أنثى')+'</span>'+
+      (a.status!=='alive'?'<span class="type-badge '+statusCls+'">'+statusLabel+'</span>':'')+
+      (a.barn?'<span class="type-badge badge-gray" style="font-size:.68rem"><i class="bi bi-building me-1"></i>'+a.barn+'</span>':'');
+    var metaText=(a.species==='goat'?'ماعز':'أغنام')+(a.birth_date?' • مواليد: '+a.birth_date:' • غير محدد');
+
+    if(isCards){
+      return '<a href="animal-detail.html?id='+a._id+'" class="animal-row animal-card-v2" style="'+rowStyle+'text-decoration:none" onclick="if(_selectMode){event.preventDefault();toggleOne(\''+a._id+'\',!_selected.has(\''+a._id+'\'))}">'+
+        (cb||menuBtn?'<div class="animal-card-v2__corner">'+cb+menuBtn+'</div>':'')+
+        '<div class="animal-card-v2__top">'+
+          '<div class="animal-card-v2__avatar">'+(a.species==='goat'?'🐐':'🐑')+'</div>'+
+          '<div style="min-width:0;flex:1">'+
+            '<div class="animal-card-v2__name">'+(a.breed||'—')+'</div>'+
+            (!a.tag?'<div class="animal-card-v2__tag">غير مرقّم</div>':'')+
+          '</div>'+
+        '</div>'+
+        '<div class="animal-card-v2__badges">'+badgesHtml+'</div>'+
+        '<div class="animal-card-v2__meta"><span>'+metaText+'</span><i class="bi bi-chevron-left"></i></div>'+
+      '</a>';
+    }
+
     return '<div class="animal-row" style="'+rowStyle+'" onclick="'+(  _selectMode?'toggleOne(\''+a._id+'\',!_selected.has(\''+a._id+'\'))':'')+'">'+
       cb+
       '<a href="animal-detail.html?id='+a._id+'" style="text-decoration:none;display:flex;align-items:center;gap:12px;flex:1;min-width:0" onclick="if(_selectMode)event.preventDefault()">'+
@@ -264,13 +333,9 @@ function renderAnimals(){
         '<div class="flex-grow-1" style="min-width:0">'+
           '<div class="d-flex gap-2 flex-wrap align-items-center">'+
             '<span class="fw-bold">'+(a.breed||'—')+'</span>'+
-            (a.tag?'<span class="type-badge badge-gray">#'+a.tag+'</span>':'')+
-            '<span class="type-badge '+purposeCls+'">'+purposeLabel+'</span>'+
-            '<span class="type-badge '+(a.gender==='male'?'badge-blue':'badge-purple')+'" style="font-size:.68rem">'+(a.gender==='male'?'♂ ذكر':'♀ أنثى')+'</span>'+
-            (a.status!=='alive'?'<span class="type-badge '+statusCls+'">'+statusLabel+'</span>':'')+
-            (a.barn?'<span class="type-badge badge-gray" style="font-size:.68rem"><i class="bi bi-building me-1"></i>'+a.barn+'</span>':'')+
+            badgesHtml+
           '</div>'+
-          '<small class="text-gray">'+(a.species==='goat'?'ماعز':'أغنام')+(a.birth_date?' • مواليد: '+a.birth_date:' • غير محدد')+'</small>'+
+          '<small class="text-gray">'+metaText+'</small>'+
         '</div>'+
         '<i class="bi bi-chevron-left text-gray"></i>'+
       '</a>'+
@@ -278,8 +343,83 @@ function renderAnimals(){
     '</div>';
   }).join('');
 
-  el.innerHTML=countHtml+rows+
+  el.innerHTML=countHtml+(isCards?'<div class="animals-grid">'+rows+'</div>':rows)+
     (list.length>150?'<div class="text-center py-3 text-gray" style="font-size:.82rem"><i class="bi bi-info-circle me-1"></i>يُعرض أول '+ar(150)+' — استخدم الفلاتر لتضييق النتائج</div>':'');
+}
+
+window.setViewMode=function(mode){
+  _viewMode=mode;
+  localStorage.setItem('animals_view_mode',mode);
+  renderAnimals();
+};
+
+// ── Related Insights + Activity Timeline (Listing Template) ──
+// New sections, added per the Animals module migration to the
+// Dashboard v2 architecture. Deliberately reuse the exact same
+// shared functions dashboard.html already established — no new
+// component, no new chart type, no new data dependency (built
+// entirely from the `animals` array already loaded for this page,
+// same as every other section on it).
+function renderAnimalsInsights(){
+  var elI=document.getElementById('animals-insights');
+  var elT=document.getElementById('animals-timeline');
+  if(!elI||!elT)return;
+
+  var alive=animals.filter(function(a){return a.status==='alive';});
+
+  // 1. Breed distribution — same renderDonutSVG primitive as dashboard.html's
+  //    health-status donut, just fed breed totals instead.
+  var byBreed={};
+  alive.forEach(function(a){
+    var k=(a.breed||'—')+' ('+(a.species==='goat'?'ماعز':'أغنام')+')';
+    byBreed[k]=(byBreed[k]||0)+1;
+  });
+  var dc=['#00e676','#2196f3','#ff6b35','#9c27b0','#ffc107','#f44336','#00bcd4','#8bc34a'];
+  var breedSegments=Object.keys(byBreed).map(function(k,i){
+    return { label:k, value:byBreed[k], color:dc[i%dc.length] };
+  }).sort(function(a,b){return b.value-a.value;}).slice(0,8);
+
+  // 2. Age distribution — now driven by the shared Life Stage model
+  //    (getLifeStage() in shared.js) instead of a hardcoded, duplicated
+  //    30-days-per-month age bucket computed inline here. Matches
+  //    "Age distribution -> Life Stage" from the lifecycle redesign.
+  var lifeStageOrder=['newborn','weaned','growing','adult'];
+  var ageCounts=lifeStageOrder.map(function(stage){
+    var c=alive.filter(function(a){
+      return a.birth_date && getLifeStage(a.birth_date)===stage;
+    }).length;
+    return { label:LIFE_STAGE_LABELS[stage], values:[c] };
+  });
+
+
+  var donutSvg=renderDonutSVG(breedSegments,{size:150});
+  var barSvg=renderGroupedBarSVG(ageCounts,{colors:['#3b82f6']});
+
+  elI.innerHTML='<h6 class="fw-bold mb-3" style="font-size:var(--text-lg)"><i class="bi bi-graph-up accent-text me-2"></i>رؤى ذات صلة</h6>'+
+    '<div class="row g-3">'+
+      '<div class="col-md-5">'+renderChartContainer({ title:'توزيع السلالات', subtitle:'الأحياء فقط', chartHtml:donutSvg||'', state: donutSvg?'ready':'empty' })+'</div>'+
+      '<div class="col-md-7">'+renderChartContainer({ title:'التوزيع العمري', subtitle:'حسب الفئة', chartHtml:barSvg||'', state: barSvg?'ready':'empty' })+'</div>'+
+    '</div>';
+
+  // 3. Activity Timeline — recent additions/births/deaths, reconstructed from
+  //    fields already loaded on this page (created_at/imported_at/birth_date/
+  //    died_at) — no new Firebase call added, same discipline as dashboard.html's
+  //    own "reconstructed where no history collection exists" approach.
+  var events=[];
+  animals.forEach(function(a){
+    var addedDate=a.created_at||a.imported_at;
+    if(addedDate) events.push({ date:addedDate, eventType:'إضافة حيوان', entity:(a.breed||'')+' '+(a.gender==='male'?'ذكر':'أنثى')+(a.tag?' #'+a.tag:'') });
+    if(a.status==='dead'&&a.died_at) events.push({ date:a.died_at, eventType:'نفوق', entity:(a.breed||'')+(a.tag?' #'+a.tag:'') });
+  });
+  events.sort(function(x,y){return (y.date||'').localeCompare(x.date||'');});
+  var recentEvents=events.slice(0,8);
+
+  elT.innerHTML='<div class="wonder-card">'+
+    '<h6 class="fw-bold mb-3" style="font-size:var(--text-lg)"><i class="bi bi-clock-history accent-text me-2"></i>النشاط الأخير</h6>'+
+    (recentEvents.length?renderTimeline(recentEvents.map(function(e){
+      return renderTimelineItem({ time:e.date, eventType:e.eventType, entity:e.entity });
+    })):'<div class="empty-state py-3"><i class="bi bi-clock-history"></i><p>لا يوجد نشاط مسجّل بعد</p></div>')+
+  '</div>';
 }
 
 // ── Bulk Selection ───────────────────────────────────
@@ -423,22 +563,27 @@ window.doBulk=function(action){
   }
   else if(action==='transfer'){
     var barns=['ج١ع١','ج١ع٢','ج٢ع١','ج٢ع٢','ج٣ع١','ج٣ع٢','ج٤ع١','ج٤ع٢','ج٥ع١','ج٥ع٢'];
-    showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()">'+
-      '<h4><i class="bi bi-arrow-left-right accent-text"></i> نقل '+cnt+' حيوان</h4>'+
+    showModal(renderFarmModal({
+      icon:'bi-arrow-left-right', iconClass:'accent-text', title:'نقل '+cnt+' حيوان',
+      extraClass:'narrow',
+      bodyHtml:
       '<label>الجمالون الجديد</label>'+
       '<select class="field" id="b-barn">'+barns.map(function(b){return'<option>'+b+'</option>';}).join('')+'</select>'+
       '<label>سبب النقل</label>'+
-      '<select class="field" id="b-reason"><option>إعادة توزيع</option><option>عزل</option><option>فطام</option><option>تسمين</option><option>علاج</option><option>أخرى</option></select>'+
+      '<select class="field" id="b-reason"><option>إعادة توزيع</option><option>عزل</option><option>فطام</option><option>تسمين</option><option>علاج</option><option>أخرى</option></select>',
+      footerHtml:
       '<div class="d-flex gap-2 justify-content-end mt-3">'+
         '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
-        '<button class="action-btn primary" onclick="execBulk(\'transfer\')">نقل '+cnt+'</button>'+
-      '</div></div>');
+        '<button class="action-btn primary" onclick="execBulk(\'transfer\',{barn:document.getElementById(\'b-barn\')?.value,reason:document.getElementById(\'b-reason\')?.value})">نقل '+cnt+'</button>'+
+      '</div>'
+    }));
   }
   else if(action==='death'){
     var bDeathId=genDeathId();
-    showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:520px;max-height:92vh;overflow-y:auto">'+
-      '<h4 style="color:var(--red)"><i class="bi bi-x-octagon-fill"></i> نفوق جماعي — '+cnt+' حيوان</h4>'+
-
+    showModal(renderFarmModal({
+      icon:'bi-x-octagon-fill', color:'var(--red)', title:'نفوق جماعي — '+cnt+' حيوان',
+      style:'max-width:520px;max-height:92vh;overflow-y:auto',
+      bodyHtml:
       // ── ملاحظة
       '<div class="mb-3 p-3" style="background:rgba(244,67,54,.06);border:1px solid rgba(244,67,54,.2);border-radius:10px;font-size:.82rem">'+
         '<i class="bi bi-info-circle-fill me-1" style="color:var(--red)"></i>'+
@@ -490,25 +635,31 @@ window.doBulk=function(action){
 
       // ── ملاحظات
       '<label>ملاحظات <span class="text-gray" style="font-weight:400">(اختياري)</span></label>'+
-      '<textarea class="field" id="b-notes" rows="2" placeholder="أي تفاصيل إضافية..."></textarea>'+
+      '<textarea class="field" id="b-notes" rows="2" placeholder="أي تفاصيل إضافية..."></textarea>',
 
+      footerHtml:
       '<div class="d-flex gap-2 justify-content-end mt-3">'+
         '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
-        '<button class="action-btn danger" onclick="execBulk(\'death\')"><i class="bi bi-x-octagon-fill"></i> تسجيل نفوق '+cnt+' حيوان</button>'+
-      '</div></div>');
+        '<button class="action-btn danger" onclick="execBulk(\'death\',{date:document.getElementById(\'b-date\')?.value,time:document.getElementById(\'b-time\')?.value,reason:document.getElementById(\'b-reason\')?.value,autopsy:document.getElementById(\'b-autopsy\')?.value,loss:document.getElementById(\'b-loss\')?.value,deathId:document.getElementById(\'b-death-id\')?.value,notes:document.getElementById(\'b-notes\')?.value})"><i class="bi bi-x-octagon-fill"></i> تسجيل نفوق '+cnt+' حيوان</button>'+
+      '</div>'
+    }));
   }
   else if(action==='sell'){
-    showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()">'+
-      '<h4 style="color:var(--yellow)"><i class="bi bi-currency-dollar"></i> بيع '+cnt+' حيوان</h4>'+
+    showModal(renderFarmModal({
+      icon:'bi-currency-dollar', color:'var(--yellow)', title:'بيع '+cnt+' حيوان',
+      extraClass:'narrow',
+      bodyHtml:
       '<div class="row g-2">'+
         '<div class="col-6"><label>التاريخ</label><input type="date" class="field" id="b-date" value="'+todayStr()+'"></div>'+
         '<div class="col-6"><label>المبلغ الإجمالي ('+s.currency+')</label><input type="number" class="field" id="b-price" placeholder="0" min="0"></div>'+
       '</div>'+
-      '<label>المشتري</label><input class="field" id="b-buyer" placeholder="اسم المشتري — اختياري">'+
+      '<label>المشتري</label><input class="field" id="b-buyer" placeholder="اسم المشتري — اختياري">',
+      footerHtml:
       '<div class="d-flex gap-2 justify-content-end mt-3">'+
         '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
         '<button class="action-btn" style="background:rgba(255,193,7,.1);border-color:rgba(255,193,7,.3);color:var(--yellow)" onclick="execBulk(\'sell\')">تأكيد البيع</button>'+
-      '</div></div>');
+      '</div>'
+    }));
   }
   else if(action==='delete'){
     if(!confirm('حذف نهائي '+cnt+' حيوان؟\nلا يمكن التراجع!'))return;
@@ -516,7 +667,78 @@ window.doBulk=function(action){
   }
 };
 
-window.execBulk=async function(action){
+// ── Bulk transfer action (Repository 4, Phase 2C) ──────────────
+// Extracted verbatim from execBulk()'s 'transfer' branch — same
+// field reads, same commitBulkPatch call, same logActivity message,
+// same toast. Only ids is now a parameter instead of a closure read;
+// ok is returned so execBulk's own toast (unchanged) keeps working.
+async function performBulkTransfer(ids,fields){
+  var barn=fields?.barn;
+  var reason=fields?.reason;
+  var ok=await commitBulkPatch(ids,{barn:barn});
+  await logActivity('edit','animals','نقل جماعي '+ar(ok)+' حيوان إلى '+barn+' | '+reason);
+  toast('تم نقل '+ar(ok)+' حيوان إلى '+barn);
+  return ok;
+}
+
+// ── Bulk sell action (Repository 4, Phase 2C Iteration 2) ──────
+// Extracted verbatim from execBulk()'s 'sell' branch — same field
+// reads, same commitBulkPatch call, same conditional finance write,
+// same logActivity message, same toast. Only ids is now a parameter;
+// ok is returned exactly as the branch's own local `ok` was used.
+async function performBulkSell(ids){
+  var date=document.getElementById('b-date')?.value||todayStr();
+  var price=parseFloat(document.getElementById('b-price')?.value)||0;
+  var buyer=document.getElementById('b-buyer')?.value||'—';
+  var r=await window.sellAnimalsBulk({animalIds:ids, date:date, price:price||null, buyer:buyer==='—'?null:buyer, skipFinance:true});
+  var ok=r.succeeded;
+  // One combined finance entry for the stated total -- matches the
+  // original behavior exactly. skipFinance:true above is what prevents
+  // sellAnimal's own per-animal finance write from ALSO firing here,
+  // which would otherwise multiply this total into ok separate
+  // full-amount income entries.
+  if(price>0)await window.recordIncome({date:date,category:'بيع حيوانات',amount:price,description:'بيع '+ar(ok)+' حيوان | '+buyer,relatedModule:'animals'});
+  await logActivity('edit','animals','بيع جماعي '+ar(ok)+' | '+buyer+(price>0?' | '+ar(price)+' '+getSettings().currency:''));
+  toast('تم بيع '+ar(ok)+' حيوان'+(price>0?' بمبلغ '+ar(price)+' '+getSettings().currency:''));
+  return ok;
+}
+
+// ── Bulk death action (Repository 4, Phase 2C Iteration 3) ─────
+// Extracted verbatim from execBulk()'s 'death' branch. Deliberately
+// NOT routed through commitBulkPatch() — its per-iteration dynamic
+// animalDeathId (batchDeathId+'-'+(i+1)) is a different shape than
+// that helper's single-static-payload contract, exactly as this
+// project's own Phase 2B audit already established. The for-loop,
+// sequential awaits, and conditional finance write are all preserved
+// exactly as they were.
+async function performBulkDeath(ids,fields){
+  fields=fields||{};
+  var date=fields.date||todayStr();
+  var time=fields.time||'';
+  var reason=fields.reason||'غير معروف';
+  var autopsy=fields.autopsy==='yes';
+  var totalLoss=parseFloat(fields.loss)||0;
+  var batchDeathId=(fields.deathId||'').trim()||genDeathId();
+  var notes=(fields.notes||'').trim()||null;
+  var perAnimalLoss=totalLoss>0?Math.round((totalLoss/ids.length)*100)/100:null;
+  var r=await window.markAnimalsDeadBulk({
+    animalIds:ids, date:date, time:time, reason:reason, autopsy:autopsy,
+    totalLoss:totalLoss, notes:notes, deathId:batchDeathId
+  });
+  var ok=r.succeeded;
+  if(ok>0 && totalLoss>0){
+    await window.recordLoss({
+      date:date,category:'نفوق حيوانات',amount:totalLoss,
+      description:'نفوق جماعي — '+batchDeathId+(reason?' | '+reason:'')+' ('+ar(ok)+' حيوان)',
+      relatedModule:'animals'
+    });
+  }
+  await logActivity('edit','animals','نفوق جماعي '+ar(ok)+' | '+reason+(autopsy?' | تشريح':'')+' | '+batchDeathId);
+  toast('✅ تم تسجيل نفوق '+ar(ok)+' حيوان — '+batchDeathId);
+  return ok;
+}
+
+window.execBulk=async function(action,extra){
   var ids=[..._selected];
   closeModal();
   toast('جاري التنفيذ على '+ar(ids.length)+' حيوان...','info');
@@ -525,98 +747,92 @@ window.execBulk=async function(action){
     var updates={};
     var gv=function(id){var el=document.getElementById(id);return el?el.value.trim():'';}
     if(gv('be-species'))updates.species=gv('be-species');
-    if(gv('be-purpose'))updates.purpose=gv('be-purpose');
     if(gv('be-breed'))updates.breed=gv('be-breed');
     if(gv('be-gender'))updates.gender=gv('be-gender');
     if(gv('be-bdate'))updates.birth_date=gv('be-bdate');
     if(gv('be-barn'))updates.barn=gv('be-barn');
     if(gv('be-mother'))updates.mother_tag=gv('be-mother');
     if(gv('be-father'))updates.father_tag=gv('be-father');
-    if(gv('be-status'))updates.status=gv('be-status');
     if(gv('be-notes'))updates.notes=gv('be-notes');
     var reason=gv('be-reason');
-    if(!Object.keys(updates).length){toast('لم تختر أي تغيير — اختر حقلاً واحداً على الأقل','error');return;}
-    for(var i=0;i<ids.length;i++){try{await fbPatch('animals',ids[i],updates);ok++;}catch(e){}}
-    var changed=Object.keys(updates).join(', ');
+    var bulkStatus=gv('be-status');
+    var bulkPurpose=gv('be-purpose');
+    if(!Object.keys(updates).length && !bulkStatus && !bulkPurpose){toast('لم تختر أي تغيير — اختر حقلاً واحداً على الأقل','error');return;}
+    var changedParts=[];
+    // status/purpose loop through the canonical service per-animal --
+    // required (not just preferred) here, since different selected
+    // animals can have different current statuses, and only a per-animal
+    // check against the transition table can correctly accept some and
+    // reject others, the same way markAnimalsDeadBulk/sellAnimalsBulk
+    // already do.
+    if(bulkStatus){
+      var statusOk=0;
+      for(var si=0;si<ids.length;si++){
+        var sr = bulkStatus==='dead'
+          ? await window.markAnimalDead({animalId:ids[si], date:todayStr(), reason:reason||'تعديل جماعي'})
+          : await window.restoreAnimal({animalId:ids[si]});
+        if(sr.ok)statusOk++;
+      }
+      ok=Math.max(ok,statusOk); changedParts.push('الحالة');
+    }
+    if(bulkPurpose){
+      var purposeOk=0;
+      for(var pi=0;pi<ids.length;pi++){
+        var pr2=await window.setAnimalPurpose({animalId:ids[pi], purpose:bulkPurpose, allowBirthTarget:bulkPurpose==='birth'});
+        if(pr2.ok)purposeOk++;
+      }
+      ok=Math.max(ok,purposeOk); changedParts.push('الغرض');
+    }
+    if(Object.keys(updates).length){
+      ok=await commitBulkPatch(ids,updates);
+      changedParts=changedParts.concat(Object.keys(updates));
+    }
+    var changed=changedParts.join(', ');
     await logActivity('edit','animals','تعديل جماعي '+ar(ok)+' حيوان | '+changed+(reason?' | '+reason:''));
     toast('✅ تم تعديل '+ar(ok)+' حيوان ('+changed+')');
   }
   else if(action==='transfer'){
-    var barn=document.getElementById('b-barn')?.value;
-    var reason=document.getElementById('b-reason')?.value;
-    for(var i=0;i<ids.length;i++){try{await fbPatch('animals',ids[i],{barn:barn});ok++;}catch(e){}}
-    await logActivity('edit','animals','نقل جماعي '+ar(ok)+' حيوان إلى '+barn+' | '+reason);
-    toast('تم نقل '+ar(ok)+' حيوان إلى '+barn);
+    ok=await performBulkTransfer(ids,extra);
   }
   else if(action==='death'){
-    var date=document.getElementById('b-date')?.value||todayStr();
-    var time=document.getElementById('b-time')?.value||'';
-    var reason=document.getElementById('b-reason')?.value||'غير معروف';
-    var autopsy=document.getElementById('b-autopsy')?.value==='yes';
-    var totalLoss=parseFloat(document.getElementById('b-loss')?.value)||0;
-    var batchDeathId=document.getElementById('b-death-id')?.value.trim()||genDeathId();
-    var notes=document.getElementById('b-notes')?.value.trim()||null;
-    var perAnimalLoss=totalLoss>0?Math.round((totalLoss/ids.length)*100)/100:null;
-    for(var i=0;i<ids.length;i++){
-      var animalDeathId=batchDeathId+'-'+(i+1);
-      try{
-        await fbPatch('animals',ids[i],{
-          status:'dead',
-          died_at:date,
-          death_time:time||null,
-          death_reason:reason,
-          death_autopsy:autopsy,
-          death_loss:perAnimalLoss||null,
-          death_id:animalDeathId,
-          death_notes:notes,
-          death_batch_id:batchDeathId
-        });
-        ok++;
-      }catch(e){}
-    }
-    if(ok>0 && totalLoss>0){
-      try{
-        await fbPost('finance',{
-          date:date,type:'loss',category:'نفوق حيوانات',
-          amount:totalLoss,
-          description:'نفوق جماعي — '+batchDeathId+(reason?' | '+reason:'')+' ('+ar(ok)+' حيوان)',
-          added_by:getUser()?.name
-        });
-      }catch(e){}
-    }
-    await logActivity('edit','animals','نفوق جماعي '+ar(ok)+' | '+reason+(autopsy?' | تشريح':'')+' | '+batchDeathId);
-    toast('✅ تم تسجيل نفوق '+ar(ok)+' حيوان — '+batchDeathId);
+    ok=await performBulkDeath(ids,extra);
   }
   else if(action==='sell'){
-    var date=document.getElementById('b-date')?.value||todayStr();
-    var price=parseFloat(document.getElementById('b-price')?.value)||0;
-    var buyer=document.getElementById('b-buyer')?.value||'—';
-    for(var i=0;i<ids.length;i++){try{await fbPatch('animals',ids[i],{status:'dead',sold_at:date,removal_reason:'sale'});ok++;}catch(e){}}
-    if(price>0)await fbPost('finance',{date:date,type:'income',category:'بيع حيوانات',amount:price,description:'بيع '+ar(ok)+' حيوان | '+buyer,added_by:getUser()?.name});
-    await logActivity('edit','animals','بيع جماعي '+ar(ok)+' | '+buyer+(price>0?' | '+ar(price)+' '+getSettings().currency:''));
-    toast('تم بيع '+ar(ok)+' حيوان'+(price>0?' بمبلغ '+ar(price)+' '+getSettings().currency:''));
+    ok=await performBulkSell(ids);
   }
-  _selected.clear();_selectMode=false;
-  animals=await fbGet('animals');
-  renderFilters();renderAnimals();
+  await refreshAnimalsAfterBulk();
 };
 
-window.execBulkDo=async function(action,ids){
-  toast('جاري الحذف...','info');var ok=0;
+// ── Bulk delete action (Repository 4, Phase 2D) ─────────────────
+// Extracted verbatim from execBulkDo()'s delete loop + its logActivity
+// call. The native confirm() dialog (in doBulk('delete')) and the
+// start/result toasts + refreshAnimalsAfterBulk() stay exactly where
+// they were, in execBulkDo — mirroring the same shape already
+// established for performBulkTransfer/Sell/Death in Phase 2C, so
+// execBulkDo becomes a thin wrapper the same way execBulk's branches
+// did, without redesigning anything new.
+async function performBulkDelete(ids){
+  if(!can('admin')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return 0;}
+  var ok=0;
   for(var i=0;i<ids.length;i++){try{await fbDelete('animals',ids[i]);ok++;}catch(e){}}
   await logActivity('delete','animals','حذف جماعي '+ar(ok)+' حيوان');
+  return ok;
+}
+
+window.execBulkDo=async function(action,ids){
+  toast('جاري الحذف...','info');
+  var ok=await performBulkDelete(ids);
   toast('تم حذف '+ar(ok)+' حيوان');
-  _selected.clear();_selectMode=false;
-  animals=await fbGet('animals');
-  renderFilters();renderAnimals();
+  await refreshAnimalsAfterBulk();
 };
 
 // ── Add Animal Modal ─────────────────────────────────
 window.openAddAnimal=function(){
   var s=getSettings();
   var barns=['','ج١ع١','ج١ع٢','ج٢ع١','ج٢ع٢','ج٣ع١','ج٣ع٢','ج٤ع١','ج٤ع٢','ج٥ع١','ج٥ع٢'];
-  showModal('<div class="farm-modal" onclick="event.stopPropagation()">'+
-    '<h4><i class="bi bi-plus-circle accent-text"></i> إضافة حيوان</h4>'+
+  showModal(renderFarmModal({
+    icon:'bi-plus-circle', iconClass:'accent-text', title:'إضافة حيوان',
+    bodyHtml:
     '<div class="row g-2">'+
       '<div class="col-6"><label>النوع</label><select class="field" id="m-sp" onchange="updateBreeds()"><option value="goat">ماعز</option><option value="sheep">أغنام</option></select></div>'+
       '<div class="col-6"><label>الغرض</label><select class="field" id="m-pur"><option value="tarbiya">تربية</option><option value="tasmeen">تسمين</option><option value="birth">مواليد</option></select></div>'+
@@ -636,11 +852,13 @@ window.openAddAnimal=function(){
     '<div class="row g-2">'+
       '<div class="col-6"><label>تاريخ الميلاد</label><input type="date" class="field" id="m-bdate" value="'+todayStr()+'"></div>'+
       '<div class="col-6"><label>الجمالون</label><select class="field" id="m-barn">'+barns.map(function(b){return'<option value="'+b+'">'+( b||'— غير محدد —')+'</option>';}).join('')+'</select></div>'+
-    '</div>'+
+    '</div>',
+    footerHtml:
     '<div class="d-flex gap-2 justify-content-end mt-3">'+
       '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
       '<button class="action-btn primary" onclick="submitAddAnimal()">حفظ</button>'+
-    '</div></div>');
+    '</div>'
+  }));
 };
 window.updateBreeds=function(){
   var s=getSettings();var sp=document.getElementById('m-sp')?.value;
@@ -657,7 +875,7 @@ window.submitAddAnimal=async function(){
   var bdate=document.getElementById('m-bdate').value;
   closeModal();toast('جاري الحفظ...','info');
   try{
-    await fbPost('animals',{species:sp,breed,gender,purpose,status:'alive',tag:tag||null,barn:barn||null,birth_date:bdate||null});
+    await fbPost('animals',{species:sp,breed,gender,purpose,status:'alive',tag:tag||await generateAnimalTag(sp,animals),barn:barn||null,birth_date:bdate||null});
     await logActivity('add','animals','إضافة: '+breed+' '+(gender==='male'?'ذكر':'أنثى'));
     toast('تمت الإضافة');
     animals=await fbGet('animals');renderFilters();renderAnimals();
@@ -694,9 +912,10 @@ window.openMarkDeath=function(){
   var alive=animals.filter(function(a){return a.status==='alive';});
   var first=alive[0]||{};
   var deathId=genDeathId();
-  showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:540px;max-height:92vh;overflow-y:auto">'+
-    '<h4 style="color:var(--red)"><i class="bi bi-x-octagon-fill"></i> تسجيل نفوق</h4>'+
-
+  showModal(renderFarmModal({
+    icon:'bi-x-octagon-fill', color:'var(--red)', title:'تسجيل نفوق',
+    style:'max-width:540px;max-height:92vh;overflow-y:auto',
+    bodyHtml:
     // ── الحيوان
     '<label>الحيوان *</label>'+
     '<select class="field" id="d-id" onchange="onDeathAnimalChange()">'+
@@ -762,13 +981,14 @@ window.openMarkDeath=function(){
 
     // ── ملاحظات
     '<label>ملاحظات <span class="text-gray" style="font-weight:400">(اختياري)</span></label>'+
-    '<textarea class="field" id="d-notes" rows="2" placeholder="أي تفاصيل إضافية..."></textarea>'+
+    '<textarea class="field" id="d-notes" rows="2" placeholder="أي تفاصيل إضافية..."></textarea>',
 
+    footerHtml:
     '<div class="d-flex gap-2 justify-content-end mt-3">'+
       '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
       '<button class="action-btn danger" onclick="submitDeath()"><i class="bi bi-x-octagon-fill"></i> تسجيل النفوق</button>'+
-    '</div>'+
-  '</div>');
+    '</div>'
+  }));
 };
 
 window.submitDeath=async function(){
@@ -784,30 +1004,14 @@ window.submitDeath=async function(){
   if(!id){toast('اختر حيواناً','error');return;}
   if(!date){toast('حدد تاريخ النفوق','error');return;}
 
-  var patch={
-    status:'dead',
-    died_at:date,
-    death_time:time||null,
-    death_reason:reason,
-    death_autopsy:autopsy,
-    death_loss:loss||null,
-    death_id:deathId,
-    death_notes:notes
-  };
-
   closeModal();
   toast('جاري التسجيل...','info');
   try{
-    await fbPatch('animals',id,patch);
+    const r=await window.markAnimalDead({animalId:id, date:date, time:time, reason:reason, autopsy:autopsy, loss:loss, notes:notes, deathId:deathId});
+    if(!r.ok) throw new Error(r.error);
     if(loss>0){
-      await fbPost('finance',{
-        date:date,type:'loss',category:'نفوق حيوانات',
-        amount:loss,
-        description:'نفوق — '+deathId+(reason?' | '+reason:''),
-        added_by:getUser()?.name
-      });
+      await window.recordLoss({date:date,category:'نفوق حيوانات',amount:loss,description:'نفوق — '+deathId+(reason?' | '+reason:''),relatedAnimal:id,relatedModule:'animals'});
     }
-    await logActivity('edit','animals','نفوق: '+deathId+' | '+reason+(autopsy?' | تشريح':''));
     toast('✅ تم تسجيل النفوق — '+deathId);
     animals=await fbGet('animals');renderFilters();renderAnimals();
   }catch(e){toast('فشل: '+e.message,'error');}
@@ -915,29 +1119,20 @@ window.submitDeathSingle=async function(id){
   var deathId=document.getElementById('ds-death-id')?.value.trim()||genDeathId();
   var notes=document.getElementById('ds-notes')?.value.trim()||null;
 
-  var patch={
-    status:'dead',died_at:date,death_time:time||null,
-    death_reason:reason,death_autopsy:autopsy,
-    death_loss:loss||null,death_id:deathId,death_notes:notes
-  };
   closeModal();
   toast('جاري التسجيل...','info');
   try{
-    await fbPatch('animals',id,patch);
+    const r=await window.markAnimalDead({animalId:id, date:date, time:time, reason:reason, autopsy:autopsy, loss:loss, notes:notes, deathId:deathId});
+    if(!r.ok) throw new Error(r.error);
     if(loss>0){
-      await fbPost('finance',{
-        date:date,type:'loss',category:'نفوق حيوانات',
-        amount:loss,
-        description:'نفوق — '+deathId+(reason?' | '+reason:''),
-        added_by:getUser()?.name
-      });
+      await window.recordLoss({date:date,category:'نفوق حيوانات',amount:loss,description:'نفوق — '+deathId+(reason?' | '+reason:''),relatedAnimal:id,relatedModule:'animals'});
     }
-    await logActivity('edit','animals','نفوق: '+deathId+' | '+reason+(autopsy?' | تشريح':''));
     toast('✅ تم تسجيل النفوق — '+deathId);
     animals=await fbGet('animals');renderFilters();renderAnimals();
   }catch(e){toast('فشل: '+e.message,'error');}
 };
 window.deleteAnimalFull=async function(id,labelEnc){
+  if(!can('admin')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return;}
   var lbl=decodeURIComponent(labelEnc);
   if(!confirm('حذف نهائي: '+lbl+'؟'))return;
   try{
@@ -951,8 +1146,9 @@ window.deleteAnimalFull=async function(id,labelEnc){
 
 // ── Reset Modal ──────────────────────────────────────
 window.openResetModal=function(){
-  showModal('<div class="farm-modal" onclick="event.stopPropagation()">'+
-    '<h4 style="color:var(--purple)"><i class="bi bi-arrow-counterclockwise"></i> إعادة تعيين (مدير فقط)</h4>'+
+  showModal(renderFarmModal({
+    icon:'bi-arrow-counterclockwise', color:'var(--purple)', title:'إعادة تعيين (مدير فقط)',
+    bodyHtml:
     '<div class="d-flex flex-column gap-2 mb-3">'+
       '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;background:rgba(244,67,54,.06);border-radius:10px;border:1px solid rgba(244,67,54,.2)">'+
         '<input type="checkbox" id="reset-dead" style="accent-color:var(--red)">'+
@@ -963,30 +1159,64 @@ window.openResetModal=function(){
       '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;background:rgba(244,67,54,.1);border-radius:10px;border:2px solid rgba(244,67,54,.4)">'+
         '<input type="checkbox" id="reset-all" style="accent-color:var(--red)">'+
         '<div><div class="fw-bold red-text">⚠️ مسح كل بيانات المزرعة</div><small style="color:var(--red)">حيوانات، صحة، تكاثر، تحصين، مالية، مخزن، أنشطة</small></div></label>'+
-    '</div>'+
+    '</div>',
+    footerHtml:
     '<div class="d-flex gap-2 justify-content-end">'+
       '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
       '<button class="action-btn" style="background:rgba(156,39,176,.15);border-color:rgba(156,39,176,.4);color:var(--purple)" onclick="submitReset()">تنفيذ</button>'+
-    '</div></div>');
+    '</div>'
+  }));
 };
 window.submitReset=async function(){
+  if(!can('admin')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return;}
   if(document.getElementById('reset-all')?.checked){
     if(!confirm('مسح كل بيانات المزرعة نهائياً؟'))return;
     var conf=prompt('اكتب "تأكيد" للمتابعة:');
     if(conf!=='تأكيد'){toast('تم الإلغاء','info');return;}
     closeModal();toast('جاري المسح...','info');
     var tables=['animals','health','breeding','vaccinations','finance','inventory_meds','inventory_feeds','inventory_equipment','activity_log'];
-    for(var t of tables){try{await fetch(FB_URL+'/'+t+'.json'+(FB_SECRET?'?auth='+FB_SECRET:''),{method:'DELETE'});}catch(e){}}
-    toast('تم مسح كل البيانات');setTimeout(function(){location.reload();},1500);return;
+    // BUG FIX: this used to build the URL with an undefined FB_SECRET
+    // global (never declared anywhere in the codebase), so every
+    // fetch() call threw a ReferenceError caught by the empty
+    // try{}catch(e){} below — meaning NOTHING was ever actually
+    // deleted, while the code still unconditionally reported success.
+    // Now reuses fbUrl(), the same authenticated helper every other
+    // Firebase call in the app already goes through (no second
+    // networking implementation), and tracks real success/failure per
+    // table so the message shown actually reflects what happened.
+    var failedTables=[];
+    for(var t of tables){
+      try{
+        var r=await fetch(await fbUrl(t),{method:'DELETE'});
+        fbCacheInvalidate(t);
+        if(!r.ok)failedTables.push(t);
+      }catch(e){failedTables.push(t);}
+    }
+    if(failedTables.length===0){
+      toast('تم مسح كل البيانات');
+    }else if(failedTables.length<tables.length){
+      toast('تم المسح جزئياً — فشل في: '+failedTables.join('، '),'error');
+    }else{
+      toast('فشل المسح بالكامل — لم يتم حذف أي بيانات','error');
+    }
+    setTimeout(function(){location.reload();},1500);return;
   }
+  // Modal field-read-timing fix (Wave E): these two checkboxes were
+  // previously read via document.getElementById AFTER closeModal()
+  // already removed them from the DOM, so their .checked state was
+  // always undefined/false regardless of what the user selected —
+  // same root cause as BL-01/02/03. Captured here, before closeModal,
+  // using the exact same read expressions; no logic or order changed.
+  var resetDeadChecked=document.getElementById('reset-dead')?.checked;
+  var resetBirthsChecked=document.getElementById('reset-births')?.checked;
   closeModal();var done=0;
-  if(document.getElementById('reset-dead')?.checked){
+  if(resetDeadChecked){
     var dead=animals.filter(function(a){return a.status==='dead';});
     for(var a of dead){try{await fbDelete('animals',a._id);done++;}catch(e){}}
   }
-  if(document.getElementById('reset-births')?.checked){
+  if(resetBirthsChecked){
     var births=animals.filter(function(a){return a.status==='alive'&&a.purpose==='birth';});
-    for(var a of births){try{await fbPatch('animals',a._id,{purpose:'tarbiya'});done++;}catch(e){}}
+    for(var a of births){try{const r=await window.setAnimalPurpose({animalId:a._id,purpose:'tarbiya'}); if(r.ok)done++;}catch(e){}}
   }
   if(done)toast('تم تنفيذ العملية على '+ar(done)+' سجل');
   animals=await fbGet('animals');renderFilters();renderAnimals();
@@ -1016,8 +1246,10 @@ window.openBatchEntry=function(){
   var s=getSettings();
   var allBreeds=[...s.goatBreeds,...s.sheepBreeds];
   var barns=['','ج١ع١','ج١ع٢','ج٢ع١','ج٢ع٢','ج٣ع١','ج٣ع٢','ج٤ع١','ج٤ع٢','ج٥ع١','ج٥ع٢'];
-  showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:520px">'+
-    '<h4><i class="bi bi-stack accent-text"></i> إضافة بالجملة</h4>'+
+  showModal(renderFarmModal({
+    icon:'bi-stack', iconClass:'accent-text', title:'إضافة بالجملة',
+    style:'max-width:520px',
+    bodyHtml:
     '<p class="text-gray mb-3" style="font-size:.82rem">أضف مجموعة حيوانات بنفس الصفات دفعة واحدة</p>'+
     '<div class="row g-2">'+
       '<div class="col-6">'+
@@ -1059,14 +1291,15 @@ window.openBatchEntry=function(){
         '<input type="number" class="field" id="be-count" value="10" min="1" max="999" oninput="_bePreview()">'+
       '</div>'+
     '</div>'+
-    '<div id="be-preview" class="mt-2" style="font-size:.78rem;color:var(--text-gray);padding:6px 10px;background:var(--bg-hover);border-radius:8px;min-height:28px"></div>'+
+    '<div id="be-preview" class="mt-2" style="font-size:.78rem;color:var(--text-gray);padding:6px 10px;background:var(--bg-hover);border-radius:8px;min-height:28px"></div>',
+    footerHtml:
     '<div class="d-flex gap-2 justify-content-end mt-3">'+
       '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
       '<button class="action-btn primary" onclick="_beSubmit()" id="be-submit-btn">'+
         '<i class="bi bi-cloud-arrow-up-fill me-1"></i>حفظ'+
       '</button>'+
-    '</div>'+
-  '</div>');
+    '</div>'
+  }));
   _bePreview();
 };
 
@@ -1108,19 +1341,28 @@ window._beSubmit=async function(){
   var btn=document.getElementById('be-submit-btn');
   if(btn){btn.disabled=true;btn.innerHTML='<div class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;margin-left:6px"></div> جاري الحفظ...';}
 
-  var ok=0,failed=0;
+  var ok=0,failed=0,weightFailed=0;
   for(var i=0;i<count;i++){
-    var tag=prefix?(prefix+String(start+i).padStart(3,'0')):null;
+    var tag=prefix?(prefix+String(start+i).padStart(3,'0')):await generateAnimalTag(sp,animals);
     try{
-      await fbPost('animals',{
+      // current_weight is NOT set directly here -- routed through the
+      // canonical Weight service below instead, once a real id exists,
+      // so a batch-entered weight becomes a real historical record
+      // rather than a field with nothing behind it (the same gap bulk
+      // import had, independently duplicated in this separate feature).
+      var newId=await fbPost('animals',{
         species:sp,breed:breed,gender:gender,purpose:purpose,status:'alive',
-        tag:tag,barn:barn,birth_date:date,current_weight:weight,notes:notes,
+        tag:tag,barn:barn,birth_date:date,notes:notes,
         created_at:todayStr(),batch_entry:true
       });
       ok++;
+      if(weight){
+        var wr=await window.recordAnimalWeight({animalId:newId,weight:weight,date:date||todayStr(),allowNonAlive:true});
+        if(!wr.ok) weightFailed++;
+      }
     }catch(e){failed++;}
   }
-  await logActivity('add','animals','إضافة بالجملة: '+ar(ok)+' '+breed+' ('+(gender==='male'?'ذكور':'إناث')+')');
+  await logActivity('add','animals','إضافة بالجملة: '+ar(ok)+' '+breed+' ('+(gender==='male'?'ذكور':'إناث')+')'+(weightFailed?' — فشل تسجيل وزن: '+ar(weightFailed):''));
   fbCacheInvalidate('animals');
   closeModal();
   toast('✅ تم إضافة '+ar(ok)+' حيوان'+(failed?' (فشل: '+ar(failed)+')':''));
@@ -1131,70 +1373,67 @@ window._beSubmit=async function(){
 // ── Quarantine action ────────────────────────────────
 window.openMarkQuarantine = function(id, labelEnc) {
   var lbl = decodeURIComponent(labelEnc);
-  showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:480px">' +
-    '<h4 style="color:var(--yellow)"><i class="bi bi-shield-fill-exclamation"></i> نقل للحجر الصحي: ' + lbl + '</h4>' +
+  showModal(renderFarmModal({
+    icon:'bi-shield-fill-exclamation', color:'var(--yellow)', title:'نقل للحجر الصحي: ' + lbl,
+    style:'max-width:480px',
+    bodyHtml:
     '<div class="mb-3 p-3" style="background:rgba(255,193,7,.08);border:1px solid rgba(255,193,7,.3);border-radius:10px;font-size:.82rem">' +
       '<i class="bi bi-info-circle me-1"></i>الحجر الصحي يعزل الحيوان عن باقي القطيع — يُستخدم للأمراض المعدية أو الاشتباه فيها' +
     '</div>' +
     '<label>تاريخ بدء الحجر</label><input type="date" class="field" id="qr-date" value="' + todayStr() + '">' +
     '<label>سبب الحجر *</label><input class="field" id="qr-reason" placeholder="مثال: ارتفاع حرارة - اشتباه إصابة">' +
     '<label>الموقع</label><input class="field" id="qr-loc" placeholder="مثال: عنبر الحجر">' +
-    '<label>ملاحظات</label><textarea class="field" id="qr-notes" rows="2"></textarea>' +
+    '<label>ملاحظات</label><textarea class="field" id="qr-notes" rows="2"></textarea>',
+    footerHtml:
     '<div class="d-flex gap-2 justify-content-end mt-3">' +
       '<button class="action-btn" onclick="closeModal()">إلغاء</button>' +
       '<button class="action-btn primary" onclick="submitQuarantine(\'' + id + '\')" style="background:rgba(255,193,7,.15);border-color:var(--yellow);color:var(--yellow)"><i class="bi bi-shield-fill-exclamation"></i> نقل للحجر</button>' +
-    '</div></div>');
+    '</div>'
+  }));
 };
 
 window.submitQuarantine = async function(id) {
   var reason = document.getElementById('qr-reason').value.trim();
   if (!reason) { toast('يرجى إدخال سبب الحجر', 'error'); return; }
-  try {
-    await fbPatch('animals', id, {
-      status: 'quarantine',
-      quarantine_start: document.getElementById('qr-date').value,
-      quarantine_reason: reason,
-      quarantine_location: document.getElementById('qr-loc').value.trim() || null,
-      quarantine_notes: document.getElementById('qr-notes').value.trim() || null,
-    });
-    await logActivity('edit', 'animals', 'نقل للحجر: ' + reason);
-    fbCacheInvalidate('animals');
-    closeModal();
-    toast('✅ تم نقل الحيوان للحجر الصحي');
-    setTimeout(function(){ location.reload(); }, 800);
-  } catch(e) { toast('خطأ: ' + e.message, 'error'); }
+  const r = await window.quarantineAnimal({
+    animalId:id, reason:reason, date:document.getElementById('qr-date').value,
+    location:document.getElementById('qr-loc').value.trim(), notes:document.getElementById('qr-notes').value.trim()
+  });
+  if (!r.ok) { toast('خطأ: ' + r.error, 'error'); return; }
+  closeModal();
+  toast('✅ تم نقل الحيوان للحجر الصحي');
+  setTimeout(function(){ location.reload(); }, 800);
 };
 
 window.releaseFromQuarantine = async function(id) {
   if (!confirm('إخراج الحيوان من الحجر الصحي وإعادته للقطيع؟')) return;
-  try {
-    await fbPatch('animals', id, {
-      status: 'alive', quarantine_end: todayStr(),
-    });
-    await logActivity('edit', 'animals', 'إخراج من الحجر الصحي');
-    fbCacheInvalidate('animals');
-    toast('✅ تم إخراج الحيوان من الحجر');
-    setTimeout(function(){ location.reload(); }, 800);
-  } catch(e) { toast('خطأ: ' + e.message, 'error'); }
+  const r = await window.releaseAnimalFromQuarantine({animalId:id});
+  if (!r.ok) { toast('خطأ: ' + r.error, 'error'); return; }
+  toast('✅ تم إخراج الحيوان من الحجر');
+  setTimeout(function(){ location.reload(); }, 800);
 };
 
 // ── Sold action ──────────────────────────────────────
 window.openMarkSold = function(id, labelEnc) {
   var lbl = decodeURIComponent(labelEnc);
   var s = getSettings();
-  showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:480px">' +
-    '<h4 style="color:var(--blue)"><i class="bi bi-cash-coin"></i> تسجيل بيع: ' + lbl + '</h4>' +
+  showModal(renderFarmModal({
+    icon:'bi-cash-coin', color:'var(--blue)', title:'تسجيل بيع: ' + lbl,
+    style:'max-width:480px',
+    bodyHtml:
     '<div class="row g-2">' +
       '<div class="col-6"><label>تاريخ البيع *</label><input type="date" class="field" id="sl-date" value="' + todayStr() + '"></div>' +
       '<div class="col-6"><label>سعر البيع (' + s.currency + ') *</label><input type="number" class="field" id="sl-price" min="0" step="0.01" placeholder="0"></div>' +
     '</div>' +
     '<label>اسم المشتري</label><input class="field" id="sl-buyer" placeholder="اختياري">' +
     '<label>رقم الهاتف / الاتصال</label><input class="field" id="sl-phone" placeholder="اختياري" dir="ltr">' +
-    '<label>ملاحظات</label><textarea class="field" id="sl-notes" rows="2" placeholder="حالة البيع، ضمانات، إلخ"></textarea>' +
+    '<label>ملاحظات</label><textarea class="field" id="sl-notes" rows="2" placeholder="حالة البيع، ضمانات، إلخ"></textarea>',
+    footerHtml:
     '<div class="d-flex gap-2 justify-content-end mt-3">' +
       '<button class="action-btn" onclick="closeModal()">إلغاء</button>' +
       '<button class="action-btn primary" onclick="submitSold(\'' + id + '\')" style="background:rgba(33,150,243,.15);border-color:var(--blue);color:var(--blue)"><i class="bi bi-cash-coin"></i> تأكيد البيع</button>' +
-    '</div></div>');
+    '</div>'
+  }));
 };
 
 window.submitSold = async function(id) {
@@ -1205,31 +1444,12 @@ window.submitSold = async function(id) {
   var buyer = document.getElementById('sl-buyer').value.trim();
   var phone = document.getElementById('sl-phone').value.trim();
   var notes = document.getElementById('sl-notes').value.trim();
-  var a = animals.find(function(x){return x._id===id;}) || {};
 
-  try {
-    await fbPatch('animals', id, {
-      status: 'sold',
-      sold_date: date, sold_price: price,
-      sold_to: buyer || null, sold_phone: phone || null,
-      sold_notes: notes || null,
-    });
-    // Also create finance income record automatically (if allowed)
-    if (typeof fbPost === 'function' && can('finance')) {
-      try {
-        await fbPost('finance', {
-          type: 'income', category: 'بيع', amount: price, date: date,
-          description: 'بيع ' + (a.breed||'') + (a.tag?' #'+a.tag:'') + (buyer?' — '+buyer:''),
-          created_at: new Date().toISOString(),
-        });
-      } catch(e) { console.warn('Finance auto-record failed:', e); }
-    }
-    await logActivity('edit', 'animals', 'بيع: ' + price + ' ' + s.currency + (buyer?' — '+buyer:''));
-    fbCacheInvalidate('animals');
-    closeModal();
-    toast('✅ تم تسجيل البيع — ' + price.toLocaleString('ar-EG') + ' ' + s.currency);
-    setTimeout(function(){ location.reload(); }, 1000);
-  } catch(e) { toast('خطأ: ' + e.message, 'error'); }
+  const r = await window.sellAnimal({animalId:id, date:date, price:price, buyer:buyer, phone:phone, notes:notes});
+  if (!r.ok) { toast('خطأ: ' + r.error, 'error'); return; }
+  closeModal();
+  toast('✅ تم تسجيل البيع — ' + price.toLocaleString('ar-EG') + ' ' + s.currency);
+  setTimeout(function(){ location.reload(); }, 1000);
 };
 
 // ── Data Menu Toggle ────────────────────────────────
@@ -1480,14 +1700,26 @@ window._doImport=async function(){
   if(!confirm('رفع '+ar(valid.length)+' حيوان لقاعدة البيانات؟'))return;
   var prev=document.getElementById('imp-preview');
   prev.innerHTML='<div class="text-center py-2"><div class="spinner"></div><p class="text-gray mt-1">جاري الرفع...</p></div>';
-  var ok=0,failed=0;
+  var ok=0,failed=0,weightFailed=0;
   for(var i=0;i<valid.length;i++){
     try{
-      await fbPost('animals',Object.assign({},valid[i].data,{status:valid[i].data.status||'alive',created_at:todayStr(),imported_at:todayStr()}));
+      var _row=Object.assign({},valid[i].data);
+      // current_weight routed through the canonical Weight service below
+      // instead of being set directly here -- this page's own separate
+      // quick-import feature had the same gap as import.html's full
+      // wizard (Violation 3): a current_weight field with zero
+      // corresponding history record behind it.
+      var _impWeight=_row.current_weight;
+      delete _row.current_weight;
+      var newId=await fbPost('animals',Object.assign({},_row,{status:_row.status||'alive',tag:_row.tag||await generateAnimalTag(_row.species,animals),created_at:todayStr(),imported_at:todayStr()}));
       ok++;
+      if(_impWeight){
+        var wr=await window.recordAnimalWeight({animalId:newId,weight:_impWeight,date:todayStr(),allowNonAlive:true});
+        if(!wr.ok) weightFailed++;
+      }
     }catch(e){failed++;}
   }
-  await logActivity('add','animals','استيراد Excel من صفحة القطيع: '+ar(ok)+' حيوان');
+  await logActivity('add','animals','استيراد Excel من صفحة القطيع: '+ar(ok)+' حيوان'+(weightFailed?' — فشل تسجيل وزن: '+ar(weightFailed):''));
   fbCacheInvalidate('animals');
   prev.innerHTML='<div style="background:rgba(0,230,118,.08);border:1px solid rgba(0,230,118,.3);border-radius:10px;padding:12px;text-align:center">'+
     '<div class="fw-bold green-text">✅ تم رفع '+ar(ok)+' حيوان بنجاح'+(failed?' (فشل: '+ar(failed)+')':'')+'</div>'+

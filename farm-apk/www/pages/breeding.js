@@ -3,10 +3,16 @@ let breedingRecs=[], bFilter='all', editBId=null;
 
 document.addEventListener('DOMContentLoaded', async ()=>{
   if(!requireAuth())return;
+  // SECURITY FIX: nav.js grants this page perm:'breeding', but no
+  // can('breeding') check enforced it.
+  if(!can('breeding')){
+    document.body.innerHTML='<div class="page-wrap"><div class="empty-state" style="padding-top:100px"><i class="bi bi-shield-x" style="font-size:3rem;display:block;margin-bottom:10px;opacity:.4"></i><p>غير مصرح بالوصول</p><a href="dashboard.html" class="action-btn">الرئيسية</a></div></div>';
+    return;
+  }
   const s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
-  renderNavbar('breeding.html');
+  renderNavbarV2('breeding.html');
 
   // FAB for mobile
   addFAB('تسجيل تقريع جديد', function(){
@@ -102,8 +108,8 @@ function renderBreedingPage(s){
           '</div>'+
           '<div class="d-flex gap-2 flex-shrink-0">'+
             (r.status==='pregnant'?'<button class="action-btn primary sm" onclick="markBorn(\''+r._id+'\')"><i class="bi bi-stars"></i> ولادة</button>':'')+
-            '<button class="action-btn sm" onclick="openBModal(\''+r._id+'\')"><i class="bi bi-pencil"></i></button>'+
-            '<button class="action-btn danger sm" onclick="delBreeding(\''+r._id+'\')"><i class="bi bi-trash"></i></button>'+
+            '<button class="action-btn sm" onclick="openBModal(\''+r._id+'\')" aria-label="تعديل" title="تعديل"><i class="bi bi-pencil"></i></button>'+
+            '<button class="action-btn danger sm" onclick="delBreeding(\''+r._id+'\')" aria-label="حذف" title="حذف"><i class="bi bi-trash"></i></button>'+
           '</div>'+
         '</div>'+
       '</div>';
@@ -123,6 +129,7 @@ window.markBorn=function(id){
 };
 
 window.delBreeding=async function(id){
+  if(!can('breeding')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return;}
   if(!confirm('حذف هذا السجل؟'))return;
   try{await fbDelete('breeding',id);await logActivity('delete','breeding','حذف سجل تكاثر');toast('تم الحذف');breedingRecs=breedingRecs.filter(r=>r._id!==id);renderBreedingPage(getSettings());}
   catch(e){toast('فشل: '+e.message,'error');}
@@ -195,19 +202,30 @@ window.submitBirthDirect=async function(){
     added_by:document.getElementById('nb-addedby').value||getUser()?.name,
     notes:document.getElementById('nb-notes').value.trim()||null
   };
+  // Field-read-timing fix (Repository 5, BL-03): these four were
+  // previously re-read inside the try block, AFTER closeModal() had
+  // already removed the modal's DOM — capturing them here, alongside
+  // rec's own fields, uses the exact same read expressions, just moved
+  // earlier. No value, order, or write logic changes.
+  const breed=document.getElementById('nb-breed').value;
+  const gender=document.getElementById('nb-gender').value;
+  const tag=document.getElementById('nb-tag').value.trim();
+  const pur=document.getElementById('nb-pur').value;
+  // Discovered during live Phase 6 verification (missed in the initial
+  // Phase 1 audit): the loop body below also re-read 'nb-father-tag'
+  // fresh on every iteration, after closeModal — same root cause,
+  // same fix pattern, now captured here alongside rec's own identical
+  // read of the same field (rec.male_tag uses this exact expression).
+  const fatherTag=rec.male_tag;
   // Also add animal records
   closeModal();toast('جاري الحفظ...','info');
   try{
     await fbPost('breeding',rec);
-    const sp=document.getElementById('nb-sp').value;
-    const breed=document.getElementById('nb-breed').value;
-    const gender=document.getElementById('nb-gender').value;
-    const bdate=document.getElementById('nb-date').value;
-    const tag=document.getElementById('nb-tag').value.trim();
-    const barn=document.getElementById('nb-barn').value||null;
-    const pur=document.getElementById('nb-pur').value;
+    const sp=rec.female_species;
+    const bdate=rec.actual_birth;
+    const barn=rec.barn;
     for(let i=0;i<qty;i++){
-      await fbPost('animals',{species:sp,breed,gender,purpose:pur,status:'alive',birth_date:bdate,tag:qty===1?(tag||null):(tag?tag+'-'+ar(i+1):null),barn,mother_tag:motherTag,mother_breed:motherBreed,father_tag:document.getElementById('nb-father-tag').value.trim()||null});
+      await fbPost('animals',{species:sp,breed,gender,purpose:pur,status:'alive',birth_date:bdate,tag:tag?(qty===1?tag:tag+'-'+ar(i+1)):await generateAnimalTag(sp),barn,mother_tag:motherTag,mother_breed:motherBreed,father_tag:fatherTag});
     }
     await logActivity('add','breeding','تسجيل ولادة: '+motherTag+' — '+ar(qty)+' مواليد');
     toast('✅ تمت إضافة '+ar(qty)+' مواليد في القطيع');
@@ -276,11 +294,61 @@ window.submitBreeding=async function(){
   const ft=document.getElementById('b-ft').value.trim();if(!ft){toast('يرجى إدخال ترقيم الأنثى','error');return;}
   const status=document.getElementById('b-st').value;
   const motherTag=ft; const motherBreed=document.getElementById('b-fb').value;
-  const data={female_tag:ft,mother_tag:ft,female_breed:motherBreed,mother_breed:motherBreed,female_species:document.getElementById('b-sp').value,male_tag:document.getElementById('b-mt').value.trim()||null,male_breed:document.getElementById('b-mb').value,barn:document.getElementById('b-barn').value||null,mating_date:document.getElementById('b-md').value,expected_birth:document.getElementById('b-ed').value||null,status,actual_birth:status==='born'?(document.getElementById('b-ad')?.value||null):null,offspring_count:status==='born'?(+document.getElementById('b-tot')?.value||null):null,male_offspring:status==='born'?(+document.getElementById('b-mal')?.value||null):null,female_offspring:status==='born'?(+document.getElementById('b-fem')?.value||null):null,birth_weights:status==='born'?(document.getElementById('b-weights')?.value||null):null,birth_amount:+document.getElementById('b-amount')?.value||null,added_by:document.getElementById('b-addedby').value||getUser()?.name,notes:document.getElementById('b-notes').value.trim()||null};
+  const maleTagInput=document.getElementById('b-mt').value.trim()||null;
+  // Resolve tag -> real animal ID at entry time, when the user can see
+  // and correct a mismatch, rather than relying on a second, independent
+  // resolution attempt later at birth time. Best-effort: an unresolved
+  // tag warns, it does not block -- the female may genuinely be a real
+  // animal not yet registered in this system.
+  const motherAnimal=await window.findByTag(ft);
+  if(!motherAnimal) toast('تنبيه: لم يتم العثور على حيوان بهذا الرقم — سيتم الحفظ كنص فقط','warning');
+  const fatherAnimal=maleTagInput?await window.findByTag(maleTagInput):null;
+  const data={female_tag:ft,mother_tag:ft,mother_id:motherAnimal?motherAnimal._id:null,female_breed:motherBreed,mother_breed:motherBreed,female_species:document.getElementById('b-sp').value,male_tag:maleTagInput,father_id:fatherAnimal?fatherAnimal._id:null,male_breed:document.getElementById('b-mb').value,barn:document.getElementById('b-barn').value||null,mating_date:document.getElementById('b-md').value,expected_birth:document.getElementById('b-ed').value||null,status,actual_birth:status==='born'?(document.getElementById('b-ad')?.value||null):null,offspring_count:status==='born'?(+document.getElementById('b-tot')?.value||null):null,male_offspring:status==='born'?(+document.getElementById('b-mal')?.value||null):null,female_offspring:status==='born'?(+document.getElementById('b-fem')?.value||null):null,birth_weights:status==='born'?(document.getElementById('b-weights')?.value||null):null,birth_amount:+document.getElementById('b-amount')?.value||null,added_by:document.getElementById('b-addedby').value||getUser()?.name,notes:document.getElementById('b-notes').value.trim()||null};
+  // Wave B Commit 1/N (D-02): a birth-status transition creates real
+  // animal records via the same createOffspringAnimal() helper _ubSubmit
+  // uses. Only fires on a genuine transition INTO 'born' -- an already-
+  // 'born' record being merely edited (e.g. fixing a typo) must not
+  // re-create animals. Checked against the pre-edit in-memory record,
+  // before this function's own write overwrites it.
+  var wasAlreadyBorn = !!(editBId && typeof breedingRecs!=='undefined' && breedingRecs && breedingRecs.some(function(r){return r._id===editBId && r.status==='born';}));
   closeModal();toast('جاري الحفظ...','info');
   try{
+    let breedingId=editBId;
     if(editBId){await fbPatch('breeding',editBId,data);await logActivity('edit','breeding','تعديل تقريع: '+ft);}
-    else{await fbPost('breeding',data);await logActivity('add','breeding','تسجيل تقريع: '+ft+(status==='pregnant'?' — حامل':status==='born'?' — ولادة':''));}
+    else{breedingId=await fbPost('breeding',data);await logActivity('add','breeding','تسجيل تقريع: '+ft+(status==='pregnant'?' — حامل':status==='born'?' — ولادة':''));}
+    // Sprint 1, Epic 1: attach task automation -- additive only, does not
+    // change the breeding write above. Never blocks on failure.
+    if(status==='pregnant'&&data.expected_birth&&window.autoGenerateTask){
+      window.autoGenerateTask('expected_birth_approaching',{sourceId:breedingId,female_tag:data.female_tag,expected_birth:data.expected_birth,barn:data.barn}).catch(function(){});
+    }
+    if(status==='born' && !wasAlreadyBorn){
+      // birth_weights is a single free-text field on this form (unlike
+      // _ubSubmit's per-batch numeric input). Only apply it as a real
+      // per-animal weight when it is unambiguously ONE clean number --
+      // never guess a split across multiple offspring.
+      var singleWeight=null;
+      if(data.birth_weights){
+        var wTrim=data.birth_weights.trim();
+        if(/^-?\d+(\.\d+)?$/.test(wTrim))singleWeight=parseFloat(wTrim);
+      }
+      var maleCount=data.male_offspring||0, femaleCount=data.female_offspring||0;
+      for(var mi=0;mi<maleCount;mi++){
+        await window.createOffspringAnimal({species:data.female_species,breed:data.female_breed,gender:'male',purpose:'birth',birthDate:data.actual_birth,motherTag:data.mother_tag,motherBreed:data.mother_breed,motherId:data.mother_id,fatherTag:data.male_tag,fatherId:data.father_id,weight:singleWeight,barn:data.barn,notes:data.notes});
+      }
+      for(var fi=0;fi<femaleCount;fi++){
+        await window.createOffspringAnimal({species:data.female_species,breed:data.female_breed,gender:'female',purpose:'birth',birthDate:data.actual_birth,motherTag:data.mother_tag,motherBreed:data.mother_breed,motherId:data.mother_id,fatherTag:data.male_tag,fatherId:data.father_id,weight:singleWeight,barn:data.barn,notes:data.notes});
+      }
+      // Sprint 11 (v1.4): closes the ORIGINAL 'expected_birth_approaching'
+      // reminder task created when this SAME breeding record was first
+      // marked pregnant -- discovered gap (docs/features/WORKFLOW-DISCOVERY.md):
+      // nothing previously resolved that reminder once the birth actually
+      // happened. Additive only, never blocks on failure.
+      if(window.completeWorkflow){
+        window.completeWorkflow('birth', { sourceId:breedingId, animalTag:data.female_tag }).then(function(r){
+          if(r&&r.recommendation&&r.recommendation.text&&r.recommendation.actionable!==false)toast('💡 '+r.recommendation.text,'info');
+        }).catch(function(){});
+      }
+    }
     toast(editBId?'تم التحديث':'تمت الإضافة');
     breedingRecs=await fbGet('breeding');renderBreedingPage(getSettings());
   }catch(e){toast('خطأ: '+e.message,'error');}

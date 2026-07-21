@@ -412,16 +412,33 @@ window.startExcelImport = async function() {
   var pct    = document.getElementById('xl-pct');
 
   var _importKnownAnimals=await fbGet('animals');
+  var weightFailures=0;
   for (var i = 0; i < total; i++) {
-    var _rowData=validRows[i].data;
+    var _rowData=Object.assign({}, validRows[i].data);
+    // current_weight never goes directly onto the animal record -- it's
+    // routed through the canonical Weight service below instead, once a
+    // real animal id exists, so an imported weight becomes a real
+    // historical record rather than a field with nothing behind it.
+    var _importedWeight=_rowData.current_weight;
+    delete _rowData.current_weight;
     var data = Object.assign({}, _rowData, {
       tag: _rowData.tag||await generateAnimalTag(_rowData.species,_importKnownAnimals),
       created_at:  new Date().toISOString(),
       imported_at: new Date().toISOString(),
     });
     try {
-      await fbPost('animals', data);
+      var newId = await fbPost('animals', data);
       ok++;
+      if(_importedWeight){
+        // Imported weight represents "known weight as of the import" --
+        // the CSV has no separate weight-measurement-date column, so
+        // today's date is the honest choice given what data actually
+        // exists. allowNonAlive:true since bulk import can legitimately
+        // include historical/non-alive animals, unlike routine
+        // day-to-day weight entry.
+        var wr = await window.recordAnimalWeight({animalId:newId, weight:_importedWeight, date:todayStr(), allowNonAlive:true});
+        if(!wr.ok){ weightFailures++; console.error('Import row weight failed:', wr.error); }
+      }
     } catch(e) {
       failed++;
       console.error('Import row failed:', e.message);
@@ -432,12 +449,12 @@ window.startExcelImport = async function() {
     status.textContent = 'جاري الرفع... ' + ar(i+1) + ' / ' + ar(total);
   }
 
-  await logActivity('add', 'animals', 'استيراد Excel: ' + ar(ok) + ' حيوان' + (failed?' — فشل: '+ar(failed):''));
+  await logActivity('add', 'animals', 'استيراد Excel: ' + ar(ok) + ' حيوان' + (failed?' — فشل: '+ar(failed):'') + (weightFailures?' — فشل تسجيل وزن: '+ar(weightFailures):''));
 
   document.getElementById('xl-result').innerHTML =
-    '<div style="background:' + (failed ? 'rgba(255,107,53,.1)' : 'rgba(0,230,118,.1)') + ';border:1px solid ' + (failed ? 'rgba(255,107,53,.3)' : 'rgba(0,230,118,.3)') + ';border-radius:12px;padding:14px 18px">' +
-      '<div class="fw-bold ' + (failed ? 'accent-text' : 'green-text') + '">' +
-        (failed ? '⚠️' : '✅') + ' تم رفع ' + ar(ok) + ' سجل' + (failed?' (فشل: '+ar(failed)+')':'') +
+    '<div style="background:' + ((failed||weightFailures) ? 'rgba(255,107,53,.1)' : 'rgba(0,230,118,.1)') + ';border:1px solid ' + ((failed||weightFailures) ? 'rgba(255,107,53,.3)' : 'rgba(0,230,118,.3)') + ';border-radius:12px;padding:14px 18px">' +
+      '<div class="fw-bold ' + ((failed||weightFailures) ? 'accent-text' : 'green-text') + '">' +
+        ((failed||weightFailures) ? '⚠️' : '✅') + ' تم رفع ' + ar(ok) + ' سجل' + (failed?' (فشل: '+ar(failed)+')':'') + (weightFailures?' — تعذر تسجيل الوزن لـ'+ar(weightFailures)+' سجل (الحيوان نفسه استُورد بنجاح)':'') +
       '</div>' +
       '<div class="d-flex gap-2 mt-3">' +
         '<a href="animals.html" class="action-btn primary"><i class="bi bi-list-ul me-1"></i>عرض القطيع</a>' +

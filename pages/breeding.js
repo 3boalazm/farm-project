@@ -294,7 +294,16 @@ window.submitBreeding=async function(){
   const ft=document.getElementById('b-ft').value.trim();if(!ft){toast('يرجى إدخال ترقيم الأنثى','error');return;}
   const status=document.getElementById('b-st').value;
   const motherTag=ft; const motherBreed=document.getElementById('b-fb').value;
-  const data={female_tag:ft,mother_tag:ft,female_breed:motherBreed,mother_breed:motherBreed,female_species:document.getElementById('b-sp').value,male_tag:document.getElementById('b-mt').value.trim()||null,male_breed:document.getElementById('b-mb').value,barn:document.getElementById('b-barn').value||null,mating_date:document.getElementById('b-md').value,expected_birth:document.getElementById('b-ed').value||null,status,actual_birth:status==='born'?(document.getElementById('b-ad')?.value||null):null,offspring_count:status==='born'?(+document.getElementById('b-tot')?.value||null):null,male_offspring:status==='born'?(+document.getElementById('b-mal')?.value||null):null,female_offspring:status==='born'?(+document.getElementById('b-fem')?.value||null):null,birth_weights:status==='born'?(document.getElementById('b-weights')?.value||null):null,birth_amount:+document.getElementById('b-amount')?.value||null,added_by:document.getElementById('b-addedby').value||getUser()?.name,notes:document.getElementById('b-notes').value.trim()||null};
+  const maleTagInput=document.getElementById('b-mt').value.trim()||null;
+  // Resolve tag -> real animal ID at entry time, when the user can see
+  // and correct a mismatch, rather than relying on a second, independent
+  // resolution attempt later at birth time. Best-effort: an unresolved
+  // tag warns, it does not block -- the female may genuinely be a real
+  // animal not yet registered in this system.
+  const motherAnimal=await window.findByTag(ft);
+  if(!motherAnimal) toast('تنبيه: لم يتم العثور على حيوان بهذا الرقم — سيتم الحفظ كنص فقط','warning');
+  const fatherAnimal=maleTagInput?await window.findByTag(maleTagInput):null;
+  const data={female_tag:ft,mother_tag:ft,mother_id:motherAnimal?motherAnimal._id:null,female_breed:motherBreed,mother_breed:motherBreed,female_species:document.getElementById('b-sp').value,male_tag:maleTagInput,father_id:fatherAnimal?fatherAnimal._id:null,male_breed:document.getElementById('b-mb').value,barn:document.getElementById('b-barn').value||null,mating_date:document.getElementById('b-md').value,expected_birth:document.getElementById('b-ed').value||null,status,actual_birth:status==='born'?(document.getElementById('b-ad')?.value||null):null,offspring_count:status==='born'?(+document.getElementById('b-tot')?.value||null):null,male_offspring:status==='born'?(+document.getElementById('b-mal')?.value||null):null,female_offspring:status==='born'?(+document.getElementById('b-fem')?.value||null):null,birth_weights:status==='born'?(document.getElementById('b-weights')?.value||null):null,birth_amount:+document.getElementById('b-amount')?.value||null,added_by:document.getElementById('b-addedby').value||getUser()?.name,notes:document.getElementById('b-notes').value.trim()||null};
   // Wave B Commit 1/N (D-02): a birth-status transition creates real
   // animal records via the same createOffspringAnimal() helper _ubSubmit
   // uses. Only fires on a genuine transition INTO 'born' -- an already-
@@ -324,10 +333,10 @@ window.submitBreeding=async function(){
       }
       var maleCount=data.male_offspring||0, femaleCount=data.female_offspring||0;
       for(var mi=0;mi<maleCount;mi++){
-        await window.createOffspringAnimal({species:data.female_species,breed:data.female_breed,gender:'male',purpose:'birth',birthDate:data.actual_birth,motherTag:data.mother_tag,motherBreed:data.mother_breed,fatherTag:data.male_tag,weight:singleWeight,barn:data.barn,notes:data.notes});
+        await window.createOffspringAnimal({species:data.female_species,breed:data.female_breed,gender:'male',purpose:'birth',birthDate:data.actual_birth,motherTag:data.mother_tag,motherBreed:data.mother_breed,motherId:data.mother_id,fatherTag:data.male_tag,fatherId:data.father_id,weight:singleWeight,barn:data.barn,notes:data.notes});
       }
       for(var fi=0;fi<femaleCount;fi++){
-        await window.createOffspringAnimal({species:data.female_species,breed:data.female_breed,gender:'female',purpose:'birth',birthDate:data.actual_birth,motherTag:data.mother_tag,motherBreed:data.mother_breed,fatherTag:data.male_tag,weight:singleWeight,barn:data.barn,notes:data.notes});
+        await window.createOffspringAnimal({species:data.female_species,breed:data.female_breed,gender:'female',purpose:'birth',birthDate:data.actual_birth,motherTag:data.mother_tag,motherBreed:data.mother_breed,motherId:data.mother_id,fatherTag:data.male_tag,fatherId:data.father_id,weight:singleWeight,barn:data.barn,notes:data.notes});
       }
       // Sprint 11 (v1.4): closes the ORIGINAL 'expected_birth_approaching'
       // reminder task created when this SAME breeding record was first

@@ -544,7 +544,8 @@ window.saveEdits=async function(){
       var toRemove=matchAnimals(q.sp,q.breed,q.births,q.row,q.gender).slice(0,Math.abs(diff));
       for(var j=0;j<toRemove.length;j++){
         try{
-          await fbPatch('animals',toRemove[j]._id,{status:'dead',died_at:todayStr(),death_reason:'تعديل من يومية المزرعة',is_correction:true});
+          const r=await window.correctAnimalCount({animalId:toRemove[j]._id, source:'يومية المزرعة'});
+          if(!r.ok) throw new Error(r.error);
           totalRemoved++;
         }catch(e){console.error(e);}
       }

@@ -1015,14 +1015,10 @@ window._ddSubmit=async function(){
   var deathId=document.getElementById('dd-death-id')?.value;
   closeModal();
   try{
-    await fbPatch('animals',id,{status:'dead',died_at:diedAt,death_time:deathTime,death_reason:deathReason,death_autopsy:deathAutopsy,death_loss:deathLoss,death_notes:deathNotes,death_id:deathId});
+    const r=await window.markAnimalDead({animalId:id, date:diedAt, time:deathTime, reason:deathReason, autopsy:deathAutopsy, loss:deathLoss, notes:deathNotes, deathId:deathId});
+    if(!r.ok) throw new Error(r.error);
     if(deathLoss>0){
-      await fbPost('finance',{
-        date:diedAt,type:'loss',category:'نفوق حيوانات',
-        amount:deathLoss,
-        description:'نفوق — '+deathId+(deathReason?' | '+deathReason:''),
-        added_by:getUser()?.name
-      });
+      await window.recordLoss({date:diedAt,category:'نفوق حيوانات',amount:deathLoss,description:'نفوق — '+deathId+(deathReason?' | '+deathReason:''),relatedAnimal:id,relatedModule:'animals'});
     }
     await logActivity('edit','animals','نفوق: '+deathId+' | '+deathReason+(deathAutopsy?' | تشريح':''));
     toast('تم تسجيل النفوق');

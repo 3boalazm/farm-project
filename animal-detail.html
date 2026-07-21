@@ -742,16 +742,51 @@ function openEditAnimal(){
 }
 window.updateEBreeds=function(){const s=getSettings();const sp=document.getElementById('e-sp').value;document.getElementById('e-breed').innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(b=>`<option>${b}</option>`).join('');};
 window.submitEditAnimal=async function(){
-  const data={species:document.getElementById('e-sp').value,purpose:document.getElementById('e-purpose').value,breed:document.getElementById('e-breed').value,gender:document.getElementById('e-gender').value,birth_date:document.getElementById('e-bdate').value||null,tag:document.getElementById('e-tag').value.trim(),mother_tag:document.getElementById('e-mother-tag').value.trim()||null,father_tag:document.getElementById('e-father-tag').value.trim()||null,barn:document.getElementById('e-barn').value||null,notes:document.getElementById('e-notes').value.trim()};
-  if(data.tag && data.tag!==(animal.tag||'')){
-    toast('جاري التحقق من رقم الترقيم...','info');
-    if(await isTagTaken(data.tag, animalId)){
-      toast('رقم الترقيم "'+data.tag+'" مستخدم بالفعل لحيوان آخر — اختر رقماً مختلفاً','error');
-      return;
-    }
-  }
+  const data={species:document.getElementById('e-sp').value,breed:document.getElementById('e-breed').value,gender:document.getElementById('e-gender').value,birth_date:document.getElementById('e-bdate').value||null,barn:document.getElementById('e-barn').value||null,notes:document.getElementById('e-notes').value.trim()};
+  const newPurpose=document.getElementById('e-purpose').value;
+  const newTag=document.getElementById('e-tag').value.trim();
+  const newMotherTag=document.getElementById('e-mother-tag').value.trim();
+  const newFatherTag=document.getElementById('e-father-tag').value.trim();
   closeModal();toast('جاري الحفظ...','info');
-  try{await fbPatch('animals',animalId,data);await logActivity('edit','animals',`تعديل #${animal.tag||animalId}`);toast('تم التعديل');animal=await fbGetSingle(`animals/${animalId}`)||animal;renderDetail(getSettings());}
+  try{
+    // purpose is routed through the canonical setAnimalPurpose() service,
+    // separately from this general patch, and only when it actually
+    // changed -- every other field here (species, breed, gender, dates,
+    // barn, notes) is unaffected by the Animal Lifecycle Service's scope
+    // and stays as a normal, direct edit.
+    if(newPurpose!==animal.purpose){
+      var pr=await window.setAnimalPurpose({animalId:animalId, purpose:newPurpose, allowBirthTarget:newPurpose==='birth'});
+      if(!pr.ok) throw new Error(pr.error);
+    }
+    // Tag changes route through renameTag() -- reuses the canonical
+    // uniqueness check and preserves old-tag history, rather than the
+    // ad-hoc check that used to sit directly in this function.
+    if(newTag && newTag!==(animal.tag||'')){
+      var rt=await window.renameTag({animalId:animalId, newTag:newTag});
+      if(!rt.ok) throw new Error(rt.error);
+    }
+    // Mother/father: resolve the entered tag to a real animal and store
+    // the ID-based link via linkParents(), rather than free, unvalidated
+    // text. Best-effort, matching breeding.js's same pattern: an
+    // unresolved tag warns, it does not block, since the parent may
+    // genuinely not be registered in this system.
+    if(newMotherTag!==(animal.mother_tag||'') || newFatherTag!==(animal.father_tag||'')){
+      var linkOpts={animalId:animalId};
+      if(newMotherTag!==(animal.mother_tag||'')){
+        var mAnimal=newMotherTag?await window.findByTag(newMotherTag):null;
+        if(newMotherTag && !mAnimal) toast('تنبيه: لم يتم العثور على الأم بهذا الرقم','warning');
+        linkOpts.motherId=mAnimal?mAnimal._id:null;
+      }
+      if(newFatherTag!==(animal.father_tag||'')){
+        var fAnimal=newFatherTag?await window.findByTag(newFatherTag):null;
+        if(newFatherTag && !fAnimal) toast('تنبيه: لم يتم العثور على الأب بهذا الرقم','warning');
+        linkOpts.fatherId=fAnimal?fAnimal._id:null;
+      }
+      var lr=await window.linkParents(linkOpts);
+      if(!lr.ok) throw new Error(lr.error);
+    }
+    await fbPatch('animals',animalId,data);await logActivity('edit','animals',`تعديل #${animal.tag||animalId}`);toast('تم التعديل');animal=await fbGetSingle(`animals/${animalId}`)||animal;renderDetail(getSettings());
+  }
   catch(e){toast('فشل: '+e.message,'error');}
 };
 
@@ -830,49 +865,38 @@ function openAddWeight(){
     '</div>'+
   '</div>');
 }
+// All three functions below are now thin DOM wrappers: read inputs, call
+// the canonical service (shared.js), reflect its result in the UI. Zero
+// business logic remains here -- validation, resync, alerts, workflows,
+// and the activity log all live in exactly one place now.
 window.submitAddWeight=async function(){
-  const kg=parseFloat(document.getElementById('w-kg').value);
-  if(!kg||kg<=0){toast('يرجى إدخال الوزن','error');return;}
-  const data={weight:kg,date:document.getElementById('w-date').value,notes:document.getElementById('w-notes').value.trim()||null};
+  const kg=document.getElementById('w-kg').value;
+  const dt=document.getElementById('w-date').value;
+  const notes=document.getElementById('w-notes').value.trim()||null;
   closeModal();toast('جاري الحفظ...','info');
-  try{
-    await fbPost('animals/'+animalId+'/weights',data);
-    await logActivity('add','animals','تسجيل وزن #'+(animal.tag||animalId)+': '+ar(kg)+' كجم');
-    toast('تم تسجيل الوزن');
-    weights=await fbGet('animals/'+animalId+'/weights')||[];
-    weights.sort(function(a,b){return b.date.localeCompare(a.date);});
-    await fbPatch('animals',animalId,{current_weight:weights[0]?weights[0].weight:null,weight_updated:weights[0]?weights[0].date:null});
-    // Sprint 2, Epic 2: attach weight intelligence -- additive only,
-    // does not change the weight write or sync above. Never blocks on failure.
-    if(window.evaluateWeightAlert){window.evaluateWeightAlert(animalId, animal.tag, animal.barn).catch(function(){});}
-    // Sprint 11 (v1.4): recommendation only -- Weight Intelligence (Sprint 2)
-    // already self-resolves, so there is no stale reminder to close here.
-    if(window.completeWorkflow){window.completeWorkflow('weight',{sourceId:animalId, animalId:animalId, animalTag:animal.tag, barn:animal.barn}).then(function(r){if(r&&r.recommendation&&r.recommendation.text&&r.recommendation.actionable!==false)toast('💡 '+r.recommendation.text,'info');}).catch(function(){});}
-    renderDetail(getSettings());
-  }catch(e){toast('فشل: '+e.message,'error');}
+  const r=await window.recordAnimalWeight({animalId:animalId, weight:kg, date:dt, notes:notes});
+  if(!r.ok){toast('فشل: '+r.error,'error');return;}
+  toast('تم تسجيل الوزن');
+  weights=await fbGet('animals/'+animalId+'/weights')||[];
+  weights.sort(function(a,b){return b.date.localeCompare(a.date);});
+  renderDetail(getSettings());
 };
 window.delWeightByIdx=async function(idx){
-  if(!can('animals')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return;}
   var w=weights[idx];if(!w)return;
-  try{
-    await fbDelete('animals/'+animalId+'/weights',w._id);toast('تم الحذف');
-    weights=weights.filter(function(_,i){return i!==idx;});
-    weights.sort(function(a,b){return b.date.localeCompare(a.date);});
-    await fbPatch('animals',animalId,{current_weight:weights[0]?weights[0].weight:null,weight_updated:weights[0]?weights[0].date:null});
-    renderDetail(getSettings());
-  }
-  catch(e){toast('فشل','error');}
+  const r=await window.deleteAnimalWeight({animalId:animalId, weightId:w._id});
+  if(!r.ok){toast('فشل: '+r.error,'error');return;}
+  toast('تم الحذف');
+  weights=weights.filter(function(_,i){return i!==idx;});
+  weights.sort(function(a,b){return b.date.localeCompare(a.date);});
+  renderDetail(getSettings());
 };
 window.delWeight=async function(id){
-  if(!can('animals')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return;}
-  try{
-    await fbDelete('animals/'+animalId+'/weights',id);toast('تم الحذف');
-    weights=weights.filter(function(w){return w._id!==id;});
-    weights.sort(function(a,b){return b.date.localeCompare(a.date);});
-    await fbPatch('animals',animalId,{current_weight:weights[0]?weights[0].weight:null,weight_updated:weights[0]?weights[0].date:null});
-    renderDetail(getSettings());
-  }
-  catch(e){toast('فشل','error');}
+  const r=await window.deleteAnimalWeight({animalId:animalId, weightId:id});
+  if(!r.ok){toast('فشل: '+r.error,'error');return;}
+  toast('تم الحذف');
+  weights=weights.filter(function(w){return w._id!==id;});
+  weights.sort(function(a,b){return b.date.localeCompare(a.date);});
+  renderDetail(getSettings());
 };
 
 function openAddMedication(){
@@ -924,20 +948,23 @@ window.submitRemoveAnimal=async function(){
     // genuine death/slaughter, matching the same broken convention already
     // repaired in performBulkSell(). Only this one branch changes — death
     // and slaughter keep their exact original update shape, untouched.
-    var updates;
+    var r;
     if(reason==='sale'){
-      updates={status:'sold',sold_date:date,sold_price:price>0?price:null,sold_to:null,sold_notes:notes||null};
+      r=await window.sellAnimal({animalId:animalId, date:date, price:price, notes:notes||null, skipFinance:true});
     }else{
-      updates={status:'dead',removed_at:date,removal_reason:reason,removal_notes:notes};
-      if(reason==='death')updates.died_at=date;
+      // 'slaughter' and 'death' are both real, legitimate death-equivalent
+      // outcomes (unlike an inventory correction) -- both correctly go
+      // through markAnimalDead(), with the Arabic reason label preserved
+      // as death_reason exactly as this page's own UI already presents it.
+      r=await window.markAnimalDead({animalId:animalId, date:date, reason:reason==='slaughter'?'ذبح':'نفوق', notes:notes||null});
     }
-    await fbPatch('animals',animalId,updates);
+    if(!r.ok) throw new Error(r.error);
     // Sprint 13 (v1.6): confirmed real gap (docs/features/FINANCE-DISCOVERY.md)
     // -- this exact write path created no finance record at all, unlike
     // animals.html's own sale flows. Same collection, same shape, same
     // category constant those flows already use -- no new structure.
     if(reason==='sale' && price>0){
-      await fbPost('finance',{date:date,type:'income',category:'بيع حيوانات',amount:price,description:'بيع '+(animal.tag||animalId)+(notes?' | '+notes:''),added_by:getUser()?.name||null});
+      await window.recordIncome({date:date,category:'بيع حيوانات',amount:price,description:'بيع '+(animal.tag||animalId)+(notes?' | '+notes:''),relatedAnimal:animalId,relatedModule:'animals'});
     }
     await logActivity('remove','animals',`إخراج #${animal.tag||animalId} — ${reason==='sale'?'بيع':reason==='slaughter'?'ذبح':'نفوق'}`);
     // Sprint 11 (v1.4): closes EVERY open reminder task tied to this

@@ -35,7 +35,7 @@ function renderSync(w){
       '<i class="bi bi-check-circle-fill" style="color:var(--green)"></i>'+
       '<span style="color:var(--green);font-weight:600">متزامن مع اليومية ✓</span>'+
       '<span class="text-gray" style="font-size:.72rem">— البيانات محدّثة ('+ar(_syncLive.filter(function(a){return a.status==='alive';}).length)+' حيوان حي)</span>'+
-      '<button onclick="checkSync()" class="action-btn sm" style="padding:2px 8px;font-size:.7rem;margin-right:auto"><i class="bi bi-arrow-repeat"></i></button>'+
+      '<button onclick="checkSync()" class="action-btn sm" style="padding:2px 8px;font-size:.7rem;margin-right:auto" aria-label="تحديث" title="تحديث"><i class="bi bi-arrow-repeat"></i></button>'+
     '</div>';
     return;
   }
@@ -67,7 +67,7 @@ function renderSync(w){
         '<i class="bi bi-journal-text me-1"></i>اليومية ('+ar(_syncLive.filter(function(a){return a.status==='alive';}).length)+' حيوان)</button>'+
       '<button class="action-btn sm" style="background:rgba(33,150,243,.1);border-color:rgba(33,150,243,.3);color:var(--blue)" onclick="keepCached()">'+
         '<i class="bi bi-grid-1x2-fill me-1"></i>الداشبورد ('+ar(_syncCached.filter(function(a){return a.status==='alive';}).length)+' حيوان)</button>'+
-      '<button class="action-btn sm" onclick="checkSync()" style="margin-right:auto"><i class="bi bi-arrow-repeat"></i></button>'+
+      '<button class="action-btn sm" onclick="checkSync()" style="margin-right:auto" aria-label="تحديث" title="تحديث"><i class="bi bi-arrow-repeat"></i></button>'+
     '</div></div>';
 }
 window.applyLive=function(){
@@ -80,7 +80,7 @@ window.keepCached=function(){
   if(w)w.innerHTML='<div style="display:flex;align-items:center;gap:8px;font-size:.8rem">'+
     '<i class="bi bi-grid-1x2-fill" style="color:var(--blue)"></i>'+
     '<span style="color:var(--blue)">متزامن مع الداشبورد</span>'+
-    '<button onclick="checkSync()" class="action-btn sm" style="padding:2px 8px;font-size:.7rem;margin-right:auto"><i class="bi bi-arrow-repeat"></i></button>'+
+    '<button onclick="checkSync()" class="action-btn sm" style="padding:2px 8px;font-size:.7rem;margin-right:auto" aria-label="تحديث" title="تحديث"><i class="bi bi-arrow-repeat"></i></button>'+
   '</div>';
   toast('يتم استخدام بيانات الداشبورد الحالية','info');
 };

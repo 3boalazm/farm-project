@@ -2,7 +2,7 @@
 
 // ── Firebase Config ──────────────────────────────────────
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyB22XrjduHzusLuNdBtlLvmdIEokFsnyfQ",
+  apiKey: "AIzaSyB22XrjduHzusLuNdBtLLvmdIEokFsnyfQ",
   authDomain: "farm-mz99.firebaseapp.com",
   databaseURL: "https://farm-mz99-default-rtdb.europe-west1.firebasedatabase.app",
   projectId: "farm-mz99",

@@ -16,6 +16,10 @@
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="media/logo-icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="media/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="media/favicon-16.png">
+<link rel="apple-touch-icon" href="media/apple-touch-icon.png">
 <link rel="stylesheet" href="styles.css">
 <style>
 .chat-wrap{max-width:760px;margin:0 auto;display:flex;flex-direction:column;height:calc(100vh - 210px)}
@@ -44,7 +48,7 @@
 </style>
 </head>
 <body>
-<div class="page-wrap" style="padding-bottom:0">
+<div class="page-wrap rail-v2-content" style="padding-bottom:0">
   <div id="page-header"></div>
 
   <div style="max-width:760px;margin:0 auto">
@@ -79,7 +83,7 @@
       <div class="chat-messages" id="chat-messages">
         <div class="msg msg-system">
           مرحباً! أنا مساعدك الذكي 🐐 — أعرف بيانات مزرعتك الحقيقية وأستطيع الإجابة عليها.<br>
-          <span style="color:var(--yellow)">أضف مفتاح Gemini المجاني أولاً 🔑 ثم تحدث أو اكتب.</span>
+          <span style="color:var(--yellow)">أضف مفتاح Groq أولاً 🔑 ثم تحدث أو اكتب.</span>
         </div>
       </div>
 
@@ -91,7 +95,7 @@
             <button class="voice-btn" id="voice-btn" onclick="toggleVoice()" title="تحدث بالعربي">
               <i class="bi bi-mic-fill" id="voice-icon"></i>
             </button>
-            <button class="action-btn primary" onclick="sendMessage()" style="padding:10px 14px"><i class="bi bi-send-fill"></i></button>
+            <button class="action-btn primary" onclick="sendMessage()" style="padding:10px 14px" aria-label="إرسال" title="إرسال"><i class="bi bi-send-fill"></i></button>
           </div>
         </div>
         <small class="text-gray d-block mt-1" style="font-size:.72rem"><i class="bi bi-info-circle me-1"></i>Ctrl+Enter للإرسال | اضغط ⚡ للاختصارات</small>
@@ -104,6 +108,7 @@
 <script src="firebase.js"></script>
 <script src="nav.js"></script>
 <script src="shared.js"></script>
+<script src="offline-sync.js" defer></script>
 <script src="pages/datepicker.js" defer></script>
 <script src="pages/tour.js" defer></script>
 <script>
@@ -113,9 +118,22 @@ var _history      = [];
 var _isRecording  = false;
 var _recognition  = null;
 var _pendingAction= null;
-var _farmData     = { animals:[], breeding:[], health:[], vaccines:[], finance:[], meds:[], feeds:[] };
+var _farmData     = { animals:[], breeding:[], health:[], vaccines:[], finance:[], meds:[], feeds:[], equipment:[], tasks:[], production:[] };
 var _farmContext  = '';  // built once, sent with every message
 var _shortcutsOpen = false;
+
+// ── Groq (GroqCloud) config ──────────────────────────────
+// NOTE: Groq (console.groq.com — fast inference for open models),
+// NOT Groq. Similar names, different companies.
+// llama-3.3-70b-versatile is on Groq's PRODUCTION model list (not the
+// preview list, which they warn can be discontinued at short notice) and
+// is the strongest multilingual option there — this app's prompts and
+// user input are entirely Arabic, so multilingual quality matters more
+// than raw speed. Overridable from the 🔑 modal because Groq deprecates
+// model IDs over time.
+var GROQ_DEFAULT_MODEL = 'llama-3.3-70b-versatile';
+var GROQ_DIRECT_URL    = 'https://api.groq.com/openai/v1/chat/completions';
+var GROQ_PROXY_URL     = '/api/groq';
 
 // ── Boot ─────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async function() {
@@ -124,17 +142,25 @@ document.addEventListener('DOMContentLoaded', async function() {
   var s = getSettings();
   document.getElementById('footer-year') && (document.getElementById('footer-year').textContent = ar(new Date().getFullYear()));
   document.getElementById('footer-farm') && (document.getElementById('footer-farm').textContent = s.farmName);
-  renderNavbar('assistant.html');
+  renderNavbarV2('assistant.html');
   renderPageHeader('<i class="bi bi-robot accent-text"></i> مساعد المزرعة الذكي', 'يقرأ بيانات مزرعتك ويساعدك في إدارتها', '');
 
   // Load farm data
   try {
-    var [animals, breeding, health, vaccines, meds, feeds] = await Promise.all([
+    var _ok = function(p){ return p.catch(function(){ return []; }); };
+    var [animals, breeding, health, vaccines, meds, feeds, equipment, finance, tasks, production] = await Promise.all([
       fbGet('animals'), fbGet('breeding'), fbGet('health'),
-      fbGet('vaccinations'), fbGet('inventory_meds').catch(function(){return[];}),
-      fbGet('inventory_feeds').catch(function(){return[];})
+      fbGet('vaccinations'), _ok(fbGet('inventory_meds')),
+      _ok(fbGet('inventory_feeds')),
+      // Added: these were never fetched, which is why the assistant could not
+      // answer about stocked medicines, equipment, money, tasks or production.
+      // 'finance' was even declared in _farmData but never populated.
+      _ok(fbGet('inventory_equipment')), _ok(fbGet('finance')),
+      _ok(fbGet('daily_tasks')), _ok(fbGet('production_log'))
     ]);
-    _farmData = { animals:animals||[], breeding:breeding||[], health:health||[], vaccines:vaccines||[], meds:meds||[], feeds:feeds||[] };
+    _farmData = { animals:animals||[], breeding:breeding||[], health:health||[], vaccines:vaccines||[],
+                  meds:meds||[], feeds:feeds||[], equipment:equipment||[], finance:finance||[],
+                  tasks:tasks||[], production:production||[] };
     _farmContext = buildFarmContext(s);
     renderContextBar(s);
   } catch(e) {
@@ -142,10 +168,10 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   // API key check
-  var savedKey = localStorage.getItem('farm_gemini_key');
+  var savedKey = localStorage.getItem('farm_groq_key');
   var btn = document.getElementById('api-btn');
   if (savedKey && btn) { btn.style.background='rgba(0,230,118,.1)'; btn.style.borderColor='rgba(0,230,118,.3)'; btn.style.color='var(--green)'; }
-  if (!savedKey) setTimeout(function(){ addMsg('system','⚙️ أضف مفتاح Gemini API بالضغط على 🔑 أعلاه للبدء.'); }, 800);
+  if (!savedKey) setTimeout(function(){ addMsg('system','⚙️ أضف مفتاح Groq بالضغط على 🔑 أعلاه للبدء.'); }, 800);
 
   buildShortcuts(s);
 });
@@ -154,7 +180,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 function buildFarmContext(s) {
   var d = _farmData;
   var alive   = d.animals.filter(function(a){ return a.status === 'alive'; });
-  var dead    = d.animals.filter(function(a){ return a.status === 'dead'; });
+  var dead    = d.animals.filter(function(a){ return window.isRealDeath(a); });
   var today   = todayStr();
 
   // Species breakdown
@@ -190,15 +216,81 @@ function buildFarmContext(s) {
   var lowMeds  = d.meds.filter(function(m){ return +m.quantity <= +m.min_quantity && +m.min_quantity > 0; });
   var lowFeeds = d.feeds.filter(function(f){ return +f.quantity <= +f.min_quantity && +f.min_quantity > 0; });
 
+  // ── Itemised lists ────────────────────────────────────
+  // The previous version only ever named items that were BELOW minimum, so
+  // with healthy stock the model received the literal string "المخزن جيد"
+  // and no item names at all -- which is exactly why it could not answer
+  // "which medicine do we have for this diagnosis?". Caps keep the context
+  // bounded on a large farm; the model is told when a list was truncated.
+  var CAP = 60;
+  function _cap(arr, fmt) {
+    if (!arr || !arr.length) return 'لا يوجد';
+    var shown = arr.slice(0, CAP).map(fmt).join(' | ');
+    return shown + (arr.length > CAP ? ' … (' + (arr.length - CAP) + ' عنصر إضافي غير معروض)' : '');
+  }
+
+  var medsList = _cap(d.meds, function(m){
+    var d2 = m.expiry ? Math.ceil((new Date(m.expiry) - new Date()) / 86400000) : null;
+    return m.name
+      + ': ' + (m.quantity != null ? m.quantity : '?') + (m.unit ? ' ' + m.unit : '')
+      + (m.purpose ? ' — لـ' + m.purpose : '')
+      + (m.expiry ? ' — ينتهي ' + m.expiry + (d2 !== null && d2 < 0 ? ' (منتهي!)' : d2 !== null && d2 <= 30 ? ' (قارب الانتهاء)' : '') : '')
+      + (m.barn ? ' — ' + m.barn : '');
+  });
+
+  var feedsList = _cap(d.feeds, function(f){
+    return f.name + ': ' + (f.quantity != null ? f.quantity : '?') + (f.unit ? ' ' + f.unit : '')
+      + (f.cost_per_unit ? ' — ' + f.cost_per_unit + '/' + (f.unit || 'وحدة') : '');
+  });
+
+  var equipList = _cap(d.equipment, function(e){
+    var st = { working:'يعمل', broken:'معطل', maintenance:'صيانة' }[e.status] || e.status || '—';
+    return e.name + ' (' + st + ')' + (e.next_maintenance ? ' — صيانة قادمة ' + e.next_maintenance : '');
+  });
+
+  // Active treatments, with the actual diagnosis + medication used
+  var healthList = _cap(activeHealth, function(r){
+    return (r.animal_tag || r.animal_breed || '—')
+      + ': ' + (r.diagnosis || 'بدون تشخيص')
+      + (r.medication ? ' — دواء: ' + r.medication : '')
+      + (r.dosage ? ' (' + r.dosage + ')' : '')
+      + (r.withdrawal_end ? ' — سحب حتى ' + r.withdrawal_end : '');
+  });
+
+  // Pending tasks
+  var openTasks = d.tasks.filter(function(t){ return t.status !== 'done' && t.status !== 'completed'; });
+  var tasksList = _cap(openTasks, function(t){
+    return (t.title || '—') + (t.date ? ' (' + t.date + ')' : '') + (t.priority ? ' [' + t.priority + ']' : '');
+  });
+
+  // Production totals by type
+  var prodByType = {};
+  d.production.forEach(function(p){
+    if (!p.type) return;
+    prodByType[p.type] = (prodByType[p.type] || 0) + (+p.quantity || 0);
+  });
+  var prodList = Object.keys(prodByType).length
+    ? Object.keys(prodByType).map(function(k){ return k + ': ' + prodByType[k]; }).join(' | ')
+    : 'لا يوجد';
+
   // Finance
-  var inc = 0, exp = 0;
-  // (skip for brevity — not critical for chat)
+  var inc = d.finance.filter(function(r){ return r.type === 'income';  }).reduce(function(t,r){ return t + (+r.amount || 0); }, 0);
+  var exp = d.finance.filter(function(r){ return r.type === 'expense'; }).reduce(function(t,r){ return t + (+r.amount || 0); }, 0);
+  var expByCat = {};
+  d.finance.filter(function(r){ return r.type === 'expense'; }).forEach(function(r){
+    if (r.category) expByCat[r.category] = (expByCat[r.category] || 0) + (+r.amount || 0);
+  });
+  var expCatList = Object.keys(expByCat).length
+    ? Object.keys(expByCat).sort(function(a,b){ return expByCat[b] - expByCat[a]; })
+        .slice(0, 8).map(function(k){ return k + ': ' + expByCat[k]; }).join(' | ')
+    : 'لا يوجد';
 
   var ctx = [
     '=== بيانات المزرعة الحقيقية (محدّثة) ===',
     'اسم المزرعة: ' + s.farmName,
     'المالك: ' + (s.ownerName || '—'),
     'العملة: ' + s.currency,
+    'تاريخ اليوم: ' + today,
     '',
     '--- القطيع الحالي ---',
     'الإجمالي الأحياء: ' + alive.length + ' رأس',
@@ -214,14 +306,34 @@ function buildFarmContext(s) {
     upcomingBirths.length ? 'ولادات قادمة خلال 14 يوم: ' + upcomingBirths.length + ' (' + upcomingBirths.map(function(r){return (r.female_tag||r.female_breed||'—')+' في '+r.expected_birth;}).join(' | ') + ')' : 'لا توجد ولادات قريبة',
     '',
     '--- الصحة ---',
-    'قيد العلاج حالياً: ' + activeHealth.length + ' رأس' + (activeHealth.length ? ' (' + activeHealth.slice(0,3).map(function(r){return r.animal_tag||r.animal_breed||'—';}).join('، ') + ')' : ''),
+    'قيد العلاج حالياً: ' + activeHealth.length + ' رأس',
+    'تفاصيل الحالات النشطة: ' + healthList,
     withdrawal.length ? 'في فترة سحب علاج: ' + withdrawal.length + ' رأس — لا يجوز بيعها أو ذبحها' : 'لا توجد فترات سحب',
     '',
-    '--- التحصين والمخزن ---',
+    '--- التحصين ---',
     vaccOverdue.length  ? 'تحصينات متأخرة: ' + vaccOverdue.map(function(v){return v.name;}).join('، ')  : 'لا تحصينات متأخرة',
     vaccPending.length  ? 'تحصينات قادمة 7 أيام: ' + vaccPending.map(function(v){return v.name+' ('+v.scheduled_date+')';}).join('، ') : 'لا مواعيد قريبة',
-    lowMeds.length  ? 'أدوية عند الحد الأدنى: ' + lowMeds.map(function(m){return m.name;}).join('، ')  : 'المخزن جيد',
-    lowFeeds.length ? 'أعلاف عند الحد الأدنى: ' + lowFeeds.map(function(f){return f.name;}).join('، ') : '',
+    '',
+    '--- الصيدلية / الأدوية المتاحة بالمخزن (القائمة الكاملة) ---',
+    medsList,
+    lowMeds.length ? 'تنبيه — أدوية عند الحد الأدنى: ' + lowMeds.map(function(m){return m.name;}).join('، ') : 'كل الأدوية فوق الحد الأدنى',
+    '',
+    '--- الأعلاف بالمخزن (القائمة الكاملة) ---',
+    feedsList,
+    lowFeeds.length ? 'تنبيه — أعلاف عند الحد الأدنى: ' + lowFeeds.map(function(f){return f.name;}).join('، ') : 'كل الأعلاف فوق الحد الأدنى',
+    '',
+    '--- المعدات ---',
+    equipList,
+    '',
+    '--- الإنتاج (إجماليات حسب النوع) ---',
+    prodList,
+    '',
+    '--- المهام المفتوحة ---',
+    tasksList,
+    '',
+    '--- المالية ---',
+    'إجمالي الإيرادات: ' + inc + ' ' + s.currency + ' | إجمالي المصروفات: ' + exp + ' ' + s.currency + ' | الصافي: ' + (inc - exp) + ' ' + s.currency,
+    'أكبر بنود المصروفات: ' + expCatList,
     '',
     '--- السلالات المتاحة ---',
     'ماعز: ' + (s.goatBreeds||[]).join('، '),
@@ -254,12 +366,17 @@ window.refreshFarmData = async function() {
   document.getElementById('farm-ctx-bar').innerHTML = '<span class="text-gray"><div class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block"></div> جاري التحديث...</span>';
   var s = getSettings();
   try {
-    var [animals, breeding, health, vaccines, meds, feeds] = await Promise.all([
+    var _ok2 = function(p){ return p.catch(function(){ return []; }); };
+    var [animals, breeding, health, vaccines, meds, feeds, equipment, finance, tasks, production] = await Promise.all([
       fbGet('animals',true), fbGet('breeding',true), fbGet('health',true),
-      fbGet('vaccinations',true), fbGet('inventory_meds',true).catch(function(){return[];}),
-      fbGet('inventory_feeds',true).catch(function(){return[];})
+      fbGet('vaccinations',true), _ok2(fbGet('inventory_meds',true)),
+      _ok2(fbGet('inventory_feeds',true)),
+      _ok2(fbGet('inventory_equipment',true)), _ok2(fbGet('finance',true)),
+      _ok2(fbGet('daily_tasks',true)), _ok2(fbGet('production_log',true))
     ]);
-    _farmData = { animals:animals||[], breeding:breeding||[], health:health||[], vaccines:vaccines||[], meds:meds||[], feeds:feeds||[] };
+    _farmData = { animals:animals||[], breeding:breeding||[], health:health||[], vaccines:vaccines||[],
+                  meds:meds||[], feeds:feeds||[], equipment:equipment||[], finance:finance||[],
+                  tasks:tasks||[], production:production||[] };
     _farmContext = buildFarmContext(s);
     renderContextBar(s);
     toast('تم تحديث بيانات المزرعة');
@@ -351,11 +468,11 @@ window.sendMessage = async function() {
   var typing = addTyping();
 
   var s      = getSettings();
-  var apiKey = localStorage.getItem('farm_gemini_key');
+  var apiKey = localStorage.getItem('farm_groq_key');
 
   if (!apiKey) {
     removeTyping();
-    addMsg('bot','⚙️ يرجى إضافة مفتاح Gemini API — اضغط 🔑 أعلاه.');
+    addMsg('bot','⚙️ يرجى إضافة مفتاح Groq — اضغط 🔑 أعلاه.');
     return;
   }
 
@@ -392,20 +509,66 @@ window.sendMessage = async function() {
   _history.push({ role: 'user', content: text });
 
   try {
-    var geminiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=' + apiKey;
-    var resp = await fetch(geminiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: system }] },
-        contents: _history.map(function(m){ return { role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.content }] }; }),
-        generationConfig: { maxOutputTokens: 1000, temperature: 0.1 }
-      })
-    });
-    var data = await resp.json();
-    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-    var raw = data.candidates && data.candidates[0] && data.candidates[0].content
-      ? data.candidates[0].content.parts[0].text : '';
+    // Groq is OpenAI-compatible. _history is ALREADY in {role,content}
+    // shape, so unlike Gemini it needs no per-message mapping.
+    var payload = {
+      model:       localStorage.getItem('farm_groq_model') || GROQ_DEFAULT_MODEL,
+      messages:    [{ role: 'system', content: system }].concat(_history),
+      max_tokens:  1000,
+      temperature: 0.1,
+      // Groq supports OpenAI-style JSON mode. This prompt already demands
+      // JSON-only, and open models are markedly less disciplined about that
+      // than Gemini was, so enforcing it at the API level is worth it.
+      // Retried without this below if the selected model doesn't support it.
+      response_format: { type: 'json_object' }
+    };
+
+    // Direct browser call first (mirrors how Gemini worked). If the browser
+    // blocks it — CORS surfaces as a TypeError, NOT an HTTP status — retry
+    // through the same-origin Vercel proxy at /api/groq.js, which follows
+    // the existing api/claude.js pattern already in this repo.
+    var usedProxy = false;
+    async function _send(p) {
+      var r;
+      try {
+        r = await fetch(GROQ_DIRECT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+          body: JSON.stringify(p)
+        });
+      } catch (netErr) {
+        usedProxy = true;
+        r = await fetch(GROQ_PROXY_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-user-key': apiKey },
+          body: JSON.stringify(p)
+        });
+      }
+      return { resp: r, data: await r.json() };
+    }
+
+    var out = await _send(payload);
+
+    // If this model rejects JSON mode, drop it and try once more rather than
+    // failing outright — the regex extraction below already handles free text.
+    if (!out.resp.ok && /response_format|json_object|json mode/i.test(JSON.stringify(out.data && out.data.error || ''))) {
+      delete payload.response_format;
+      out = await _send(payload);
+    }
+
+    var resp = out.resp, data = out.data;
+
+    // Status must be folded into the message BEFORE throwing: the error
+    // handler below matches on codes like 401/404/429, and Groq's own
+    // error text does not always contain them.
+    if (!resp.ok || data.error) {
+      var em = (data.error && (data.error.message || data.error)) || 'unknown error';
+      if (typeof em !== 'string') em = JSON.stringify(em);
+      throw new Error('HTTP ' + resp.status + ' — ' + em + (usedProxy ? ' (عبر الوسيط)' : ''));
+    }
+
+    var raw = data.choices && data.choices[0] && data.choices[0].message
+      ? (data.choices[0].message.content || '') : '';
 
     removeTyping();
     _history.push({ role: 'assistant', content: raw });
@@ -424,12 +587,21 @@ window.sendMessage = async function() {
 
   } catch(e) {
     removeTyping();
+    var m = (e && e.message) ? e.message : String(e);
     var msg = '❌ ';
-    if (e.message.includes('API_KEY_INVALID') || e.message.includes('invalid'))
-      msg += 'مفتاح Gemini غلط — اضغط 🔑 وأدخل المفتاح الصحيح';
-    else if (e.message.includes('quota') || e.message.includes('RATE_LIMIT'))
-      msg += 'تجاوزت الحد المجاني. انتظر قليلاً ثم أعد المحاولة.';
-    else msg += 'خطأ: ' + e.message;
+    if (/401|Unauthorized|incorrect.*api.*key|invalid.*api.*key|api.*key.*invalid/i.test(m))
+      msg += 'مفتاح Groq غلط أو منتهي — اضغط 🔑 وأدخل المفتاح الصحيح';
+    else if (/403|does not have access|not enabled|permission/i.test(m))
+      msg += 'المفتاح مالوش صلاحية على الموديل ده — غيّر اسم الموديل من 🔑';
+    else if (/404|model.*not found|does not exist|decommissioned|deprecated/i.test(m))
+      msg += 'اسم الموديل غلط أو اتشال — افتح 🔑 وغيّره (مثلاً llama-3.3-70b-versatile أو openai/gpt-oss-120b)';
+    else if (/429|rate.?limit|quota|too many requests/i.test(m))
+      msg += 'تجاوزت حد الاستخدام المجاني. استنى شوية وحاول تاني.';
+    else if (/credit|billing|payment|insufficient/i.test(m))
+      msg += 'رصيد حساب Groq خلص — راجع console.groq.com';
+    else if (/Failed to fetch|NetworkError|CORS/i.test(m))
+      msg += 'الاتصال بـ Groq اتمنع من المتصفح، والوسيط /api/groq مش متاح. ارفع api/groq.js على Vercel أو تأكد من الإنترنت.';
+    else msg += 'خطأ: ' + m;
     addMsg('bot', msg);
   }
 };
@@ -478,15 +650,34 @@ window.executeAction = async function() {
     if (parsed.action === 'add_animal') {
       var count = parseInt(d.count) || 1;
       for (var i = 0; i < count; i++) {
-        await fbPost('animals', { species:d.species, breed:d.breed, gender:d.gender, purpose:d.purpose||'tarbiya', status:'alive', tag:count===1?(d.tag||null):null, barn:d.barn||null, birth_date:d.birth_date||null, notes:d.notes||null, created_at:todayStr() });
+        await fbPost('animals', { species:d.species, breed:d.breed, gender:d.gender, purpose:d.purpose||'tarbiya', status:'alive', tag:(count===1&&d.tag)?d.tag:await generateAnimalTag(d.species,_farmData.animals), barn:d.barn||null, birth_date:d.birth_date||null, notes:d.notes||null, created_at:todayStr() });
       }
       await logActivity('add','animals','إضافة عبر المساعد: '+ar(count)+' '+d.breed+' '+d.gender);
       addMsg('system','✅ تم إضافة '+ar(count)+' حيوان بنجاح');
     }
     else if (parsed.action === 'add_birth') {
       var cnt = parseInt(d.count) || 1;
+      await fbPost('breeding', {
+        female_tag:d.mother_tag||null, mother_tag:d.mother_tag||null,
+        female_breed:d.mother_breed||null, mother_breed:d.mother_breed||null,
+        female_species:d.species,
+        male_tag:null,
+        mating_date:null, expected_birth:null,
+        actual_birth:d.birth_date||todayStr(), status:'born',
+        offspring_count:cnt,
+        male_offspring:d.gender==='male'?cnt:0,
+        female_offspring:d.gender==='female'?cnt:0,
+        birth_weights:d.birth_weight?String(d.birth_weight):null,
+        birth_amount:null, barn:d.barn||null,
+        added_by:'مساعد ذكي', notes:null
+      });
       for (var j = 0; j < cnt; j++) {
-        await fbPost('animals', { species:d.species, breed:d.breed||d.mother_breed, gender:d.gender, purpose:'birth', status:'alive', mother_tag:d.mother_tag||null, mother_breed:d.mother_breed||null, birth_date:d.birth_date||todayStr(), barn:d.barn||null, birth_weight:d.birth_weight||null, created_at:todayStr() });
+        await window.createOffspringAnimal({
+          species:d.species, breed:d.breed||d.mother_breed, gender:d.gender, purpose:'birth',
+          birthDate:d.birth_date||todayStr(), tag:null,
+          motherTag:d.mother_tag||null, motherBreed:d.mother_breed||null, fatherTag:null,
+          weight:d.birth_weight||null, barn:d.barn||null, notes:null
+        });
       }
       await logActivity('add','animals','تسجيل ولادة عبر المساعد: '+ar(cnt)+' مواليد');
       addMsg('system','✅ تم تسجيل '+ar(cnt)+' مولود');
@@ -494,8 +685,8 @@ window.executeAction = async function() {
     else if (parsed.action === 'mark_dead') {
       var toKill = _farmData.animals.filter(function(a){ return a.status==='alive' && (d.animal_tag ? a.tag===d.animal_tag : (a.breed===d.breed && a.gender===d.gender)); }).slice(0,1);
       if (toKill.length) {
-        await fbPatch('animals', toKill[0]._id, { status:'dead', died_at:d.died_at||todayStr(), death_cause:d.death_reason||null });
-        await logActivity('edit','animals','تسجيل نفوق: '+(d.animal_tag||d.breed));
+        const r=await window.markAnimalDead({animalId:toKill[0]._id, date:d.died_at||todayStr(), reason:d.death_reason||null});
+        if (!r.ok) { addMsg('bot','⚠️ '+r.error); return; }
         addMsg('system','✅ تم تسجيل النفوق');
       } else { addMsg('bot','⚠️ لم أجد الحيوان. تأكد من البيانات.'); return; }
     }
@@ -510,10 +701,18 @@ window.executeAction = async function() {
       addMsg('system','✅ تم تسجيل التحصين');
     }
     else if (parsed.action === 'add_weight') {
+      // Routed through the canonical Weight service (shared.js) -- this
+      // handler used to patch current_weight directly, in the wrong
+      // order (before the history record even existed) and with no
+      // comparison against the animal's existing weight history, so a
+      // backdated entry could silently overwrite a newer, correct value.
+      // The service now owns validation, resync, alerts, workflow, and
+      // activity-log -- this handler only resolves the target animal and
+      // reports the service's own result.
       var animal = _farmData.animals.find(function(a){ return a.tag === d.animal_tag || a.breed === d.animal_breed; });
-      if (animal) await fbPatch('animals', animal._id, { current_weight: d.weight, weight_updated: d.date||todayStr() });
-      await fbPost('weight_log', { animal_tag:d.animal_tag||'—', animal_breed:d.animal_breed||'—', weight:d.weight, date:d.date||todayStr(), recorded_by:'مساعد ذكي' });
-      await logActivity('add','weight_log','تسجيل وزن: '+(d.animal_tag||d.animal_breed)+' = '+d.weight+' كجم');
+      if (!animal) { addMsg('bot','⚠️ لم أجد الحيوان. تأكد من البيانات.'); return; }
+      var wr = await window.recordAnimalWeight({ animalId: animal._id, weight: d.weight, date: d.date||todayStr() });
+      if (!wr.ok) { addMsg('bot','⚠️ '+wr.error); return; }
       addMsg('system','✅ تم تسجيل الوزن: '+ar(d.weight)+' كجم');
     }
     else if (parsed.action === 'add_breeding') {
@@ -524,8 +723,8 @@ window.executeAction = async function() {
       addMsg('system','✅ تم تسجيل التقريع' + (expBirth ? ' — الولادة المتوقعة: '+expBirth : ''));
     }
     else if (parsed.action === 'add_finance' && can('finance')) {
-      await fbPost('finance', { type:d.type||'expense', category:d.category||'متنوع', description:d.description||'—', amount:d.amount||0, date:d.date||todayStr(), notes:'سُجِّل عبر المساعد الذكي' });
-      await logActivity('add','finance','تسجيل مالية: '+(d.description||'—'));
+      const fr = await window.manualEntry({ type:d.type||'expense', category:d.category||'متنوع', description:d.description||'—', amount:d.amount||0, date:d.date||todayStr(), source:'assistant' });
+      if (!fr.ok) { addMsg('bot','⚠️ '+fr.error); return; }
       addMsg('system','✅ تم تسجيل العملية المالية: '+ar(d.amount||0)+' '+s.currency);
     }
 
@@ -613,19 +812,27 @@ window.showFarmContext = function() {
 };
 
 window.openApiSettings = function() {
-  var current = localStorage.getItem('farm_gemini_key') || '';
+  var current = localStorage.getItem('farm_groq_key') || '';
+  var model   = localStorage.getItem('farm_groq_model') || GROQ_DEFAULT_MODEL;
   showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:480px">' +
-    '<h4><i class="bi bi-key-fill" style="color:var(--yellow)"></i> مفتاح Gemini API (مجاني)</h4>' +
+    '<h4><i class="bi bi-key-fill" style="color:var(--yellow)"></i> مفتاح Groq API</h4>' +
     '<div class="mb-3 p-3" style="background:rgba(255,193,7,.07);border:1px solid rgba(255,193,7,.25);border-radius:10px;font-size:.83rem">' +
-      '<div class="fw-bold mb-2" style="color:var(--yellow)"><i class="bi bi-gift-fill me-1"></i>100% مجاني — 1500 طلب/يوم</div>' +
+      '<div class="fw-bold mb-2" style="color:var(--yellow)"><i class="bi bi-lightning-charge-fill me-1"></i>فيه باقة مجانية — وسريع جداً</div>' +
       '<ol style="margin:0;padding-right:18px;line-height:2">' +
-        '<li>افتح <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--blue)">aistudio.google.com/app/apikey</a></li>' +
-        '<li>اضغط <strong>Create API key</strong></li>' +
+        '<li>افتح <a href="https://console.groq.com/keys" target="_blank" style="color:var(--blue)">console.groq.com/keys</a></li>' +
+        '<li>اضغط <strong>Create API Key</strong></li>' +
         '<li>انسخ المفتاح والصقه هنا</li>' +
       '</ol>' +
     '</div>' +
-    '<label>مفتاح Gemini API</label>' +
-    '<input class="field" id="gemini-key-input" type="password" value="' + current + '" placeholder="AIzaSy...">' +
+    '<label>مفتاح Groq API</label>' +
+    '<input class="field" id="groq-key-input" type="password" value="' + current + '" placeholder="gsk_...">' +
+    '<label class="mt-3">اسم الموديل</label>' +
+    '<input class="field" id="groq-model-input" type="text" value="' + model + '" placeholder="' + GROQ_DEFAULT_MODEL + '">' +
+    '<div style="font-size:.75rem;color:var(--text-muted);margin-top:6px;line-height:1.6">' +
+      'الافتراضي <strong>llama-3.3-70b-versatile</strong> — أفضل موديل إنتاجي على Groq للعربي. ' +
+      'بدائل: <strong>openai/gpt-oss-120b</strong> (أسرع وأرخص) أو <strong>llama-3.1-8b-instant</strong> (الأسرع، أقل دقة). ' +
+      'Groq بتوقف موديلات قديمة أحياناً — لو ظهرت رسالة إن الموديل مش موجود، غيّر الاسم هنا وراجع console.groq.com/docs/models.' +
+    '</div>' +
     '<div class="d-flex gap-2 justify-content-end mt-3">' +
       '<button class="action-btn" onclick="closeModal()">إلغاء</button>' +
       '<button class="action-btn primary" onclick="saveApiKey()"><i class="bi bi-check-lg"></i> حفظ</button>' +
@@ -633,13 +840,15 @@ window.openApiSettings = function() {
 };
 
 window.saveApiKey = function() {
-  var key = document.getElementById('gemini-key-input').value.trim();
+  var key = document.getElementById('groq-key-input').value.trim();
   if (!key) { toast('أدخل المفتاح','error'); return; }
-  localStorage.setItem('farm_gemini_key', key);
+  var model = document.getElementById('groq-model-input').value.trim() || GROQ_DEFAULT_MODEL;
+  localStorage.setItem('farm_groq_key', key);
+  localStorage.setItem('farm_groq_model', model);
   closeModal();
   var btn = document.getElementById('api-btn');
   if (btn) { btn.style.background='rgba(0,230,118,.1)'; btn.style.borderColor='rgba(0,230,118,.3)'; btn.style.color='var(--green)'; }
-  toast('✅ تم حفظ مفتاح Gemini');
+  toast('✅ تم حفظ مفتاح Groq');
 };
 
 window.showExamples = function() {

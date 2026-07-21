@@ -11,15 +11,15 @@
   "dir": "rtl",
   "icons": [
     {
-      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAxOTIgMTkyJz48cmVjdCB3aWR0aD0nMTkyJyBoZWlnaHQ9JzE5Micgcng9JzMyJyBmaWxsPScjMDBlNjc2Jy8+PHRleHQgeT0nMTQwJyB4PScyOCcgZm9udC1zaXplPScxMzAnPvCfkKE8L3RleHQ+PC9zdmc+",
+      "src": "media/favicon-192.png",
       "sizes": "192x192",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA1MTIgNTEyJz48cmVjdCB3aWR0aD0nNTEyJyBoZWlnaHQ9JzUxMicgcng9JzgwJyBmaWxsPScjMDBlNjc2Jy8+PHRleHQgeT0nMzgwJyB4PSc1MCcgZm9udC1zaXplPSczMzAnPvCfkKE8L3RleHQ+PC9zdmc+",
+      "src": "media/favicon-512.png",
       "sizes": "512x512",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ],

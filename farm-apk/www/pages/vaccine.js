@@ -3,10 +3,16 @@ let vaccines=[], vaccFilter='all', editVaccId=null;
 
 document.addEventListener('DOMContentLoaded', async ()=>{
   if(!requireAuth())return;
+  // SECURITY FIX (Phase 6 hardening): nav.js grants perm:'health', unenforced until now.
+  if (!can('health')) {
+    document.getElementById('content').innerHTML='<div class="empty-state"><i class="bi bi-shield-x"></i><p>غير مصرح بالوصول لبيانات التحصين</p></div>';
+    renderNavbarV2('vaccine.html');
+    return;
+  }
   const s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
-  renderNavbar('vaccine.html');
+  renderNavbarV2('vaccine.html');
 
   // FAB for mobile
   addFAB('تحصين جديد', function(){ openVaccModal(); }, 'bi-bandaid-fill');
@@ -88,8 +94,8 @@ function renderVaccPage(s){
         </div>
         <div class="d-flex gap-2 flex-wrap flex-shrink-0">
           ${v.status!=='done'&&can('health')?`<button class="action-btn primary sm" aria-label="تعليم كمنجز" onclick="markDone('${v._id}')"><i class="bi bi-check-lg"></i> تنفيذ</button>`:''}
-          ${can('health')?`<button class="action-btn sm" onclick="openVaccModal('${v._id}')"><i class="bi bi-pencil"></i></button>`:''}
-          ${can('admin')?`<button class="action-btn danger sm" onclick="delVacc('${v._id}')"><i class="bi bi-trash"></i></button>`:''}
+          ${can('health')?`<button class="action-btn sm" onclick="openVaccModal('${v._id}')" aria-label="تعديل" title="تعديل"><i class="bi bi-pencil"></i></button>`:''}
+          ${can('admin')?`<button class="action-btn danger sm" onclick="delVacc('${v._id}')" aria-label="حذف" title="حذف"><i class="bi bi-trash"></i></button>`:''}
         </div>
       </div>
     </div>`;
@@ -101,15 +107,29 @@ function daysUntil(dateStr){return Math.ceil((new Date(dateStr)-new Date())/8640
 window.markDone=async function(id){
   const u=getUser();
   try{
+    const v=vaccines.find(v=>v._id===id);
     await fbPatch('vaccinations',id,{status:'done',done_date:todayStr(),progress:100,executed_by:u?.name||'—'});
-    await logActivity('edit','vaccine','تنفيذ تحصين: '+vaccines.find(v=>v._id===id)?.name);
+    await logActivity('edit','vaccine','تنفيذ تحصين: '+v?.name);
     toast('تم تسجيل التحصين كمنجز');
+    // Sprint 11 (v1.4): closes the ORIGINAL 'vaccination_scheduled'
+    // reminder task created when this same vaccination was first
+    // scheduled -- discovered gap (docs/features/WORKFLOW-DISCOVERY.md).
+    if(window.completeWorkflow && v){
+      window.completeWorkflow('vaccination', { sourceId:id, targetSection:v.target_section }).then(function(r){
+        if(r&&r.recommendation&&r.recommendation.text&&r.recommendation.actionable!==false)toast('💡 '+r.recommendation.text,'info');
+      }).catch(function(){});
+    }
+    // Sprint 14 (v1.7): deduct vaccine stock -- Best Effort, never blocks marking done.
+    if(window.recordInventoryTransaction && v){
+      window.recordInventoryTransaction('meds', v.name, -(v.count||1), 'vaccination', id).catch(function(){});
+    }
     vaccines=await fbGet('vaccinations');
     renderVaccPage(getSettings());
   }catch(e){toast('فشل: '+e.message,'error');}
 };
 
 window.delVacc=async function(id){
+  if(!can('admin')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return;}
   if(!confirm('حذف هذا التحصين؟'))return;
   try{
     await fbDelete('vaccinations',id);
@@ -169,8 +189,14 @@ window.submitVacc=async function(){
   const data={name,target_section:document.getElementById('v-section').value,count:+document.getElementById('v-count').value||0,status:document.getElementById('v-status').value,scheduled_date:document.getElementById('v-scheduled').value||null,done_date:document.getElementById('v-done-date').value||null,progress:+document.getElementById('v-prog').value||0,repeat:document.getElementById('v-repeat').value||null,notes:document.getElementById('v-notes').value.trim()||null};
   closeModal();toast('جاري الحفظ...','info');
   try{
+    let vaccId=editVaccId;
     if(editVaccId){await fbPatch('vaccinations',editVaccId,data);await logActivity('edit','vaccine','تعديل تحصين: '+name);}
-    else{await fbPost('vaccinations',data);await logActivity('add','vaccine','إضافة تحصين: '+name);}
+    else{vaccId=await fbPost('vaccinations',data);await logActivity('add','vaccine','إضافة تحصين: '+name);}
+    // Sprint 1, Epic 1: attach task automation -- additive only, does not
+    // change the vaccination write above. Never blocks on failure.
+    if(data.status==='pending'&&data.scheduled_date&&window.autoGenerateTask){
+      window.autoGenerateTask('vaccination_scheduled',{sourceId:vaccId,name:data.name,target_section:data.target_section,scheduled_date:data.scheduled_date}).catch(function(){});
+    }
     toast(editVaccId?'تم التحديث':'تمت الإضافة');
     vaccines=await fbGet('vaccinations');
     renderVaccPage(getSettings());
@@ -207,7 +233,7 @@ window.openTemplates = async function() {
     next.setMonth(next.getMonth() + (t.interval_months||6));
     var nextStr = next.toISOString().slice(0,10);
     var delBtn = t.custom
-      ? '<button class="action-btn sm danger" data-id="' + (t._id||'') + '" onclick="deleteTpl(this)" style="padding:3px 8px"><i class="bi bi-trash"></i></button>'
+      ? '<button class="action-btn sm danger" data-id="' + (t._id||'') + '" onclick="deleteTpl(this)" style="padding:3px 8px" aria-label="حذف" title="حذف"><i class="bi bi-trash"></i></button>'
       : '';
     return '<div class="wonder-card mb-2 p-3">' +
       '<div class="d-flex justify-content-between align-items-start gap-2">' +
@@ -286,12 +312,17 @@ window.submitTpl = async function() {
   if (!date) { toast('أدخل التاريخ','error'); return; }
   closeModal();
   try {
-    await fbPost('vaccinations', {
+    const newVaccId = await fbPost('vaccinations', {
       name:vaccName, target_section:section, count:count,
       scheduled_date:date, status:'pending', notes:notes||null,
       from_template:true, created_at:todayStr(),
     });
     await logActivity('add','vaccinations','جدولة من قالب: '+vaccName);
+    // Sprint 1, Epic 1: same automation entry point as submitVacc above --
+    // both writers converge onto one engine, no duplicated logic.
+    if(window.autoGenerateTask){
+      window.autoGenerateTask('vaccination_scheduled',{sourceId:newVaccId,name:vaccName,target_section:section,scheduled_date:date}).catch(function(){});
+    }
     toast('✅ تم إنشاء جدول التحصين');
     vaccines = await fbGet('vaccinations',true);
     renderVaccPage(getSettings());
@@ -335,6 +366,7 @@ window.saveNewTpl = async function() {
 };
 
 window.deleteTpl = async function(btn) {
+  if(!can('health')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return;}
   var id = btn && btn.dataset ? btn.dataset.id : btn;
   if (!id || !confirm('حذف هذا القالب؟')) return;
   try { await fbDelete('vaccination_templates',id); toast('تم الحذف'); openTemplates(); }

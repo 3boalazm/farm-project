@@ -1189,6 +1189,523 @@ window.getProductionPurpose=function(animal){
 };
 
 // ══════════════════════════════════════════════════════
+// Weight Service — the ONLY code allowed to touch
+// animals.current_weight, anywhere in this project.
+// ══════════════════════════════════════════════════════
+// Built in response to Round 3's adversarial certification, which found
+// FOUR independent write paths to current_weight (the canonical
+// animal-detail.html function, the AI assistant patching it directly,
+// bulk import patching it directly, and a diverged APK copy) -- three of
+// which violated the "current_weight == newest weight record" invariant
+// by construction, not by edge case.
+//
+// Plain top-level functions, not a class/namespace object: this matches
+// every other shared service in this file (createOffspringAnimal,
+// recordInventoryTransaction, getLifeStage) -- introducing a
+// WeightService.X object pattern here would be the one inconsistent
+// corner of an otherwise 100% plain-function, no-build-step codebase.
+//
+// Two entry points, one shared brain:
+//   recordAnimalWeight(opts)  -- add a new weight record
+//   deleteAnimalWeight(opts)  -- remove one
+// Both call _resyncCurrentWeight() as their final step, so the
+// recalculation logic itself -- the part every violation actually broke --
+// exists in exactly one place, reused by both directions of change.
+
+// In-flight guard, keyed per animal so recording weight for two different
+// animals never blocks each other, but two rapid clicks for the SAME
+// animal collapse onto one another. Addresses Violation 4 (no
+// double-submission guard) from the Round 3 certification.
+var _weightWriteInFlight={};
+
+// Shared recalculation step (service requirement #9-11). skipCache:true
+// on the fbGet forces a fresh read, not the 45-second sessionStorage
+// cache -- Round 3 flagged the cache as a possible fifth, unconfirmed
+// violation path; forcing a fresh read here closes it rather than leaving
+// it open.
+async function _resyncCurrentWeight(animalId){
+  var list=await fbGet('animals/'+animalId+'/weights', true);
+  list=(list||[]).slice().sort(function(a,b){return (b.date||'').localeCompare(a.date||'');});
+  var newest=list[0]||null;
+  await fbPatch('animals',animalId,{
+    current_weight: newest?newest.weight:null,
+    weight_updated: newest?newest.date:null
+  });
+  fbCacheInvalidate('animals');
+  return newest;
+}
+
+// ── recordAnimalWeight(opts) ─────────────────────────────
+// opts: { animalId (required), weight (required, number), date (required,
+//         'YYYY-MM-DD'), notes (optional), allowNonAlive (optional,
+//         default false) }
+// Returns { ok:true, weightId, current_weight } or { ok:false, error }.
+// NEVER throws -- every caller (DOM handler, AI assistant, bulk import)
+// needs a structured result to build its own UI/reporting around, not a
+// try/catch of its own duplicating error handling three different ways.
+window.recordAnimalWeight=async function(opts){
+  opts=opts||{};
+  var animalId=opts.animalId;
+
+  // 1. Permission validation
+  if(!can('animals')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+
+  // 2. Input validation (structural -- do the required fields even exist)
+  if(!animalId) return {ok:false, error:'رقم الحيوان مطلوب'};
+  var weight=parseFloat(opts.weight);
+  var date=opts.date;
+  if(!date) return {ok:false, error:'التاريخ مطلوب'};
+
+  // Per-animal in-flight guard (service requirement #7 -- prevent duplicate submission)
+  if(_weightWriteInFlight[animalId]) return {ok:false, error:'جاري تسجيل وزن لهذا الحيوان بالفعل'};
+  _weightWriteInFlight[animalId]=true;
+
+  try{
+    // 3. Verify animal exists
+    var animal=await fbGetOne('animals',animalId);
+    if(!animal) return {ok:false, error:'الحيوان غير موجود'};
+
+    // 4. Verify animal status (alive only, unless explicitly allowed --
+    //    e.g. a future bulk-historical-import mode might legitimately
+    //    need this, so the door is left open rather than hardcoded shut)
+    if(animal.status!=='alive' && !opts.allowNonAlive){
+      return {ok:false, error:'لا يمكن تسجيل وزن لحيوان غير حي'};
+    }
+
+    // 5. Validate weight value (range matches import.html's existing,
+    //    more complete check -- the canonical DOM function previously had
+    //    NO upper bound at all; centralizing here fixes that inconsistency too)
+    if(!weight || isNaN(weight) || weight<=0 || weight>500){
+      return {ok:false, error:'وزن غير منطقي (يجب أن يكون بين 0 و 500 كجم)'};
+    }
+
+    // 6. Validate measurement date (format + not in the future)
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)) return {ok:false, error:'صيغة التاريخ غير صحيحة'};
+    if(date>todayStr()) return {ok:false, error:'لا يمكن تسجيل وزن بتاريخ مستقبلي'};
+
+    // 7. (guard already taken above, before the async work started)
+
+    // 8. Write weight history
+    var weightId=await fbPost('animals/'+animalId+'/weights',{
+      weight:weight, date:date, notes:opts.notes||null
+    });
+
+    // 9-11. Determine newest valid record, recalculate, update animals.current_weight
+    var newest=await _resyncCurrentWeight(animalId);
+
+    // 12. Update alerts (existing Sprint 2 hook -- fire-and-forget, never
+    //     blocks the result this function returns)
+    if(window.evaluateWeightAlert) window.evaluateWeightAlert(animalId, animal.tag, animal.barn).catch(function(){});
+
+    // 13. Update workflows (existing Sprint 11 hook -- same fire-and-forget contract)
+    if(window.completeWorkflow){
+      window.completeWorkflow('weight',{sourceId:animalId, animalId:animalId, animalTag:animal.tag, barn:animal.barn})
+        .then(function(r){ if(r&&r.recommendation&&r.recommendation.text&&r.recommendation.actionable!==false) toast('💡 '+r.recommendation.text,'info'); })
+        .catch(function(){});
+    }
+
+    // 14. Update activity log
+    await logActivity('add','animals','تسجيل وزن #'+(animal.tag||animalId)+': '+ar(weight)+' كجم');
+
+    // 15. Refresh caches (already done inside _resyncCurrentWeight, listed
+    //     here too since it's a named required step, not to double-invalidate)
+
+    // 16. Return success
+    return {ok:true, weightId:weightId, current_weight: newest?newest.weight:null};
+
+  }catch(e){
+    return {ok:false, error:e.message||'خطأ غير معروف'};
+  }finally{
+    delete _weightWriteInFlight[animalId];
+  }
+};
+
+// ── deleteAnimalWeight(opts) ─────────────────────────────
+// opts: { animalId (required), weightId (required) }
+// Returns { ok:true, current_weight } or { ok:false, error }.
+window.deleteAnimalWeight=async function(opts){
+  opts=opts||{};
+  var animalId=opts.animalId, weightId=opts.weightId;
+  if(!can('animals')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!animalId||!weightId) return {ok:false, error:'بيانات ناقصة'};
+  try{
+    await fbDelete('animals/'+animalId+'/weights',weightId);
+    var newest=await _resyncCurrentWeight(animalId);
+    return {ok:true, current_weight: newest?newest.weight:null};
+  }catch(e){
+    return {ok:false, error:e.message||'خطأ غير معروف'};
+  }
+};
+
+// ══════════════════════════════════════════════════════
+// Animal Lifecycle Service — the ONLY code allowed to touch
+// animals.status or animals.purpose, anywhere in this project.
+// ══════════════════════════════════════════════════════
+// Built the same way the Weight service was: repository-wide search
+// first, one shared validated core, thin named operations on top.
+// Phase 1 search found FIVE real status values in live use (alive, dead,
+// sold, quarantine -- quarantine was previously undocumented anywhere in
+// this project's own knowledge, found only by this search -- plus the
+// new 'removed' introduced here), and roughly seventeen separate places
+// writing animals.status directly, across individual and bulk death
+// recording (five near-duplicate implementations), sale, quarantine
+// enter/release, restore, and four separate "count correction"
+// implementations that were writing status:'dead' with an is_correction
+// flag as a bolt-on distinguishing marker.
+//
+// animals.lifecycle does not exist as a stored field anywhere in this
+// codebase (confirmed by search) -- getLifeStage() (added earlier this
+// session) is deliberately computed-only, never stored, so there is
+// nothing to protect there; documented here rather than inventing a
+// field that has no reason to exist.
+//
+// pregnancy_status is a related, separate field (animal-detail.html)
+// discovered during this search. It is NOT covered by this pass --
+// flagged honestly as a scoping decision, not an oversight: it belongs
+// conceptually closer to the Breeding domain (which already has its own
+// status field) than to the animal's own core lifecycle, and folding a
+// third domain into an already-large rebuild risked doing all three
+// less carefully. Left for its own, focused pass.
+
+var _STATUS_TRANSITIONS={
+  alive:      ['dead','sold','quarantine','removed'],
+  quarantine: ['alive','dead'],
+  dead:       [], // terminal -- restoreAnimal is a deliberate, explicit
+                   // override (matching the existing dead.html admin
+                   // tool), never a normal transition. "DEAD -> ANYTHING"
+                   // stays illegal for every other caller.
+  sold:       [], // terminal
+  removed:    [], // terminal
+};
+
+var _statusWriteInFlight={};
+
+// Previously duplicated identically across dead.html, animals.html,
+// sheep.html, goats.html with no shared owner. markAnimalDead() below is
+// the first piece of shared.js code to actually need it, so it moves
+// here now. The four existing per-page copies are harmless, functionally
+// identical shadows (page-local declarations load after shared.js and
+// simply take precedence on those specific pages) -- not touched, since
+// removing them isn't necessary for this to work correctly.
+if(typeof window.genDeathId!=='function'){
+  window.genDeathId=function(){
+    var d=new Date();
+    var pad=function(n){return n<10?'0'+n:n;};
+    var datePart=d.getFullYear()+''+pad(d.getMonth()+1)+''+pad(d.getDate());
+    var rand=Math.random().toString(36).substring(2,6).toUpperCase();
+    return'DTH-'+datePart+'-'+rand;
+  };
+}
+
+// Shared core: every named operation below funnels through this one
+// function. Permission, existence, and transition-legality are checked
+// in exactly one place, so a new operation can never accidentally skip
+// one of them the way three of the weight-subsystem's writers did.
+async function _writeAnimalStatus(opts){
+  var animalId=opts.animalId;
+  if(!can('animals')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!animalId) return {ok:false, error:'رقم الحيوان مطلوب'};
+  if(_statusWriteInFlight[animalId]) return {ok:false, error:'جاري تنفيذ عملية أخرى على هذا الحيوان'};
+  _statusWriteInFlight[animalId]=true;
+  try{
+    var animal=await fbGetOne('animals',animalId);
+    if(!animal) return {ok:false, error:'الحيوان غير موجود'};
+    var fromStatus=animal.status||'alive';
+    if(opts.toStatus && !opts.allowFromAny){
+      var legal=_STATUS_TRANSITIONS[fromStatus]||[];
+      if(legal.indexOf(opts.toStatus)===-1){
+        return {ok:false, error:'انتقال غير مسموح: '+fromStatus+' ← '+opts.toStatus};
+      }
+    }
+    var patch=Object.assign({}, opts.fields||{});
+    if(opts.toStatus) patch.status=opts.toStatus;
+    await fbPatch('animals',animalId,patch);
+    fbCacheInvalidate('animals');
+    if(opts.activityMsg) await logActivity(opts.activityAction||'edit','animals',opts.activityMsg(animal));
+    return {ok:true, animal:Object.assign({},animal,patch)};
+  }catch(e){
+    return {ok:false, error:e.message||'خطأ غير معروف'};
+  }finally{
+    delete _statusWriteInFlight[animalId];
+  }
+}
+
+// ── Death (individual) ───────────────────────────────────
+window.markAnimalDead=function(opts){
+  opts=opts||{};
+  if(!opts.date) return Promise.resolve({ok:false, error:'تاريخ النفوق مطلوب'});
+  var fields={
+    died_at:opts.date, death_time:opts.time||null, death_reason:opts.reason||'غير معروف',
+    death_autopsy:!!opts.autopsy, death_loss:opts.loss||null,
+    death_id:opts.deathId||genDeathId(), death_notes:opts.notes||null
+  };
+  if(opts.batchId) fields.death_batch_id=opts.batchId;
+  return _writeAnimalStatus({
+    animalId:opts.animalId, toStatus:'dead',
+    fields:fields,
+    activityAction:'edit',
+    activityMsg:function(a){return 'تسجيل نفوق: '+(a.breed||'')+(a.tag?' #'+a.tag:'');}
+  });
+};
+
+// ── Death (bulk) ──────────────────────────────────────────
+window.markAnimalsDeadBulk=async function(opts){
+  opts=opts||{};
+  var ids=opts.animalIds||[];
+  var date=opts.date||todayStr();
+  var batchDeathId=(opts.deathId||'').trim()||genDeathId();
+  var perAnimalLoss=opts.totalLoss>0?Math.round((opts.totalLoss/ids.length)*100)/100:null;
+  var ok=0, failed=0;
+  for(var i=0;i<ids.length;i++){
+    var r=await window.markAnimalDead({
+      animalId:ids[i], date:date, time:opts.time, reason:opts.reason, autopsy:opts.autopsy,
+      loss:perAnimalLoss, notes:opts.notes, deathId:batchDeathId+'-'+(i+1), batchId:batchDeathId
+    });
+    if(r.ok)ok++; else failed++;
+  }
+  return {ok:failed===0, succeeded:ok, failed:failed};
+};
+
+// ── Restore (explicit admin override, dead -> alive) ─────
+window.restoreAnimal=function(opts){
+  return _writeAnimalStatus({
+    animalId:(opts||{}).animalId, toStatus:'alive', allowFromAny:true,
+    fields:{died_at:null, death_reason:null},
+    activityMsg:function(a){return 'استرجاع من النفوق: '+(a.breed||'')+(a.tag?' #'+a.tag:'');}
+  });
+};
+window.restoreAllDeadBulk=async function(){
+  var all=await fbGet('animals');
+  var dead=(all||[]).filter(function(a){return a.status==='dead';});
+  var ok=0;
+  for(var i=0;i<dead.length;i++){
+    var r=await window.restoreAnimal({animalId:dead[i]._id});
+    if(r.ok)ok++;
+  }
+  return {ok:true, restored:ok};
+};
+
+// ── Inventory correction (Phase 6) ───────────────────────
+// The formal replacement for the is_correction bolt-on: a count
+// correction is now its own real terminal status, 'removed', never
+// 'dead'. isRealDeath()/isMortalityCorrection() (already in this file)
+// need zero changes -- they already exclude anything that isn't
+// status==='dead', so a 'removed' record is automatically, trivially
+// excluded from mortality statistics rather than needing the is_correction
+// flag to be specifically checked. Old, already-written dead+is_correction
+// records stay correctly excluded too, by that same existing logic --
+// nothing needs to be migrated, only new writes change.
+window.correctAnimalCount=function(opts){
+  opts=opts||{};
+  return _writeAnimalStatus({
+    animalId:opts.animalId, toStatus:'removed',
+    fields:{removed_at:todayStr(), removed_reason:'inventory_correction', removed_source:opts.source||null},
+    activityMsg:function(a){return 'تصحيح عدد: '+(a.breed||'')+(a.tag?' #'+a.tag:'')+(opts.source?' — '+opts.source:'');}
+  });
+};
+
+// ── Sale (individual) ────────────────────────────────────
+window.sellAnimal=async function(opts){
+  opts=opts||{};
+  if(opts.price==null||isNaN(opts.price)||opts.price<0) return {ok:false, error:'يرجى إدخال سعر صحيح'};
+  var r=await _writeAnimalStatus({
+    animalId:opts.animalId, toStatus:'sold',
+    fields:{sold_date:opts.date||todayStr(), sold_price:opts.price, sold_to:opts.buyer||null, sold_phone:opts.phone||null, sold_notes:opts.notes||null},
+    activityMsg:function(a){return 'بيع: '+(a.breed||'')+(a.tag?' #'+a.tag:'');}
+  });
+  // skipFinance: for bulk callers that record ONE combined finance entry
+  // for a stated total themselves, rather than one per animal at the same
+  // price (which would incorrectly multiply a total into N full-amount
+  // entries -- the exact bug this flag exists to avoid).
+  if(r.ok && opts.price>0 && !opts.skipFinance){
+    await window.animalSale({amount:opts.price, date:opts.date||todayStr(), animalId:opts.animalId,
+      description:'بيع '+(r.animal.breed||'')+(r.animal.tag?' #'+r.animal.tag:'')+(opts.buyer?' — '+opts.buyer:'')});
+  }
+  return r;
+};
+
+// ── Sale (bulk) ───────────────────────────────────────────
+window.sellAnimalsBulk=async function(opts){
+  opts=opts||{};
+  var ids=opts.animalIds||[];
+  var ok=0, failed=0;
+  for(var i=0;i<ids.length;i++){
+    var r=await window.sellAnimal({animalId:ids[i], date:opts.date, price:opts.price, buyer:opts.buyer, skipFinance:opts.skipFinance});
+    if(r.ok)ok++; else failed++;
+  }
+  return {ok:failed===0, succeeded:ok, failed:failed};
+};
+
+// ── Quarantine ────────────────────────────────────────────
+window.quarantineAnimal=function(opts){
+  opts=opts||{};
+  if(!opts.reason) return Promise.resolve({ok:false, error:'يرجى إدخال سبب الحجر'});
+  return _writeAnimalStatus({
+    animalId:opts.animalId, toStatus:'quarantine',
+    fields:{quarantine_start:opts.date||todayStr(), quarantine_reason:opts.reason, quarantine_location:opts.location||null, quarantine_notes:opts.notes||null},
+    activityMsg:function(a){return 'نقل للحجر: '+opts.reason;}
+  });
+};
+window.releaseAnimalFromQuarantine=function(opts){
+  return _writeAnimalStatus({
+    animalId:(opts||{}).animalId, toStatus:'alive',
+    fields:{quarantine_end:todayStr()},
+    activityMsg:function(){return 'إخراج من الحجر الصحي';}
+  });
+};
+
+// ── Purpose (manual, not state-machine-constrained -- تربية/تسمين
+// may change freely in either direction at any time, per this
+// project's own earlier design; only 'birth' is excluded as a target
+// since it represents "not yet assigned", not a real destination) ──
+window.setAnimalPurpose=function(opts){
+  opts=opts||{};
+  var validTarget = opts.purpose==='tarbiya' || opts.purpose==='tasmeen' || (opts.purpose==='birth' && opts.allowBirthTarget);
+  if(!validTarget){
+    return Promise.resolve({ok:false, error:'غرض غير صالح'});
+  }
+  return _writeAnimalStatus({
+    animalId:opts.animalId, fields:{purpose:opts.purpose},
+    activityMsg:function(a){return 'تغيير الغرض: '+(a.breed||'')+(a.tag?' #'+a.tag:'')+' → '+(opts.purpose==='tarbiya'?'تربية':'تسمين');}
+  });
+};
+
+// ══════════════════════════════════════════════════════
+// Finance Service — the ONLY code allowed to create
+// financial transactions, anywhere in this project.
+// ══════════════════════════════════════════════════════
+// Phase 1 search found 13 separate direct-write call sites across 9
+// files (assistant.html, animals.html x4, dead.html, sheep.html, goats.html,
+// dashboard.html, animal-detail.html, shared.js x2, pages/finance.js) --
+// no prior shared abstraction existed at all, unlike Inventory (which
+// already had recordInventoryTransaction from earlier this session).
+//
+// Scoping decision, stated plainly rather than silently resolved:
+// pages/finance.js's existing submitFin() can EDIT an already-posted
+// entry via a plain fbPatch, which is in real tension with "finance must
+// be append-only, never silently modify balances." Converting that into
+// a proper reversing/correcting-entry workflow is a genuine UX design
+// question (what does "posted" vs "draft" mean to a user, how is a
+// correction presented) that this pass does not unilaterally resolve --
+// every NEW write below is a true, validated, complete append; the one
+// pre-existing edit path is left as-is and flagged here, not hidden.
+//
+// Plain functions, matching every other service in this file -- not a
+// FinanceService.X namespace object.
+
+var _financeWriteInFlight={};
+
+// Shared core: every named operation funnels through here. Permission,
+// required-field validation, and the full transaction shape (type,
+// source, reference, date, operator, reason, related_animal,
+// related_inventory_item, related_module -- Phase 5's exact field list)
+// are handled in exactly one place.
+async function _writeFinanceTransaction(opts){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.type || (opts.type!=='income' && opts.type!=='expense' && opts.type!=='loss')){
+    return {ok:false, error:'نوع معاملة غير صالح'};
+  }
+  var amount=parseFloat(opts.amount);
+  if(!amount || isNaN(amount) || amount<=0) return {ok:false, error:'يرجى إدخال مبلغ صحيح'};
+  var record={
+    type:opts.type, category:opts.category||'متنوع', amount:amount,
+    date:opts.date||todayStr(), description:opts.description||null,
+    source:opts.source||null, reference:opts.reference||null,
+    operator:(getUser()&&getUser().name)||null,
+    reason:opts.reason||null,
+    related_animal:opts.relatedAnimal||null,
+    related_inventory_item:opts.relatedInventoryItem||null,
+    related_module:opts.relatedModule||null,
+    added_by:(getUser()&&getUser().name)||null,
+    barn:opts.barn||null,
+  };
+  try{
+    var id=await fbPost('finance',record);
+    fbCacheInvalidate('finance');
+    if(opts.activityMsg) await logActivity('add','finance',opts.activityMsg(record));
+    return {ok:true, id:id, record:record};
+  }catch(e){
+    return {ok:false, error:e.message||'خطأ غير معروف'};
+  }
+}
+
+window.recordIncome=function(opts){
+  opts=opts||{};
+  return _writeFinanceTransaction(Object.assign({},opts,{type:'income',
+    activityMsg:function(r){return 'إيراد: '+r.category+' — '+ar(r.amount)+' '+getSettings().currency;}}));
+};
+window.recordExpense=function(opts){
+  opts=opts||{};
+  return _writeFinanceTransaction(Object.assign({},opts,{type:'expense',
+    activityMsg:function(r){return 'مصروف: '+r.category+' — '+ar(r.amount)+' '+getSettings().currency;}}));
+};
+// Distinct from recordExpense: the existing app already writes death
+// losses as type:'loss', not 'expense' -- preserved here exactly rather
+// than silently reclassified. Flagged, not fixed: finance.js's own
+// revenue/expense analytics currently buckets only type==='income' and
+// type==='expense' (confirmed by direct search), meaning 'loss' records
+// are presently invisible to the farm's own P&L summary. Whether losses
+// should count as expenses in that report is a business-logic decision
+// this pass surfaces rather than unilaterally makes.
+window.recordLoss=function(opts){
+  opts=opts||{};
+  return _writeFinanceTransaction(Object.assign({},opts,{type:'loss',
+    activityMsg:function(r){return 'خسارة: '+r.category+' — '+ar(r.amount)+' '+getSettings().currency;}}));
+};
+window.manualEntry=function(opts){
+  opts=opts||{};
+  return _writeFinanceTransaction(Object.assign({},opts,{relatedModule:'manual',
+    activityMsg:function(r){return (r.type==='income'?'إيراد':'مصروف')+' يدوي: '+r.category+' — '+ar(r.amount)+' '+getSettings().currency;}}));
+};
+
+// ── Cross-domain operations (Phase 6) ── these are the specific,
+// named financial consequences of an event in ANOTHER domain. They do
+// NOT themselves touch animals.status or inventory quantities -- Phase
+// 2's rule ("financial transactions must NEVER directly change
+// inventory") holds structurally, not just by convention, since these
+// functions only ever call _writeFinanceTransaction.
+window.animalSale=function(opts){
+  opts=opts||{};
+  return _writeFinanceTransaction({type:'income', category:'بيع', amount:opts.amount, date:opts.date,
+    description:opts.description, relatedAnimal:opts.animalId, relatedModule:'animals',
+    activityMsg:function(r){return 'بيع: '+ar(r.amount)+' '+getSettings().currency;}});
+};
+window.animalPurchase=function(opts){
+  opts=opts||{};
+  return _writeFinanceTransaction({type:'expense', category:'شراء حيوانات', amount:opts.amount, date:opts.date,
+    description:opts.description, relatedAnimal:opts.animalId, relatedModule:'animals',
+    activityMsg:function(r){return 'شراء حيوان: '+ar(r.amount)+' '+getSettings().currency;}});
+};
+window.feedPurchase=function(opts){
+  opts=opts||{};
+  return _writeFinanceTransaction({type:'expense', category:'أعلاف ومواد تغذية', amount:opts.amount, date:opts.date,
+    description:opts.description, relatedInventoryItem:opts.itemName, relatedModule:'inventory',
+    activityMsg:function(r){return 'شراء علف: '+ar(r.amount)+' '+getSettings().currency;}});
+};
+window.medicinePurchase=function(opts){
+  opts=opts||{};
+  return _writeFinanceTransaction({type:'expense', category:'أدوية وعلاجات', amount:opts.amount, date:opts.date,
+    description:opts.description, relatedInventoryItem:opts.itemName, relatedModule:'inventory',
+    activityMsg:function(r){return 'شراء دواء: '+ar(r.amount)+' '+getSettings().currency;}});
+};
+window.refund=function(opts){
+  opts=opts||{};
+  return _writeFinanceTransaction({type:'expense', category:opts.category||'استرجاع', amount:opts.amount, date:opts.date,
+    description:opts.description, reference:opts.originalReference||null, relatedModule:opts.relatedModule||null,
+    activityMsg:function(r){return 'استرجاع: '+ar(r.amount)+' '+getSettings().currency;}});
+};
+window.inventoryAdjustment=function(opts){
+  opts=opts||{};
+  // Per Phase 6: inventory correction affects inventory only, financial
+  // consequence is OPTIONAL and explicit, never silent -- this function
+  // exists specifically so a caller CHOOSES to record one, rather than
+  // one happening as an automatic side effect of a stock change.
+  return _writeFinanceTransaction({type:opts.type||'expense', category:'تسوية مخزون', amount:opts.amount, date:opts.date,
+    description:opts.description, relatedInventoryItem:opts.itemName, relatedModule:'inventory',
+    activityMsg:function(r){return 'تسوية مخزون: '+ar(r.amount)+' '+getSettings().currency;}});
+};
+
+// ══════════════════════════════════════════════════════
 // Farm Diary — historical snapshots
 // ══════════════════════════════════════════════════════
 // Collection: diary_snapshots/{YYYY-MM-DD} -- one entry per calendar day,
@@ -1380,10 +1897,34 @@ window.isTagTaken=async function(tag, excludeId){
 // same order, same weight-history behavior as the pre-existing inline
 // logic this replaces -- no behavior change for _ubSubmit's own callers.
 window.createOffspringAnimal=async function(p){
+  // Resolve mother/father to a real animal ID at birth time -- either
+  // explicitly passed (preferred, when the caller already has it) or
+  // resolved from the tag (best-effort; if the tag doesn't resolve to
+  // exactly one real animal, the ID link is simply left null rather than
+  // guessed -- repairGenealogy() exists specifically to catch and flag
+  // these cases later, not this hot path).
+  // Identity Resolution Rule: a tag is resolved to an ID exactly once.
+  // motherId===undefined means the caller never attempted resolution --
+  // resolve it here. motherId===null (explicitly) means a caller like
+  // breeding.js already tried and the tag genuinely didn't match a real
+  // animal -- that is not re-attempted here, since the underlying data
+  // hasn't changed between then and now and would only re-fail
+  // identically, which is redundant work, not a second chance at a
+  // different answer.
+  var motherId=p.motherId!==undefined?p.motherId:null;
+  if(p.motherId===undefined && p.motherTag){
+    var motherAnimal=await window.findByTag(p.motherTag);
+    if(motherAnimal) motherId=motherAnimal._id;
+  }
+  var fatherId=p.fatherId!==undefined?p.fatherId:null;
+  if(p.fatherId===undefined && p.fatherTag){
+    var fatherAnimal=await window.findByTag(p.fatherTag);
+    if(fatherAnimal) fatherId=fatherAnimal._id;
+  }
   const rec={species:p.species,breed:p.breed,gender:p.gender,purpose:p.purpose,status:'alive',birth_date:p.birthDate,
     tag:p.tag||await generateAnimalTag(p.species),
-    mother_tag:p.motherTag,mother_breed:p.motherBreed,
-    father_tag:p.fatherTag||null,
+    mother_tag:p.motherTag,mother_breed:p.motherBreed,mother_id:motherId,
+    father_tag:p.fatherTag||null,father_id:fatherId,
     birth_weight:p.weight||null,barn:p.barn||null,notes:p.notes||null};
   const newAnimalId=await fbPost('animals',rec);
   if(p.weight){
@@ -2876,13 +3417,373 @@ window.recordInventoryTransaction = async function(itemType, itemName, deltaQty,
     };
     await fbPost('inventory_transactions', record);
 
-    // Purchase -> Finance linking (closes a confirmed gap, feeds only,
-    // since only inventory_feeds carries cost_per_unit today).
-    if(reason==='purchase' && itemType==='feeds' && deltaQty>0 && item.cost_per_unit>0){
-      try{
-        await fbPost('finance', { date:todayStr(), type:'expense', category:'أعلاف ومواد تغذية', amount:Math.round(deltaQty*item.cost_per_unit*100)/100, description:'شراء '+itemName+' — '+ar(deltaQty)+' '+(item.unit||''), added_by:(getUser()&&getUser().name)||null });
-      }catch(e){}
-    }
-    return { matched:true, before:before, after:after, actualDelta:after-before, clamped:(after-before)!==deltaQty };
+    return { matched:true, before:before, after:after, actualDelta:after-before, clamped:(after-before)!==deltaQty, item:item };
   }catch(e){ return null; }
 };
+
+// ══════════════════════════════════════════════════════
+// Inventory Service — named operations layered on the
+// existing ledger engine above.
+// ══════════════════════════════════════════════════════
+// recordInventoryTransaction() (v1.7, built earlier this session) was
+// ALREADY the only real writer of inventory quantities -- confirmed by
+// a repository-wide search finding zero direct fbPatch('inventory_feeds'
+// / 'inventory_meds', ...) calls anywhere. What was missing: named
+// operations matching this task's actual vocabulary, a fix for the one
+// real bypass found (submitInv(), the add/edit item form, which wrote
+// quantity directly on a dynamic table variable -- invisible to a plain
+// string search, the same class of gap Weight and Status both had), and
+// separating the embedded feeds-only finance link above into an
+// explicit, symmetric call available to both feeds and medicine.
+//
+// transferStock() updates the item's storage-location (barn) metadata,
+// not a quantity split across locations -- this project's inventory
+// model has no per-location stock (unlike animals, which do have a
+// transferable barn field with real precedent). Documented here rather
+// than inventing a multi-location model this codebase doesn't have.
+
+window.purchaseFeed=async function(opts){
+  opts=opts||{};
+  var r=await window.recordInventoryTransaction('feeds', opts.itemName, Math.abs(opts.quantity||0), 'purchase', opts.sourceId||null);
+  if(!r||!r.matched) return {ok:false, error:r?'الصنف غير موجود':'خطأ في تسجيل الحركة'};
+  var cost=opts.totalCost!=null ? opts.totalCost : (r.item.cost_per_unit>0 ? Math.round(Math.abs(opts.quantity)*r.item.cost_per_unit*100)/100 : null);
+  if(cost>0) await window.feedPurchase({amount:cost, date:opts.date, itemName:opts.itemName, description:'شراء '+opts.itemName+' — '+ar(Math.abs(opts.quantity))+' '+(r.item.unit||'')});
+  return {ok:true, before:r.before, after:r.after};
+};
+window.purchaseMedicine=async function(opts){
+  opts=opts||{};
+  var r=await window.recordInventoryTransaction('meds', opts.itemName, Math.abs(opts.quantity||0), 'purchase', opts.sourceId||null);
+  if(!r||!r.matched) return {ok:false, error:r?'الصنف غير موجود':'خطأ في تسجيل الحركة'};
+  var cost=opts.totalCost!=null ? opts.totalCost : (r.item.cost_per_unit>0 ? Math.round(Math.abs(opts.quantity)*r.item.cost_per_unit*100)/100 : null);
+  if(cost>0) await window.medicinePurchase({amount:cost, date:opts.date, itemName:opts.itemName, description:'شراء '+opts.itemName+' — '+ar(Math.abs(opts.quantity))+' '+(r.item.unit||'')});
+  return {ok:true, before:r.before, after:r.after};
+};
+window.consumeFeed=async function(opts){
+  opts=opts||{};
+  var r=await window.recordInventoryTransaction('feeds', opts.itemName, -Math.abs(opts.quantity||0), opts.reason||'feeding', opts.sourceId||null);
+  return r&&r.matched ? {ok:true, before:r.before, after:r.after} : {ok:false, error:r?'الصنف غير موجود':'خطأ في تسجيل الحركة'};
+};
+window.consumeMedicine=async function(opts){
+  opts=opts||{};
+  var r=await window.recordInventoryTransaction('meds', opts.itemName, -Math.abs(opts.quantity||0), opts.reason||'treatment', opts.sourceId||null);
+  return r&&r.matched ? {ok:true, before:r.before, after:r.after} : {ok:false, error:r?'الصنف غير موجود':'خطأ في تسجيل الحركة'};
+};
+window.expireStock=async function(opts){
+  opts=opts||{};
+  var r=await window.recordInventoryTransaction(opts.itemType, opts.itemName, -Math.abs(opts.quantity||0), 'expiry', opts.sourceId||null);
+  return r&&r.matched ? {ok:true, before:r.before, after:r.after} : {ok:false, error:r?'الصنف غير موجود':'خطأ في تسجيل الحركة'};
+};
+window.returnStock=async function(opts){
+  opts=opts||{};
+  var r=await window.recordInventoryTransaction(opts.itemType, opts.itemName, Math.abs(opts.quantity||0), 'return', opts.sourceId||null);
+  return r&&r.matched ? {ok:true, before:r.before, after:r.after} : {ok:false, error:r?'الصنف غير موجود':'خطأ في تسجيل الحركة'};
+};
+window.stockAdjustment=async function(opts){
+  opts=opts||{};
+  var r=await window.recordInventoryTransaction(opts.itemType, opts.itemName, opts.deltaQty||0, 'adjustment', opts.sourceId||null);
+  return r&&r.matched ? {ok:true, before:r.before, after:r.after} : {ok:false, error:r?'الصنف غير موجود':'خطأ في تسجيل الحركة'};
+};
+// Inventory correction: quantity being CORRECTED to a known-true value
+// (not a delta) -- computes the delta internally, same reasoning as
+// Animal Status's correctAnimalCount(), same 'never silently' spirit:
+// the correction is a real, visible ledger entry, not an overwrite.
+window.inventoryCorrection=async function(opts){
+  opts=opts||{};
+  var table=INVENTORY_COLLECTION[opts.itemType];
+  if(!table) return {ok:false, error:'نوع صنف غير صالح'};
+  var items=await fbGet(table);
+  var item=(items||[]).find(function(i){return i.name===opts.itemName;});
+  if(!item) return {ok:false, error:'الصنف غير موجود'};
+  var delta=(opts.newQuantity||0)-(+item.quantity||0);
+  if(delta===0) return {ok:true, before:item.quantity, after:item.quantity, unchanged:true};
+  var r=await window.recordInventoryTransaction(opts.itemType, opts.itemName, delta, 'correction', opts.sourceId||null);
+  return r&&r.matched ? {ok:true, before:r.before, after:r.after} : {ok:false, error:'خطأ في تسجيل التصحيح'};
+};
+window.transferStock=async function(opts){
+  opts=opts||{};
+  var table=INVENTORY_COLLECTION[opts.itemType];
+  if(!table) return {ok:false, error:'نوع صنف غير صالح'};
+  var items=await fbGet(table);
+  var item=(items||[]).find(function(i){return i.name===opts.itemName;});
+  if(!item) return {ok:false, error:'الصنف غير موجود'};
+  try{
+    await fbPatch(table, item._id, {barn:opts.toBarn||null});
+    await logActivity('edit','inventory','نقل '+opts.itemName+' إلى '+(opts.toBarn||'—'));
+    fbCacheInvalidate(table);
+    return {ok:true};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+// Initial stock: creates a NEW item (metadata only, no quantity field on
+// the create itself) then establishes its starting quantity as a real
+// ledger entry -- this is the direct fix for submitInv()'s creation
+// path, which previously wrote quantity as just another form field.
+window.initialStock=async function(opts){
+  opts=opts||{};
+  if(!can('inventory')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var table=INVENTORY_COLLECTION[opts.itemType];
+  if(!table || !opts.name) return {ok:false, error:'بيانات ناقصة'};
+  var meta=Object.assign({}, opts.fields||{}, {name:opts.name, quantity:0});
+  try{
+    var id=await fbPost(table, meta);
+    await logActivity('add','inventory','إضافة: '+opts.name);
+    fbCacheInvalidate(table);
+    if(opts.quantity>0){
+      await window.recordInventoryTransaction(opts.itemType, opts.name, opts.quantity, 'initial', id);
+    }
+    return {ok:true, id:id};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+window.bulkImportInventory=async function(opts){
+  opts=opts||{};
+  var items=opts.items||[];
+  var ok=0, failed=0;
+  for(var i=0;i<items.length;i++){
+    var it=items[i];
+    var r=await window.initialStock({itemType:opts.itemType, name:it.name, quantity:it.quantity||0, fields:it.fields||{}});
+    if(r.ok)ok++; else failed++;
+  }
+  return {ok:failed===0, succeeded:ok, failed:failed};
+};
+
+// ══════════════════════════════════════════════════════
+// Animal Identity Service
+// ══════════════════════════════════════════════════════
+// Phase 1 search found the real problem, and it is not "animals lack a
+// permanent identity" -- animals._id (a Firebase push key) already is
+// one: immutable by construction, confirmed already used for navigation
+// in pedigree.js. The real, verified problem is that RELATIONSHIPS use
+// the mutable `tag` string instead of that already-permanent _id:
+//   - createOffspringAnimal() (the shared birth-creation function used
+//     by breeding.js and the AI assistant) has NEVER written an
+//     ID-based parent link -- only mother_tag/father_tag strings, since
+//     this project's inception.
+//   - animal-detail.html's OWN separate offspring-registration form
+//     (openAddOffspring-equivalent) DOES already write mother_id --
+//     one inconsistent field, in exactly one place, confirmed by search.
+//     Adopted as the canonical name below rather than inventing a
+//     different one, since it already exists and nothing else conflicts
+//     with it.
+//   - pedigree.js, the entire genealogy/family-tree page, resolves
+//     every relationship via _allAnimals.find(a => a.tag === tag). Any
+//     tag rename silently breaks every pedigree link pointing at that
+//     animal -- not a hypothetical, a direct read of the live traversal
+//     code.
+//   - breeding.js's female-tag field and animal-detail.html's own
+//     mother_tag/father_tag edit fields are plain text inputs with zero
+//     validation against the real roster (confirmed, matches this
+//     session's earlier business-logic audit).
+//   - health.js stores animal_tag only, with its own code comment
+//     admitting the fragility ("carry animal_tag, not animal_id, so
+//     resolve it first") -- resolution happens downstream, by tag, at
+//     read time, which is exactly the failure mode a tag rename creates.
+//
+// Scoping decision, stated plainly: mergeAnimals() and archiveAnimal()
+// (Ahmed's Phase 5 list) are NOT built here. Both are high-risk,
+// low-frequency operations (merging two animal records touches every
+// collection that could reference either one; archiving needs its own
+// answer to "what does an archived animal look like everywhere it's
+// referenced") that deserve their own focused design and explicit
+// sign-off, not a bolt-on inside an already-large rebuild. What IS built
+// covers the actual, verified, everyday risk: a tag getting renamed (or
+// mistyped) and silently breaking a real relationship.
+
+// ── findAnimal / findByTag ── thin, safe lookup helpers other
+// services and pages can share instead of each writing their own
+// _allAnimals.find(...) inline (which is how the tag-based fragility
+// spread to begin with -- eleven separate inline implementations found
+// across the files searched this session).
+window.findAnimal=async function(animalId){
+  if(!animalId) return null;
+  return await fbGetOne('animals', animalId);
+};
+window.findByTag=async function(tag){
+  if(!tag) return null;
+  var all=await fbGet('animals');
+  return (all||[]).find(function(a){ return a.tag===tag; }) || null;
+};
+
+// ── renameTag ── THE core safety operation this task actually needs.
+// Checks uniqueness (reusing the existing isTagTaken(), not duplicating
+// it), preserves the old tag in a searchable history array, and never
+// touches _id -- identity is untouched by construction, since nothing
+// here writes to it.
+window.renameTag=async function(opts){
+  opts=opts||{};
+  if(!can('animals')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var animalId=opts.animalId, newTag=(opts.newTag||'').trim();
+  if(!animalId || !newTag) return {ok:false, error:'بيانات ناقصة'};
+  var animal=await fbGetOne('animals', animalId);
+  if(!animal) return {ok:false, error:'الحيوان غير موجود'};
+  if(newTag===animal.tag) return {ok:true, unchanged:true};
+  if(await window.isTagTaken(newTag, animalId)){
+    return {ok:false, error:'رقم الترقيم "'+newTag+'" مستخدم بالفعل لحيوان آخر'};
+  }
+  var priorTags=(animal.previous_tags||[]).slice();
+  if(animal.tag) priorTags.push({tag:animal.tag, until:todayStr()});
+  try{
+    await fbPatch('animals', animalId, {tag:newTag, previous_tags:priorTags});
+    fbCacheInvalidate('animals');
+    await logActivity('edit','animals','تغيير الترقيم: '+(animal.tag||'—')+' → '+newTag);
+    return {ok:true, oldTag:animal.tag, newTag:newTag};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// ── linkParents / unlinkParents ── writes the canonical ID-based
+// relationship (mother_id/father_id) alongside the existing display
+// fields (mother_tag/father_tag kept in sync, same cached-projection
+// pattern as current_weight) -- never the tag fields alone.
+window.linkParents=async function(opts){
+  opts=opts||{};
+  if(!can('animals')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var animalId=opts.animalId;
+  if(!animalId) return {ok:false, error:'بيانات ناقصة'};
+  var fields={};
+  if(opts.motherId!==undefined){
+    var mother=opts.motherId?await fbGetOne('animals',opts.motherId):null;
+    if(opts.motherId && !mother) return {ok:false, error:'الأم غير موجودة'};
+    fields.mother_id=opts.motherId||null;
+    fields.mother_tag=mother?mother.tag:null;
+    fields.mother_breed=mother?mother.breed:null;
+  }
+  if(opts.fatherId!==undefined){
+    var father=opts.fatherId?await fbGetOne('animals',opts.fatherId):null;
+    if(opts.fatherId && !father) return {ok:false, error:'الأب غير موجود'};
+    fields.father_id=opts.fatherId||null;
+    fields.father_tag=father?father.tag:null;
+  }
+  if(!Object.keys(fields).length) return {ok:false, error:'لا يوجد ما يتغير'};
+  try{
+    await fbPatch('animals', animalId, fields);
+    fbCacheInvalidate('animals');
+    await logActivity('edit','animals','ربط الأنساب');
+    return {ok:true};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+window.unlinkParents=async function(opts){
+  opts=opts||{};
+  return window.linkParents({animalId:(opts||{}).animalId, motherId:null, fatherId:null});
+};
+
+// ── repairGenealogy ── audit tool: for every animal with a mother_tag
+// but no mother_id (the entire birth history prior to this rebuild),
+// attempt to resolve the tag to a real animal and backfill the ID link.
+// Read-only where it can't resolve confidently -- never guesses, never
+// silently drops a relationship it can't verify. This is the migration
+// this task's Phase 8 asks for, run as an idempotent, re-runnable
+// repair rather than a one-time destructive script.
+window.repairGenealogy=async function(){
+  if(!can('admin')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var all=await fbGet('animals')||[];
+  var byTag={};
+  all.forEach(function(a){ if(a.tag) byTag[a.tag]=a; });
+  var repaired=0, ambiguousTags=[], unresolvedTags=[];
+  var tagCounts={};
+  all.forEach(function(a){ if(a.tag) tagCounts[a.tag]=(tagCounts[a.tag]||0)+1; });
+  for(var i=0;i<all.length;i++){
+    var a=all[i];
+    var fields={};
+    if(a.mother_tag && !a.mother_id){
+      if(tagCounts[a.mother_tag]>1){ ambiguousTags.push({animalId:a._id, tag:a.mother_tag, role:'mother'}); }
+      else if(byTag[a.mother_tag]){ fields.mother_id=byTag[a.mother_tag]._id; }
+      else{ unresolvedTags.push({animalId:a._id, tag:a.mother_tag, role:'mother'}); }
+    }
+    if(a.father_tag && !a.father_id){
+      if(tagCounts[a.father_tag]>1){ ambiguousTags.push({animalId:a._id, tag:a.father_tag, role:'father'}); }
+      else if(byTag[a.father_tag]){ fields.father_id=byTag[a.father_tag]._id; }
+      else{ unresolvedTags.push({animalId:a._id, tag:a.father_tag, role:'father'}); }
+    }
+    if(Object.keys(fields).length){
+      try{ await fbPatch('animals', a._id, fields); repaired++; }catch(e){}
+    }
+  }
+  if(repaired>0) await logActivity('edit','animals','إصلاح الأنساب: '+ar(repaired)+' سجل');
+  fbCacheInvalidate('animals');
+  return {ok:true, repaired:repaired, ambiguous:ambiguousTags, unresolved:unresolvedTags};
+};
+
+// ── checkGenealogyIntegrity ── read-only diagnostic, never modifies
+// data. Covers every check this task's Data Integrity section asks for.
+// "Symmetric" here means: if A is recorded as B's parent, B should be
+// findable in A's own offspring set -- true by construction once both
+// sides resolve through the same ID, which is exactly what this checks
+// for rather than assuming.
+window.checkGenealogyIntegrity=async function(){
+  var all=await fbGet('animals')||[];
+  var byId={}; all.forEach(function(a){ byId[a._id]=a; });
+  var report={
+    total:all.length, checked_at:new Date().toISOString(),
+    cycles:[], self_parent:[], duplicate_parent:[],
+    cross_species_parent:[], dead_parent:[], deleted_parent_reference:[],
+    unknown_parent:[], future_birth_date:[], gender_mismatch:[]
+  };
+  var today=todayStr();
+  for(var i=0;i<all.length;i++){
+    var a=all[i];
+    var hasMother = !!(a.mother_id||a.mother_tag);
+    var hasFather = !!(a.father_id||a.father_tag);
+    if(!hasMother && !hasFather) report.unknown_parent.push(a._id);
+
+    // self-parent
+    if(a.mother_id===a._id || a.father_id===a._id) report.self_parent.push(a._id);
+
+    // duplicate parent (same animal recorded as both mother and father)
+    if(a.mother_id && a.mother_id===a.father_id) report.duplicate_parent.push(a._id);
+
+    // deleted/missing parent reference (ID set, but no such animal exists)
+    if(a.mother_id && !byId[a.mother_id]) report.deleted_parent_reference.push({animalId:a._id, role:'mother', missingId:a.mother_id});
+    if(a.father_id && !byId[a.father_id]) report.deleted_parent_reference.push({animalId:a._id, role:'father', missingId:a.father_id});
+
+    // cross-species / dead parent (only checkable when the ID resolves)
+    if(a.mother_id && byId[a.mother_id]){
+      var m=byId[a.mother_id];
+      if(m.species && a.species && m.species!==a.species) report.cross_species_parent.push({animalId:a._id, role:'mother', parentId:m._id});
+      if(m.status==='dead' && a.birth_date && m.died_at && a.birth_date>m.died_at) report.dead_parent.push({animalId:a._id, role:'mother', parentId:m._id, note:'birth recorded after mother\'s recorded death date'});
+    }
+    if(a.father_id && byId[a.father_id]){
+      var f=byId[a.father_id];
+      if(f.species && a.species && f.species!==a.species) report.cross_species_parent.push({animalId:a._id, role:'father', parentId:f._id});
+    }
+
+    // future birth date
+    if(a.birth_date && a.birth_date>today) report.future_birth_date.push(a._id);
+  }
+
+  // Gender consistency, replacing an earlier, vacuous "asymmetry" check.
+  // This app deliberately stores only one direction of the relationship
+  // (mother_id on the child; no separate children[] array on the parent
+  // to duplicate and risk drifting out of sync with it) -- so there is
+  // no second stored direction to compare against for asymmetry. What
+  // IS real and checkable: does mother_id actually point at a female
+  // animal, father_id at a male one. Caught by measuring, not assumed:
+  // the original version filtered the full array against the animal's
+  // own field, which by construction always includes the animal itself
+  // and could never detect anything -- also the source of a real,
+  // measured O(n^2) cost at 10k animals (1.3s), now gone along with the
+  // bug, since this check is O(1) per animal.
+  for(var j=0;j<all.length;j++){
+    var animal=all[j];
+    if(animal.mother_id && byId[animal.mother_id]){
+      var m=byId[animal.mother_id];
+      if(m.gender && m.gender!=='female') report.gender_mismatch.push({animalId:animal._id, role:'mother', parentId:m._id, parentGender:m.gender});
+      // cycle: does this animal appear as an ANCESTOR of its own recorded mother?
+      var seen={}, cur=byId[animal.mother_id], depth=0;
+      while(cur && depth<50){
+        if(cur._id===animal._id){ report.cycles.push({animalId:animal._id, throughId:animal.mother_id}); break; }
+        if(seen[cur._id]) break;
+        seen[cur._id]=true;
+        cur = cur.mother_id ? byId[cur.mother_id] : null;
+        depth++;
+      }
+    }
+    if(animal.father_id && byId[animal.father_id]){
+      var f2=byId[animal.father_id];
+      if(f2.gender && f2.gender!=='male') report.gender_mismatch.push({animalId:animal._id, role:'father', parentId:f2._id, parentGender:f2.gender});
+    }
+  }
+
+  report.clean = report.cycles.length===0 && report.self_parent.length===0 &&
+    report.duplicate_parent.length===0 && report.cross_species_parent.length===0 &&
+    report.deleted_parent_reference.length===0 && report.future_birth_date.length===0 && report.gender_mismatch.length===0;
+  return report;
+};
+

@@ -289,22 +289,13 @@ window.submitDeathGoat=async function(){
   if(!id){toast('اختر حيواناً','error');return;}
   if(!date){toast('حدد تاريخ النفوق','error');return;}
 
-  var patch={
-    status:'dead',died_at:date,death_time:time||null,
-    death_reason:reason,death_autopsy:autopsy,
-    death_loss:loss||null,death_id:deathId,death_notes:notes
-  };
   closeModal();
   toast('جاري التسجيل...','info');
   try{
-    await fbPatch('animals',id,patch);
+    const r=await window.markAnimalDead({animalId:id, date:date, time:time, reason:reason, autopsy:autopsy, loss:loss, notes:notes, deathId:deathId});
+    if(!r.ok) throw new Error(r.error);
     if(loss>0){
-      await fbPost('finance',{
-        date:date,type:'loss',category:'نفوق حيوانات',
-        amount:loss,
-        description:'نفوق — '+deathId+(reason?' | '+reason:''),
-        added_by:getUser()?.name
-      });
+      await window.recordLoss({date:date,category:'نفوق حيوانات',amount:loss,description:'نفوق — '+deathId+(reason?' | '+reason:''),relatedAnimal:id,relatedModule:'animals'});
     }
     await logActivity('edit','animals','نفوق: '+deathId+' | '+reason+(autopsy?' | تشريح':''));
     toast('✅ تم تسجيل النفوق — '+deathId);
@@ -392,7 +383,7 @@ window.submitBreedEdit=async function(){
     } else {
       var toRemove=_animals.filter(function(a){return a.status==='alive'&&a.species===d.sp&&a.breed===d.breed&&a.gender===cat[0]&&a.purpose===cat[1];}).slice(0,Math.abs(diff));
       for(var j=0;j<toRemove.length;j++){
-        try{await fbPatch('animals',toRemove[j]._id,{status:'dead',died_at:todayStr(),death_reason:'تعديل من صفحة السلالة',is_correction:true});removed++;}catch(e){}
+        try{const r=await window.correctAnimalCount({animalId:toRemove[j]._id, source:'صفحة السلالة'}); if(r.ok)removed++;}catch(e){}
       }
     }
   }

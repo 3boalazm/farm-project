@@ -150,8 +150,10 @@ window.completeHealth=async function(id){
     // first set -- discovered gap (docs/features/WORKFLOW-DISCOVERY.md).
     // Recommendation reuses evaluateHealthRisk() live, never re-scores.
     if(window.completeWorkflow && r){
-      const animals=await fbGet('animals');
-      const animal=animals.find(function(a){return a.tag===r.animal_tag;});
+      // ID-first, tag-fallback: records saved after this session's fix
+      // already carry animal_id (a single-item fetch); older records
+      // fall back to the tag-based lookup this always used.
+      const animal = r.animal_id ? await window.findAnimal(r.animal_id) : (await fbGet('animals')).find(function(a){return a.tag===r.animal_tag;});
       window.completeWorkflow('medication', { sourceId:id, animalId:animal?animal._id:null, animalTag:r.animal_tag, barn:animal?animal.barn:null }).then(function(res){
         if(res&&res.recommendation&&res.recommendation.text&&res.recommendation.actionable!==false)toast('💡 '+res.recommendation.text,'info');
       }).catch(function(){});
@@ -256,7 +258,14 @@ window.submitHealth=async function(){
   if(!diag||!med){toast('يرجى إدخال التشخيص والدواء','error');return;}
   const tend=document.getElementById('h-tend').value;const wdays=+document.getElementById('h-wdays').value||0;
   let withdrawal_end='';if(tend&&wdays>0){const dt=new Date(tend);dt.setDate(dt.getDate()+wdays);withdrawal_end=dt.toISOString().slice(0,10);}
-  const data={animal_tag:document.getElementById('h-tag').value.trim(),animal_breed:document.getElementById('h-breed').value,animal_species:document.getElementById('h-sp').value,barn:document.getElementById('h-barn').value,date:document.getElementById('h-date').value,vet_name:document.getElementById('h-vet').value.trim()||null,diagnosis:diag,medication:med,dosage:document.getElementById('h-dose').value.trim(),withdrawal_days:wdays,treatment_end:tend,withdrawal_end:withdrawal_end||null,bcs:document.getElementById('h-bcs').value||null,status:document.getElementById('h-stat').value,notes:document.getElementById('h-notes').value.trim()||null};
+  const animalTag=document.getElementById('h-tag').value.trim();
+  // Resolved ONCE, here, before the record is saved -- so the stored
+  // health record itself carries animal_id, and every downstream use
+  // (risk evaluation, inventory deduction, workflow) reuses this same
+  // resolution instead of each doing its own separate fbGet/find.
+  const matchedAnimal=animalTag?await window.findByTag(animalTag):null;
+  if(animalTag && !matchedAnimal) toast('تنبيه: لم يتم العثور على حيوان بهذا الرقم — سيتم الحفظ كنص فقط','warning');
+  const data={animal_tag:animalTag,animal_id:matchedAnimal?matchedAnimal._id:null,animal_breed:document.getElementById('h-breed').value,animal_species:document.getElementById('h-sp').value,barn:document.getElementById('h-barn').value,date:document.getElementById('h-date').value,vet_name:document.getElementById('h-vet').value.trim()||null,diagnosis:diag,medication:med,dosage:document.getElementById('h-dose').value.trim(),withdrawal_days:wdays,treatment_end:tend,withdrawal_end:withdrawal_end||null,bcs:document.getElementById('h-bcs').value||null,status:document.getElementById('h-stat').value,notes:document.getElementById('h-notes').value.trim()||null};
   closeModal();toast('جاري الحفظ...','info');
   try{
     let healthId=editHealthId;
@@ -267,13 +276,11 @@ window.submitHealth=async function(){
     if(data.withdrawal_end&&window.autoGenerateTask){
       window.autoGenerateTask('medication_followup',{sourceId:healthId,animal_tag:data.animal_tag,withdrawal_end:data.withdrawal_end,barn:data.barn}).catch(function(){});
     }
-    // Sprint 3, Epic 3: attach health risk evaluation -- health records
-    // carry animal_tag, not animal_id, so resolve it first. Fire-and-
-    // forget; never blocks on failure or delays the save above.
-    if(window.evaluateHealthRisk&&data.animal_tag){
-      fbGet('animals').then(function(allAnimals){
-        var match=(allAnimals||[]).find(function(a){return a.tag===data.animal_tag;});
-        if(match){
+    // Sprint 3, Epic 3: attach health risk evaluation -- reuses the SAME
+    // resolution from above (matchedAnimal), no second fbGet('animals').
+    // Fire-and-forget; never blocks on failure or delays the save above.
+    if(window.evaluateHealthRisk&&matchedAnimal){
+      (function(match){
           window.evaluateHealthRisk(match._id, match.tag, match.barn);
           // Sprint 14 (v1.7): deduct medication stock -- Best Effort,
           // never blocks the health record itself (already saved above).
@@ -288,8 +295,7 @@ window.submitHealth=async function(){
               if(r&&r.recommendation&&r.recommendation.text&&r.recommendation.actionable!==false)toast('💡 '+r.recommendation.text,'info');
             }).catch(function(){});
           }
-        }
-      }).catch(function(){});
+      })(matchedAnimal);
     }
     toast(editHealthId?'تم التحديث':'تمت الإضافة');
     healthRecs=await fbGet('health');renderHealthPage(getSettings());

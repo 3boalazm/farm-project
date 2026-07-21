@@ -100,39 +100,55 @@ function renderEmpty() {
 // ══════════════════════════════════════════
 //  Tree Renderer
 // ══════════════════════════════════════════
+// ID-first, tag-fallback throughout: prefers mother_id/father_id (immune
+// to tag renames and tag reuse -- the actual bug this rebuild exists to
+// close) and falls back to tag matching only for animals not yet linked
+// by repairGenealogy(). Once an ID link exists it is authoritative --
+// deliberately NOT also checked against tag, so a different animal later
+// reusing an old tag string can never be confused for the real parent.
+function resolveParent(animal, role) {
+  var id = role==='mother' ? animal.mother_id : animal.father_id;
+  var tag = role==='mother' ? animal.mother_tag : animal.father_tag;
+  if (id) return _allAnimals.find(a => a._id === id) || null;
+  return tag ? findAnimalByTag(tag) : null;
+}
+function isChildOf(candidate, parent, role) {
+  var idField = role==='mother' ? 'mother_id' : 'father_id';
+  var tagField = role==='mother' ? 'mother_tag' : 'father_tag';
+  if (candidate[idField]) return candidate[idField] === parent._id;
+  return !!(parent.tag && candidate[tagField] === parent.tag);
+}
 function renderTree(animal) {
   // Find parents
-  const mother = findAnimalByTag(animal.mother_tag);
-  const father = findAnimalByTag(animal.father_tag);
+  const mother = resolveParent(animal, 'mother');
+  const father = resolveParent(animal, 'father');
 
   // Find grandparents
-  const motherMom = mother ? findAnimalByTag(mother.mother_tag) : null;
-  const motherDad = mother ? findAnimalByTag(mother.father_tag) : null;
-  const fatherMom = father ? findAnimalByTag(father.mother_tag) : null;
-  const fatherDad = father ? findAnimalByTag(father.father_tag) : null;
+  const motherMom = mother ? resolveParent(mother, 'mother') : null;
+  const motherDad = mother ? resolveParent(mother, 'father') : null;
+  const fatherMom = father ? resolveParent(father, 'mother') : null;
+  const fatherDad = father ? resolveParent(father, 'father') : null;
 
   // Find siblings (same mother or father, exclude self)
-  const siblings = animal.mother_tag
+  const siblings = (animal.mother_id || animal.mother_tag)
     ? _allAnimals.filter(a =>
         a._id !== animal._id &&
-        a.mother_tag === animal.mother_tag &&
+        isChildOf(a, mother || {_id:animal.mother_id, tag:animal.mother_tag}, 'mother') &&
         a.status !== 'dead'
       ).slice(0, 6)
     : [];
 
   // Find offspring (animals where this animal is the parent)
   const offspring = _allAnimals.filter(a =>
-    (animal.tag && (a.mother_tag === animal.tag || a.father_tag === animal.tag))
+    isChildOf(a, animal, 'mother') || isChildOf(a, animal, 'father')
   );
 
   // Find grand-offspring
   const grandOffspring = [];
   offspring.forEach(o => {
-    if (o.tag) {
-      _allAnimals.filter(a => a.mother_tag === o.tag || a.father_tag === o.tag).forEach(g => {
-        if (!grandOffspring.find(x => x._id === g._id)) grandOffspring.push(g);
-      });
-    }
+    _allAnimals.filter(a => isChildOf(a, o, 'mother') || isChildOf(a, o, 'father')).forEach(g => {
+      if (!grandOffspring.find(x => x._id === g._id)) grandOffspring.push(g);
+    });
   });
 
   return `

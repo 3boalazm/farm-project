@@ -164,11 +164,24 @@ window.updateFinCats=function(){const t=document.getElementById('f-type').value;
 window.submitFin=async function(){
   const amount=+document.getElementById('f-amount').value;const cat=document.getElementById('f-cat').value;
   if(!amount||!cat){toast('يرجى إدخال المبلغ والفئة','error');return;}
-  const data={date:document.getElementById('f-date').value,type:document.getElementById('f-type').value,category:cat,amount,description:document.getElementById('f-desc').value.trim()||null,barn:document.getElementById('f-barn').value||null,added_by:document.getElementById('f-by')?.value.trim()||getUser()?.name||null};
+  const type=document.getElementById('f-type').value;
+  const date=document.getElementById('f-date').value;
+  const description=document.getElementById('f-desc').value.trim()||null;
+  const barn=document.getElementById('f-barn').value||null;
   closeModal();toast('جاري الحفظ...','info');
   try{
-    if(editFinId){await fbPatch('finance',editFinId,data);await logActivity('edit','finance',`تعديل معاملة: ${cat} ${amount}`);}
-    else{await fbPost('finance',data);await logActivity('add','finance',`${data.type==='income'?'إيراد':'مصروف'}: ${cat} — ${amount} ${getSettings().currency}`);}
+    if(editFinId){
+      // Edit path intentionally unchanged -- see the Finance Service's
+      // own scoping note (shared.js): converting this into a proper
+      // correcting-entry workflow is a real UX design question, not
+      // silently resolved by this pass.
+      const data={date,type,category:cat,amount,description,barn,added_by:document.getElementById('f-by')?.value.trim()||getUser()?.name||null};
+      await fbPatch('finance',editFinId,data);await logActivity('edit','finance',`تعديل معاملة: ${cat} ${amount}`);
+    }
+    else{
+      const fr=await window.manualEntry({type,category:cat,amount,description,barn,date});
+      if(!fr.ok) throw new Error(fr.error);
+    }
     toast(editFinId?'تم التحديث':'تمت الإضافة');editFinId=null;finRecs=await fbGet('finance');renderFinancePage(getSettings());
   }catch(e){toast('خطأ: '+e.message,'error');}
 };
