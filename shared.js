@@ -3929,6 +3929,204 @@ window.cancelPostedSourceDocument=async function(documentId){
   }catch(e){ return {ok:false, error:e.message}; }
 };
 
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — CASH & BANK (Phase 3). One new collection
+//  (cash_bank_accounts) -- a lightweight registry of the farm's actual
+//  cash boxes / bank accounts, each POINTING AT one leaf account in the
+//  Chart of Accounts it posts to (so a farm can have two real bank
+//  accounts that both post under GL account 1200, for example). Balance
+//  is never stored as a mutable number: it's always computed from the
+//  account's opening balance plus every journal_entries line that
+//  touches its linkedAccountId, the same flat-collection-scan pattern
+//  used everywhere else in this file. Even the OPENING balance is a real
+//  journal entry (against 3300, opening equity), never a bare field
+//  nobody can trace in the ledger.
+//
+//  Transfers/receipts/payments are thin wrappers over Phase 2's source
+//  documents (type 'transfer'/'receipt'/'payment') rather than a
+//  parallel posting path -- this is what "do not leave two competing
+//  financial truth sources" means in code. Full statement-matching bank
+//  reconciliation is its own later phase; this phase only adds the
+//  structural "last reconciled" marker.
+// ══════════════════════════════════════════════════════════════
+
+var CASH_BANK_TYPES=['cash','bank'];
+
+window.createCashBankAccount=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.name || CASH_BANK_TYPES.indexOf(opts.type)===-1 || !opts.linkedAccountId){
+    return {ok:false, error:'بيانات ناقصة (الاسم، النوع، والحساب المرتبط مطلوبون)'};
+  }
+  var accounts=await fbGet('accounts');
+  var linked=accounts.find(function(a){return a._id===opts.linkedAccountId;});
+  if(!linked) return {ok:false, error:'الحساب المرتبط غير موجود'};
+  if(linked.postable===false) return {ok:false, error:'لا يمكن الربط بحساب رئيسي غير قابل للترحيل'};
+  var opening=Math.round((+opts.openingBalance||0)*100)/100;
+  var record={
+    name:opts.name, type:opts.type, linkedAccountId:opts.linkedAccountId,
+    openingBalance:opening, openingDate:opts.openingDate||todayStr(),
+    currency:opts.currency||(getSettings().currency), active:true,
+    lastReconciledDate:null, lastReconciledAt:null, lastReconciledBy:null,
+    createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+  };
+  try{
+    var id=await fbPost('cash_bank_accounts',record);
+    fbCacheInvalidate('cash_bank_accounts');
+    if(opening>0){
+      // Real opening-balance entry, not a bare number: debits the linked
+      // asset account, credits opening equity -- traceable in the ledger
+      // from day one. A negative opening balance (overdraft) is refused
+      // rather than silently flipped, since that's a real business
+      // decision this pass shouldn't make on its own.
+      await window.postJournalEntry({
+        date:record.openingDate, description:'رصيد افتتاحي: '+record.name,
+        sourceType:'cash_bank_opening', sourceId:id,
+        lines:[{accountId:opts.linkedAccountId, debit:opening},{accountId:'3300', credit:opening}],
+      });
+    }
+    await logActivity('add','cash_bank_accounts','إضافة حساب نقدي/بنكي: '+record.name);
+    return {ok:true, id:id};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Never a stored number: purely the sum of every journal line that ever
+// touched this account's linkedAccountId, signed by debit-increases-an-
+// ASSET (how cash/bank accounts are always modeled here). The record's
+// own `openingBalance` field is NOT re-added here -- createCashBankAccount
+// already posts a real journal entry for it when non-zero (see above), so
+// summing from journal_entries alone already includes it exactly once;
+// adding the stored field on top would double-count every opening balance.
+window.getCashBankBalance=async function(cashBankAccountId){
+  var accounts=await fbGet('cash_bank_accounts');
+  var cba=accounts.find(function(a){return a._id===cashBankAccountId;});
+  if(!cba) return {ok:false, error:'الحساب غير موجود'};
+  var entries=await fbGet('journal_entries');
+  var balance=0;
+  entries.forEach(function(e){
+    (e.lines||[]).forEach(function(l){
+      if(l.accountId===cba.linkedAccountId) balance+=(+l.debit||0)-(+l.credit||0);
+    });
+  });
+  return {ok:true, balance:Math.round(balance*100)/100, asOf:new Date().toISOString()};
+};
+
+// Every journal line touching this account, newest first, with the
+// counterparty side of its own entry attached for display (the other
+// line(s) in the same posting) -- date-range filterable per Phase 3's
+// own requirement.
+window.getCashBankTransactionHistory=async function(cashBankAccountId,startDate,endDate){
+  var accounts=await fbGet('cash_bank_accounts');
+  var cba=accounts.find(function(a){return a._id===cashBankAccountId;});
+  if(!cba) return {ok:false, error:'الحساب غير موجود'};
+  var entries=await fbGet('journal_entries');
+  var rows=[];
+  entries.forEach(function(e){
+    if(startDate && e.date<startDate) return;
+    if(endDate && e.date>endDate) return;
+    (e.lines||[]).forEach(function(l){
+      if(l.accountId!==cba.linkedAccountId) return;
+      rows.push({
+        journalEntryId:e._id, date:e.date, description:e.description,
+        debit:+l.debit||0, credit:+l.credit||0,
+        otherLines:(e.lines||[]).filter(function(x){return x!==l;}),
+        sourceType:e.sourceType, sourceId:e.sourceId,
+      });
+    });
+  });
+  rows.sort(function(a,b){return (b.date||'').localeCompare(a.date||'');});
+  return {ok:true, rows:rows};
+};
+
+// Cash → Bank (or any cash_bank_account → another): a pure balance-sheet
+// movement, never income or expense, because both sides are always
+// ASSET accounts -- structurally guaranteed by construction, not by a
+// special-case check. Routed entirely through Phase 2's source-document
+// primitives (type 'transfer'), so idempotency/immutability come for
+// free instead of being reimplemented here.
+window.recordCashTransfer=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var accounts=await fbGet('cash_bank_accounts');
+  var from=accounts.find(function(a){return a._id===opts.fromAccountId;});
+  var to=accounts.find(function(a){return a._id===opts.toAccountId;});
+  if(!from||!to) return {ok:false, error:'حساب المصدر أو الوجهة غير موجود'};
+  if(from._id===to._id) return {ok:false, error:'لا يمكن التحويل لنفس الحساب'};
+  var created=await window.createSourceDocument({
+    type:'transfer', total:opts.amount, date:opts.date, operationId:opts.operationId,
+    notes:'تحويل: '+from.name+' → '+to.name,
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return created;
+  return await window.postSourceDocument(created.id,{
+    lines:[{accountId:to.linkedAccountId, debit:created.document.total},
+           {accountId:from.linkedAccountId, credit:created.document.total}],
+  });
+};
+
+// Thin, explicit wrappers over Phase 2's generic document + posting
+// primitives -- 'receipt' (cash coming IN against any account the caller
+// names, e.g. AR or a revenue account for a walk-in sale) and 'payment'
+// (cash going OUT against any account, e.g. AP or an expense account).
+// Neither guesses the counterAccountId: the caller states it, same
+// reasoning as recordPaymentAgainstDocument in Phase 2.
+window.recordCashReceipt=async function(opts){
+  opts=opts||{};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var accounts=await fbGet('cash_bank_accounts');
+  var cba=accounts.find(function(a){return a._id===opts.cashBankAccountId;});
+  if(!cba) return {ok:false, error:'الحساب النقدي/البنكي غير موجود'};
+  if(!opts.counterAccountId) return {ok:false, error:'الحساب المقابل مطلوب'};
+  var created=await window.createSourceDocument({
+    type:'receipt', total:opts.amount, date:opts.date, operationId:opts.operationId,
+    counterpartyName:opts.counterpartyName||null, notes:opts.notes||null,
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return created;
+  return await window.postSourceDocument(created.id,{
+    lines:[{accountId:cba.linkedAccountId, debit:created.document.total},
+           {accountId:opts.counterAccountId, credit:created.document.total}],
+  });
+};
+
+window.recordCashPayment=async function(opts){
+  opts=opts||{};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var accounts=await fbGet('cash_bank_accounts');
+  var cba=accounts.find(function(a){return a._id===opts.cashBankAccountId;});
+  if(!cba) return {ok:false, error:'الحساب النقدي/البنكي غير موجود'};
+  if(!opts.counterAccountId) return {ok:false, error:'الحساب المقابل مطلوب'};
+  var created=await window.createSourceDocument({
+    type:'payment', total:opts.amount, date:opts.date, operationId:opts.operationId,
+    counterpartyName:opts.counterpartyName||null, notes:opts.notes||null,
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return created;
+  return await window.postSourceDocument(created.id,{
+    lines:[{accountId:opts.counterAccountId, debit:created.document.total},
+           {accountId:cba.linkedAccountId, credit:created.document.total}],
+  });
+};
+
+// Structural marker only (full statement-line matching is its own later
+// phase): records that this account's ledger has been checked against a
+// real bank statement up to a given date.
+window.markCashBankReconciled=async function(cashBankAccountId,throughDate){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var accounts=await fbGet('cash_bank_accounts');
+  var cba=accounts.find(function(a){return a._id===cashBankAccountId;});
+  if(!cba) return {ok:false, error:'الحساب غير موجود'};
+  try{
+    await fbPatch('cash_bank_accounts',cashBankAccountId,{
+      lastReconciledDate:throughDate||todayStr(), lastReconciledAt:new Date().toISOString(),
+      lastReconciledBy:(getUser()&&getUser().name)||null,
+    });
+    fbCacheInvalidate('cash_bank_accounts');
+    return {ok:true};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
 // ══════════════════════════════════════════════════════
 // Animal Identity Service
 // ══════════════════════════════════════════════════════

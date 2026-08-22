@@ -227,6 +227,20 @@
       }
     },
 
+    // ── Accounting Engine (Phase 3): Cash & Bank account registry. Each
+    //    record only points at a real ledger account (linkedAccountId) --
+    //    balances are always computed from journal_entries, never stored
+    //    here, so there's nothing balance-shaped for this rule to have to
+    //    protect beyond normal admin-only write. ────────────────────────
+    "cash_bank_accounts": {
+      ".read":  "auth != null",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      "$id": {
+        ".validate": "newData.hasChild('name') && newData.hasChild('type') && newData.hasChild('linkedAccountId')",
+        "type": { ".validate": "newData.val() === 'cash' || newData.val() === 'bank'" }
+      }
+    },
+
     // ── Users: read needed for the PIN-login screen (matches by pin_hash
     //    client-side); write restricted to admin only -- prevents any
     //    signed-in session from granting itself 'role':'admin' or
