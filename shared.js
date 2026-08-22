@@ -4127,6 +4127,130 @@ window.markCashBankReconciled=async function(cashBankAccountId,throughDate){
   }catch(e){ return {ok:false, error:e.message}; }
 };
 
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — ACCOUNTS RECEIVABLE (Phase 4). One new collection
+//  (customers). Sales invoices are NOT a new document engine -- they are
+//  Phase 2 source_documents of type 'sales_invoice', posted Debit AR /
+//  Credit Revenue. Payments are Phase 2's recordPaymentAgainstDocument
+//  with direction 'receive' against the AR account. This phase only adds
+//  what's genuinely new: the customer registry, and AR-specific
+//  read-side reporting (balance, aging, overdue detection, statement)
+//  computed by scanning source_documents -- never a second truth source.
+// ══════════════════════════════════════════════════════════════
+
+var AR_ACCOUNT_ID='1300'; // Accounts Receivable, per the Phase 1 default chart
+
+window.createCustomer=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.name) return {ok:false, error:'اسم العميل مطلوب'};
+  var record={
+    name:opts.name, phone:opts.phone||null, notes:opts.notes||null, active:true,
+    createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+  };
+  try{
+    var id=await fbPost('customers',record);
+    fbCacheInvalidate('customers');
+    await logActivity('add','customers','إضافة عميل: '+record.name);
+    return {ok:true, id:id};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Debit AR, Credit the given revenue account -- the ONE new accounting
+// recipe this phase adds; everything else is Phase 2's generic engine.
+// revenueAccountId is caller-supplied (animal sales vs. milk vs. wool
+// etc. are different revenue accounts -- this function doesn't guess).
+window.createSalesInvoice=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  if(!opts.revenueAccountId) return {ok:false, error:'حساب الإيراد مطلوب'};
+  var created=await window.createSourceDocument({
+    type:'sales_invoice', total:opts.total, date:opts.date, dueDate:opts.dueDate,
+    operationId:opts.operationId, counterpartyId:opts.customerId||null,
+    counterpartyName:opts.customerName||null, notes:opts.notes||null,
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return created;
+  return await window.postSourceDocument(created.id,{
+    debitAccountId:AR_ACCOUNT_ID, creditAccountId:opts.revenueAccountId,
+  });
+};
+
+// Thin wrapper over Phase 2's generic payment primitive: an AR payment
+// is always Debit Cash/Bank, Credit AR -- the direction/counter-account
+// never varies for this specific case, so this saves every caller from
+// repeating that.
+window.recordCustomerPayment=async function(documentId,opts){
+  opts=opts||{};
+  return await window.recordPaymentAgainstDocument(documentId,Object.assign({},opts,{
+    counterAccountId:AR_ACCOUNT_ID, direction:'receive',
+  }));
+};
+
+function _isOpenReceivable(doc){
+  return doc.type==='sales_invoice' && (doc.status==='POSTED'||doc.status==='PARTIALLY_PAID'||doc.status==='OVERDUE');
+}
+
+window.getCustomerBalance=async function(customerId){
+  var docs=await fbGet('source_documents');
+  var open=docs.filter(function(d){return _isOpenReceivable(d) && d.counterpartyId===customerId;});
+  var balance=open.reduce(function(s,d){return s+(+d.remainingAmount||0);},0);
+  return {ok:true, balance:Math.round(balance*100)/100, openInvoiceCount:open.length};
+};
+
+window.getCustomerStatement=async function(customerId){
+  var docs=await fbGet('source_documents');
+  var mine=docs.filter(function(d){return d.type==='sales_invoice' && d.counterpartyId===customerId;});
+  mine.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');});
+  return {ok:true, invoices:mine};
+};
+
+// Buckets every OPEN invoice by how many days past its due date `asOfDate`
+// is -- an invoice with no dueDate is never counted as overdue (missing
+// information stays missing, it is not assumed current or overdue).
+window.getARAging=async function(asOfDate){
+  asOfDate=asOfDate||todayStr();
+  var docs=await fbGet('source_documents');
+  var buckets={current:[], d1_30:[], d31_60:[], d61_90:[], d90_plus:[], noDueDate:[]};
+  docs.filter(_isOpenReceivable).forEach(function(d){
+    if(!d.dueDate){ buckets.noDueDate.push(d); return; }
+    var daysPast=Math.floor((new Date(asOfDate)-new Date(d.dueDate))/86400000);
+    if(daysPast<=0) buckets.current.push(d);
+    else if(daysPast<=30) buckets.d1_30.push(d);
+    else if(daysPast<=60) buckets.d31_60.push(d);
+    else if(daysPast<=90) buckets.d61_90.push(d);
+    else buckets.d90_plus.push(d);
+  });
+  var totals={};
+  Object.keys(buckets).forEach(function(k){
+    totals[k]=Math.round(buckets[k].reduce(function(s,d){return s+(+d.remainingAmount||0);},0)*100)/100;
+  });
+  return {ok:true, asOfDate:asOfDate, buckets:buckets, totals:totals};
+};
+
+// Status-only transition (POSTED/PARTIALLY_PAID -> OVERDUE once past
+// dueDate) -- type/date/total are untouched, so this is a legal write
+// under both the engine's own rules and database.rules.json's
+// source_documents guard. Never invents a dueDate: invoices without one
+// are simply never marked overdue.
+window.refreshOverdueInvoiceStatuses=async function(asOfDate){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  asOfDate=asOfDate||todayStr();
+  var docs=await fbGet('source_documents');
+  var toFlag=docs.filter(function(d){
+    return (d.type==='sales_invoice'||d.type==='purchase_invoice')
+      && (d.status==='POSTED'||d.status==='PARTIALLY_PAID')
+      && d.dueDate && d.dueDate<asOfDate;
+  });
+  var flagged=0;
+  for(var i=0;i<toFlag.length;i++){
+    try{ await fbPatch('source_documents',toFlag[i]._id,{status:'OVERDUE'}); flagged++; }catch(e){ /* best-effort, continue with the rest */ }
+  }
+  if(flagged) fbCacheInvalidate('source_documents');
+  return {ok:true, flagged:flagged};
+};
+
 // ══════════════════════════════════════════════════════
 // Animal Identity Service
 // ══════════════════════════════════════════════════════

@@ -241,6 +241,17 @@
       }
     },
 
+    // ── Accounting Engine (Phase 4): Customer registry (Accounts
+    //    Receivable). Sales invoices themselves live in source_documents
+    //    (type 'sales_invoice') -- this is only the customer master. ────
+    "customers": {
+      ".read":  "auth != null",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      "$id": {
+        ".validate": "newData.hasChild('name')"
+      }
+    },
+
     // ── Users: read needed for the PIN-login screen (matches by pin_hash
     //    client-side); write restricted to admin only -- prevents any
     //    signed-in session from granting itself 'role':'admin' or
