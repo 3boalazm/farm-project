@@ -4251,6 +4251,99 @@ window.refreshOverdueInvoiceStatuses=async function(asOfDate){
   return {ok:true, flagged:flagged};
 };
 
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — ACCOUNTS PAYABLE (Phase 5). One new collection
+//  (suppliers). Mirrors Phase 4's AR exactly, in the opposite direction:
+//  purchase bills are Phase 2 source_documents (type 'purchase_invoice')
+//  posted Debit [inventory/expense/asset -- caller-specified, since what
+//  a bill is FOR varies] / Credit AP (2100); payments are Phase 2's
+//  recordPaymentAgainstDocument with direction 'pay'. Overdue detection
+//  is already shared with AR -- refreshOverdueInvoiceStatuses (Phase 4)
+//  already covers 'purchase_invoice' too, nothing new needed here.
+// ══════════════════════════════════════════════════════════════
+
+var AP_ACCOUNT_ID='2100'; // Accounts Payable, per the Phase 1 default chart
+
+window.createSupplier=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.name) return {ok:false, error:'اسم المورد مطلوب'};
+  var record={
+    name:opts.name, phone:opts.phone||null, notes:opts.notes||null, active:true,
+    createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+  };
+  try{
+    var id=await fbPost('suppliers',record);
+    fbCacheInvalidate('suppliers');
+    await logActivity('add','suppliers','إضافة مورد: '+record.name);
+    return {ok:true, id:id};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Debit the given debit account (inventory/expense/asset -- whatever
+// this bill is actually for, caller-supplied, never guessed), Credit AP.
+window.createPurchaseBill=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  if(!opts.debitAccountId) return {ok:false, error:'حساب المدين (المخزون/المصروف/الأصل) مطلوب'};
+  var created=await window.createSourceDocument({
+    type:'purchase_invoice', total:opts.total, date:opts.date, dueDate:opts.dueDate,
+    operationId:opts.operationId, counterpartyId:opts.supplierId||null,
+    counterpartyName:opts.supplierName||null, notes:opts.notes||null,
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return created;
+  return await window.postSourceDocument(created.id,{
+    debitAccountId:opts.debitAccountId, creditAccountId:AP_ACCOUNT_ID,
+  });
+};
+
+window.recordSupplierPayment=async function(documentId,opts){
+  opts=opts||{};
+  return await window.recordPaymentAgainstDocument(documentId,Object.assign({},opts,{
+    counterAccountId:AP_ACCOUNT_ID, direction:'pay',
+  }));
+};
+
+function _isOpenPayable(doc){
+  return doc.type==='purchase_invoice' && (doc.status==='POSTED'||doc.status==='PARTIALLY_PAID'||doc.status==='OVERDUE');
+}
+
+window.getSupplierBalance=async function(supplierId){
+  var docs=await fbGet('source_documents');
+  var open=docs.filter(function(d){return _isOpenPayable(d) && d.counterpartyId===supplierId;});
+  var balance=open.reduce(function(s,d){return s+(+d.remainingAmount||0);},0);
+  return {ok:true, balance:Math.round(balance*100)/100, openBillCount:open.length};
+};
+
+window.getSupplierStatement=async function(supplierId){
+  var docs=await fbGet('source_documents');
+  var mine=docs.filter(function(d){return d.type==='purchase_invoice' && d.counterpartyId===supplierId;});
+  mine.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');});
+  return {ok:true, bills:mine};
+};
+
+window.getAPAging=async function(asOfDate){
+  asOfDate=asOfDate||todayStr();
+  var docs=await fbGet('source_documents');
+  var buckets={current:[], d1_30:[], d31_60:[], d61_90:[], d90_plus:[], noDueDate:[]};
+  docs.filter(_isOpenPayable).forEach(function(d){
+    if(!d.dueDate){ buckets.noDueDate.push(d); return; }
+    var daysPast=Math.floor((new Date(asOfDate)-new Date(d.dueDate))/86400000);
+    if(daysPast<=0) buckets.current.push(d);
+    else if(daysPast<=30) buckets.d1_30.push(d);
+    else if(daysPast<=60) buckets.d31_60.push(d);
+    else if(daysPast<=90) buckets.d61_90.push(d);
+    else buckets.d90_plus.push(d);
+  });
+  var totals={};
+  Object.keys(buckets).forEach(function(k){
+    totals[k]=Math.round(buckets[k].reduce(function(s,d){return s+(+d.remainingAmount||0);},0)*100)/100;
+  });
+  return {ok:true, asOfDate:asOfDate, buckets:buckets, totals:totals};
+};
+
 // ══════════════════════════════════════════════════════
 // Animal Identity Service
 // ══════════════════════════════════════════════════════

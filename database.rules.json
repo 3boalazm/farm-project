@@ -252,6 +252,17 @@
       }
     },
 
+    // ── Accounting Engine (Phase 5): Supplier registry (Accounts
+    //    Payable). Purchase bills themselves live in source_documents
+    //    (type 'purchase_invoice') -- this is only the supplier master.
+    "suppliers": {
+      ".read":  "auth != null",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      "$id": {
+        ".validate": "newData.hasChild('name')"
+      }
+    },
+
     // ── Users: read needed for the PIN-login screen (matches by pin_hash
     //    client-side); write restricted to admin only -- prevents any
     //    signed-in session from granting itself 'role':'admin' or
