@@ -3545,6 +3545,205 @@ window.bulkImportInventory=async function(opts){
   return {ok:failed===0, succeeded:ok, failed:failed};
 };
 
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE (Phase 1). Two new collections (accounts,
+//  journal_entries), purely additive -- the existing `finance` collection
+//  and computeFinanceKPIs/computeFinanceTrend are untouched. Journal
+//  lines are embedded in the entry (one atomic write per posting, same
+//  flat-collection/client-filter pattern as everything else here).
+//  A posted entry is never edited or deleted: corrections post a new
+//  reversing entry instead (reversesJournalEntryId), enforced both here
+//  and at the database-rules level. No migration of legacy `finance`
+//  records into journal entries happens in this phase -- see
+//  docs/finance-audit for the Phase 0 baseline this builds on.
+// ══════════════════════════════════════════════════════════════
+
+var ACCOUNT_TYPES=['ASSET','LIABILITY','EQUITY','REVENUE','EXPENSE'];
+var ACCOUNT_TYPE_NORMAL_BALANCE={ASSET:'debit',LIABILITY:'credit',EQUITY:'credit',REVENUE:'credit',EXPENSE:'debit'};
+
+// Suggested starting chart, per docs/finance-audit's Phase 1 design.
+// Round-number entries (x000) are non-postable category headers --
+// journal lines must target a real leaf account. 1690/3200 are contra
+// accounts (accumulated depreciation, owner drawings): their normal
+// balance is the OPPOSITE of their type's default, flagged via `contra`.
+var DEFAULT_CHART_OF_ACCOUNTS=[
+  {code:'1000',name_ar:'الأصول',name_en:'Assets',type:'ASSET',parentId:null,postable:false},
+  {code:'1100',name_ar:'النقدية',name_en:'Cash',type:'ASSET',parentId:'1000',postable:false},
+  {code:'1110',name_ar:'نقدية المزرعة',name_en:'Farm Cash',type:'ASSET',parentId:'1100'},
+  {code:'1120',name_ar:'عهدة نثرية',name_en:'Petty Cash',type:'ASSET',parentId:'1100'},
+  {code:'1200',name_ar:'البنك',name_en:'Bank',type:'ASSET',parentId:'1000'},
+  {code:'1300',name_ar:'ذمم مدينة',name_en:'Accounts Receivable',type:'ASSET',parentId:'1000'},
+  {code:'1400',name_ar:'المخزون',name_en:'Inventory',type:'ASSET',parentId:'1000',postable:false},
+  {code:'1410',name_ar:'مخزون الأعلاف',name_en:'Feed Inventory',type:'ASSET',parentId:'1400'},
+  {code:'1420',name_ar:'مخزون الأدوية',name_en:'Medicine Inventory',type:'ASSET',parentId:'1400'},
+  {code:'1430',name_ar:'مخزون المعدات',name_en:'Equipment Inventory',type:'ASSET',parentId:'1400'},
+  {code:'1500',name_ar:'الأصول الحيوانية',name_en:'Biological / Livestock Assets',type:'ASSET',parentId:'1000'},
+  {code:'1600',name_ar:'الأصول الثابتة',name_en:'Fixed Assets',type:'ASSET',parentId:'1000'},
+  {code:'1690',name_ar:'مجمّع الإهلاك',name_en:'Accumulated Depreciation',type:'ASSET',parentId:'1000',contra:true},
+
+  {code:'2000',name_ar:'الخصوم',name_en:'Liabilities',type:'LIABILITY',parentId:null,postable:false},
+  {code:'2100',name_ar:'ذمم دائنة',name_en:'Accounts Payable',type:'LIABILITY',parentId:'2000'},
+  {code:'2200',name_ar:'مصروفات مستحقة',name_en:'Accrued Expenses',type:'LIABILITY',parentId:'2000'},
+  {code:'2300',name_ar:'قروض وتمويل',name_en:'Loans / Financing',type:'LIABILITY',parentId:'2000'},
+
+  {code:'3000',name_ar:'حقوق الملكية',name_en:'Equity',type:'EQUITY',parentId:null,postable:false},
+  {code:'3100',name_ar:'رأس مال المالك',name_en:'Owner Capital',type:'EQUITY',parentId:'3000'},
+  {code:'3200',name_ar:'مسحوبات المالك',name_en:'Owner Drawings',type:'EQUITY',parentId:'3000',contra:true},
+  {code:'3300',name_ar:'أرباح مرحّلة',name_en:'Retained Earnings / Opening Equity',type:'EQUITY',parentId:'3000'},
+
+  {code:'4000',name_ar:'الإيرادات',name_en:'Revenue',type:'REVENUE',parentId:null,postable:false},
+  {code:'4100',name_ar:'بيع حيوانات',name_en:'Animal Sales',type:'REVENUE',parentId:'4000'},
+  {code:'4200',name_ar:'بيع ألبان',name_en:'Milk Sales',type:'REVENUE',parentId:'4000'},
+  {code:'4300',name_ar:'بيع صوف',name_en:'Wool Sales',type:'REVENUE',parentId:'4000'},
+  {code:'4400',name_ar:'بيع سماد',name_en:'Manure Sales',type:'REVENUE',parentId:'4000'},
+  {code:'4900',name_ar:'إيرادات أخرى',name_en:'Other Revenue',type:'REVENUE',parentId:'4000'},
+
+  {code:'5000',name_ar:'تكلفة المبيعات',name_en:'Cost of Sales / Direct Costs',type:'EXPENSE',parentId:null,postable:false},
+  {code:'5100',name_ar:'تكلفة بيع الحيوانات',name_en:'Animal Cost of Sales',type:'EXPENSE',parentId:'5000'},
+  {code:'5200',name_ar:'تكاليف الإنتاج',name_en:'Production Costs',type:'EXPENSE',parentId:'5000'},
+
+  {code:'6000',name_ar:'المصروفات التشغيلية',name_en:'Operating Expenses',type:'EXPENSE',parentId:null,postable:false},
+  {code:'6100',name_ar:'مصروف الأعلاف',name_en:'Feed Expense',type:'EXPENSE',parentId:'6000'},
+  {code:'6200',name_ar:'مصروف بيطري ودوائي',name_en:'Veterinary / Medicine Expense',type:'EXPENSE',parentId:'6000'},
+  {code:'6300',name_ar:'مصروف عمالة',name_en:'Labor Expense',type:'EXPENSE',parentId:'6000'},
+  {code:'6400',name_ar:'كهرباء ومياه',name_en:'Utilities',type:'EXPENSE',parentId:'6000'},
+  {code:'6500',name_ar:'صيانة معدات',name_en:'Maintenance',type:'EXPENSE',parentId:'6000'},
+  {code:'6600',name_ar:'نقل وشحن',name_en:'Transport',type:'EXPENSE',parentId:'6000'},
+  {code:'6700',name_ar:'إيجار',name_en:'Rent',type:'EXPENSE',parentId:'6000'},
+  {code:'6800',name_ar:'إهلاك',name_en:'Depreciation',type:'EXPENSE',parentId:'6000'},
+  {code:'6900',name_ar:'مصروفات أخرى',name_en:'Other Expenses',type:'EXPENSE',parentId:'6000'},
+];
+
+function _accountNormalBalance(type,contra){
+  var base=ACCOUNT_TYPE_NORMAL_BALANCE[type];
+  return contra ? (base==='debit'?'credit':'debit') : base;
+}
+
+// One-time, idempotent bootstrap -- mirrors Users.init()'s own pattern
+// (fbGet the collection, only write if empty). Deliberately NOT called
+// from initApp(): seeding a chart of accounts is a real decision a farm
+// should take consciously, not something silently created on every page
+// load the way the first admin user is.
+window.seedDefaultChartOfAccounts=async function(){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var existing=await fbGet('accounts');
+  if(existing.length) return {ok:true, seeded:0, skipped:true};
+  var count=0;
+  for(var i=0;i<DEFAULT_CHART_OF_ACCOUNTS.length;i++){
+    var a=DEFAULT_CHART_OF_ACCOUNTS[i];
+    await fbPut('accounts',a.code,{
+      code:a.code, name_ar:a.name_ar, name_en:a.name_en, type:a.type,
+      parentId:a.parentId||null, postable:a.postable!==false,
+      normalBalance:_accountNormalBalance(a.type,a.contra),
+      active:true, systemAccount:true, created_at:new Date().toISOString(),
+    });
+    count++;
+  }
+  fbCacheInvalidate('accounts');
+  await logActivity('add','accounts','تهيئة دليل الحسابات الافتراضي ('+count+' حساب)');
+  return {ok:true, seeded:count};
+};
+
+window.createAccount=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.code || !opts.name_ar || !opts.type) return {ok:false, error:'بيانات ناقصة (الكود، الاسم، والنوع مطلوبون)'};
+  if(ACCOUNT_TYPES.indexOf(opts.type)===-1) return {ok:false, error:'نوع حساب غير صالح'};
+  var existing=await fbGet('accounts');
+  if(existing.some(function(a){return a._id===opts.code;})) return {ok:false, error:'الكود مستخدم بالفعل'};
+  try{
+    await fbPut('accounts',opts.code,{
+      code:opts.code, name_ar:opts.name_ar, name_en:opts.name_en||null, type:opts.type,
+      parentId:opts.parentId||null, postable:opts.postable!==false,
+      normalBalance:_accountNormalBalance(opts.type,opts.contra),
+      active:true, systemAccount:false, created_at:new Date().toISOString(),
+    });
+    fbCacheInvalidate('accounts');
+    await logActivity('add','accounts','إضافة حساب: '+opts.code+' — '+opts.name_ar);
+    return {ok:true, code:opts.code};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Every posted entry is validated against this before it's ever written:
+// at least 2 lines, each with EXACTLY ONE of debit/credit set (never
+// both, never neither), nothing negative, and the entry balances to the
+// cent. Never auto-corrected -- an unbalanced entry is rejected outright,
+// per this project's "never invent a number" principle.
+function _validateJournalLines(lines){
+  if(!Array.isArray(lines) || lines.length<2) return {valid:false, error:'يجب أن يحتوي القيد على سطرين على الأقل'};
+  var totalDebit=0, totalCredit=0;
+  for(var i=0;i<lines.length;i++){
+    var l=lines[i]||{};
+    var debit=+l.debit||0, credit=+l.credit||0;
+    if(!l.accountId) return {valid:false, error:'كل سطر يجب أن يحدد حساب'};
+    if(debit<0 || credit<0) return {valid:false, error:'لا يمكن أن تكون قيمة السطر سالبة'};
+    if(debit>0 && credit>0) return {valid:false, error:'السطر لا يمكن أن يحتوي على مدين ودائن معًا'};
+    if(debit===0 && credit===0) return {valid:false, error:'كل سطر يجب أن يحتوي على قيمة مدين أو دائن'};
+    totalDebit+=debit; totalCredit+=credit;
+  }
+  totalDebit=Math.round(totalDebit*100)/100; totalCredit=Math.round(totalCredit*100)/100;
+  if(totalDebit!==totalCredit) return {valid:false, error:'القيد غير متزن: مدين '+totalDebit+' لا يساوي دائن '+totalCredit};
+  return {valid:true, totalDebit:totalDebit, totalCredit:totalCredit};
+}
+
+// The ONLY way a journal entry is ever created. Always posts immediately
+// (status:'POSTED') -- there is no draft workflow in this phase. Once
+// written, the entry is immutable both here (nothing in this engine ever
+// fbPatch's a journal_entries record) and at the database-rules level.
+window.postJournalEntry=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var v=_validateJournalLines(opts.lines);
+  if(!v.valid) return {ok:false, error:v.error};
+  var accounts=await fbGet('accounts');
+  for(var i=0;i<opts.lines.length;i++){
+    var acc=accounts.find(function(a){return a._id===opts.lines[i].accountId;});
+    if(!acc) return {ok:false, error:'حساب غير موجود: '+opts.lines[i].accountId};
+    if(acc.active===false) return {ok:false, error:'الحساب غير نشط: '+acc.name_ar};
+    if(acc.postable===false) return {ok:false, error:'لا يمكن الترحيل مباشرة إلى حساب رئيسي: '+acc.name_ar};
+  }
+  var entry={
+    date:opts.date||todayStr(), description:opts.description||null,
+    sourceType:opts.sourceType||'manual', sourceId:opts.sourceId||null,
+    status:'POSTED', lines:opts.lines,
+    totalDebit:v.totalDebit, totalCredit:v.totalCredit,
+    reversesJournalEntryId:opts.reversesJournalEntryId||null,
+    createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+    postedBy:(getUser()&&getUser().name)||null, postedAt:new Date().toISOString(),
+  };
+  try{
+    var id=await fbPost('journal_entries',entry);
+    fbCacheInvalidate('journal_entries');
+    await logActivity('add','journal_entries','قيد محاسبي: '+(entry.description||entry.sourceType)+' — '+ar(v.totalDebit)+' '+getSettings().currency);
+    return {ok:true, id:id, entry:entry};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Corrections never touch the original entry -- they post a NEW entry
+// with every line's debit/credit swapped (a balanced set stays balanced
+// once swapped, so this always passes _validateJournalLines on its own),
+// linked back via reversesJournalEntryId. Refuses to reverse a
+// non-posted or already-reversed entry.
+window.reverseJournalEntry=async function(originalId,opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var entries=await fbGet('journal_entries');
+  var original=entries.find(function(e){return e._id===originalId;});
+  if(!original) return {ok:false, error:'القيد الأصلي غير موجود'};
+  if(original.status!=='POSTED') return {ok:false, error:'لا يمكن عكس قيد غير مُرحّل'};
+  var alreadyReversed=entries.some(function(e){return e.reversesJournalEntryId===originalId;});
+  if(alreadyReversed) return {ok:false, error:'تم عكس هذا القيد بالفعل'};
+  var swappedLines=(original.lines||[]).map(function(l){
+    return Object.assign({},l,{debit:l.credit||0, credit:l.debit||0});
+  });
+  return await window.postJournalEntry({
+    date:opts.date||todayStr(),
+    description:'عكس قيد: '+(original.description||original._id),
+    sourceType:'reversal', sourceId:originalId,
+    lines:swappedLines, reversesJournalEntryId:originalId,
+  });
+};
+
 // ══════════════════════════════════════════════════════
 // Animal Identity Service
 // ══════════════════════════════════════════════════════

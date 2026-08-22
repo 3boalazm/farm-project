@@ -175,6 +175,39 @@
       }
     },
 
+    // ── Accounting Engine (Phase 1): Chart of Accounts. Read open to any
+    //    signed-in session (journal posting needs to resolve account
+    //    names/types client-side); write restricted to admin only, same
+    //    reasoning as finance/users -- account definitions are structural,
+    //    not day-to-day data entry. ──────────────────────────────────────
+    "accounts": {
+      ".read":  "auth != null",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      "$id": {
+        ".validate": "newData.hasChild('code') && newData.hasChild('name_ar') && newData.hasChild('type')",
+        "type": { ".validate": "newData.val() === 'ASSET' || newData.val() === 'LIABILITY' || newData.val() === 'EQUITY' || newData.val() === 'REVENUE' || newData.val() === 'EXPENSE'" },
+        "normalBalance": { ".validate": "!newData.exists() || newData.val() === 'debit' || newData.val() === 'credit'" }
+      }
+    },
+
+    // ── Accounting Engine (Phase 1): Journal Entries. Double-entry lines
+    //    are embedded in the entry itself (one atomic write per posting,
+    //    matching this app's established flat-collection/client-filter
+    //    pattern -- see computeFinanceKPIs). Immutability is enforced
+    //    right here at the rules level, not just client-side: once a
+    //    given entry's status is 'POSTED', this rule blocks every further
+    //    write to that same id, full stop -- corrections must post a new
+    //    reversing entry (reversesJournalEntryId) instead of touching the
+    //    original. ─────────────────────────────────────────────────────
+    "journal_entries": {
+      ".read":  "auth != null",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' && (!data.exists() || data.child('status').val() !== 'POSTED')",
+      "$id": {
+        ".validate": "newData.hasChild('date') && newData.hasChild('lines') && newData.hasChild('status')",
+        "status": { ".validate": "newData.val() === 'DRAFT' || newData.val() === 'POSTED' || newData.val() === 'REVERSED'" }
+      }
+    },
+
     // ── Users: read needed for the PIN-login screen (matches by pin_hash
     //    client-side); write restricted to admin only -- prevents any
     //    signed-in session from granting itself 'role':'admin' or
