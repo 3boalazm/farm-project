@@ -7,7 +7,7 @@ Follow `docs/deployment/INSTALL.md`. Once `npm run serve` is running, `index.htm
 This is a **buildless, vanilla-JS multi-page app** -- there is no compile step. Edit any `.html`/`.js` file directly, save, and refresh the browser. Changes are visible immediately.
 
 - New feature with real business logic touching a domain that has a `pages/*.js` file (breeding, finance, health, inventory, production, reports, tasks, vaccine, pedigree, farm_profile) -> edit that file.
-- New shared UI component or utility used by 2+ pages -> add a new function to `shared.js` (additive only -- see `ARCHITECTURE-REFERENCE.md`'s Engineering Rules).
+- New shared UI component or utility used by 2+ pages -> add a new function to `shared.js` (additive only -- see `docs/archive/merge-e655e2b/ARCHITECTURE-REFERENCE.md`'s Engineering Rules).
 - New page -> follow the delegated pattern (`pages/<name>.js` + a thin HTML shell) unless genuinely simple.
 
 ## Running Tests

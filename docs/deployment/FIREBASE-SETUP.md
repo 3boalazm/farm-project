@@ -4,7 +4,18 @@
 This project talks to Firebase Realtime Database **directly over REST** -- no Firebase SDK, no `npm install firebase`. The client config (`apiKey`, `authDomain`, `databaseURL`, `projectId`) is already committed in both `config.js` and `firebase.js`, pointing at the project's existing production Firebase instance. This is standard, expected practice for a Firebase web app -- these values are not secrets (Firebase's own security model relies on database rules, not key secrecy).
 
 ## This Project's Specific Security Model
-Authentication is a **custom PIN system**, not Firebase Auth. `database.rules.json` therefore enforces **data validation only** (types, required fields), not per-user access control -- access control lives entirely client-side via `can()` (see `ARCHITECTURE-REFERENCE.md`). The practical consequence: **the database URL should be treated as sensitive**, even though it isn't a traditional secret -- this project's security relies on it not being widely known, not on Firebase-side authorization.
+Authentication is a **custom PIN system**, not Firebase Auth. `database.rules.json` therefore enforces **data validation only** (types, required fields), not per-user access control -- access control lives entirely client-side via `can()` (see `docs/archive/merge-e655e2b/ARCHITECTURE-REFERENCE.md`). The practical consequence: **the database URL should be treated as sensitive**, even though it isn't a traditional secret -- this project's security relies on it not being widely known, not on Firebase-side authorization.
+
+### What the current rules protect
+- **Data validation** — every collection has `.validate` rejecting malformed writes
+- **Type checking** — e.g. `species: goat/sheep` only, `type: income/expense` only
+- **Required fields** — e.g. an animal write must include `breed`/`gender`/`species`
+- **`$other: false`** — any collection not explicitly listed in the rules is rejected
+
+Going further (per-user authorization via `auth.uid`) would require migrating the app to real Firebase Auth — out of scope while PIN login is primary.
+
+### Publishing rule changes
+Firebase Console → project → Realtime Database → Rules → paste `database.rules.json` → Publish.
 
 ## Setting Up Your Own Firebase Project (If Needed)
 If you need an independent instance (e.g., a staging environment, or forking this project for a different farm):
