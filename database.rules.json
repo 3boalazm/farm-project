@@ -208,6 +208,25 @@
       }
     },
 
+    // ── Accounting Engine (Phase 2): Source Documents. Once a document
+    //    leaves DRAFT, its financial identity (type/date/total) can never
+    //    change again -- only status/paidAmount/remainingAmount/
+    //    appliedPayments may still move (payment application), which is
+    //    exactly what the third clause below allows while still locking
+    //    type/date/total. Corrections to a POSTED document happen by
+    //    reversing its linked journal entry, never by editing this
+    //    record's financial fields directly. ─────────────────────────────
+    "source_documents": {
+      ".read":  "auth != null",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' && (!data.exists() || data.child('status').val() === 'DRAFT' || (newData.child('type').val() === data.child('type').val() && newData.child('date').val() === data.child('date').val() && newData.child('total').val() === data.child('total').val()))",
+      "$id": {
+        ".validate": "newData.hasChild('type') && newData.hasChild('date') && newData.hasChild('total') && newData.hasChild('operationId') && newData.hasChild('status')",
+        "type": { ".validate": "newData.val() === 'sales_invoice' || newData.val() === 'purchase_invoice' || newData.val() === 'receipt' || newData.val() === 'payment' || newData.val() === 'expense_voucher' || newData.val() === 'transfer' || newData.val() === 'animal_sale' || newData.val() === 'inventory_purchase' || newData.val() === 'inventory_consumption' || newData.val() === 'labor_payment' || newData.val() === 'asset_purchase' || newData.val() === 'loan' || newData.val() === 'owner_capital' || newData.val() === 'owner_withdrawal'" },
+        "status": { ".validate": "newData.val() === 'DRAFT' || newData.val() === 'POSTED' || newData.val() === 'PARTIALLY_PAID' || newData.val() === 'PAID' || newData.val() === 'OVERDUE' || newData.val() === 'VOID' || newData.val() === 'CANCELLED'" },
+        "total": { ".validate": "newData.isNumber() && newData.val() > 0" }
+      }
+    },
+
     // ── Users: read needed for the PIN-login screen (matches by pin_hash
     //    client-side); write restricted to admin only -- prevents any
     //    signed-in session from granting itself 'role':'admin' or

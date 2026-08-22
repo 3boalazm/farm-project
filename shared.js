@@ -3744,6 +3744,191 @@ window.reverseJournalEntry=async function(originalId,opts){
   });
 };
 
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — SOURCE DOCUMENTS (Phase 2). One new collection
+//  (source_documents), purely additive on top of Phase 1's journal
+//  engine. A document is a business-level record (invoice, receipt,
+//  payment...) that MAY post exactly one journal entry via the existing
+//  postJournalEntry() -- this layer never builds journal lines itself
+//  beyond simple caller-supplied debit/credit shorthand, so it never
+//  invents which accounts a specific business event touches (that's
+//  each later phase's -- AR, AP, animal accounting, etc. -- own job).
+//
+//  Idempotency: every create/payment call takes a caller-supplied
+//  operationId. A repeated operationId returns the ALREADY-recorded
+//  result instead of creating a duplicate -- this is what "a replay must
+//  never create a duplicate accounting result" actually means in code.
+//
+//  Immutability: once a document leaves DRAFT, its type/date/total can
+//  never change again (enforced both here and at the database-rules
+//  level). Only payment application (paidAmount/remainingAmount/status)
+//  may still move, and only through recordPaymentAgainstDocument() --
+//  never a raw fbPatch. Cancelling a POSTED document reverses its linked
+//  journal entry (reuses Phase 1's reverseJournalEntry) rather than
+//  editing or deleting anything.
+// ══════════════════════════════════════════════════════════════
+
+var SOURCE_DOCUMENT_TYPES=['sales_invoice','purchase_invoice','receipt','payment','expense_voucher',
+  'transfer','animal_sale','inventory_purchase','inventory_consumption','labor_payment',
+  'asset_purchase','loan','owner_capital','owner_withdrawal'];
+var SOURCE_DOCUMENT_STATUSES=['DRAFT','POSTED','PARTIALLY_PAID','PAID','OVERDUE','VOID','CANCELLED'];
+var SOURCE_DOCUMENT_OPEN_STATUSES=['POSTED','PARTIALLY_PAID','OVERDUE']; // eligible for a new payment
+
+function _genDocumentNumber(type){
+  return 'SD-'+(type||'doc').slice(0,4).toUpperCase()+'-'+genId().toUpperCase();
+}
+
+// Create-or-return-existing, keyed on opts.operationId -- the caller
+// decides that key (e.g. a UI click-token, or a deterministic id built
+// from the triggering event), this engine only ever reads it back.
+window.createSourceDocument=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  if(SOURCE_DOCUMENT_TYPES.indexOf(opts.type)===-1) return {ok:false, error:'نوع مستند غير صالح'};
+  var amount=+opts.total;
+  if(!amount || isNaN(amount) || amount<=0) return {ok:false, error:'يرجى إدخال إجمالي صحيح'};
+  var docs=await fbGet('source_documents');
+  var dupe=docs.find(function(d){return d.operationId===opts.operationId;});
+  if(dupe) return {ok:true, id:dupe._id, document:dupe, idempotent:true};
+  var record={
+    documentNumber:_genDocumentNumber(opts.type), type:opts.type, date:opts.date||todayStr(),
+    status:'DRAFT', counterpartyId:opts.counterpartyId||null, counterpartyName:opts.counterpartyName||null,
+    total:Math.round(amount*100)/100, paidAmount:0, remainingAmount:Math.round(amount*100)/100,
+    dueDate:opts.dueDate||null, notes:opts.notes||null,
+    sourceType:opts.sourceType||null, sourceId:opts.sourceId||null, operationId:opts.operationId,
+    journalEntryId:null, appliedPayments:null,
+    createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+    postedAt:null, postedBy:null,
+  };
+  try{
+    var id=await fbPost('source_documents',record);
+    fbCacheInvalidate('source_documents');
+    await logActivity('add','source_documents','مستند '+record.documentNumber+' — '+ar(record.total)+' '+getSettings().currency);
+    return {ok:true, id:id, document:record};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Posts the document's ONE journal entry. Caller supplies either a full
+// `lines` array (for anything non-trivial) or the debitAccountId/
+// creditAccountId shorthand for a plain two-line posting of the
+// document's own total. Only a DRAFT document can be posted; nothing
+// about the document is touched if the underlying journal entry fails
+// validation (unbalanced, bad account, etc. -- see Phase 1).
+window.postSourceDocument=async function(documentId,opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var docs=await fbGet('source_documents');
+  var doc=docs.find(function(d){return d._id===documentId;});
+  if(!doc) return {ok:false, error:'المستند غير موجود'};
+  if(doc.status!=='DRAFT') return {ok:false, error:'المستند مُرحّل بالفعل أو ملغى'};
+  var lines=opts.lines;
+  if(!lines && opts.debitAccountId && opts.creditAccountId){
+    lines=[{accountId:opts.debitAccountId, debit:doc.total, description:doc.documentNumber},
+           {accountId:opts.creditAccountId, credit:doc.total, description:doc.documentNumber}];
+  }
+  var posted=await window.postJournalEntry({
+    date:doc.date, description:'ترحيل مستند: '+doc.documentNumber+(doc.notes?(' — '+doc.notes):''),
+    sourceType:'source_document', sourceId:documentId, lines:lines,
+  });
+  if(!posted.ok) return posted;
+  var newStatus=(+doc.paidAmount||0)>=doc.total ? 'PAID' : 'POSTED';
+  try{
+    await fbPatch('source_documents',documentId,{status:newStatus, journalEntryId:posted.id, postedAt:new Date().toISOString(), postedBy:(getUser()&&getUser().name)||null});
+    fbCacheInvalidate('source_documents');
+    await logActivity('post','source_documents','ترحيل '+doc.documentNumber);
+    return {ok:true, id:documentId, journalEntryId:posted.id, status:newStatus};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Applies one payment to an already-posted document. Idempotent on
+// opts.operationId: replaying the same operationId returns the
+// already-applied result instead of double-subtracting the balance.
+// The caller states BOTH sides explicitly (cashAccountId +
+// counterAccountId + direction) -- this engine never guesses which
+// account a payment clears, since that's specific to what kind of
+// document it is (a job for AR/AP in later phases, not this primitive).
+window.recordPaymentAgainstDocument=async function(documentId,opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var docs=await fbGet('source_documents');
+  var doc=docs.find(function(d){return d._id===documentId;});
+  if(!doc) return {ok:false, error:'المستند غير موجود'};
+  if(doc.appliedPayments && doc.appliedPayments[opts.operationId]){
+    return {ok:true, idempotent:true, applied:doc.appliedPayments[opts.operationId]};
+  }
+  if(SOURCE_DOCUMENT_OPEN_STATUSES.indexOf(doc.status)===-1) return {ok:false, error:'المستند غير قابل للسداد في حالته الحالية'};
+  var amount=+opts.amount;
+  if(!amount || isNaN(amount) || amount<=0) return {ok:false, error:'يرجى إدخال مبلغ سداد صحيح'};
+  if(amount>doc.remainingAmount+0.001) return {ok:false, error:'المبلغ أكبر من المتبقي على المستند'};
+  if(!opts.cashAccountId || !opts.counterAccountId || (opts.direction!=='receive' && opts.direction!=='pay')){
+    return {ok:false, error:'بيانات السداد ناقصة (الحساب النقدي، الحساب المقابل، والاتجاه مطلوبون)'};
+  }
+  var lines=opts.direction==='receive'
+    ? [{accountId:opts.cashAccountId, debit:amount},{accountId:opts.counterAccountId, credit:amount}]
+    : [{accountId:opts.counterAccountId, debit:amount},{accountId:opts.cashAccountId, credit:amount}];
+  var posted=await window.postJournalEntry({
+    date:opts.date||todayStr(), description:'سداد على مستند '+doc.documentNumber,
+    sourceType:'document_payment', sourceId:documentId, lines:lines,
+  });
+  if(!posted.ok) return posted;
+  var newPaid=Math.round(((+doc.paidAmount||0)+amount)*100)/100;
+  var newRemaining=Math.round((doc.total-newPaid)*100)/100;
+  var newStatus=newRemaining<=0 ? 'PAID' : 'PARTIALLY_PAID';
+  var appliedRecord={amount:amount, date:opts.date||todayStr(), journalEntryId:posted.id};
+  try{
+    await fbPatch('source_documents',documentId,{
+      paidAmount:newPaid, remainingAmount:newRemaining, status:newStatus,
+      appliedPayments:Object.assign({},doc.appliedPayments||{}, (function(){var o={};o[opts.operationId]=appliedRecord;return o;})()),
+    });
+    fbCacheInvalidate('source_documents');
+    await logActivity('pay','source_documents','سداد '+ar(amount)+' '+getSettings().currency+' على '+doc.documentNumber);
+    return {ok:true, journalEntryId:posted.id, paidAmount:newPaid, remainingAmount:newRemaining, status:newStatus};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// A never-posted (still DRAFT) document can simply be voided -- nothing
+// in the ledger references it yet. A POSTED document must go through
+// cancelPostedSourceDocument() instead, since a real journal entry
+// exists and needs a real reversal, not a silent status flip.
+window.voidSourceDocument=async function(documentId){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var docs=await fbGet('source_documents');
+  var doc=docs.find(function(d){return d._id===documentId;});
+  if(!doc) return {ok:false, error:'المستند غير موجود'};
+  if(doc.status!=='DRAFT') return {ok:false, error:'المستند مُرحّل بالفعل — استخدم إلغاء المستند المُرحّل بدلاً من ذلك'};
+  try{
+    await fbPatch('source_documents',documentId,{status:'VOID'});
+    fbCacheInvalidate('source_documents');
+    await logActivity('void','source_documents','إلغاء مسودة '+doc.documentNumber);
+    return {ok:true};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Cancels a POSTED document by reversing its linked journal entry
+// (Phase 1's reverseJournalEntry -- never edits/deletes the original).
+// Refuses if any payment has already been applied: unwinding real cash
+// movement isn't something this function decides on its own, it must be
+// reconciled first, one payment at a time.
+window.cancelPostedSourceDocument=async function(documentId){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var docs=await fbGet('source_documents');
+  var doc=docs.find(function(d){return d._id===documentId;});
+  if(!doc) return {ok:false, error:'المستند غير موجود'};
+  if(!doc.journalEntryId) return {ok:false, error:'المستند غير مُرحّل، لا يوجد قيد لعكسه'};
+  if(doc.status==='CANCELLED'||doc.status==='VOID') return {ok:false, error:'المستند ملغى بالفعل'};
+  if((+doc.paidAmount||0)>0) return {ok:false, error:'لا يمكن الإلغاء التلقائي بعد تسجيل سداد — سوّي المدفوعات أولاً'};
+  var rev=await window.reverseJournalEntry(doc.journalEntryId);
+  if(!rev.ok) return rev;
+  try{
+    await fbPatch('source_documents',documentId,{status:'CANCELLED'});
+    fbCacheInvalidate('source_documents');
+    await logActivity('cancel','source_documents','إلغاء '+doc.documentNumber);
+    return {ok:true, reversalEntryId:rev.id};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
 // ══════════════════════════════════════════════════════
 // Animal Identity Service
 // ══════════════════════════════════════════════════════
