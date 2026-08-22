@@ -1,5 +1,10 @@
 # LOCAL-DEVELOPMENT.md
 
+## Runtime Requirements
+- **Node:** `package.json` declares `24.x` under `engines`, though the app itself (no build step) runs fine under other modern Node versions too -- this mainly matters for the `devDependencies` tooling (`@playwright/test`).
+- **Browser:** any modern evergreen browser (native `<input type="date">`, `fetch`, IndexedDB, and Service Worker APIs are all relied upon -- see `CLAUDE.md`).
+- **Firebase:** a Firebase Realtime Database instance reachable over REST; no Firebase SDK/npm package required. See `docs/deployment/FIREBASE-SETUP.md` for what's needed.
+
 ## First Run
 Follow `docs/deployment/INSTALL.md`. Once `npm run serve` is running, `index.html` redirects to `login.html` (no `localStorage['farm_user']` yet) or `dashboard.html` (if already logged in on that browser).
 

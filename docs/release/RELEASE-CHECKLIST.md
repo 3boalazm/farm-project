@@ -1,7 +1,7 @@
 # RELEASE-CHECKLIST.md
 
 ## Before Release
-- [ ] `npx playwright test` — all tests passing (32/32 as of `baseline-v2-production-candidate`)
+- [ ] `npx playwright test` — all tests passing (189/189 as of `v1.7.0`; re-verify this count hasn't drifted)
 - [ ] `node scripts/safety-scan.js` — 0 CRITICAL findings
 - [ ] `docs/audit/PERMISSION-MATRIX.md` reviewed if `nav.js`/`can()` changed
 - [ ] Firebase reachable — confirm `config.js`/`firebase.js`'s `databaseURL` is live (no automated check exists for this; manual confirmation)

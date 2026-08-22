@@ -23,4 +23,4 @@ Full detail in docs/release/REPOSITORY-DISCOVERY-v1.7.0.md and UI-UX-CERTIFICATI
 - Safety scanner: 0 CRITICAL.
 
 ## Where to Go From Here
-docs/release/PRODUCTION-CERTIFICATION-v1.7.0.md for the full scored assessment. docs/release/KNOWN-LIMITATIONS.md for every honestly-remaining gap. docs/release/DEPLOYMENT-CHECKLIST.md and UPGRADE-GUIDE-v1.7.0.md for actually shipping this.
+docs/release/PRODUCTION-CERTIFICATION-v1.7.0.md for the full scored assessment. docs/release/KNOWN-LIMITATIONS.md for every honestly-remaining gap. docs/release/DEPLOYMENT-CHECKLIST-v1.7.0.md and UPGRADE-GUIDE-v1.7.0.md for actually shipping this.

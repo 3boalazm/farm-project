@@ -9,10 +9,10 @@ Vercel, static hosting. `vercel.json` only sets CORS headers for `/api/*` -- no 
 3. If deploying `api/claude.js` (the Anthropic proxy serverless function): set `ANTHROPIC_API_KEY` in the Vercel project's Environment Variables dashboard. Never commit this key to source.
 
 ## Pre-Deploy Checklist
-See `docs/release/DEPLOYMENT-CHECKLIST.md` for the full, current pre-deploy checklist (verified as of `v1.0.0-rc1`).
+See `docs/release/RELEASE-CHECKLIST.md` for the current pre-deploy/post-deploy checklist.
 
 ## Post-Deploy Validation
-See `docs/release/POST-DEPLOYMENT-VALIDATION.md` -- a real-Firebase checklist covering everything the automated test suite cannot verify against mocked data.
+Smoke-test the live deployed URL directly (login, one read, one write) -- CI only tests the local static server, not the actual Vercel deployment.
 
 ## Rollback
 See `docs/release/ROLLBACK-PLAN.md`. In short: `git revert` or redeploy from a previous tag (e.g., `baseline-v2-production-candidate` or an earlier `v1.0.0-rc*`) -- every commit in this project's history is meant to be independently revertible.

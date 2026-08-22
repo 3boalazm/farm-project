@@ -2,7 +2,7 @@
 
 ## First-Time Setup
 1. Copy `release/source/` to your chosen project location.
-2. `cd` into it, run `npm install` (dev tooling only — see `docs/release/LOCAL-SETUP.md`).
+2. `cd` into it, run `npm install` (dev tooling only — see `docs/deployment/LOCAL-DEVELOPMENT.md`).
 3. Confirm Firebase connectivity is reachable (the app talks to it directly over REST — no separate SDK setup needed).
 4. `npm run serve`, open `http://localhost:8080`.
 5. Log in and confirm the app behaves as expected before making any changes.
