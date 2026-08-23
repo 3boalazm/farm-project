@@ -10,13 +10,32 @@
 // already held in dark mode) instead of the theme-swapping variable --
 // the smallest possible change: one CSS rule, two values, no selector
 // changes, no JS changes, no other rule touched.
+//
+// UPDATED 2026-08-23: the sidebar itself was later rebuilt as "Rail V2"
+// (renderNavbarV2 in shared.js) -- .sidebar-item no longer exists
+// anywhere, replaced by .rail-v2__icon-link (the collapsed icon rail,
+// shown on desktop) and .rail-v2__child (the expanded label list, shown
+// on mobile/when the rail is expanded). Both variants are always present
+// in the DOM; CSS controls which one is visible per viewport/state. This
+// suite's selector, and its mobile-drawer trigger (openSidebar(), which
+// belonged to the old renderNavbar() and is dead code no page still
+// calls), were never updated for that redesign -- every test here was
+// failing on a stale selector, not a real regression. Verified live
+// before this fix: .rail-v2__icon-link.active still resolves to the
+// exact same fixed, WCAG-passing colors (rgb(52,211,153) on
+// rgb(2,44,34)) in light mode; .rail-v2__child.active uses a separate,
+// also-high-contrast white/near-black pair. Updated to match current
+// markup, no change to what's being verified.
 
 const { test, expect } = require('@playwright/test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function getActiveItemStyle(page) {
   return page.evaluate(() => {
-    const el = document.querySelector('.sidebar-item.active');
+    // Prefer whichever active variant is actually visible for this
+    // viewport/state -- both can exist in the DOM simultaneously.
+    const candidates = [...document.querySelectorAll('.rail-v2__icon-link.active, .rail-v2__child.active')];
+    const el = candidates.find((e) => e.offsetParent !== null) || candidates[0];
     if (!el) return null;
     const cs = getComputedStyle(el);
     return { background: cs.backgroundColor, color: cs.color };
@@ -115,7 +134,7 @@ test.describe('Theme switch: sidebar active-item contrast (hotfix regression)', 
     await page.setViewportSize({ width: 375, height: 700 });
     await page.goto(`${BASE_URL}/dashboard.html`);
     await page.waitForTimeout(700);
-    await page.evaluate(() => window.openSidebar && window.openSidebar());
+    await page.evaluate(() => window.toggleRailDrawerMobile && window.toggleRailDrawerMobile());
     await page.waitForTimeout(300);
     const style = await getActiveItemStyle(page);
     const ratio = contrastRatio(style.background, style.color);
@@ -156,10 +175,10 @@ test.describe('Theme switch: sidebar active-item contrast (hotfix regression)', 
     await page.addInitScript(() => localStorage.setItem('farm_user', JSON.stringify({ name: 'T', role: 'admin' })));
     await page.goto(`${BASE_URL}/dashboard.html`);
     await page.waitForTimeout(700);
-    await page.evaluate(() => { window.__sidebarRef = document.getElementById('sidebarMenu'); });
+    await page.evaluate(() => { window.__sidebarRef = document.querySelector('.rail-v2'); });
     await page.evaluate(() => window.toggleTheme());
     await page.waitForTimeout(150);
-    const sameNode = await page.evaluate(() => window.__sidebarRef === document.getElementById('sidebarMenu'));
+    const sameNode = await page.evaluate(() => window.__sidebarRef === document.querySelector('.rail-v2'));
     expect(sameNode, 'the fix is pure CSS -- the sidebar DOM node must not be recreated on theme toggle').toBe(true);
   });
 });
