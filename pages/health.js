@@ -16,7 +16,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   renderNavbarV2('health.html');
 
   // FAB for mobile
-  addFAB('تسجيل سجل صحي جديد', function(){ openAddHealth(); });
+  addFAB('تسجيل سجل صحي جديد', function(){ openHealthModal(); });
   renderRelatedLinks('health.js');
   healthRecs=await fbGet('health');
   renderHealthPage(s);

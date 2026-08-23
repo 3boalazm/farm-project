@@ -8,10 +8,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   if(!can('finance')){document.getElementById('content').innerHTML='<div class="empty-state"><i class="bi bi-shield-x"></i><p>غير مصرح بالوصول للبيانات المالية</p></div>';renderNavbarV2('finance.html');return;}
 
   // FAB for mobile
-  addFAB('إضافة معاملة مالية', function(){
-    var btn=document.querySelector('.action-btn.primary');
-    if(btn)btn.click();
-  }, 'bi-wallet2');
+  addFAB('إضافة معاملة مالية', function(){ openFinModal(); }, 'bi-wallet2');
   const s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
