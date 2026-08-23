@@ -1996,7 +1996,7 @@ function addFAB(label,actionFn,iconClass){
   btn.setAttribute('aria-label',label);
   btn.setAttribute('title',label);
   btn.innerHTML='<i class="bi '+iconClass+'"></i>';
-  btn.style.cssText='position:fixed;bottom:80px;left:20px;width:56px;height:56px;border-radius:50%;background:var(--orange);color:#fff;border:none;box-shadow:0 8px 24px rgba(255,107,53,.5);font-size:1.3rem;cursor:pointer;z-index:1000;display:none;align-items:center;justify-content:center;transition:.2s;font-family:Cairo,sans-serif';
+  btn.style.cssText='position:fixed;bottom:80px;left:20px;width:56px;height:56px;border-radius:50%;background:var(--orange);color:#fff;border:none;box-shadow:0 8px 24px rgba(255,107,53,.5);font-size:1.3rem;cursor:pointer;z-index:var(--z-fab);display:none;align-items:center;justify-content:center;transition:.2s;font-family:Cairo,sans-serif';
   btn.onclick=actionFn;
   btn.onmouseover=function(){this.style.transform='scale(1.08)';};
   btn.onmouseout=function(){this.style.transform='scale(1)';};
@@ -3713,6 +3713,15 @@ window.postJournalEntry=async function(opts){
   if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
   var v=_validateJournalLines(opts.lines);
   if(!v.valid) return {ok:false, error:v.error};
+  // Phase 17 (Fiscal Periods): every single posting in this whole engine
+  // funnels through this one function (directly, or via
+  // postSourceDocument), which is exactly why the period-lock check
+  // belongs HERE and nowhere else -- one gate protects every phase
+  // already built, none of them needed to be touched individually.
+  var periodCheck=typeof window._checkFiscalPeriodOpen==='function'
+    ? await window._checkFiscalPeriodOpen(opts.date||todayStr())
+    : {ok:true};
+  if(!periodCheck.ok) return periodCheck;
   var accounts=await fbGet('accounts');
   for(var i=0;i<opts.lines.length;i++){
     var acc=accounts.find(function(a){return a._id===opts.lines[i].accountId;});
@@ -5408,6 +5417,112 @@ window.getOwnerEquitySummary=async function(startDate,endDate){
   });
   capital=Math.round(capital*100)/100; drawings=Math.round(drawings*100)/100;
   return {ok:true, capitalContributed:capital, drawings:drawings, netEquityMovement:Math.round((capital-drawings)*100)/100};
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — FISCAL PERIODS (Phase 17). One new collection
+//  (fiscal_periods). This is the one phase that reaches BACK into
+//  postJournalEntry (Phase 1) rather than only adding new functions,
+//  because every posting in this entire engine already funnels through
+//  that one function -- that's exactly why the period-lock check was
+//  added there: a single gate protects every phase already built,
+//  automatically, with nothing else to touch.
+//
+//  Honest, stated limitation: this lock is enforced at the ENGINE level
+//  (postJournalEntry itself refuses), not yet at the database-rules
+//  level. A real server-authoritative period lock would need rules that
+//  can resolve "which fiscal period does this date fall in" without
+//  reliable string-slicing support in Firebase's rules language --
+//  attempting that without the ability to test it against a live
+//  Firebase project (per this session's own earlier lesson: an untested
+//  rules change already caused a full production outage once) is a real
+//  risk this pass declines to take blind. Tracked here as a genuine gap
+//  for Phase 31 (Security Hardening) to close properly, not silently
+//  assumed solved. Periods are opt-in: a date with no matching period
+//  record posts exactly as it always has -- nothing already built
+//  becomes MORE restricted than before this phase existed.
+// ══════════════════════════════════════════════════════════════
+
+window.createFiscalPeriod=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.periodKey||!opts.startDate||!opts.endDate) return {ok:false, error:'بيانات ناقصة (المعرّف وتاريخ البداية والنهاية مطلوبون)'};
+  if(opts.endDate<opts.startDate) return {ok:false, error:'تاريخ النهاية يجب أن يكون بعد تاريخ البداية'};
+  var existing=await fbGet('fiscal_periods');
+  if(existing.some(function(p){return p._id===opts.periodKey;})) return {ok:false, error:'الفترة موجودة بالفعل'};
+  try{
+    await fbPut('fiscal_periods',opts.periodKey,{
+      periodKey:opts.periodKey, startDate:opts.startDate, endDate:opts.endDate, status:'OPEN',
+      createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+    });
+    fbCacheInvalidate('fiscal_periods');
+    await logActivity('add','fiscal_periods','فتح فترة مالية: '+opts.periodKey);
+    return {ok:true, periodKey:opts.periodKey};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+function _findFiscalPeriodForDate(periods,date){
+  return periods.find(function(p){return p.startDate<=date && date<=p.endDate;})||null;
+}
+
+// Used by postJournalEntry (Phase 1) for every single posting in this
+// engine. No matching period -> allowed (opt-in control, see header).
+window._checkFiscalPeriodOpen=async function(date){
+  var periods=await fbGet('fiscal_periods');
+  var period=_findFiscalPeriodForDate(periods,date);
+  if(!period) return {ok:true};
+  if(period.status!=='OPEN'){
+    return {ok:false, error:'الفترة المالية '+period.periodKey+' '+(period.status==='LOCKED'?'مقفلة نهائيًا':'مغلقة')+' — لا يمكن الترحيل بتاريخ يقع ضمنها. استخدم قيدًا عكسيًا إذا احتجت لتصحيح شيء مُرحّل بالفعل.'};
+  }
+  return {ok:true};
+};
+
+window.closeFiscalPeriod=async function(periodKey){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var periods=await fbGet('fiscal_periods');
+  var period=periods.find(function(p){return p._id===periodKey;});
+  if(!period) return {ok:false, error:'الفترة غير موجودة'};
+  if(period.status!=='OPEN') return {ok:false, error:'الفترة ليست مفتوحة'};
+  try{
+    await fbPatch('fiscal_periods',periodKey,{status:'CLOSED', closedAt:new Date().toISOString(), closedBy:(getUser()&&getUser().name)||null});
+    fbCacheInvalidate('fiscal_periods');
+    await logActivity('close_period','fiscal_periods','إغلاق فترة مالية: '+periodKey);
+    return {ok:true};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Locking is a ONE-WAY door: a CLOSED period may be reopened (controlled,
+// logged), but a LOCKED one may not -- "locked periods cannot be
+// modified" applies to the period's own protection state too, not just
+// the entries inside it.
+window.lockFiscalPeriod=async function(periodKey){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var periods=await fbGet('fiscal_periods');
+  var period=periods.find(function(p){return p._id===periodKey;});
+  if(!period) return {ok:false, error:'الفترة غير موجودة'};
+  if(period.status!=='CLOSED') return {ok:false, error:'يجب إغلاق الفترة أولاً قبل قفلها نهائيًا'};
+  try{
+    await fbPatch('fiscal_periods',periodKey,{status:'LOCKED', lockedAt:new Date().toISOString(), lockedBy:(getUser()&&getUser().name)||null});
+    fbCacheInvalidate('fiscal_periods');
+    await logActivity('lock_period','fiscal_periods','قفل نهائي لفترة مالية: '+periodKey);
+    return {ok:true};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+window.reopenFiscalPeriod=async function(periodKey,reason){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!reason) return {ok:false, error:'سبب إعادة الفتح مطلوب'};
+  var periods=await fbGet('fiscal_periods');
+  var period=periods.find(function(p){return p._id===periodKey;});
+  if(!period) return {ok:false, error:'الفترة غير موجودة'};
+  if(period.status==='LOCKED') return {ok:false, error:'لا يمكن إعادة فتح فترة مقفلة نهائيًا'};
+  if(period.status!=='CLOSED') return {ok:false, error:'الفترة ليست مغلقة'};
+  try{
+    await fbPatch('fiscal_periods',periodKey,{status:'OPEN', reopenedAt:new Date().toISOString(), reopenedBy:(getUser()&&getUser().name)||null, reopenReason:reason});
+    fbCacheInvalidate('fiscal_periods');
+    await logActivity('reopen_period','fiscal_periods','إعادة فتح فترة مالية: '+periodKey+' — '+reason);
+    return {ok:true};
+  }catch(e){ return {ok:false, error:e.message}; }
 };
 
 // ══════════════════════════════════════════════════════

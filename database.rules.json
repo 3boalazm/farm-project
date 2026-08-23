@@ -338,6 +338,19 @@
       }
     },
 
+    // ── Accounting Engine (Phase 17): Fiscal Periods. Enforced at the
+    //    engine level (postJournalEntry checks this collection before
+    //    every single posting) -- see shared.js's own header comment on
+    //    why a matching rules-level lock isn't attempted this pass. ────
+    "fiscal_periods": {
+      ".read":  "auth != null",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      "$id": {
+        ".validate": "newData.hasChild('periodKey') && newData.hasChild('startDate') && newData.hasChild('endDate') && newData.hasChild('status')",
+        "status": { ".validate": "newData.val() === 'OPEN' || newData.val() === 'CLOSED' || newData.val() === 'LOCKED'" }
+      }
+    },
+
     // ── Users: read needed for the PIN-login screen (matches by pin_hash
     //    client-side); write restricted to admin only -- prevents any
     //    signed-in session from granting itself 'role':'admin' or
