@@ -6377,6 +6377,60 @@ window.getFinancialDashboardKPIs=async function(periodStartDate,periodEndDate){
   };
 };
 
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — FINANCIAL DATA QUALITY (Phase 29). Read-only
+//  audit scan, same philosophy as the repo's own scripts/safety-scan.js
+//  -- reports real issues found in the data, never auto-fixes anything.
+//  postJournalEntry's own _validateJournalLines (Phase 1) already
+//  guarantees every entry it creates is balanced and every line has SOME
+//  accountId -- but it never checks that accountId actually exists in
+//  `accounts`, and it can't protect data written outside this engine's
+//  own path (a legacy import, a future bug, manual console access).
+//  This scan checks exactly the gaps that write-time validation does
+//  NOT already close, so every finding here is genuinely new evidence,
+//  not a re-check of something already proven impossible.
+// ══════════════════════════════════════════════════════════════
+
+window.runFinancialDataQualityScan=async function(){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+
+  var accounts=await fbGet('accounts');
+  var accountIds={}; accounts.forEach(function(a){ accountIds[a._id]=a; });
+  var entries=await fbGet('journal_entries');
+  var docs=await fbGet('source_documents');
+  var issues=[];
+
+  entries.forEach(function(e){
+    var lines=e.lines||[];
+    var totalDebit=0, totalCredit=0;
+    lines.forEach(function(l){
+      totalDebit+=(+l.debit||0); totalCredit+=(+l.credit||0);
+      if(l.accountId && !accountIds[l.accountId]){
+        issues.push({type:'UNKNOWN_ACCOUNT', journalEntryId:e._id, accountId:l.accountId});
+      }else if(l.accountId && accountIds[l.accountId].postable===false){
+        issues.push({type:'POSTED_TO_NON_POSTABLE_ACCOUNT', journalEntryId:e._id, accountId:l.accountId});
+      }
+    });
+    totalDebit=Math.round(totalDebit*100)/100; totalCredit=Math.round(totalCredit*100)/100;
+    if(totalDebit!==totalCredit){
+      issues.push({type:'UNBALANCED_ENTRY', journalEntryId:e._id, totalDebit:totalDebit, totalCredit:totalCredit});
+    }
+  });
+
+  var seenOperationIds={};
+  docs.forEach(function(d){
+    if(d.status && d.status!=='DRAFT' && !d.journalEntryId){
+      issues.push({type:'POSTED_DOCUMENT_MISSING_JOURNAL_ENTRY', documentId:d._id});
+    }
+    if(d.operationId){
+      if(seenOperationIds[d.operationId]) issues.push({type:'DUPLICATE_OPERATION_ID', documentId:d._id, operationId:d.operationId});
+      else seenOperationIds[d.operationId]=true;
+    }
+  });
+
+  return {ok:true, scannedEntries:entries.length, scannedDocuments:docs.length, issueCount:issues.length, issues:issues};
+};
+
 // ══════════════════════════════════════════════════════
 // Animal Identity Service
 // ══════════════════════════════════════════════════════
