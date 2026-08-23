@@ -363,6 +363,20 @@
       }
     },
 
+    // ── Accounting Engine (Phase 20): Budgets. DRAFT -> APPROVED -> LOCKED
+    //    only counts APPROVED/LOCKED lines as the real budget (see
+    //    getBudgetVsActual in shared.js) -- normal admin write, not
+    //    write-once, since the status transitions patch this record. ────
+    "budgets": {
+      ".read":  "auth != null",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      "$id": {
+        ".validate": "newData.hasChild('periodKey') && newData.hasChild('accountId') && newData.hasChild('amount') && newData.hasChild('status')",
+        "status": { ".validate": "newData.val() === 'DRAFT' || newData.val() === 'APPROVED' || newData.val() === 'LOCKED'" },
+        "amount": { ".validate": "newData.isNumber() && newData.val() > 0" }
+      }
+    },
+
     // ── Users: read needed for the PIN-login screen (matches by pin_hash
     //    client-side); write restricted to admin only -- prevents any
     //    signed-in session from granting itself 'role':'admin' or

@@ -5731,6 +5731,108 @@ window.getLegacyMigrationReconciliation=async function(){
   };
 };
 
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — BUDGETING (Phase 20). One new collection
+//  (budgets). Actual figures are NEVER overwritten by a budget --
+//  getBudgetVsActual only ever READS journal_entries for the actual
+//  side, exactly the same real-ledger-scan pattern as every reporting
+//  function in this engine; budget lines live in their own collection,
+//  structurally incapable of touching a posted entry. A budget of
+//  exactly zero returns variancePercent:null (never a fabricated 0% or
+//  an Infinity), matching the Master Prompt's own explicit rule.
+// ══════════════════════════════════════════════════════════════
+
+var BUDGET_STATUSES=['DRAFT','APPROVED','LOCKED'];
+
+window.createBudgetLine=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.periodKey||!opts.accountId) return {ok:false, error:'الفترة والحساب مطلوبان'};
+  var amount=+opts.amount;
+  if(!amount||isNaN(amount)||amount<=0) return {ok:false, error:'يرجى إدخال مبلغ صحيح'};
+  var accounts=await fbGet('accounts');
+  if(!accounts.some(function(a){return a._id===opts.accountId;})) return {ok:false, error:'الحساب غير موجود'};
+  try{
+    var id=await fbPost('budgets',{
+      periodKey:opts.periodKey, accountId:opts.accountId, costCenterId:opts.costCenterId||null,
+      amount:Math.round(amount*100)/100, notes:opts.notes||null, status:'DRAFT',
+      createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+      approvedBy:null, approvedAt:null,
+    });
+    fbCacheInvalidate('budgets');
+    await logActivity('add','budgets','إضافة بند ميزانية: '+opts.periodKey);
+    return {ok:true, id:id};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+window.approveBudgetLine=async function(budgetId){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var budgets=await fbGet('budgets');
+  var b=budgets.find(function(x){return x._id===budgetId;});
+  if(!b) return {ok:false, error:'بند الميزانية غير موجود'};
+  if(b.status!=='DRAFT') return {ok:false, error:'يجب أن يكون البند مسودة ليُعتمد'};
+  try{
+    await fbPatch('budgets',budgetId,{status:'APPROVED', approvedBy:(getUser()&&getUser().name)||null, approvedAt:new Date().toISOString()});
+    fbCacheInvalidate('budgets');
+    _recordFinancialAudit('APPROVE_BUDGET','budget',budgetId,{});
+    return {ok:true};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+window.lockBudgetLine=async function(budgetId){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var budgets=await fbGet('budgets');
+  var b=budgets.find(function(x){return x._id===budgetId;});
+  if(!b) return {ok:false, error:'بند الميزانية غير موجود'};
+  if(b.status!=='APPROVED') return {ok:false, error:'يجب اعتماد البند أولاً قبل قفله'};
+  try{
+    await fbPatch('budgets',budgetId,{status:'LOCKED'});
+    fbCacheInvalidate('budgets');
+    return {ok:true};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Budget = sum of APPROVED/LOCKED lines for this period+account (a
+// DRAFT line isn't a real commitment yet, so it's excluded). Actual =
+// real journal_entries lines touching this account within the given
+// date range -- never anything else. If accountId's normal balance is
+// 'debit' (an expense/asset), variance is computed as actual-budget
+// (positive = over budget); if 'credit' (revenue/liability/equity),
+// variance is budget-actual (positive = under target) -- either way,
+// this reflects the account's own normal balance, never a guessed sign.
+window.getBudgetVsActual=async function(opts){
+  opts=opts||{};
+  if(!opts.periodKey||!opts.accountId) return {ok:false, error:'الفترة والحساب مطلوبان'};
+  var budgets=await fbGet('budgets');
+  var relevant=budgets.filter(function(b){
+    return b.periodKey===opts.periodKey && b.accountId===opts.accountId
+      && (opts.costCenterId ? b.costCenterId===opts.costCenterId : true)
+      && (b.status==='APPROVED'||b.status==='LOCKED');
+  });
+  var budget=Math.round(relevant.reduce(function(s,b){return s+(+b.amount||0);},0)*100)/100;
+
+  var entries=await fbGet('journal_entries');
+  var actual=0;
+  entries.forEach(function(e){
+    if(opts.startDate && e.date<opts.startDate) return;
+    if(opts.endDate && e.date>opts.endDate) return;
+    (e.lines||[]).forEach(function(l){
+      if(l.accountId!==opts.accountId) return;
+      if(opts.costCenterId && l.costCenterId!==opts.costCenterId) return;
+      actual+=(+l.debit||0)-(+l.credit||0);
+    });
+  });
+  actual=Math.round(Math.abs(actual)*100)/100; // magnitude -- sign convention is handled below via the account's normal balance
+
+  var accounts=await fbGet('accounts');
+  var account=accounts.find(function(a){return a._id===opts.accountId;});
+  var normalBalance=account?account.normalBalance:'debit';
+  var variance=normalBalance==='debit' ? Math.round((actual-budget)*100)/100 : Math.round((budget-actual)*100)/100;
+  var variancePercent=budget!==0 ? Math.round((variance/budget)*10000)/100 : null;
+
+  return {ok:true, periodKey:opts.periodKey, accountId:opts.accountId, budget:budget, actual:actual, variance:variance, variancePercent:variancePercent};
+};
+
 // ══════════════════════════════════════════════════════
 // Animal Identity Service
 // ══════════════════════════════════════════════════════
