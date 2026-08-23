@@ -160,7 +160,7 @@ function renderSpeciesSection(sp, icon, title, color, births, breedList){
     html+='<div class="breed-header">';
     html+='<div class="breed-icon">'+icon+'</div>';
     html+='<div>'+
-      '<div class="fw-bold">'+breed+'</div>'+
+      '<div class="fw-bold">'+escapeHtml(breed)+'</div>'+
       '<small class="text-gray">'+ar(total)+' مولود</small>'+
     '</div></div>';
 
@@ -216,7 +216,7 @@ window.openBirthBreedEdit=function(sp, breedEnc){
   window._birthEditData={sp:sp,breed:breed,mB:mB,fB:fB,mT:mT,fT:fT};
 
   showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:480px">'+
-    '<h4><i class="bi bi-pencil-square" style="color:var(--blue)"></i> تعديل مواليد: '+breed+' ('+spLabel+')</h4>'+
+    '<h4><i class="bi bi-pencil-square" style="color:var(--blue)"></i> تعديل مواليد: '+escapeHtml(breed)+' ('+spLabel+')</h4>'+
     '<div class="mb-3 p-3" style="background:rgba(255,193,7,.06);border:1px solid rgba(255,193,7,.25);border-radius:10px;font-size:.82rem">'+
       'الأرقام الحالية: مواليد ('+ar(mB)+'♂ / '+ar(fB)+'♀) | تسمين ('+ar(mT)+'♂ / '+ar(fT)+'♀)<br>'+
       '<span class="text-gray">الزيادة تضيف مواليد — النقص يعطّل الزيادة</span>'+

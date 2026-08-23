@@ -60,8 +60,8 @@ function renderFarmProfile(s,animals,users){
       <div class="wonder-card">
         <div class="section-title mb-3"><i class="bi bi-people-fill accent-text"></i> المستخدمون (${ar(users.length)})</div>
         ${users.slice(0,5).map(u=>`<div class="d-flex align-items-center gap-2 py-2" style="border-bottom:1px solid #1e1e1e">
-          <div class="user-avatar" style="width:32px;height:32px;font-size:.8rem;background:${ROLES[u.role]?.color||'var(--gray)'}22;color:${ROLES[u.role]?.color||'var(--gray)'}">${(u.name||'?').slice(0,1)}</div>
-          <div><div style="font-size:.85rem;font-weight:600">${u.name||'—'}</div><small class="text-gray">${ROLES[u.role]?.label||u.role}</small></div>
+          <div class="user-avatar" style="width:32px;height:32px;font-size:.8rem;background:${ROLES[u.role]?.color||'var(--gray)'}22;color:${ROLES[u.role]?.color||'var(--gray)'}">${escapeHtml((u.name||'?').slice(0,1))}</div>
+          <div><div style="font-size:.85rem;font-weight:600">${escapeHtml(u.name||'—')}</div><small class="text-gray">${ROLES[u.role]?.label||u.role}</small></div>
           <span class="ms-auto type-badge ${u.active!==false?'badge-tarbiya':'badge-danger'}" style="font-size:.65rem">${u.active!==false?'نشط':'غير نشط'}</span>
         </div>`).join('')}
       </div>

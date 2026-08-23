@@ -523,6 +523,13 @@ function renderKPICard({ label, value=null, unit='', trend=null, trendDir='up', 
 function renderAlertCard({ severity='info', icon='bi-info-circle', title, message='', source='', deadline='', actionLabel='', actionHref='' }){
   const sevMap = { info:'var(--blue)', watch:'var(--yellow)', critical:'var(--red)' };
   const color = sevMap[severity] || sevMap.info;
+  // XSS fix (2026-08-23): title/message/source/deadline/actionLabel are
+  // plain-text fields by this component's own contract (no *Html-suffixed
+  // param exists for them) but are built by callers across the app from
+  // free-text Firebase fields (medicine/feed names, tags, diagnoses,
+  // barns) with no escaping upstream -- fixing it once here protects
+  // every current and future caller, same pattern already used for toast().
+  title=escapeHtml(title); message=escapeHtml(message); source=escapeHtml(source); deadline=escapeHtml(deadline); actionLabel=escapeHtml(actionLabel);
   return `
     <div class="alert-card-v2" style="border-right:3px solid ${color}">
       <div class="d-flex align-items-start gap-2">
@@ -578,6 +585,13 @@ function renderDataTableWrapper({ title, filterHtml='', headers=[], rowsHtml='',
 
 // ── 7. Timeline ──
 function renderTimelineItem({ time, eventType='', entity='', description='', statusBadgeHtml='' }){
+  // XSS fix (2026-08-23): eventType/entity/description are plain-text by
+  // contract (statusBadgeHtml is the only param meant to carry markup) but
+  // are built by callers from free-text Firebase fields (tags, breeds,
+  // diagnoses, activity-log descriptions, user names) with no escaping
+  // upstream -- fixing it once here protects every caller, same pattern
+  // already used for toast().
+  eventType=escapeHtml(eventType); entity=escapeHtml(entity); description=escapeHtml(description);
   return `
     <div class="timeline-item-v2">
       <div class="timeline-item-v2-dot"></div>

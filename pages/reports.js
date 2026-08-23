@@ -235,7 +235,7 @@ function renderFinanceTab(el, m) {
     ${renderDataTableWrapper({
       title: 'آخر العمليات',
       headers: ['التاريخ','النوع','الفئة','الوصف','المبلغ'],
-      rowsHtml: fin.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,10).map(r=>`<tr><td class="text-gray">${r.date||'—'}</td><td><span class="type-badge ${r.type==='income'?'badge-tarbiya':'badge-danger'}">${r.type==='income'?'إيراد':'مصروف'}</span></td><td class="text-gray">${r.category||'—'}</td><td>${r.description||'—'}</td><td class="fw-bold ${r.type==='income'?'green-text':'red-text'}">${(+r.amount||0).toLocaleString('ar-EG')} ${curr}</td></tr>`).join(''),
+      rowsHtml: fin.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,10).map(r=>`<tr><td class="text-gray">${r.date||'—'}</td><td><span class="type-badge ${r.type==='income'?'badge-tarbiya':'badge-danger'}">${r.type==='income'?'إيراد':'مصروف'}</span></td><td class="text-gray">${r.category||'—'}</td><td>${escapeHtml(r.description||'—')}</td><td class="fw-bold ${r.type==='income'?'green-text':'red-text'}">${(+r.amount||0).toLocaleString('ar-EG')} ${curr}</td></tr>`).join(''),
       actionsHtml: `<a href="finance.html" class="action-btn sm"><i class="bi bi-arrow-left"></i> كل العمليات</a>`
     })}
   </div>`;
@@ -289,7 +289,7 @@ function renderHealthTab(el, m) {
     <div class="col-md-6"><div class="wonder-card h-100"><h6 class="fw-bold mb-3"><i class="bi bi-bar-chart-fill accent-text"></i> التشخيصات الأكثر شيوعاً</h6>${diagTop.length?'<div style="position:relative;height:200px"><canvas id="chart-diag"></canvas></div>':'<div class="text-gray text-center py-4">لا توجد سجلات بعد</div>'}</div></div>
     <div class="col-md-6"><div class="wonder-card h-100"><h6 class="fw-bold mb-3"><i class="bi bi-pie-chart-fill accent-text"></i> حالة التحصين</h6><div style="position:relative;height:160px"><canvas id="chart-vac"></canvas></div><div class="row g-2 mt-2">${[['تم التنفيذ',m.vacDone,'var(--green)'],['انتظار',m.vacPend,'var(--orange)'],['متأخر',m.vacOver,'var(--red)']].map(([l,v,c])=>`<div class="col-4 text-center"><div class="fw-bold" style="color:${c}">${ar(v)}</div><small class="text-gray">${l}</small></div>`).join('')}</div></div></div>
   </div>
-  ${m.withdrawalHealth.length?`<div class="withdrawal-alert mb-4"><div class="fw-bold red-text mb-2"><i class="bi bi-exclamation-triangle-fill me-2"></i>تحذير: ${ar(m.withdrawalHealth.length)} حيوان في فترة تأثير علاج</div>${m.withdrawalHealth.slice(0,4).map(r=>{const d=Math.max(0,Math.ceil((new Date(r.withdrawal_end)-new Date())/86400000));return`<div class="d-flex align-items-center gap-2 mt-1 flex-wrap"><span class="type-badge badge-danger">${r.animal_tag||r.animal_breed||'—'}</span><small class="text-gray">${r.medication} — ينتهي ${r.withdrawal_end} <span style="color:var(--red)">(${ar(d)} يوم)</span></small></div>`;}).join('')}<div class="mt-2"><a href="health.html" class="action-btn sm danger"><i class="bi bi-arrow-left"></i> عرض الكل</a></div></div>`:''}
+  ${m.withdrawalHealth.length?`<div class="withdrawal-alert mb-4"><div class="fw-bold red-text mb-2"><i class="bi bi-exclamation-triangle-fill me-2"></i>تحذير: ${ar(m.withdrawalHealth.length)} حيوان في فترة تأثير علاج</div>${m.withdrawalHealth.slice(0,4).map(r=>{const d=Math.max(0,Math.ceil((new Date(r.withdrawal_end)-new Date())/86400000));return`<div class="d-flex align-items-center gap-2 mt-1 flex-wrap"><span class="type-badge badge-danger">${escapeHtml(r.animal_tag||r.animal_breed||'—')}</span><small class="text-gray">${escapeHtml(r.medication)} — ينتهي ${r.withdrawal_end} <span style="color:var(--red)">(${ar(d)} يوم)</span></small></div>`;}).join('')}<div class="mt-2"><a href="health.html" class="action-btn sm danger"><i class="bi bi-arrow-left"></i> عرض الكل</a></div></div>`:''}
   <!-- MIGRATED to renderDataTableWrapper. Disclosed, minor cosmetic trade-off:
        the original card had a distinct amber-tinted border (border-color:
        rgba(255,193,7,.3)) signaling urgency; renderDataTableWrapper's own
@@ -300,10 +300,10 @@ function renderHealthTab(el, m) {
   ${expiringMeds.length?`<div class="mb-4">${renderDataTableWrapper({
     title: '⚠️ أدوية قاربت الانتهاء (30 يوم)',
     headers: ['الدواء','الكمية','تاريخ الانتهاء','متبقي'],
-    rowsHtml: expiringMeds.map(med=>{const d=Math.ceil((new Date(med.expiry)-new Date())/86400000);return`<tr><td class="fw-bold">${med.name||'—'}</td><td>${med.quantity||0} ${med.unit||''}</td><td class="text-gray">${med.expiry}</td><td><span class="type-badge ${d<=7?'badge-danger':'badge-yellow'}">${ar(d)} يوم</span></td></tr>`;}).join(''),
+    rowsHtml: expiringMeds.map(med=>{const d=Math.ceil((new Date(med.expiry)-new Date())/86400000);return`<tr><td class="fw-bold">${escapeHtml(med.name||'—')}</td><td>${med.quantity||0} ${med.unit||''}</td><td class="text-gray">${med.expiry}</td><td><span class="type-badge ${d<=7?'badge-danger':'badge-yellow'}">${ar(d)} يوم</span></td></tr>`;}).join(''),
     actionsHtml: `<a href="inventory.html" class="action-btn sm"><i class="bi bi-arrow-left"></i> الصيدلية</a>`
   })}</div>`:''}
-  ${medTop.length?`<div class="wonder-card mb-4"><h6 class="fw-bold mb-3"><i class="bi bi-capsule-pill accent-text"></i> الأدوية الأكثر استخداماً</h6>${medTop.map((m2,i)=>`<div class="finance-bar-wrap"><div class="lb"><span>${m2.med||'غير محدد'}</span><span class="fw-bold">${ar(m2.count)} مرة</span></div><div class="finance-bar"><div class="finance-bar-fill" style="width:${Math.round(m2.count/medTop[0].count*100)}%;background:${CHART_COLORS[i]}"></div></div></div>`).join('')}</div>`:''}`;
+  ${medTop.length?`<div class="wonder-card mb-4"><h6 class="fw-bold mb-3"><i class="bi bi-capsule-pill accent-text"></i> الأدوية الأكثر استخداماً</h6>${medTop.map((m2,i)=>`<div class="finance-bar-wrap"><div class="lb"><span>${escapeHtml(m2.med||'غير محدد')}</span><span class="fw-bold">${ar(m2.count)} مرة</span></div><div class="finance-bar"><div class="finance-bar-fill" style="width:${Math.round(m2.count/medTop[0].count*100)}%;background:${CHART_COLORS[i]}"></div></div></div>`).join('')}</div>`:''}`;
   setTimeout(()=>{
     if(!window.Chart)return;
     if(diagTop.length)mkChart('chart-diag',{type:'bar',data:{labels:diagTop.map(d=>d.d||'غير محدد'),datasets:[{label:'الحالات',data:diagTop.map(d=>d.count),backgroundColor:'rgba(244,67,54,0.7)',borderRadius:4}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:textClr()},grid:{color:gridClr()}},y:{ticks:{color:textClr(),font:{size:11}}}}}});
@@ -421,7 +421,7 @@ async function renderIntelligenceRanking() {
     container.innerHTML = renderDataTableWrapper({
       title:'', headers:['الحيوان','الأولوية','الدرجة','الثقة','المحركات المساهمة'],
       state: ranked.length?'ready':'empty',
-      rowsHtml: ranked.slice(0,15).map(r=>`<tr><td class="fw-bold"><a href="animal-detail.html?id=${r.animalId}">${r.animalTag||r.animalId}</a></td><td><span class="type-badge ${r.level==='critical'?'badge-danger':r.level==='high'?'badge-yellow':'badge-tarbiya'}">${LEVEL_LABEL[r.level]||r.level}</span></td><td>${ar(r.score)}/100</td><td class="text-gray">${r.confidence==='high'?'عالية':'متوسطة'}</td><td class="text-gray">${r.contributingEngines.map(e=>ENGINE_LABEL[e]||e).join('، ')}</td></tr>`).join('')
+      rowsHtml: ranked.slice(0,15).map(r=>`<tr><td class="fw-bold"><a href="animal-detail.html?id=${r.animalId}">${escapeHtml(r.animalTag||r.animalId)}</a></td><td><span class="type-badge ${r.level==='critical'?'badge-danger':r.level==='high'?'badge-yellow':'badge-tarbiya'}">${LEVEL_LABEL[r.level]||r.level}</span></td><td>${ar(r.score)}/100</td><td class="text-gray">${r.confidence==='high'?'عالية':'متوسطة'}</td><td class="text-gray">${r.contributingEngines.map(e=>ENGINE_LABEL[e]||e).join('، ')}</td></tr>`).join('')
     });
   } catch(e) { container.innerHTML=''; }
 }
@@ -500,13 +500,13 @@ async function renderForecastTabAsync() {
     const wTable=document.getElementById('forecast-weight-table');
     if (wTable) wTable.innerHTML = renderDataTableWrapper({
       title:'', headers:['الحيوان','الوزن الحالي','بعد ٧ أيام','بعد ٣٠ يوم','الثقة'], state: decliningWeights.length?'ready':'empty',
-      rowsHtml: decliningWeights.map(w=>`<tr><td class="fw-bold"><a href="animal-detail.html?id=${w.animalId}">${w.animalTag}</a></td><td>${ar(w.currentWeight)} كجم</td><td class="text-gray">${ar(w.projected7)} كجم</td><td style="color:var(--red)">${ar(w.projected30)} كجم</td><td class="text-gray">${w.confidence==='high'?'عالية':'متوسطة'}</td></tr>`).join('')
+      rowsHtml: decliningWeights.map(w=>`<tr><td class="fw-bold"><a href="animal-detail.html?id=${w.animalId}">${escapeHtml(w.animalTag)}</a></td><td>${ar(w.currentWeight)} كجم</td><td class="text-gray">${ar(w.projected7)} كجم</td><td style="color:var(--red)">${ar(w.projected30)} كجم</td><td class="text-gray">${w.confidence==='high'?'عالية':'متوسطة'}</td></tr>`).join('')
     });
 
     const hTable=document.getElementById('forecast-health-table');
     if (hTable) hTable.innerHTML = renderDataTableWrapper({
       title:'', headers:['الحيوان','الدرجة الحالية','الدرجة المتوقعة','الثقة','السبب'], state: risingRisks.length?'ready':'empty',
-      rowsHtml: risingRisks.map(h=>`<tr><td class="fw-bold"><a href="animal-detail.html?id=${h.animalId}">${h.animalTag}</a></td><td>${ar(h.currentScore)}</td><td style="color:var(--yellow)">${ar(h.projectedScore)}</td><td class="text-gray">${h.confidence==='high'?'عالية':'متوسطة'}</td><td class="text-gray">${h.evidence[0]||''}</td></tr>`).join('')
+      rowsHtml: risingRisks.map(h=>`<tr><td class="fw-bold"><a href="animal-detail.html?id=${h.animalId}">${escapeHtml(h.animalTag)}</a></td><td>${ar(h.currentScore)}</td><td style="color:var(--yellow)">${ar(h.projectedScore)}</td><td class="text-gray">${h.confidence==='high'?'عالية':'متوسطة'}</td><td class="text-gray">${escapeHtml(h.evidence[0]||'')}</td></tr>`).join('')
     });
   } catch(e) {}
 }
@@ -529,14 +529,14 @@ function renderInventoryTab(el, m) {
   </div>
   <div class="row g-3 mb-4">
     <div class="col-md-6">${renderDataTableWrapper({title:'مستويات المخزون — أدوية', headers:['الصنف','الكمية','الحد الأدنى','المورّد','الحالة'], state:meds.length?'ready':'empty',
-      rowsHtml: meds.map(x=>`<tr><td class="fw-bold">${x.name}</td><td>${ar(x.quantity)} ${x.unit||''}</td><td class="text-gray">${ar(x.min_quantity||0)}</td><td class="text-gray">${x.supplier||'—'}</td><td>${(+x.quantity<=0)?'<span class="type-badge badge-danger">نافد</span>':(+x.quantity<=+x.min_quantity&&+x.min_quantity>0)?'<span class="type-badge badge-yellow">منخفض</span>':'<span class="type-badge badge-tarbiya">جيد</span>'}</td></tr>`).join('')})}</div>
+      rowsHtml: meds.map(x=>`<tr><td class="fw-bold">${escapeHtml(x.name)}</td><td>${ar(x.quantity)} ${x.unit||''}</td><td class="text-gray">${ar(x.min_quantity||0)}</td><td class="text-gray">${escapeHtml(x.supplier||'—')}</td><td>${(+x.quantity<=0)?'<span class="type-badge badge-danger">نافد</span>':(+x.quantity<=+x.min_quantity&&+x.min_quantity>0)?'<span class="type-badge badge-yellow">منخفض</span>':'<span class="type-badge badge-tarbiya">جيد</span>'}</td></tr>`).join('')})}</div>
     <div class="col-md-6">${renderDataTableWrapper({title:'مستويات المخزون — علف', headers:['الصنف','الكمية','الحد الأدنى','التكلفة/وحدة','الحالة'], state:feeds.length?'ready':'empty',
-      rowsHtml: feeds.map(x=>`<tr><td class="fw-bold">${x.name}</td><td>${ar(x.quantity)} ${x.unit||''}</td><td class="text-gray">${ar(x.min_quantity||0)}</td><td class="text-gray">${(+x.cost_per_unit||0).toLocaleString('ar-EG')}</td><td>${(+x.quantity<=0)?'<span class="type-badge badge-danger">نافد</span>':(+x.quantity<=+x.min_quantity&&+x.min_quantity>0)?'<span class="type-badge badge-yellow">منخفض</span>':'<span class="type-badge badge-tarbiya">جيد</span>'}</td></tr>`).join('')})}</div>
+      rowsHtml: feeds.map(x=>`<tr><td class="fw-bold">${escapeHtml(x.name)}</td><td>${ar(x.quantity)} ${x.unit||''}</td><td class="text-gray">${ar(x.min_quantity||0)}</td><td class="text-gray">${(+x.cost_per_unit||0).toLocaleString('ar-EG')}</td><td>${(+x.quantity<=0)?'<span class="type-badge badge-danger">نافد</span>':(+x.quantity<=+x.min_quantity&&+x.min_quantity>0)?'<span class="type-badge badge-yellow">منخفض</span>':'<span class="type-badge badge-tarbiya">جيد</span>'}</td></tr>`).join('')})}</div>
   </div>
   <div class="mb-4">${renderDataTableWrapper({title:'آخر حركات المخزون (Transactions)', headers:['التاريخ','الصنف','السبب','التغيّر','قبل','بعد'],
-    rowsHtml: txns.slice().sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||'')).slice(0,15).map(t=>`<tr><td class="text-gray">${t.date||'—'}</td><td class="fw-bold">${t.item_name}</td><td class="text-gray">${{treatment:'علاج',vaccination:'تحصين',feeding:'تغذية',purchase:'شراء',manual_adjustment:'تعديل يدوي'}[t.reason]||t.reason}</td><td class="${t.actual_delta<0?'red-text':'green-text'}">${t.actual_delta>0?'+':''}${ar(Math.round(t.actual_delta*100)/100)}</td><td class="text-gray">${ar(t.quantity_before)}</td><td class="text-gray">${ar(t.quantity_after)}</td></tr>`).join('')})}</div>
+    rowsHtml: txns.slice().sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||'')).slice(0,15).map(t=>`<tr><td class="text-gray">${t.date||'—'}</td><td class="fw-bold">${escapeHtml(t.item_name)}</td><td class="text-gray">${{treatment:'علاج',vaccination:'تحصين',feeding:'تغذية',purchase:'شراء',manual_adjustment:'تعديل يدوي'}[t.reason]||t.reason}</td><td class="${t.actual_delta<0?'red-text':'green-text'}">${t.actual_delta>0?'+':''}${ar(Math.round(t.actual_delta*100)/100)}</td><td class="text-gray">${ar(t.quantity_before)}</td><td class="text-gray">${ar(t.quantity_after)}</td></tr>`).join('')})}</div>
   <div class="mb-4">${renderDataTableWrapper({title:'سجل استهلاك العلف', headers:['التاريخ','الجمالون','العلف','الكمية (كجم)'],
-    rowsHtml: consumption.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,15).map(c=>`<tr><td class="text-gray">${c.date||'—'}</td><td>${c.barn||'—'}</td><td class="fw-bold">${c.feed_name}</td><td>${ar(c.quantity_kg)}</td></tr>`).join('')})}</div>`;
+    rowsHtml: consumption.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,15).map(c=>`<tr><td class="text-gray">${c.date||'—'}</td><td>${c.barn||'—'}</td><td class="fw-bold">${escapeHtml(c.feed_name)}</td><td>${ar(c.quantity_kg)}</td></tr>`).join('')})}</div>`;
 }
 
 // ════════════════ TAB 7: WORKFLOW HISTORY (v1.4) ═══════════

@@ -228,17 +228,17 @@ window.openMarkDeathGoat=function(){
 
     '<label>الحيوان *</label>'+
     '<select class="field" id="d-id" onchange="onDeathAnimalChangeGoat()">'+
-      alive.slice(0,300).map(function(a){return'<option value="'+a._id+'">'+(a.breed||'—')+(a.tag?' #'+a.tag:'')+' ('+(a.gender==='male'?'ذكر':'أنثى')+')</option>';}).join('')+
+      alive.slice(0,300).map(function(a){return'<option value="'+a._id+'">'+escapeHtml(a.breed||'—')+(a.tag?' #'+escapeHtml(a.tag):'')+' ('+(a.gender==='male'?'ذكر':'أنثى')+')</option>';}).join('')+
     '</select>'+
 
     '<div class="row g-2">'+
       '<div class="col-6">'+
         '<label>الترقيم</label>'+
-        '<input class="field" id="d-tag" value="'+(first.tag||'—')+'" readonly style="background:var(--bg-3);opacity:.7">'+
+        '<input class="field" id="d-tag" value="'+escapeHtml(first.tag||'—')+'" readonly style="background:var(--bg-3);opacity:.7">'+
       '</div>'+
       '<div class="col-6">'+
         '<label>السلالة</label>'+
-        '<input class="field" id="d-breed" value="'+(first.breed||'—')+'" readonly style="background:var(--bg-3);opacity:.7">'+
+        '<input class="field" id="d-breed" value="'+escapeHtml(first.breed||'—')+'" readonly style="background:var(--bg-3);opacity:.7">'+
       '</div>'+
     '</div>'+
 
