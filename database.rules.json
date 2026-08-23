@@ -309,6 +309,20 @@
       }
     },
 
+    // ── Accounting Engine (Phase 14): Fixed Asset register. Acquisition
+    //    itself posts through source_documents (type 'asset_purchase');
+    //    this is the asset master (acquisitionCost/usefulLifeMonths/
+    //    residualValue) that postDepreciation reads to compute each
+    //    period's straight-line amount. Accumulated depreciation is never
+    //    stored here -- always derived from journal_entries. ────────────
+    "fixed_assets": {
+      ".read":  "auth != null",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      "$id": {
+        ".validate": "newData.hasChild('name') && newData.hasChild('acquisitionCost') && newData.hasChild('usefulLifeMonths')"
+      }
+    },
+
     // ── Users: read needed for the PIN-login screen (matches by pin_hash
     //    client-side); write restricted to admin only -- prevents any
     //    signed-in session from granting itself 'role':'admin' or

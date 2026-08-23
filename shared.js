@@ -5093,6 +5093,126 @@ window.getProductionMargin=async function(opts){
   };
 };
 
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — FIXED ASSETS & DEPRECIATION (Phase 14). One new
+//  collection (fixed_assets). Acquisition is Phase 2's source_documents
+//  (type 'asset_purchase', already in the enum): Debit Fixed Assets
+//  (1600) / Credit Cash or AP. Depreciation is a plain, idempotency-
+//  guarded journal entry (Phase 6's _findExistingJournalBySource
+//  pattern), straight-line only, one period per call.
+//
+//  Accumulated depreciation is NEVER a stored, mutable number on the
+//  asset record -- same principle as Phase 3's cash/bank balances: it's
+//  always the real sum of every depreciation journal entry actually
+//  posted for that asset (sourceType 'asset_depreciation', sourceId the
+//  asset's id), so it can never silently drift from the ledger. Every
+//  depreciation posting is capped so accumulated depreciation can never
+//  exceed the asset's own depreciable value (acquisitionCost -
+//  residualValue) -- if less than a full period remains, only the real
+//  remainder is posted; if nothing remains, nothing is posted.
+// ══════════════════════════════════════════════════════════════
+
+window.postAssetPurchase=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.name) return {ok:false, error:'اسم الأصل مطلوب'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var cost=+opts.acquisitionCost;
+  if(!cost||isNaN(cost)||cost<=0) return {ok:false, error:'تكلفة الاستحواذ يجب أن تكون صحيحة'};
+  var usefulLifeMonths=+opts.usefulLifeMonths;
+  if(!usefulLifeMonths||usefulLifeMonths<=0) return {ok:false, error:'العمر الإنتاجي (بالأشهر) يجب أن يكون صحيحًا'};
+  var residualValue=opts.residualValue!=null ? +opts.residualValue : 0;
+  if(residualValue<0||residualValue>=cost) return {ok:false, error:'القيمة التخريدية يجب أن تكون أقل من تكلفة الاستحواذ'};
+  if(opts.paymentMode!=='cash' && opts.paymentMode!=='credit') return {ok:false, error:'طريقة الدفع يجب أن تكون cash أو credit'};
+  if(opts.paymentMode==='cash' && !opts.cashAccountId) return {ok:false, error:'الحساب النقدي مطلوب للشراء الكاش'};
+
+  var assetId;
+  try{
+    assetId=await fbPost('fixed_assets',{
+      name:opts.name, category:opts.category||null, acquisitionDate:opts.date||todayStr(),
+      acquisitionCost:Math.round(cost*100)/100, usefulLifeMonths:usefulLifeMonths,
+      residualValue:Math.round(residualValue*100)/100, depreciationMethod:'STRAIGHT_LINE',
+      location:opts.location||null, status:'active', createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+    });
+    fbCacheInvalidate('fixed_assets');
+  }catch(e){ return {ok:false, error:e.message}; }
+
+  var created=await window.createSourceDocument({
+    type:'asset_purchase', total:cost, date:opts.date, operationId:opts.operationId,
+    counterpartyId:opts.supplierId||null, counterpartyName:opts.supplierName||null,
+    sourceType:'fixed_asset', sourceId:assetId, notes:'شراء أصل: '+opts.name,
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return {ok:true, assetId:assetId, documentId:created.id, idempotent:true};
+  var posted=await window.postSourceDocument(created.id,{
+    debitAccountId:'1600', creditAccountId:opts.paymentMode==='cash'?opts.cashAccountId:AP_ACCOUNT_ID,
+    paidAmount:opts.paymentMode==='cash'?cost:0,
+  });
+  if(!posted.ok) return posted;
+  return {ok:true, assetId:assetId, documentId:created.id, journalEntryId:posted.journalEntryId, status:posted.status};
+};
+
+// Depreciation entries use a COMPOSITE sourceId ("{assetId}::{periodKey}"),
+// not a separate field on the entry -- journal_entries is immutable the
+// instant it's posted (Phase 1's own rule blocks any later write, on
+// purpose), so there is no legal way to tag an asset id onto an entry
+// AFTER posting it. Encoding both the asset and the period into the one
+// sourceId the engine already carries avoids needing a second field or a
+// third collection.
+function _depreciationSourceId(assetId,periodOperationId){ return assetId+'::'+periodOperationId; }
+
+window.getAssetAccumulatedDepreciation=async function(assetId){
+  var entries=await fbGet('journal_entries');
+  var prefix=assetId+'::';
+  var total=0;
+  entries.forEach(function(e){
+    if(e.sourceType!=='asset_depreciation'||typeof e.sourceId!=='string'||e.sourceId.indexOf(prefix)!==0) return;
+    (e.lines||[]).forEach(function(l){ if(l.accountId==='1690') total+=(+l.credit||0); });
+  });
+  return Math.round(total*100)/100;
+};
+
+window.getAssetBookValue=async function(assetId){
+  var assets=await fbGet('fixed_assets');
+  var asset=assets.find(function(a){return a._id===assetId;});
+  if(!asset) return {ok:false, error:'الأصل غير موجود'};
+  var accumulated=await window.getAssetAccumulatedDepreciation(assetId);
+  var bookValue=Math.round((asset.acquisitionCost-accumulated)*100)/100;
+  return {ok:true, acquisitionCost:asset.acquisitionCost, accumulatedDepreciation:accumulated, bookValue:bookValue};
+};
+
+// One straight-line period. periodOperationId should be unique per
+// asset+period (e.g. "assetId-2026-01") so re-running the same period
+// is a safe no-op rather than double-depreciating.
+window.postDepreciation=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.assetId||!opts.periodOperationId) return {ok:false, error:'معرّف الأصل ومعرّف الفترة مطلوبان'};
+
+  var compositeSourceId=_depreciationSourceId(opts.assetId,opts.periodOperationId);
+  var existing=await _findExistingJournalBySource('asset_depreciation',compositeSourceId);
+  if(existing) return {ok:true, journalEntryId:existing._id, idempotent:true};
+
+  var assets=await fbGet('fixed_assets');
+  var asset=assets.find(function(a){return a._id===opts.assetId;});
+  if(!asset) return {ok:false, error:'الأصل غير موجود'};
+
+  var depreciableValue=Math.round((asset.acquisitionCost-asset.residualValue)*100)/100;
+  var periodAmount=Math.round((depreciableValue/asset.usefulLifeMonths)*100)/100;
+  var accumulated=await window.getAssetAccumulatedDepreciation(opts.assetId);
+  var remaining=Math.round((depreciableValue-accumulated)*100)/100;
+  if(remaining<=0) return {ok:true, posted:false, reason:'الأصل مُهلَك بالكامل بالفعل'};
+  var thisAmount=Math.min(periodAmount,remaining);
+
+  var posted=await window.postJournalEntry({
+    date:opts.date||todayStr(), description:'إهلاك: '+asset.name+(opts.periodLabel?(' — '+opts.periodLabel):''),
+    sourceType:'asset_depreciation', sourceId:compositeSourceId,
+    lines:[{accountId:'6800', debit:thisAmount},{accountId:'1690', credit:thisAmount}],
+  });
+  if(!posted.ok) return posted;
+  return {ok:true, journalEntryId:posted.id, amount:thisAmount, remainingAfter:Math.round((remaining-thisAmount)*100)/100};
+};
+
 // ══════════════════════════════════════════════════════
 // Animal Identity Service
 // ══════════════════════════════════════════════════════
