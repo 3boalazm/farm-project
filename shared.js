@@ -6332,6 +6332,51 @@ window.rankAnimalProfitability=async function(animalIds){
   return {ok:true, realized:realized, stillActive:stillActive};
 };
 
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — MANAGEMENT DASHBOARD KPIs (Phase 28). A pure
+//  composition layer over Phases 22/24/26 (Cash Flow, Financial
+//  Statements, Trial Balance) -- same discipline shared.js's own
+//  evaluateOperationalPriority already established for the
+//  non-financial engines: never recalculates what those functions
+//  already computed, only combines their outputs and derives a small
+//  set of standard ratios. Every ratio is guarded against a zero
+//  denominator and returned as null, never 0 or Infinity, when it has
+//  no real meaning yet (e.g. no revenue posted this period). No
+//  current/non-current asset classification exists in this chart of
+//  accounts, so a current ratio is deliberately NOT computed here --
+//  that would require inventing a split the data doesn't support.
+// ══════════════════════════════════════════════════════════════
+
+window.getFinancialDashboardKPIs=async function(periodStartDate,periodEndDate){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!periodStartDate||!periodEndDate) return {ok:false, error:'التاريخ من وإلى مطلوبان'};
+
+  var incomeStatement=await window.getIncomeStatement(periodStartDate,periodEndDate);
+  if(!incomeStatement.ok) return incomeStatement;
+  var balanceSheet=await window.getBalanceSheet(periodEndDate);
+  if(!balanceSheet.ok) return balanceSheet;
+  var trialBalance=await window.getTrialBalance(periodEndDate);
+  if(!trialBalance.ok) return trialBalance;
+  var cashFlow=await window.getCashFlowStatement(periodStartDate,periodEndDate); // optional -- no cash/bank accounts yet is not fatal to the rest of the dashboard
+
+  var netIncome=incomeStatement.netIncome;
+  var totalRevenue=incomeStatement.totalRevenue;
+  var totalAssets=balanceSheet.totalAssets;
+  var totalLiabilities=balanceSheet.totalLiabilities;
+  var totalEquity=balanceSheet.totalEquity;
+
+  return {
+    ok:true, periodStartDate:periodStartDate, periodEndDate:periodEndDate,
+    revenue:totalRevenue, expense:incomeStatement.totalExpense, netIncome:netIncome,
+    totalAssets:totalAssets, totalLiabilities:totalLiabilities, totalEquity:totalEquity,
+    netCashFlow:cashFlow.ok?cashFlow.netCashFlow:null, closingCash:cashFlow.ok?cashFlow.closingCash:null,
+    netProfitMarginPercent:totalRevenue>0 ? Math.round((netIncome/totalRevenue)*10000)/100 : null,
+    debtToEquityRatio:totalEquity!==0 ? Math.round((totalLiabilities/totalEquity)*100)/100 : null,
+    returnOnAssetsPercent:totalAssets!==0 ? Math.round((netIncome/totalAssets)*10000)/100 : null,
+    ledgerBalanced:balanceSheet.balanced && trialBalance.balanced,
+  };
+};
+
 // ══════════════════════════════════════════════════════
 // Animal Identity Service
 // ══════════════════════════════════════════════════════
