@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <!-- Performance hints -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://farm-mz99-default-rtdb.europe-west1.firebasedatabase.app" crossorigin>
+  <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+  <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
+
+<script>(function(){var t=localStorage.getItem('farm_theme');if(t==='light')document.documentElement.classList.add('light-mode');}());</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>محاسبة الحيوانات — بيان المزرعة</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="media/logo-icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="media/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="media/favicon-16.png">
+<link rel="apple-touch-icon" href="media/apple-touch-icon.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="page-wrap rail-v2-content">
+  <div id="page-header"></div>
+
+  <ul class="nav nav-pills mb-4 gap-2" id="fa-tabs">
+    <li><button class="nav-link active" onclick="switchFaTab('purchase')"><i class="bi bi-cart-plus me-2"></i>شراء حيوان</button></li>
+    <li><button class="nav-link" onclick="switchFaTab('sale')"><i class="bi bi-cash-coin me-2"></i>بيع حيوان</button></li>
+    <li><button class="nav-link" onclick="switchFaTab('death')"><i class="bi bi-file-earmark-minus me-2"></i>الأثر المحاسبي للنفوق</button></li>
+    <li><button class="nav-link" onclick="switchFaTab('cc')"><i class="bi bi-diagram-3 me-2"></i>مراكز التكلفة</button></li>
+  </ul>
+
+  <div id="tab-purchase"></div>
+  <div id="tab-sale" style="display:none"></div>
+  <div id="tab-death" style="display:none"></div>
+  <div id="tab-cc" style="display:none"></div>
+
+  <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
+    © <span id="footer-year"></span> <span id="footer-farm"></span><br>
+    <small style="font-size:.72rem;color:var(--text-muted)">إشراف: لواء أحمد رجب نوح | تطوير: جندي مصطفى محمد إبراهيم</small>
+  </footer>
+</div>
+<script src="config.js"></script>
+<script src="firebase.js"></script>
+<script src="nav.js"></script>
+<script src="shared.js"></script>
+<script src="offline-sync.js" defer></script>
+<script src="pages/datepicker.js" defer></script>
+<script>
+'use strict';
+
+let faAnimals=[], faAccounts=[], faCbas=[], faCostCenters=[];
+const FA_COST_CENTER_TYPES = [
+  {v:'farm', l:'المزرعة ككل'}, {v:'barn', l:'حظيرة/عنبر'}, {v:'animal_group', l:'مجموعة حيوانات'},
+  {v:'batch', l:'دفعة'}, {v:'breeding_group', l:'مجموعة تربية'}, {v:'milk_production', l:'إنتاج ألبان'},
+  {v:'fattening', l:'تسمين'}, {v:'nursery', l:'حضانة'}, {v:'quarantine', l:'حجر صحي'}, {v:'maintenance', l:'صيانة'},
+];
+
+document.addEventListener('DOMContentLoaded', async ()=>{
+  if(!requireAuth())return;
+  if(!can('finance')){
+    document.body.innerHTML='<div class="page-wrap"><div class="empty-state" style="padding-top:100px"><i class="bi bi-shield-x" style="font-size:3rem;display:block;margin-bottom:10px;opacity:.4"></i><p>غير مصرح بالوصول</p><a href="dashboard.html" class="action-btn">الرئيسية</a></div></div>';
+    return;
+  }
+  initFirebase();
+  const s=getSettings();
+  document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
+  document.getElementById('footer-farm').textContent=s.farmName;
+  renderNavbarV2('finance-animals.html');
+  renderPageHeader('<i class="bi bi-piggy-bank-fill accent-text"></i> محاسبة الحيوانات ومراكز التكلفة',
+    'شراء وبيع الحيوانات بأثرها المحاسبي الكامل (تكلفة الأساس وتكلفة البيع تلقائيًا)، والأثر المحاسبي للنفوق','');
+
+  document.querySelectorAll('#fa-tabs .nav-link').forEach(b=>{
+    b.style.cssText='background:var(--bg-3);border:1px solid var(--border);color:var(--text-sub);border-radius:10px;padding:8px 16px;cursor:pointer;font-family:Cairo,sans-serif;font-size:.85rem;transition:.2s';
+  });
+  document.querySelector('#fa-tabs .nav-link.active').style.cssText+=';background:rgba(0,230,118,.1);border-color:rgba(0,230,118,.35);color:var(--green)';
+
+  await faLoadAll();
+  renderPurchaseTab();
+  renderSaleTab();
+  renderDeathTab();
+  renderCcTab();
+});
+
+window.switchFaTab=function(tab){
+  ['purchase','sale','death','cc'].forEach(t=>{
+    document.getElementById('tab-'+t).style.display = t===tab ? 'block' : 'none';
+  });
+  document.querySelectorAll('#fa-tabs .nav-link').forEach(b=>{
+    const isA=b.getAttribute('onclick').includes("'"+tab+"'");
+    b.classList.toggle('active',isA);
+    b.style.background=isA?'rgba(0,230,118,.1)':'var(--bg-3)';
+    b.style.borderColor=isA?'rgba(0,230,118,.35)':'var(--border)';
+    b.style.color=isA?'var(--green)':'var(--text-sub)';
+  });
+};
+
+async function faLoadAll(){
+  try{
+    [faAnimals, faAccounts, faCbas, faCostCenters] = await Promise.all([
+      fbGet('animals'), fbGet('accounts'), fbGet('cash_bank_accounts'), fbGet('cost_centers'),
+    ]);
+  }catch(e){ toast('خطأ في تحميل البيانات: '+e.message,'error'); }
+}
+
+function faAnimalOptions(){
+  return faAnimals.map(a=>`<option value="${a._id}">${escapeHtml((a.tag||a._id)+(a.breed?' — '+a.breed:''))}</option>`).join('');
+}
+function faAccountOptions(filterFn){
+  return faAccounts.filter(a=>a.postable!==false && (!filterFn||filterFn(a)))
+    .map(a=>`<option value="${a._id}">${escapeHtml(a.code+' — '+a.name_ar)}</option>`).join('');
+}
+function faCbaOptions(){
+  return faCbas.map(c=>`<option value="${c.linkedAccountId}">${escapeHtml(c.name)}</option>`).join('');
+}
+function faEmptyHtml(msg){ return `<div class="empty-state py-4"><i class="bi bi-inbox" style="font-size:2rem;opacity:.4"></i><p class="mt-2">${msg}</p></div>`; }
+
+function faPaymentModeToggle(prefix){
+  const mode = document.getElementById(prefix+'-mode').value;
+  document.getElementById(prefix+'-cash-wrap').style.display = mode==='cash' ? 'block' : 'none';
+}
+window.faPaymentModeToggle=faPaymentModeToggle;
+
+// ══════════════════════════════════════════════════════
+//  TAB — Animal Purchase
+// ══════════════════════════════════════════════════════
+function renderPurchaseTab(){
+  document.getElementById('tab-purchase').innerHTML = renderSectionContainer({
+    title:'شراء حيوان', description:'يسجّل تكلفة الأساس تلقائيًا لاستخدامها لاحقًا عند البيع أو النفوق',
+    contentHtml: !faAnimals.length ? faEmptyHtml('لا توجد حيوانات مسجّلة في القطيع بعد') : `
+      <div class="row g-3">
+        <div class="col-md-3"><label class="form-label small text-gray">الحيوان</label>
+          <select id="ap-animal" class="form-select form-select-sm">${faAnimalOptions()}</select>
+        </div>
+        <div class="col-md-2"><label class="form-label small text-gray">المبلغ</label><input type="number" step="0.01" min="0.01" id="ap-amount" class="form-control form-control-sm"></div>
+        <div class="col-md-2"><label class="form-label small text-gray">التاريخ</label><input type="date" id="ap-date" class="form-control form-control-sm" value="${todayStr()}"></div>
+        <div class="col-md-2"><label class="form-label small text-gray">طريقة الدفع</label>
+          <select id="ap-mode" class="form-select form-select-sm" onchange="faPaymentModeToggle('ap')">
+            <option value="cash">نقدًا</option><option value="credit">آجل (ذمم دائنة)</option>
+          </select>
+        </div>
+        <div class="col-md-3" id="ap-cash-wrap"><label class="form-label small text-gray">الحساب النقدي/البنكي</label>
+          <select id="ap-cash" class="form-select form-select-sm">${faCbaOptions()}</select>
+        </div>
+      </div>
+      <button class="action-btn mt-3" id="ap-submit-btn" onclick="faSubmitPurchase()"><i class="bi bi-cart-plus me-1"></i> تسجيل الشراء</button>
+    `,
+  });
+}
+
+window.faSubmitPurchase=async function(){
+  const animal = faAnimals.find(a=>a._id===document.getElementById('ap-animal').value);
+  const amount = +document.getElementById('ap-amount').value || 0;
+  const date = document.getElementById('ap-date').value;
+  const paymentMode = document.getElementById('ap-mode').value;
+  const cashAccountId = document.getElementById('ap-cash').value;
+
+  if(!animal){ toast('يرجى اختيار حيوان','error'); return; }
+  if(!amount||amount<=0){ toast('يرجى إدخال مبلغ صحيح','error'); return; }
+  if(paymentMode==='cash' && !cashAccountId){ toast('يرجى اختيار الحساب النقدي/البنكي','error'); return; }
+
+  const btn=document.getElementById('ap-submit-btn');
+  btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> جارٍ التسجيل...';
+  const r = await postAnimalPurchase({
+    animalId:animal._id, animalTag:animal.tag, amount, date, paymentMode,
+    cashAccountId: paymentMode==='cash' ? cashAccountId : undefined, operationId:genId(),
+  });
+  btn.disabled=false; btn.innerHTML='<i class="bi bi-cart-plus me-1"></i> تسجيل الشراء';
+
+  if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
+  toast('تم تسجيل شراء الحيوان بنجاح','success');
+  document.getElementById('ap-amount').value='';
+};
+
+// ══════════════════════════════════════════════════════
+//  TAB — Animal Sale
+// ══════════════════════════════════════════════════════
+function renderSaleTab(){
+  document.getElementById('tab-sale').innerHTML = renderSectionContainer({
+    title:'بيع حيوان', description:'تُحسب تكلفة البيع تلقائيًا من تكلفة الأساس المسجّلة، إن وُجدت',
+    contentHtml: !faAnimals.length ? faEmptyHtml('لا توجد حيوانات مسجّلة في القطيع بعد') : `
+      <div class="row g-3">
+        <div class="col-md-3"><label class="form-label small text-gray">الحيوان</label>
+          <select id="as-animal" class="form-select form-select-sm" onchange="faShowCostBasisPreview()">${faAnimalOptions()}</select>
+        </div>
+        <div class="col-md-2"><label class="form-label small text-gray">سعر البيع</label><input type="number" step="0.01" min="0.01" id="as-price" class="form-control form-control-sm"></div>
+        <div class="col-md-2"><label class="form-label small text-gray">حساب الإيراد</label>
+          <select id="as-revenue" class="form-select form-select-sm">${faAccountOptions(a=>a.type==='REVENUE')}</select>
+        </div>
+        <div class="col-md-2"><label class="form-label small text-gray">التاريخ</label><input type="date" id="as-date" class="form-control form-control-sm" value="${todayStr()}"></div>
+        <div class="col-md-2"><label class="form-label small text-gray">طريقة الدفع</label>
+          <select id="as-mode" class="form-select form-select-sm" onchange="faPaymentModeToggle('as')">
+            <option value="cash">نقدًا</option><option value="credit">آجل (ذمم مدينة)</option>
+          </select>
+        </div>
+        <div class="col-md-3" id="as-cash-wrap"><label class="form-label small text-gray">الحساب النقدي/البنكي</label>
+          <select id="as-cash" class="form-select form-select-sm">${faCbaOptions()}</select>
+        </div>
+      </div>
+      <div id="as-cost-preview" class="mt-2" style="font-size:.85rem"></div>
+      <button class="action-btn mt-3" id="as-submit-btn" onclick="faSubmitSale()"><i class="bi bi-cash-coin me-1"></i> تسجيل البيع</button>
+    `,
+  });
+  faShowCostBasisPreview();
+}
+
+window.faShowCostBasisPreview=async function(){
+  const animalId = document.getElementById('as-animal') ? document.getElementById('as-animal').value : null;
+  const el = document.getElementById('as-cost-preview');
+  if(!animalId || !el) return;
+  el.textContent='...';
+  const cb = await getAnimalCostBasis(animalId);
+  el.innerHTML = cb.hasCostBasis
+    ? `<span class="text-gray">تكلفة الأساس المسجّلة: <b class="mono">${ar(cb.knownCost)} ${getSettings().currency}</b> — ستُقيَّد تلقائيًا كتكلفة بيع</span>`
+    : `<span class="text-gray">لا توجد تكلفة أساس مسجّلة لهذا الحيوان — سيُقيَّد البيع كإيراد فقط بدون تكلفة بيع</span>`;
+};
+
+window.faSubmitSale=async function(){
+  const animal = faAnimals.find(a=>a._id===document.getElementById('as-animal').value);
+  const salePrice = +document.getElementById('as-price').value || 0;
+  const revenueAccountId = document.getElementById('as-revenue').value;
+  const date = document.getElementById('as-date').value;
+  const paymentMode = document.getElementById('as-mode').value;
+  const cashAccountId = document.getElementById('as-cash').value;
+
+  if(!animal){ toast('يرجى اختيار حيوان','error'); return; }
+  if(!salePrice||salePrice<=0){ toast('يرجى إدخال سعر بيع صحيح','error'); return; }
+  if(paymentMode==='cash' && !cashAccountId){ toast('يرجى اختيار الحساب النقدي/البنكي','error'); return; }
+
+  const btn=document.getElementById('as-submit-btn');
+  btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> جارٍ التسجيل...';
+  const r = await postAnimalSale({
+    animalId:animal._id, animalTag:animal.tag, salePrice, revenueAccountId, date, paymentMode,
+    cashAccountId: paymentMode==='cash' ? cashAccountId : undefined, operationId:genId(),
+  });
+  btn.disabled=false; btn.innerHTML='<i class="bi bi-cash-coin me-1"></i> تسجيل البيع';
+
+  if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
+  toast(r.costBasisKnown ? `تم تسجيل البيع — تكلفة البيع المقيّدة: ${ar(r.knownCost)} ${getSettings().currency}` : 'تم تسجيل البيع (بدون تكلفة أساس معروفة)','success');
+  document.getElementById('as-price').value='';
+};
+
+// ══════════════════════════════════════════════════════
+//  TAB — Animal Death (accounting write-off only)
+// ══════════════════════════════════════════════════════
+function renderDeathTab(){
+  document.getElementById('tab-death').innerHTML = renderSectionContainer({
+    title:'الأثر المحاسبي لنفوق حيوان', description:'هذا النموذج للأثر المحاسبي فقط (إعدام تكلفة الأساس) — تسجيل حالة الحيوان نفسه (نافق) يتم من صفحة "النافق" المخصصة',
+    contentHtml: !faAnimals.length ? faEmptyHtml('لا توجد حيوانات مسجّلة في القطيع بعد') : `
+      <div class="row g-3">
+        <div class="col-md-4"><label class="form-label small text-gray">الحيوان</label>
+          <select id="ad-animal" class="form-select form-select-sm" onchange="faShowDeathCostPreview()">${faAnimalOptions()}</select>
+        </div>
+        <div class="col-md-3"><label class="form-label small text-gray">التاريخ</label><input type="date" id="ad-date" class="form-control form-control-sm" value="${todayStr()}"></div>
+      </div>
+      <div id="ad-cost-preview" class="mt-2" style="font-size:.85rem"></div>
+      <button class="action-btn mt-3" id="ad-submit-btn" onclick="faSubmitDeath()"><i class="bi bi-file-earmark-minus me-1"></i> تسجيل الأثر المحاسبي</button>
+    `,
+  });
+  faShowDeathCostPreview();
+}
+
+window.faShowDeathCostPreview=async function(){
+  const animalId = document.getElementById('ad-animal') ? document.getElementById('ad-animal').value : null;
+  const el = document.getElementById('ad-cost-preview');
+  if(!animalId || !el) return;
+  el.textContent='...';
+  const cb = await getAnimalCostBasis(animalId);
+  el.innerHTML = cb.hasCostBasis
+    ? `<span style="color:var(--red)">سيُقيَّد كخسارة نفوق مواشي بمبلغ: <b class="mono">${ar(cb.knownCost)} ${getSettings().currency}</b></span>`
+    : `<span class="text-gray">لا توجد تكلفة أساس مسجّلة لهذا الحيوان — لن يُقيَّد أي أثر محاسبي</span>`;
+};
+
+window.faSubmitDeath=async function(){
+  const animal = faAnimals.find(a=>a._id===document.getElementById('ad-animal').value);
+  const date = document.getElementById('ad-date').value;
+  if(!animal){ toast('يرجى اختيار حيوان','error'); return; }
+
+  const btn=document.getElementById('ad-submit-btn');
+  btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> جارٍ التسجيل...';
+  const r = await postAnimalDeath({animalId:animal._id, animalTag:animal.tag, date, operationId:genId()});
+  btn.disabled=false; btn.innerHTML='<i class="bi bi-file-earmark-minus me-1"></i> تسجيل الأثر المحاسبي';
+
+  if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
+  toast(r.costBasisKnown ? `تم تسجيل الخسارة: ${ar(r.amount)} ${getSettings().currency}` : (r.reason||'لا يوجد أثر محاسبي مطلوب'),'success');
+};
+
+// ══════════════════════════════════════════════════════
+//  TAB — Cost Centers
+// ══════════════════════════════════════════════════════
+function renderCcTab(){
+  document.getElementById('tab-cc').innerHTML =
+    renderSectionContainer({
+      title:'مركز تكلفة جديد', description:'',
+      contentHtml:`
+        <div class="row g-3">
+          <div class="col-md-5"><label class="form-label small text-gray">الاسم</label><input type="text" id="cc-name" class="form-control form-control-sm" placeholder="مثال: عنبر رقم 1"></div>
+          <div class="col-md-5"><label class="form-label small text-gray">النوع</label>
+            <select id="cc-type" class="form-select form-select-sm">${FA_COST_CENTER_TYPES.map(t=>`<option value="${t.v}">${t.l}</option>`).join('')}</select>
+          </div>
+        </div>
+        <button class="action-btn mt-3" id="cc-submit-btn" onclick="faSubmitCostCenter()"><i class="bi bi-plus-lg me-1"></i> إضافة مركز التكلفة</button>
+      `,
+    }) +
+    renderSectionContainer({title:'مراكز التكلفة الحالية', description:'', contentHtml:'<div id="cc-list"></div>'});
+  faRefreshCcList();
+}
+
+function faRefreshCcList(){
+  const el=document.getElementById('cc-list');
+  if(!faCostCenters.length){ el.innerHTML=faEmptyHtml('لا توجد مراكز تكلفة بعد'); return; }
+  const typeLabel = t => (FA_COST_CENTER_TYPES.find(x=>x.v===t)||{l:t}).l;
+  el.innerHTML=`<table class="table table-sm"><thead><tr><th>الاسم</th><th>النوع</th></tr></thead><tbody>
+    ${faCostCenters.map(c=>`<tr><td>${escapeHtml(c.name)}</td><td>${escapeHtml(typeLabel(c.type))}</td></tr>`).join('')}
+  </tbody></table>`;
+}
+
+window.faSubmitCostCenter=async function(){
+  const name = document.getElementById('cc-name').value.trim();
+  const type = document.getElementById('cc-type').value;
+  if(!name){ toast('اسم مركز التكلفة مطلوب','error'); return; }
+
+  const btn=document.getElementById('cc-submit-btn');
+  btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> جارٍ الإضافة...';
+  const r = await createCostCenter({name, type});
+  btn.disabled=false; btn.innerHTML='<i class="bi bi-plus-lg me-1"></i> إضافة مركز التكلفة';
+
+  if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
+  toast('تمت إضافة مركز التكلفة بنجاح','success');
+  faCostCenters = await fbGet('cost_centers');
+  renderCcTab();
+};
+</script>
+</body>
+</html>
