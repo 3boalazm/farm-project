@@ -141,77 +141,11 @@ function timeAr(iso){
   return `${ar(d.getFullYear())}/${pad2(d.getMonth()+1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
-// ── NAVBAR ────────────────────────────────────────────────
-// NAV_PAGES & SIDEBAR_EXTRA defined in nav.js (loaded before shared.js)
-
-function renderNavbar(activePage=''){
-  const s=getSettings();const u=getUser();
-  const visibleTabs=NAV_PAGES.filter(p=>!p.perm||can(p.perm)).slice(0,7);
-  const html=`
-  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
-  <aside class="sidebar-menu" id="sidebarMenu">
-    <div class="sidebar-header">
-      <div class="d-flex align-items-center gap-2">
-        <div class="farm-logo-sm">${s.logoUrl==='media/logo-icon.svg'?`<img class="logo-for-light" src="media/logo-icon.svg" alt="">
-<img class="logo-for-dark" src="media/logo-icon-dark.svg" alt="">`:s.logoUrl?`<img src="${s.logoUrl}" alt="">`:'🐐'}</div>
-        <div><div class="fw-bold" style="font-size:1rem">${s.farmName}</div>
-        <small style="color:${ROLES[u?.role||'admin']?.color}">${ROLES[u?.role||'admin']?.label}</small></div>
-      </div>
-      <button class="sidebar-close" onclick="closeSidebar()" aria-label="إغلاق القائمة" title="إغلاق القائمة" data-hint="إغلاق القائمة"><i class="bi bi-x-lg"></i></button>
-    </div>
-    <nav class="sidebar-nav">
-      <div class="sidebar-section-label">التنقل</div>
-      ${NAV_PAGES.filter(p=>!p.perm||can(p.perm)).map(p=>`
-        <a href="${p.href}" class="sidebar-item${activePage===p.href?' active':''}">
-          <i class="bi ${p.icon}"></i> ${p.label}</a>`).join('')}
-      <div class="sidebar-divider"></div>
-      ${SIDEBAR_EXTRA.filter(p=>!p.perm||can(p.perm)).map(p=>`
-        <a href="${p.href}" class="sidebar-item${activePage===p.href?' active':''}" ${p.onclick?'onclick="closeSidebar();'+p.onclick+';return false;"':''}>
-          <i class="bi ${p.icon}"></i> ${p.label}</a>`).join('')}
-      <div class="sidebar-divider"></div>
-      <button class="sidebar-item" onclick="logout()" style="color:var(--red)">
-        <i class="bi bi-box-arrow-left"></i> تسجيل الخروج</button>
-    </nav>
-    <div class="sidebar-footer">
-      <div class="d-flex align-items-center gap-3">
-        <div class="user-avatar">${(u?.name||'م').slice(0,1)}</div>
-        <div><div class="fw-bold">${u?.name||'مدير'}</div>
-        <small class="green-text"><i class="bi bi-circle-fill" style="font-size:7px"></i> متصل</small></div>
-      </div>
-    </div>
-  </aside>
-  <nav class="navbar-wonder">
-    <div class="container d-flex justify-content-between align-items-center">
-      <a href="dashboard.html" class="navbar-brand"><span>${s.logoUrl==='media/logo-icon.svg'?`<img class="logo-for-light" src="media/logo-icon.svg" alt="" style="height:1.2em;width:auto;vertical-align:-.2em"><img class="logo-for-dark" src="media/logo-icon-dark.svg" alt="" style="height:1.2em;width:auto;vertical-align:-.2em">`:s.logoUrl?`<img src="${s.logoUrl}" alt="" style="height:1.2em;width:auto;vertical-align:-.2em">`:'🐐'}</span> ${s.farmName}</a>
-      <div class="d-flex align-items-center gap-2">
-        <span class="date-badge d-none d-sm-flex"><i class="bi bi-calendar3"></i> ${todayAr()}</span>
-        <button class="theme-btn d-none d-md-flex" onclick="toggleTheme()" id="theme-toggle-btn" title="تبديل المظهر" data-hint="تبديل المظهر">
-          <i class="bi bi-circle-half" id="theme-icon"></i>
-        </button>
-        <div style="position:relative">
-          <a href="notifications.html" class="bell-btn" id="bell-btn" style="text-decoration:none" title="الإشعارات" data-hint="الإشعارات">
-            <i class="bi bi-bell-fill"></i><span class="bell-badge" id="bell-badge" style="display:none">0</span>
-          </a>
-        </div>
-        <button id="undo-btn" onclick="undoLast()" title="تراجع عن آخر عملية" data-hint="تراجع عن آخر عملية" style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:20px;color:var(--text-muted);padding:5px 12px;cursor:pointer;font-size:.8rem;display:flex;align-items:center;gap:5px;font-family:Cairo,sans-serif;transition:.2s;white-space:nowrap;opacity:0.5" id="undo-btn">
-          <i class="bi bi-arrow-counterclockwise"></i>
-        </button>
-        <button class="menu-btn" onclick="openSidebar()" aria-label="القائمة" title="القائمة" data-hint="القائمة"><i class="bi bi-list"></i></button>
-      </div>
-    </div>
-  </nav>
-  <div id="toast-wrap"></div>
-  <div id="modal-root"></div>`;
-  document.body.insertAdjacentHTML('afterbegin', html);
-  // Sprint 9: populate the bell badge that's now on every page, not just
-  // notifications.html -- fire-and-forget, never blocks page render.
-  if(window.updateGlobalBellBadge) window.updateGlobalBellBadge();
-}
-
 // ══════════════════════════════════════════════════════
-// NAV RAIL V2 — pilot (dashboard.html only, opt-in). Purely
-// additive: renderNavbar() above is completely untouched, so
-// every other page is at zero risk from this. Reuses the exact
+// NAV RAIL V2 — the only nav renderer in this file. (Dead-code removal,
+// 2026-08-23: renderNavbar(), the .navbar-wonder/.sidebar-menu shell
+// this replaced, had zero remaining callers and was deleted here; see
+// git history for the removed function.) Reuses the exact
 // same FARM_NAV/can() permission filtering and the exact same
 // mobile off-canvas sidebar markup+IDs as the original -- only
 // the desktop-width visual shell (icon rail + right panel)
