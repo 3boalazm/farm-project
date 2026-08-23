@@ -5920,6 +5920,93 @@ window.getForecastVsActual=async function(forecastId,targetStartDate,targetEndDa
   };
 };
 
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — CASH FLOW STATEMENT (Phase 22). Direct-method,
+//  evidence-only: classifies every REAL cash/bank movement in
+//  journal_entries into Operating / Investing / Financing by looking
+//  at the real counter-account(s) on the other side of each entry --
+//  never a derived/indirect reconciliation from net income. Pure
+//  cash-to-cash transfers (e.g. bank -> petty cash) net to zero within
+//  their own entry and are excluded entirely, since they have no
+//  external effect on total cash. A mixed entry (a cash line offset by
+//  counter-lines in more than one category) is split proportionally by
+//  each category's real weight in that same entry -- never guessed.
+// ══════════════════════════════════════════════════════════════
+
+function _cashFlowCategoryForAccountCode(code){
+  // Fixed/biological assets moving -> investing. Loans and owner
+  // capital/drawings (plus 3300, used for opening-balance capitalization
+  // entries) -> financing. Everything else (revenue, expense, AR, AP,
+  // inventory, accrued/payroll payable, legacy migration clearing) is
+  // ordinary day-to-day farm activity -> operating.
+  if(code==='1500'||code==='1600'||code==='1690') return 'investing';
+  if(code==='2300'||code==='3100'||code==='3200'||code==='3300') return 'financing';
+  return 'operating';
+}
+
+window.getCashFlowStatement=async function(startDate,endDate){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!startDate||!endDate) return {ok:false, error:'التاريخ من وإلى مطلوبان'};
+
+  var cbas=await fbGet('cash_bank_accounts');
+  var cashAccountIds={};
+  cbas.forEach(function(c){ cashAccountIds[c.linkedAccountId]=true; });
+  if(!Object.keys(cashAccountIds).length) return {ok:false, error:'لا توجد حسابات نقدية/بنكية معرّفة'};
+
+  var entries=await fbGet('journal_entries');
+
+  // Opening/closing cash are summed straight from the ledger (same
+  // pattern as getCashBankBalance) -- never a stored, driftable number.
+  var openingCash=0, closingCash=0;
+  entries.forEach(function(e){
+    (e.lines||[]).forEach(function(l){
+      if(!cashAccountIds[l.accountId]) return;
+      var delta=(+l.debit||0)-(+l.credit||0);
+      if(e.date<startDate) openingCash+=delta;
+      if(e.date<=endDate) closingCash+=delta;
+    });
+  });
+  openingCash=Math.round(openingCash*100)/100;
+  closingCash=Math.round(closingCash*100)/100;
+
+  var totals={operating:0,investing:0,financing:0};
+  var movements=[];
+  entries.forEach(function(e){
+    if(e.date<startDate||e.date>endDate) return;
+    var cashLines=(e.lines||[]).filter(function(l){return cashAccountIds[l.accountId];});
+    if(!cashLines.length) return;
+    var netCash=Math.round(cashLines.reduce(function(s,l){return s+(+l.debit||0)-(+l.credit||0);},0)*100)/100;
+    if(netCash===0) return; // pure cash-to-cash transfer -- no external effect
+
+    var otherLines=(e.lines||[]).filter(function(l){return !cashAccountIds[l.accountId];});
+    var weights={}, totalWeight=0;
+    otherLines.forEach(function(l){
+      var cat=_cashFlowCategoryForAccountCode(l.accountId);
+      var w=Math.abs((+l.debit||0)-(+l.credit||0));
+      weights[cat]=(weights[cat]||0)+w; totalWeight+=w;
+    });
+    if(totalWeight===0) weights.operating=1, totalWeight=1; // no real counter-weight to classify by -- default to operating rather than dropping the movement
+
+    var catKeys=Object.keys(weights), allocated=0;
+    catKeys.forEach(function(cat,idx){
+      var share = idx===catKeys.length-1
+        ? Math.round((netCash-allocated)*100)/100
+        : Math.round((netCash*(weights[cat]/totalWeight))*100)/100;
+      if(idx!==catKeys.length-1) allocated=Math.round((allocated+share)*100)/100;
+      totals[cat]=Math.round(((totals[cat]||0)+share)*100)/100;
+      movements.push({journalEntryId:e._id, date:e.date, description:e.description, amount:share, category:cat, sourceType:e.sourceType, sourceId:e.sourceId});
+    });
+  });
+
+  var netCashFlow=Math.round((totals.operating+totals.investing+totals.financing)*100)/100;
+  return {
+    ok:true, startDate:startDate, endDate:endDate,
+    openingCash:openingCash, closingCash:closingCash, netCashFlow:netCashFlow,
+    operating:totals.operating, investing:totals.investing, financing:totals.financing,
+    movements:movements,
+  };
+};
+
 // ══════════════════════════════════════════════════════
 // Animal Identity Service
 // ══════════════════════════════════════════════════════
