@@ -6074,6 +6074,99 @@ window.getBankReconciliationHistory=async function(cashBankAccountId){
     .sort(function(a,b){return (b.statementDate||'').localeCompare(a.statementDate||'');});
 };
 
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — FINANCIAL STATEMENTS (Phase 24): Income
+//  Statement and Balance Sheet. Purely computed from `accounts` +
+//  `journal_entries` -- no new collection, nothing stored. The Cash
+//  Flow Statement (the third classic financial statement) was already
+//  delivered in Phase 22 (getCashFlowStatement).
+//
+//  No month-end close exists yet (that's Phase 30), so revenue/expense
+//  accounts are never zeroed into retained earnings automatically.
+//  getBalanceSheet therefore computes "current period earnings" itself
+//  (cumulative revenue minus cumulative expense since inception, up to
+//  asOfDate) and folds it into Equity as its own line -- this is what
+//  makes Assets = Liabilities + Equity hold true at any moment, purely
+//  as a consequence of every journal entry already being balanced by
+//  construction (Phase 1's own validation), not a plug or override.
+// ══════════════════════════════════════════════════════════════
+
+window.getIncomeStatement=async function(startDate,endDate){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!startDate||!endDate) return {ok:false, error:'التاريخ من وإلى مطلوبان'};
+
+  var accounts=await fbGet('accounts');
+  var entries=await fbGet('journal_entries');
+  var balances={};
+  entries.forEach(function(e){
+    if(e.date<startDate||e.date>endDate) return;
+    (e.lines||[]).forEach(function(l){ balances[l.accountId]=(balances[l.accountId]||0)+(+l.debit||0)-(+l.credit||0); });
+  });
+
+  var revenue=[], expense=[], totalRevenue=0, totalExpense=0;
+  accounts.forEach(function(a){
+    if(a.postable===false) return;
+    var raw=balances[a._id]||0;
+    if(raw===0) return; // no activity this period -- omit, don't list a fabricated zero line
+    if(a.type==='REVENUE'){
+      var bal=Math.round((-raw)*100)/100; revenue.push({accountId:a._id,name:a.name_ar,amount:bal}); totalRevenue+=bal;
+    }else if(a.type==='EXPENSE'){
+      var bal2=Math.round(raw*100)/100; expense.push({accountId:a._id,name:a.name_ar,amount:bal2}); totalExpense+=bal2;
+    }
+  });
+  totalRevenue=Math.round(totalRevenue*100)/100;
+  totalExpense=Math.round(totalExpense*100)/100;
+  return {
+    ok:true, startDate:startDate, endDate:endDate,
+    revenue:revenue, expense:expense, totalRevenue:totalRevenue, totalExpense:totalExpense,
+    netIncome:Math.round((totalRevenue-totalExpense)*100)/100,
+  };
+};
+
+window.getBalanceSheet=async function(asOfDate){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!asOfDate) return {ok:false, error:'التاريخ مطلوب'};
+
+  var accounts=await fbGet('accounts');
+  var entries=await fbGet('journal_entries');
+  var balances={};
+  entries.forEach(function(e){
+    if(e.date>asOfDate) return; // cumulative since inception, not period-bound
+    (e.lines||[]).forEach(function(l){ balances[l.accountId]=(balances[l.accountId]||0)+(+l.debit||0)-(+l.credit||0); });
+  });
+
+  var assets=[], liabilities=[], equity=[];
+  var totalAssets=0, totalLiabilities=0, totalEquity=0, totalRevenue=0, totalExpense=0;
+  accounts.forEach(function(a){
+    if(a.postable===false) return;
+    var raw=balances[a._id]||0;
+    if(raw===0) return;
+    if(a.type==='ASSET'){
+      var ab=Math.round(raw*100)/100; assets.push({accountId:a._id,name:a.name_ar,balance:ab}); totalAssets+=ab;
+    }else if(a.type==='LIABILITY'){
+      var lb=Math.round((-raw)*100)/100; liabilities.push({accountId:a._id,name:a.name_ar,balance:lb}); totalLiabilities+=lb;
+    }else if(a.type==='EQUITY'){
+      var eb=Math.round((-raw)*100)/100; equity.push({accountId:a._id,name:a.name_ar,balance:eb}); totalEquity+=eb;
+    }else if(a.type==='REVENUE'){ totalRevenue+=(-raw); }
+    else if(a.type==='EXPENSE'){ totalExpense+=raw; }
+  });
+
+  var currentEarnings=Math.round((totalRevenue-totalExpense)*100)/100;
+  if(currentEarnings!==0){
+    equity.push({accountId:null, name:'أرباح الفترة الحالية (غير مرحّلة)', balance:currentEarnings});
+    totalEquity=Math.round((totalEquity+currentEarnings)*100)/100;
+  }
+  totalAssets=Math.round(totalAssets*100)/100;
+  totalLiabilities=Math.round(totalLiabilities*100)/100;
+
+  return {
+    ok:true, asOfDate:asOfDate,
+    assets:assets, liabilities:liabilities, equity:equity,
+    totalAssets:totalAssets, totalLiabilities:totalLiabilities, totalEquity:totalEquity,
+    balanced:Math.round((totalAssets-(totalLiabilities+totalEquity))*100)/100===0,
+  };
+};
+
 // ══════════════════════════════════════════════════════
 // Animal Identity Service
 // ══════════════════════════════════════════════════════
