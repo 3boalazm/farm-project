@@ -379,8 +379,15 @@ function renderValidationResults(res) {
           var ico = r.errors.length ? '❌' : r.warnings.length ? '⚠️' : '✅';
           return '<tr style="'+(r.errors.length?'background:rgba(244,67,54,.04)':r.warnings.length?'background:rgba(255,193,7,.04)':'')+'">'+
             '<td class="text-gray">' + ar(r.row) + '</td>' +
-            '<td title="'+(r.errors.join(' | ')||r.warnings.join(' | '))+'">' + ico + '</td>' +
-            Object.values(_mapped).map(function(f){return '<td>'+(r.data[f]!==undefined?r.data[f]:'<span class="text-muted">—</span>')+'</td>';}).join('') +
+            '<td title="'+escapeHtml(r.errors.join(' | ')||r.warnings.join(' | '))+'">' + ico + '</td>' +
+            // XSS fix (2026-08-24): this PREVIEW render is the entry point --
+            // a malicious CSV/Excel cell value must render inert here.
+            // Deliberately escapes only the displayed copy, never r.data[f]
+            // itself: startExcelImport() below reads the exact same
+            // _validated[].data objects to write to Firebase, and imported
+            // records must keep their real original value, not an
+            // HTML-escaped one.
+            Object.values(_mapped).map(function(f){return '<td>'+(r.data[f]!==undefined?escapeHtml(r.data[f]):'<span class="text-muted">—</span>')+'</td>';}).join('') +
           '</tr>';
         }).join('') +
         (_validated.length > 15 ? '<tr><td colspan="20" class="text-center text-gray" style="padding:8px">+ ' + ar(_validated.length-15) + ' صف...</td></tr>' : '') +

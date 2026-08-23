@@ -644,6 +644,10 @@ function renderProductionWidget({ type, value, unit='', trend=null, trendDir='up
 
 // ── 10. Inventory Stock Indicator (farm-specific — progress bar, not a chart, per the report) ──
 function renderInventoryStockIndicator({ name, quantity, minQuantity=0, unit='' }){
+  // XSS fix (2026-08-24): name is a free-text inventory item name
+  // (medicine/feed), rendered raw with no escaping upstream. Only real
+  // caller (pages/inventory.js) never escapes it either.
+  name=escapeHtml(name);
   const ratio = minQuantity > 0 ? quantity / (minQuantity * 3) : 1;
   const pct = Math.max(4, Math.min(100, Math.round(ratio * 100)));
   const isLow = minQuantity > 0 && quantity <= minQuantity;
