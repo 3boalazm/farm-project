@@ -10,7 +10,7 @@
 | D-04 | Should Farm Settings move to Firebase-backed sync? | **Open** | Not started |
 | D-05 | Should the Undo system be connected? | Approved (deferred) — no evidenced need | Deliberately not implemented |
 | D-06 | Should Notifications gain a persisted producer? | Approved (deferred) — live-computed path already sufficient | Deliberately not implemented |
-| — | `submitBirthDirect()` convergence onto `createOffspringAnimal()` | **No decision record exists** | Not authorized |
+| D-07 | `submitBirthDirect()` convergence onto `createOffspringAnimal()` | Approved, Implemented | `pages/breeding.js` |
 | — | AI `add_birth`'s `father_tag`/`tag` support | **Open, deferred by D-03** | Not started |
 
 See individual files for full rationale, consequences, and historical-data strategy per decision.

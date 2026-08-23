@@ -214,6 +214,8 @@ window.submitBirthDirect=async function(){
   // same fix pattern, now captured here alongside rec's own identical
   // read of the same field (rec.male_tag uses this exact expression).
   const fatherTag=rec.male_tag;
+  // D-07: read alongside the other pre-closeModal fields above, same rule.
+  const weightNum=parseFloat(document.getElementById('nb-weight').value)||null;
   // Also add animal records
   closeModal();toast('جاري الحفظ...','info');
   try{
@@ -222,7 +224,17 @@ window.submitBirthDirect=async function(){
     const bdate=rec.actual_birth;
     const barn=rec.barn;
     for(let i=0;i<qty;i++){
-      await fbPost('animals',{species:sp,breed,gender,purpose:pur,status:'alive',birth_date:bdate,tag:tag?(qty===1?tag:tag+'-'+ar(i+1)):await generateAnimalTag(sp),barn,mother_tag:motherTag,mother_breed:motherBreed,father_tag:fatherTag});
+      // D-07: converged onto the canonical Birth helper -- was a raw
+      // fbPost('animals',...) missing mother_id/father_id resolution,
+      // birth_weight, weight-history, and notes. See docs/decisions/D-07.md.
+      // Tag suffix intentionally left as ar(i+1) (Arabic-Indic digit),
+      // matching this function's pre-existing behavior -- not part of
+      // this decision.
+      await window.createOffspringAnimal({
+        species:sp,breed,gender,purpose:pur,birthDate:bdate,
+        tag:tag?(qty===1?tag:tag+'-'+ar(i+1)):null,
+        motherTag,motherBreed,fatherTag,weight:weightNum,barn,notes:rec.notes
+      });
     }
     await logActivity('add','breeding','تسجيل ولادة: '+motherTag+' — '+ar(qty)+' مواليد');
     toast('✅ تمت إضافة '+ar(qty)+' مواليد في القطيع');

@@ -4,7 +4,7 @@
 
 | Risk | Thread | Classification | Evidence |
 |---|---|---|---|
-| `submitBirthDirect()` diverges from canonical Birth shape (missing `birth_weight`/`notes`) | Core/SSOT | Medium | Confirmed live, Wave B final certification |
+| ~~`submitBirthDirect()` diverges from canonical Birth shape (missing `birth_weight`/`notes`)~~ **RESOLVED 2026-08-23** | Core/SSOT | Was Medium | `docs/decisions/D-07.md` — converged onto `createOffspringAnimal()`, live-verified in-browser (stubbed writes, real form, both qty>1 and qty=1/no-tag paths). `docs/certification/BIRTH.md` upgraded to fully CERTIFIED |
 | ~~`todayStr()` returns UTC date, not local calendar date — misdates entries during a fixed daily window for non-UTC-0 users~~ **RESOLVED 2026-08-23** | Core/SSOT | Was Medium (deterministic, repository-wide) | Numerically proven, Formal Verification Round 3. The canonical `todayStr()` helper (`firebase.js`) was already fixed to use local time in an earlier commit (`5b52250`, confirmed via `git log -S`), but ~11 call sites in `login.html`, `animal-detail.html`, and `shared.js` independently called `new Date().toISOString().slice(0,10)` instead of the helper, keeping the bug live at each of them. All switched to `todayStr()`; `grep` across every root-level `.html`/`.js` file confirms none remain |
 | Historical `weight_log` data never migrated to real production Firebase | Core/SSOT | Medium | Migration utility proven correct against simulated data only; no Firebase network access from any verification sandbox used |
 | `import.html` has a pre-existing syntax error | Core/SSOT | Medium — blocks verifying that page's real-world behavior at all | `repo4-checkpoint-report.md`; **not independently re-confirmed against the current live repo this pass** |
