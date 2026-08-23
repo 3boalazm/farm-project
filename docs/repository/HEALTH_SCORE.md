@@ -10,7 +10,7 @@
 | SSOT | 82 | Achieved exactly where pursued (Weight, Birth); Farm Settings remains a confirmed, real exception awaiting a product decision |
 | Duplication | 78 | Zero new duplication from any certified commit; one bounded, pre-existing exception (`submitBirthDirect`) |
 | Runtime Confidence | 70 | High for certified subsystems, repeatedly live-tested; lower for the broader entity set only given a first-pass audit |
-| Technical Debt | 68 | Well-inventoried where investigated; `todayStr()`'s UTC bug and the unmigrated historical weight data are the two most concrete open items |
+| Technical Debt | 68 | Well-inventoried where investigated; `todayStr()`'s UTC bug (resolved 2026-08-23 — see `docs/certification/WEIGHT.md`) and the unmigrated historical weight data were the two most concrete open items at the time this score was assessed |
 | **Thread Overall** | **75** | A small, deeply-certified core with an honestly-bounded remainder |
 
 ## Design System Thread

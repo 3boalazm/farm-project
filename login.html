@@ -122,7 +122,7 @@
     // pre-existing limitation of fbGet's error handling, not
     // redesigned here.
     if(!user&&users.length===0&&lRole==='admin'&&lPin==='1234'){
-      user=users.find(u=>u.role==='admin')||{id:'admin1',name:'مدير المزرعة',role:'admin',active:true,created:new Date().toISOString().slice(0,10)};
+      user=users.find(u=>u.role==='admin')||{id:'admin1',name:'مدير المزرعة',role:'admin',active:true,created:todayStr()};
     }
     if(user){
       setUser(user);
@@ -138,7 +138,7 @@
             userId:user.id, userName:user.name, userRole:user.role,
             action:'login', resource:'system',
             description:`تسجيل دخول — ${ROLES[user.role]?.label}`,
-            date:new Date().toISOString().slice(0,10),
+            date:todayStr(),
             timestamp:new Date().toISOString()
           });
         }catch(e){}
@@ -155,7 +155,7 @@
           userName:user.name, userRole:user.role,
           roleLabel:ROLES[user.role]?.label||user.role,
           timestamp:new Date().toISOString(),
-          date:new Date().toISOString().slice(0,10),
+          date:todayStr(),
           pushed:false
         });
         }  // end throttle check
@@ -163,7 +163,7 @@
           userId:user.id, userName:user.name, userRole:user.role,
           action:'login', resource:'system',
           description:'تسجيل دخول — '+user.name+' ('+( ROLES[user.role]?.label||user.role)+')',
-          date:new Date().toISOString().slice(0,10),
+          date:todayStr(),
           timestamp:new Date().toISOString()
         });
       }catch(e){console.warn('login log:',e);}
@@ -193,7 +193,7 @@
   window.addEventListener('beforeunload',()=>{
     const u=getUser();
     if(u&&initFirebase()){
-      const data={userId:u.id,userName:u.name,userRole:u.role,action:'logout',resource:'system',description:'تسجيل خروج',date:new Date().toISOString().slice(0,10),timestamp:new Date().toISOString(),created_at:new Date().toISOString()};
+      const data={userId:u.id,userName:u.name,userRole:u.role,action:'logout',resource:'system',description:'تسجيل خروج',date:todayStr(),timestamp:new Date().toISOString(),created_at:new Date().toISOString()};
       navigator.sendBeacon(`${FB_URL}/activity_log.json`,JSON.stringify(data));
     }
   });

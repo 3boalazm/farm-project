@@ -266,7 +266,7 @@ function renderDetail(s){
     </div>
     ${healthRecs.length===0?'<div class="text-gray text-center py-3" style="font-size:.85rem">لا توجد سجلات صحية مرتبطة بهذا الحيوان</div>':
       healthRecs.slice(0,4).map(function(r){
-        var today=new Date().toISOString().slice(0,10);
+        var today=todayStr();
         var inW=r.withdrawal_end&&r.withdrawal_end>=today;
         var dLeft=inW?Math.max(0,Math.ceil((new Date(r.withdrawal_end)-new Date())/86400000)):0;
         return'<div class="record-card" style="margin-bottom:8px">'+
