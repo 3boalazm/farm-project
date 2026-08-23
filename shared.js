@@ -3584,6 +3584,9 @@ var DEFAULT_CHART_OF_ACCOUNTS=[
   {code:'2000',name_ar:'الخصوم',name_en:'Liabilities',type:'LIABILITY',parentId:null,postable:false},
   {code:'2100',name_ar:'ذمم دائنة',name_en:'Accounts Payable',type:'LIABILITY',parentId:'2000'},
   {code:'2200',name_ar:'مصروفات مستحقة',name_en:'Accrued Expenses',type:'LIABILITY',parentId:'2000'},
+  // Added in Phase 12 (Labor Costing): a dedicated payable so payroll
+  // accruals are traceable separately from other accrued expenses.
+  {code:'2210',name_ar:'أجور مستحقة',name_en:'Payroll Payable',type:'LIABILITY',parentId:'2200'},
   {code:'2300',name_ar:'قروض وتمويل',name_en:'Loans / Financing',type:'LIABILITY',parentId:'2000'},
 
   {code:'3000',name_ar:'حقوق الملكية',name_en:'Equity',type:'EQUITY',parentId:null,postable:false},
@@ -4957,6 +4960,85 @@ window.getMedicineCostPerAnimal=async function(animalId,startDate,endDate){
   var rows=_expenseLinesForAccount(entries,MEDICINE_EXPENSE_ACCOUNT,startDate,endDate).filter(function(r){return r.relatedAnimalId===animalId;});
   var total=rows.reduce(function(s,r){return s+r.amount;},0);
   return {ok:true, total:Math.round(total*100)/100, entries:rows};
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — LABOR COSTING (Phase 12). One new collection
+//  (employees). Mirrors Phase 5's Accounts Payable pattern exactly:
+//  accrual creates a real open payable (Debit Labor Expense 6300 /
+//  Credit Payroll Payable 2210) via a Phase 2 source_document (type
+//  'labor_payment', already in the enum), and the actual payment is
+//  Phase 2's recordPaymentAgainstDocument with direction 'pay' against
+//  2210 -- the exact same expense-recognition-vs-payment separation the
+//  Master Prompt asks for, reusing machinery instead of inventing a
+//  parallel one.
+// ══════════════════════════════════════════════════════════════
+
+var PAYROLL_PAYABLE_ACCOUNT='2210';
+var EMPLOYEE_RATE_TYPES=['daily','hourly','monthly'];
+
+window.createEmployee=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.name) return {ok:false, error:'اسم العامل مطلوب'};
+  if(opts.rateType && EMPLOYEE_RATE_TYPES.indexOf(opts.rateType)===-1) return {ok:false, error:'نوع الأجر غير صالح'};
+  var record={
+    name:opts.name, role:opts.role||null, rateType:opts.rateType||null, rateAmount:+opts.rateAmount||null,
+    active:true, createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+  };
+  try{
+    var id=await fbPost('employees',record);
+    fbCacheInvalidate('employees');
+    await logActivity('add','employees','إضافة عامل: '+record.name);
+    return {ok:true, id:id};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Accrual: Debit Labor Expense, Credit Payroll Payable -- a real open
+// liability, not a payment. costCenterId is optional, caller-supplied
+// (e.g. which barn/activity this work period was for); left unset when
+// there's no real basis to attribute it, never guessed.
+window.postLaborAccrual=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.employeeId) return {ok:false, error:'معرّف العامل مطلوب'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var amount=+opts.amount;
+  if(!amount||isNaN(amount)||amount<=0) return {ok:false, error:'يرجى إدخال مبلغ صحيح'};
+
+  var created=await window.createSourceDocument({
+    type:'labor_payment', total:amount, date:opts.date, operationId:opts.operationId,
+    counterpartyId:opts.employeeId, counterpartyName:opts.employeeName||null,
+    notes:opts.workPeriodStart?('فترة عمل: '+opts.workPeriodStart+' — '+(opts.workPeriodEnd||opts.workPeriodStart)):null,
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return {ok:true, id:created.id, idempotent:true};
+  var posted=await window.postSourceDocument(created.id,{
+    lines:[{accountId:'6300', debit:amount, costCenterId:opts.costCenterId||null},
+           {accountId:PAYROLL_PAYABLE_ACCOUNT, credit:amount}],
+  });
+  if(!posted.ok) return posted;
+  return {ok:true, id:created.id, journalEntryId:posted.journalEntryId, status:posted.status};
+};
+
+// Payment: Debit Payroll Payable, Credit Cash/Bank -- thin wrapper over
+// Phase 2's generic payment primitive, same shape as
+// recordSupplierPayment (Phase 5).
+window.postLaborPayment=async function(documentId,opts){
+  opts=opts||{};
+  return await window.recordPaymentAgainstDocument(documentId,Object.assign({},opts,{
+    counterAccountId:PAYROLL_PAYABLE_ACCOUNT, direction:'pay',
+  }));
+};
+
+window.getEmployeeBalance=async function(employeeId){
+  var docs=await fbGet('source_documents');
+  var open=docs.filter(function(d){
+    return d.type==='labor_payment' && d.counterpartyId===employeeId
+      && (d.status==='POSTED'||d.status==='PARTIALLY_PAID'||d.status==='OVERDUE');
+  });
+  var balance=open.reduce(function(s,d){return s+(+d.remainingAmount||0);},0);
+  return {ok:true, balance:Math.round(balance*100)/100, openAccrualCount:open.length};
 };
 
 // ══════════════════════════════════════════════════════

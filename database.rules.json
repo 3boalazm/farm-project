@@ -298,6 +298,17 @@
       }
     },
 
+    // ── Accounting Engine (Phase 12): Employee registry (Labor Costing).
+    //    Accruals/payments themselves live in source_documents (type
+    //    'labor_payment') -- this is only the employee master. ─────────
+    "employees": {
+      ".read":  "auth != null",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      "$id": {
+        ".validate": "newData.hasChild('name')"
+      }
+    },
+
     // ── Users: read needed for the PIN-login screen (matches by pin_hash
     //    client-side); write restricted to admin only -- prevents any
     //    signed-in session from granting itself 'role':'admin' or
