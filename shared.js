@@ -5343,6 +5343,73 @@ window.getInterestPaidOnLoan=async function(loanId){
   return {ok:true, totalInterestPaid:Math.round(total*100)/100};
 };
 
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — OWNER EQUITY (Phase 16). No new collection.
+//  Capital and Drawings are Phase 2 source_documents (types
+//  'owner_capital' / 'owner_withdrawal', already in the enum): Debit
+//  Cash / Credit Owner Capital (3100) and Debit Owner Drawings (3200,
+//  contra-equity) / Credit Cash, respectively. Both post to 3xxx equity
+//  accounts exclusively -- structurally never an operating-expense
+//  account, so "never classify drawings as operating expenses" is
+//  enforced by which account this function is even capable of touching,
+//  not by a runtime check.
+// ══════════════════════════════════════════════════════════════
+
+window.postOwnerCapital=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var amount=+opts.amount;
+  if(!amount||isNaN(amount)||amount<=0) return {ok:false, error:'يرجى إدخال مبلغ صحيح'};
+  if(!opts.cashAccountId) return {ok:false, error:'الحساب النقدي/البنكي مطلوب'};
+
+  var created=await window.createSourceDocument({
+    type:'owner_capital', total:amount, date:opts.date, operationId:opts.operationId, notes:opts.notes||null,
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return {ok:true, id:created.id, idempotent:true};
+  var posted=await window.postSourceDocument(created.id,{
+    debitAccountId:opts.cashAccountId, creditAccountId:'3100', paidAmount:amount,
+  });
+  if(!posted.ok) return posted;
+  return {ok:true, id:created.id, journalEntryId:posted.journalEntryId};
+};
+
+window.postOwnerWithdrawal=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var amount=+opts.amount;
+  if(!amount||isNaN(amount)||amount<=0) return {ok:false, error:'يرجى إدخال مبلغ صحيح'};
+  if(!opts.cashAccountId) return {ok:false, error:'الحساب النقدي/البنكي مطلوب'};
+
+  var created=await window.createSourceDocument({
+    type:'owner_withdrawal', total:amount, date:opts.date, operationId:opts.operationId, notes:opts.notes||null,
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return {ok:true, id:created.id, idempotent:true};
+  var posted=await window.postSourceDocument(created.id,{
+    debitAccountId:'3200', creditAccountId:opts.cashAccountId, paidAmount:amount,
+  });
+  if(!posted.ok) return posted;
+  return {ok:true, id:created.id, journalEntryId:posted.journalEntryId};
+};
+
+window.getOwnerEquitySummary=async function(startDate,endDate){
+  var entries=await fbGet('journal_entries');
+  var capital=0, drawings=0;
+  entries.forEach(function(e){
+    if(startDate && e.date<startDate) return;
+    if(endDate && e.date>endDate) return;
+    (e.lines||[]).forEach(function(l){
+      if(l.accountId==='3100') capital+=(+l.credit||0);
+      if(l.accountId==='3200') drawings+=(+l.debit||0);
+    });
+  });
+  capital=Math.round(capital*100)/100; drawings=Math.round(drawings*100)/100;
+  return {ok:true, capitalContributed:capital, drawings:drawings, netEquityMovement:Math.round((capital-drawings)*100)/100};
+};
+
 // ══════════════════════════════════════════════════════
 // Animal Identity Service
 // ══════════════════════════════════════════════════════
