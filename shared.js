@@ -3617,6 +3617,12 @@ var DEFAULT_CHART_OF_ACCOUNTS=[
   // this ONE account absorbs both rather than inventing a separate
   // "found inventory" revenue line with no real business meaning here.
   {code:'6950',name_ar:'فروقات جرد المخزون',name_en:'Inventory Adjustment / Shrinkage',type:'EXPENSE',parentId:'6000'},
+  // Added in Phase 7 (Animal Accounting): writing off a dead animal's
+  // KNOWN cost basis is a real loss, distinct from ordinary operating
+  // expenses -- kept under 5000 (direct/cost-of-sales) alongside 5100
+  // Cost of Animal Sales, since both represent the livestock asset
+  // leaving the books, just via a different exit event.
+  {code:'5150',name_ar:'خسارة نفوق المواشي',name_en:'Loss on Livestock Death',type:'EXPENSE',parentId:'5000'},
 ];
 
 function _accountNormalBalance(type,contra){
@@ -3774,7 +3780,7 @@ window.reverseJournalEntry=async function(originalId,opts){
 // ══════════════════════════════════════════════════════════════
 
 var SOURCE_DOCUMENT_TYPES=['sales_invoice','purchase_invoice','receipt','payment','expense_voucher',
-  'transfer','animal_sale','inventory_purchase','inventory_consumption','labor_payment',
+  'transfer','animal_sale','animal_purchase','inventory_purchase','inventory_consumption','labor_payment',
   'asset_purchase','loan','owner_capital','owner_withdrawal'];
 var SOURCE_DOCUMENT_STATUSES=['DRAFT','POSTED','PARTIALLY_PAID','PAID','OVERDUE','VOID','CANCELLED'];
 var SOURCE_DOCUMENT_OPEN_STATUSES=['POSTED','PARTIALLY_PAID','OVERDUE']; // eligible for a new payment
@@ -4540,6 +4546,174 @@ window.postInventoryAdjustment=async function(opts){
   });
   if(!posted.ok) return posted;
   return {ok:true, journalEntryId:posted.id, amount:total, direction:delta>0?'gain':'shrinkage'};
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — ANIMAL ACCOUNTING (Phase 7). One new collection
+//  (animal_cost_ledger -- a pure append log of real, evidenced costs
+//  attributed to one animal; this is a trimmed-forward slice of the full
+//  Phase 9 "Animal Cost Basis" design, pulled in now because Phase 7's
+//  own sale/death recipes genuinely can't be correct without it: you
+//  cannot decide whether to post "Cost of Animal Sales" without first
+//  knowing whether a real cost basis exists).
+//
+//  PURCHASE and SALE are Phase 2 source_documents (types 'animal_purchase'
+//  / 'animal_sale', the latter already existed in the Phase 2 enum).
+//  DEATH is a plain journal entry (like inventory adjustment) since there
+//  is no payment/counterparty lifecycle to a death.
+//
+//  The one rule every function here obeys: a Cost of Animal Sales /
+//  Loss on Livestock leg is posted ONLY when animal_cost_ledger actually
+//  has evidence for that animal. A farm-born animal with no purchase
+//  price and no recorded direct costs sells or dies with its cost side
+//  left unposted, `costBasisKnown:false` returned -- never a guessed
+//  number standing in for missing evidence.
+// ══════════════════════════════════════════════════════════════
+
+var LIVESTOCK_ASSET_ACCOUNT='1500';
+var COST_OF_ANIMAL_SALES_ACCOUNT='5100';
+var LOSS_ON_LIVESTOCK_ACCOUNT='5150';
+
+window.recordAnimalCost=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.animalId||!opts.costType||!opts.operationId) return {ok:false, error:'بيانات ناقصة (الحيوان، نوع التكلفة، وoperationId مطلوبون)'};
+  var amount=+opts.amount;
+  if(!amount||isNaN(amount)||amount<=0) return {ok:false, error:'يرجى إدخال مبلغ صحيح'};
+  var ledger=await fbGet('animal_cost_ledger');
+  var dupe=ledger.find(function(l){return l.operationId===opts.operationId;});
+  if(dupe) return {ok:true, id:dupe._id, idempotent:true};
+  var record={
+    animalId:opts.animalId, date:opts.date||todayStr(), costType:opts.costType,
+    sourceType:opts.sourceType||null, sourceId:opts.sourceId||null, amount:Math.round(amount*100)/100,
+    operationId:opts.operationId, createdAt:new Date().toISOString(),
+  };
+  try{
+    var id=await fbPost('animal_cost_ledger',record);
+    fbCacheInvalidate('animal_cost_ledger');
+    return {ok:true, id:id};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Purely additive: sums whatever evidence exists. Never claims
+// completeness -- a real total of zero (no evidence at all) and a real
+// total of, say, 500 (some evidence, possibly not all of it) are both
+// reported as exactly what they are, nothing more.
+window.getAnimalCostBasis=async function(animalId){
+  var ledger=await fbGet('animal_cost_ledger');
+  var mine=ledger.filter(function(l){return l.animalId===animalId;});
+  var byType={};
+  mine.forEach(function(l){ byType[l.costType]=(byType[l.costType]||0)+(+l.amount||0); });
+  var knownCost=mine.reduce(function(s,l){return s+(+l.amount||0);},0);
+  return {ok:true, knownCost:Math.round(knownCost*100)/100, hasCostBasis:knownCost>0, byType:byType, entryCount:mine.length};
+};
+
+// Debit Livestock Asset, Credit Cash/AP -- then records the purchase
+// price as this animal's own first cost-ledger entry, so a later sale
+// can post a real Cost of Animal Sales leg against it.
+window.postAnimalPurchase=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.animalId) return {ok:false, error:'معرّف الحيوان مطلوب'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var amount=+opts.amount;
+  if(!amount||isNaN(amount)||amount<=0) return {ok:false, error:'يرجى إدخال مبلغ صحيح'};
+  if(opts.paymentMode!=='cash' && opts.paymentMode!=='credit') return {ok:false, error:'طريقة الدفع يجب أن تكون cash أو credit'};
+  if(opts.paymentMode==='cash' && !opts.cashAccountId) return {ok:false, error:'الحساب النقدي مطلوب للشراء الكاش'};
+
+  var created=await window.createSourceDocument({
+    type:'animal_purchase', total:amount, date:opts.date, operationId:opts.operationId,
+    counterpartyId:opts.supplierId||null, counterpartyName:opts.supplierName||null,
+    sourceType:'animal', sourceId:opts.animalId, notes:opts.animalTag?('شراء حيوان: '+opts.animalTag):null,
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return {ok:true, id:created.id, idempotent:true};
+  var posted=await window.postSourceDocument(created.id,{
+    debitAccountId:LIVESTOCK_ASSET_ACCOUNT,
+    creditAccountId:opts.paymentMode==='cash'?opts.cashAccountId:AP_ACCOUNT_ID,
+    paidAmount:opts.paymentMode==='cash'?amount:0,
+  });
+  if(!posted.ok) return posted;
+  await window.recordAnimalCost({
+    animalId:opts.animalId, costType:'purchase', amount:amount, date:opts.date,
+    sourceType:'source_document', sourceId:created.id, operationId:opts.operationId+'-cost',
+  });
+  return {ok:true, id:created.id, journalEntryId:posted.journalEntryId, status:posted.status};
+};
+
+// Debit Cash/AR, Credit the given revenue account -- always. Then, ONLY
+// if animal_cost_ledger has real evidence for this animal, a SEPARATE
+// journal entry posts Debit Cost of Animal Sales / Credit Livestock
+// Asset for exactly that known amount. If there's no evidence, that
+// second leg is skipped outright and costBasisKnown:false is returned --
+// the sale itself is never blocked or distorted by missing cost data.
+window.postAnimalSale=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.animalId) return {ok:false, error:'معرّف الحيوان مطلوب'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  if(!opts.revenueAccountId) return {ok:false, error:'حساب الإيراد مطلوب'};
+  var amount=+opts.salePrice;
+  if(!amount||isNaN(amount)||amount<=0) return {ok:false, error:'يرجى إدخال سعر بيع صحيح'};
+  if(opts.paymentMode!=='cash' && opts.paymentMode!=='credit') return {ok:false, error:'طريقة الدفع يجب أن تكون cash أو credit'};
+  if(opts.paymentMode==='cash' && !opts.cashAccountId) return {ok:false, error:'الحساب النقدي مطلوب للبيع الكاش'};
+
+  var created=await window.createSourceDocument({
+    type:'animal_sale', total:amount, date:opts.date, operationId:opts.operationId,
+    counterpartyId:opts.customerId||null, counterpartyName:opts.customerName||null,
+    sourceType:'animal', sourceId:opts.animalId, notes:opts.animalTag?('بيع حيوان: '+opts.animalTag):null,
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return {ok:true, id:created.id, idempotent:true};
+  var posted=await window.postSourceDocument(created.id,{
+    debitAccountId:opts.paymentMode==='cash'?opts.cashAccountId:AR_ACCOUNT_ID,
+    creditAccountId:opts.revenueAccountId,
+    paidAmount:opts.paymentMode==='cash'?amount:0,
+  });
+  if(!posted.ok) return posted;
+
+  var costBasis=await window.getAnimalCostBasis(opts.animalId);
+  var cogsResult=null;
+  if(costBasis.knownCost>0){
+    cogsResult=await window.postJournalEntry({
+      date:opts.date||todayStr(), description:'تكلفة بيع حيوان: '+(opts.animalTag||opts.animalId),
+      sourceType:'animal_sale_cogs', sourceId:opts.operationId,
+      lines:[{accountId:COST_OF_ANIMAL_SALES_ACCOUNT, debit:costBasis.knownCost, relatedAnimalId:opts.animalId},
+             {accountId:LIVESTOCK_ASSET_ACCOUNT, credit:costBasis.knownCost, relatedAnimalId:opts.animalId}],
+    });
+  }
+  return {
+    ok:true, id:created.id, journalEntryId:posted.journalEntryId, status:posted.status,
+    costBasisKnown:costBasis.knownCost>0, knownCost:costBasis.knownCost,
+    cogsJournalEntryId:cogsResult&&cogsResult.ok?cogsResult.id:null,
+  };
+};
+
+// If (and only if) this animal has a real, evidenced cost basis, writes
+// it off: Debit Loss on Livestock, Credit Livestock Asset. No cost
+// basis -> no journal entry, costBasisKnown:false -- a farm-born
+// animal's death is a real event even when it has no traceable cost to
+// write off, and this never invents one just to "close the books".
+window.postAnimalDeath=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.animalId) return {ok:false, error:'معرّف الحيوان مطلوب'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+
+  var existing=await _findExistingJournalBySource('animal_death_writeoff',opts.operationId);
+  if(existing) return {ok:true, journalEntryId:existing._id, idempotent:true};
+
+  var costBasis=await window.getAnimalCostBasis(opts.animalId);
+  if(costBasis.knownCost<=0) return {ok:true, posted:false, costBasisKnown:false, reason:'لا توجد تكلفة مسجّلة لهذا الحيوان'};
+
+  var posted=await window.postJournalEntry({
+    date:opts.date||todayStr(), description:'إعدام حيوان نافق: '+(opts.animalTag||opts.animalId),
+    sourceType:'animal_death_writeoff', sourceId:opts.operationId,
+    lines:[{accountId:LOSS_ON_LIVESTOCK_ACCOUNT, debit:costBasis.knownCost, relatedAnimalId:opts.animalId},
+           {accountId:LIVESTOCK_ASSET_ACCOUNT, credit:costBasis.knownCost, relatedAnimalId:opts.animalId}],
+  });
+  if(!posted.ok) return posted;
+  return {ok:true, journalEntryId:posted.id, costBasisKnown:true, amount:costBasis.knownCost};
 };
 
 // ══════════════════════════════════════════════════════
