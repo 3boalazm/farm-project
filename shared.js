@@ -4843,6 +4843,76 @@ window.getUnallocatedCosts=async function(startDate,endDate){
   return {ok:true, total:total, entries:unallocated};
 };
 
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — FEED COSTING (Phase 10). No new collection --
+//  pure reporting over journal_entries lines already posted against the
+//  Feed Expense account (6100) by Phase 6's postInventoryConsumption
+//  (which already accepts relatedAnimalId on its expense line). Note
+//  Phase 9 ("Animal Cost Basis") is not a separate pass here: Phase 7's
+//  animal_cost_ledger/getAnimalCostBasis already deliver exactly that
+//  remit (real evidenced cost per animal, no fabricated completeness) --
+//  duplicating it under a different name would create a second,
+//  competing cost-basis source, which this whole engine exists to avoid.
+//
+//  Deliberately NOT implemented: feed conversion ratio. Per the Phase 0
+//  audit, this app's weight records and feed-consumption records are not
+//  reliably correlated per-animal today, so computing a ratio would mean
+//  guessing which weight change came from which feed -- exactly the kind
+//  of invented number this engine refuses to produce. If/when a real,
+//  evidenced link between the two exists, this is the natural place to
+//  add it.
+// ══════════════════════════════════════════════════════════════
+
+var FEED_EXPENSE_ACCOUNT='6100';
+
+function _feedExpenseLines(entries,startDate,endDate){
+  var rows=[];
+  entries.forEach(function(e){
+    if(startDate && e.date<startDate) return;
+    if(endDate && e.date>endDate) return;
+    (e.lines||[]).forEach(function(l){
+      if(l.accountId===FEED_EXPENSE_ACCOUNT && (+l.debit||0)>0){
+        rows.push({journalEntryId:e._id, date:e.date, amount:+l.debit, relatedAnimalId:l.relatedAnimalId||null, relatedBarnId:l.relatedBarnId||null});
+      }
+    });
+  });
+  return rows;
+}
+
+// Total feed cost in range, split into what CAN be attributed to a
+// specific animal (relatedAnimalId was set when the consumption was
+// posted) vs. what genuinely can't (feeding logged at the barn/group
+// level, no per-animal split ever recorded) -- the unattributed bucket
+// is reported explicitly, never silently folded into "per animal".
+window.getFeedCostSummary=async function(startDate,endDate){
+  var entries=await fbGet('journal_entries');
+  var rows=_feedExpenseLines(entries,startDate,endDate);
+  var total=0, byAnimal={}, unattributed=0;
+  rows.forEach(function(r){
+    total+=r.amount;
+    if(r.relatedAnimalId) byAnimal[r.relatedAnimalId]=(byAnimal[r.relatedAnimalId]||0)+r.amount;
+    else unattributed+=r.amount;
+  });
+  Object.keys(byAnimal).forEach(function(k){ byAnimal[k]=Math.round(byAnimal[k]*100)/100; });
+  return {ok:true, total:Math.round(total*100)/100, byAnimal:byAnimal, unattributed:Math.round(unattributed*100)/100, recordCount:rows.length};
+};
+
+window.getFeedCostPerAnimal=async function(animalId,startDate,endDate){
+  var entries=await fbGet('journal_entries');
+  var rows=_feedExpenseLines(entries,startDate,endDate).filter(function(r){return r.relatedAnimalId===animalId;});
+  var total=rows.reduce(function(s,r){return s+r.amount;},0);
+  return {ok:true, total:Math.round(total*100)/100, entries:rows};
+};
+
+window.getFeedCostPerDay=async function(startDate,endDate){
+  var entries=await fbGet('journal_entries');
+  var rows=_feedExpenseLines(entries,startDate,endDate);
+  var byDate={};
+  rows.forEach(function(r){ byDate[r.date]=(byDate[r.date]||0)+r.amount; });
+  var days=Object.keys(byDate).sort().map(function(d){ return {date:d, total:Math.round(byDate[d]*100)/100}; });
+  return {ok:true, days:days};
+};
+
 // ══════════════════════════════════════════════════════
 // Animal Identity Service
 // ══════════════════════════════════════════════════════
