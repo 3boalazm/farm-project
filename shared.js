@@ -461,7 +461,7 @@ async function loadNotifDropdown(){
       body.innerHTML=notifs.length===0?'<div class="text-center py-4 text-gray" style="font-size:.85rem"><i class="bi bi-check-circle-fill green-text d-block mb-2" style="font-size:1.5rem"></i>لا توجد تنبيهات 🎉</div>':
         notifs.slice(0,8).map(n=>'<div class="notif-item-sm n-'+n.type+'"'+(n.href?' onclick="window.location.href=\''+(n.href||'#')+'\'">':'>') +
           '<div style="width:28px;height:28px;border-radius:50%;background:'+catC[n.type]+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="bi '+n.icon+'" style="font-size:.8rem;color:'+catC[n.type]+'"></i></div>'+
-          '<div><div style="font-size:.82rem;font-weight:700">'+n.title+'</div><div style="font-size:.75rem;color:var(--gray)">'+n.msg+'</div></div>'+
+          '<div><div style="font-size:.82rem;font-weight:700">'+escapeHtml(n.title||'')+'</div><div style="font-size:.75rem;color:var(--gray)">'+escapeHtml(n.msg||'')+'</div></div>'+
         '</div>').join('');
       // Update badge
       const cnt=notifs.filter(n=>n.type==='danger').length;
@@ -980,10 +980,10 @@ window.openNotificationsPopup = async function(){
             '<div style="width:34px;height:34px;border-radius:50%;background:'+cfg.c+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="bi '+n.icon+'" style="color:'+cfg.c+'"></i></div>'+
             '<div style="flex:1;min-width:0">'+
               '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'+
-                '<div class="fw-bold" style="font-size:.85rem;color:'+cfg.c+'">'+n.title+'</div>'+
+                '<div class="fw-bold" style="font-size:.85rem;color:'+cfg.c+'">'+escapeHtml(n.title||'')+'</div>'+
                 '<span class="type-badge" style="background:'+cfg.c+'22;color:'+cfg.c+';border:1px solid '+cfg.c+'44;font-size:.62rem;flex-shrink:0">'+cfg.label+'</span>'+
               '</div>'+
-              '<div class="text-gray" style="font-size:.8rem;margin-top:2px">'+n.msg+'</div>'+
+              '<div class="text-gray" style="font-size:.8rem;margin-top:2px">'+escapeHtml(n.msg||'')+'</div>'+
               (n.href?'<div style="font-size:.72rem;color:'+cfg.c+';margin-top:4px">اضغط للانتقال ←</div>':'')+
             '</div>'+
           '</div>';
