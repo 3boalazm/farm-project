@@ -2,6 +2,20 @@
 // Regression protection for the certified Weight SSOT (docs/certification/WEIGHT.md).
 // Fails if a future change re-introduces a second weight-storage path or breaks
 // the current_weight synchronization this session's own Wave A work established.
+//
+// UPDATED 2026-08-23: submitAddWeight() no longer calls fbPost directly --
+// it now delegates to shared.js's recordAnimalWeight(), a validated service
+// function (permission, animal-existence, alive-status, weight-range,
+// date-format checks) that WEIGHT.md's own "Known, Bounded Defects" section
+// still listed as missing ("No animal-existence check at write time") at
+// the time this test was last touched. That defect is fixed now -- this
+// test was failing because its mocks didn't cover fbGetOne(), which
+// recordAnimalWeight()'s existence check calls; against the real,
+// unmocked fbGetOne, the placeholder id 'testAnimal' correctly resolves
+// to "not found" and the write is correctly refused before ever reaching
+// fbPost. Mocking fbGetOne to return a real-shaped alive animal restores
+// this test's actual job: proving the canonical path is still the only
+// path, not the write-refused-for-a-fake-id branch.
 
 const { test, expect } = require('@playwright/test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
@@ -21,6 +35,10 @@ test.describe('Weight SSOT regression', () => {
         return 'id';
       };
       window.fbGet = async (c) => (c.endsWith('/weights') ? window._weightsDB.slice() : []);
+      // recordAnimalWeight()'s step 3 (animal-existence check) calls this --
+      // must resolve to a real, alive-status animal or every write is
+      // correctly refused before reaching fbPost at all.
+      window.fbGetOne = async (c, id) => (c === 'animals' && id === 'testAnimal' ? { _id: 'testAnimal', status: 'alive' } : null);
       window.fbPatch = async (c, id, p) => window._calls.push({ t: 'patch', c, p });
       window.logActivity = async () => {};
       window.renderDetail = () => {};
