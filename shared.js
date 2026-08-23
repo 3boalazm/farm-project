@@ -6431,6 +6431,78 @@ window.runFinancialDataQualityScan=async function(){
   return {ok:true, scannedEntries:entries.length, scannedDocuments:docs.length, issueCount:issues.length, issues:issues};
 };
 
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — MONTH-END CLOSE (Phase 30). Reaches into the
+//  existing Phase 17 fiscal-period machinery (createFiscalPeriod /
+//  closeFiscalPeriod / _checkFiscalPeriodOpen) rather than replacing
+//  it: this function POSTS the real closing entry (zeroing revenue and
+//  expense accounts into Retained Earnings, 3300) and THEN calls the
+//  existing closeFiscalPeriod to lock the period -- so a period is
+//  never locked without its close actually having been posted first.
+//
+//  Critical correctness point: the closing entry is dated the day
+//  AFTER period.endDate, never ON it. getIncomeStatement (Phase 24) is
+//  a simple date-range filter with no concept of "closing entries" --
+//  if the close posted ON endDate, its own zeroing lines would fall
+//  inside the very range being closed and a later re-run of
+//  getIncomeStatement for that same period would show revenue/expense
+//  netted to zero, corrupting the historical statement it's supposed
+//  to preserve. Dating it the next day keeps the just-closed period's
+//  own Income Statement exactly as it was.
+//
+//  If there was no revenue/expense activity at all, no entry is
+//  posted (nothing to close) but the period is still locked. If
+//  revenue and expense activity exists but happens to net to exactly
+//  zero, the zeroing entry is still posted (accounts must return to
+//  zero for the next period) -- it's simply already balanced without
+//  needing a Retained Earnings plug line.
+// ══════════════════════════════════════════════════════════════
+
+function _dayAfter(dateStr){
+  var d=new Date(dateStr+'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate()+1);
+  return d.toISOString().slice(0,10);
+}
+
+window.runMonthEndClose=async function(periodKey){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!periodKey) return {ok:false, error:'معرّف الفترة مطلوب'};
+
+  var periods=await fbGet('fiscal_periods');
+  var period=periods.find(function(p){return p._id===periodKey;});
+  if(!period) return {ok:false, error:'الفترة غير موجودة'};
+  if(period.status!=='OPEN') return {ok:false, error:'الفترة ليست مفتوحة'};
+
+  var existing=await _findExistingJournalBySource('period_close',periodKey);
+  if(existing) return {ok:true, journalEntryId:existing._id, idempotent:true};
+
+  var incomeStatement=await window.getIncomeStatement(period.startDate,period.endDate);
+  if(!incomeStatement.ok) return incomeStatement;
+
+  var lines=[];
+  incomeStatement.revenue.forEach(function(r){ if(r.amount>0) lines.push({accountId:r.accountId, debit:r.amount}); });
+  incomeStatement.expense.forEach(function(x){ if(x.amount>0) lines.push({accountId:x.accountId, credit:x.amount}); });
+  var netIncome=incomeStatement.netIncome;
+
+  var journalEntryId=null;
+  if(lines.length){
+    if(netIncome>0) lines.push({accountId:'3300', credit:netIncome});
+    else if(netIncome<0) lines.push({accountId:'3300', debit:-netIncome});
+    var posted=await window.postJournalEntry({
+      date:_dayAfter(period.endDate), description:'قيد إقفال نهاية الفترة: '+periodKey,
+      sourceType:'period_close', sourceId:periodKey, lines:lines,
+    });
+    if(!posted.ok) return posted;
+    journalEntryId=posted.id;
+  }
+
+  var lockResult=await window.closeFiscalPeriod(periodKey);
+  if(!lockResult.ok) return lockResult;
+
+  await logActivity('close_period','fiscal_periods','إقفال محاسبي لنهاية الفترة: '+periodKey+' — صافي الدخل '+netIncome);
+  return {ok:true, journalEntryId:journalEntryId, netIncome:netIncome, closed:true};
+};
+
 // ══════════════════════════════════════════════════════
 // Animal Identity Service
 // ══════════════════════════════════════════════════════
