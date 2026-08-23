@@ -740,11 +740,18 @@ async function performBulkDeath(ids,fields){
 
 window.execBulk=async function(action,extra){
   var ids=[..._selected];
-  closeModal();
-  toast('جاري التنفيذ على '+ar(ids.length)+' حيوان...','info');
-  var ok=0;
+  // Modal field-read-timing fix (same bug class as BL-01/02/03/submitReset,
+  // MODAL_LIFECYCLE.md): the 'edit' branch used to read its be-* fields
+  // via gv() AFTER closeModal() below had already removed them from the
+  // DOM, so document.getElementById() returned null for every one of them
+  // -- updates/bulkStatus/bulkPurpose were always empty, and bulk-edit
+  // always failed with "لم تختر أي تغيير" regardless of what was actually
+  // selected. Captured here, before closeModal(), using the exact same
+  // read expressions; no logic changed for the transfer/death/sell
+  // branches, which never read the DOM here (their values arrive
+  // pre-read in `extra`, captured at the confirm button's onclick).
+  var updates={}, reason='', bulkStatus='', bulkPurpose='';
   if(action==='edit'){
-    var updates={};
     var gv=function(id){var el=document.getElementById(id);return el?el.value.trim():'';}
     if(gv('be-species'))updates.species=gv('be-species');
     if(gv('be-breed'))updates.breed=gv('be-breed');
@@ -754,9 +761,14 @@ window.execBulk=async function(action,extra){
     if(gv('be-mother'))updates.mother_tag=gv('be-mother');
     if(gv('be-father'))updates.father_tag=gv('be-father');
     if(gv('be-notes'))updates.notes=gv('be-notes');
-    var reason=gv('be-reason');
-    var bulkStatus=gv('be-status');
-    var bulkPurpose=gv('be-purpose');
+    reason=gv('be-reason');
+    bulkStatus=gv('be-status');
+    bulkPurpose=gv('be-purpose');
+  }
+  closeModal();
+  toast('جاري التنفيذ على '+ar(ids.length)+' حيوان...','info');
+  var ok=0;
+  if(action==='edit'){
     if(!Object.keys(updates).length && !bulkStatus && !bulkPurpose){toast('لم تختر أي تغيير — اختر حقلاً واحداً على الأقل','error');return;}
     var changedParts=[];
     // status/purpose loop through the canonical service per-animal --
