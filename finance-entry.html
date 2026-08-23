@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <!-- Performance hints -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://farm-mz99-default-rtdb.europe-west1.firebasedatabase.app" crossorigin>
+  <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+  <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
+
+<script>(function(){var t=localStorage.getItem('farm_theme');if(t==='light')document.documentElement.classList.add('light-mode');}());</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>إدخال البيانات المالية — بيان المزرعة</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="media/logo-icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="media/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="media/favicon-16.png">
+<link rel="apple-touch-icon" href="media/apple-touch-icon.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="page-wrap rail-v2-content">
+  <div id="page-header"></div>
+
+  <ul class="nav nav-pills mb-4 gap-2" id="fe-tabs">
+    <li><button class="nav-link active" onclick="switchFeTab('je')"><i class="bi bi-journal-plus me-2"></i>قيد يومية</button></li>
+    <li><button class="nav-link" onclick="switchFeTab('cba')"><i class="bi bi-bank me-2"></i>حسابات نقدية/بنكية</button></li>
+    <li><button class="nav-link" onclick="switchFeTab('doc')"><i class="bi bi-file-earmark-text me-2"></i>مستندات مصدر</button></li>
+  </ul>
+
+  <div id="tab-je"></div>
+  <div id="tab-cba" style="display:none"></div>
+  <div id="tab-doc" style="display:none"></div>
+
+  <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
+    © <span id="footer-year"></span> <span id="footer-farm"></span><br>
+    <small style="font-size:.72rem;color:var(--text-muted)">إشراف: لواء أحمد رجب نوح | تطوير: جندي مصطفى محمد إبراهيم</small>
+  </footer>
+</div>
+<script src="config.js"></script>
+<script src="firebase.js"></script>
+<script src="nav.js"></script>
+<script src="shared.js"></script>
+<script src="offline-sync.js" defer></script>
+<script src="pages/datepicker.js" defer></script>
+<script>
+'use strict';
+
+// Only source-document types with no dedicated specialized posting
+// function are offered here. animal_sale/animal_purchase/inventory_*/
+// labor_payment/asset_purchase/loan each have their own postXxx()
+// function with real side effects beyond the plain journal entry
+// (cost-basis recording, stock movement, etc.) -- routing them through
+// the generic createSourceDocument+postSourceDocument path here would
+// silently skip those side effects. Those get their own dedicated
+// forms in a later phase.
+const FE_DOC_TYPES = [
+  {v:'sales_invoice',    l:'فاتورة مبيعات'},
+  {v:'purchase_invoice', l:'فاتورة مشتريات'},
+  {v:'receipt',          l:'إيصال قبض'},
+  {v:'payment',          l:'إيصال صرف'},
+  {v:'expense_voucher',  l:'سند مصروفات'},
+  {v:'transfer',         l:'تحويل'},
+  {v:'owner_capital',    l:'رأس مال المالك (إيداع)'},
+  {v:'owner_withdrawal', l:'مسحوبات المالك'},
+];
+
+let feAccounts = [], feCashBankAccounts = [];
+
+document.addEventListener('DOMContentLoaded', async ()=>{
+  if(!requireAuth())return;
+  if(!can('finance')){
+    document.body.innerHTML='<div class="page-wrap"><div class="empty-state" style="padding-top:100px"><i class="bi bi-shield-x" style="font-size:3rem;display:block;margin-bottom:10px;opacity:.4"></i><p>غير مصرح بالوصول</p><a href="dashboard.html" class="action-btn">الرئيسية</a></div></div>';
+    return;
+  }
+  initFirebase();
+  const s=getSettings();
+  document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
+  document.getElementById('footer-farm').textContent=s.farmName;
+  renderNavbarV2('finance-entry.html');
+  renderPageHeader('<i class="bi bi-pencil-square accent-text"></i> إدخال البيانات المالية',
+    'قيود اليومية، الحسابات النقدية/البنكية، ومستندات المصدر — ترحيل مباشر إلى دفتر الأستاذ الفعلي','');
+
+  document.querySelectorAll('#fe-tabs .nav-link').forEach(b=>{
+    b.style.cssText='background:var(--bg-3);border:1px solid var(--border);color:var(--text-sub);border-radius:10px;padding:8px 16px;cursor:pointer;font-family:Cairo,sans-serif;font-size:.85rem;transition:.2s';
+  });
+  document.querySelector('#fe-tabs .nav-link.active').style.cssText+=';background:rgba(0,230,118,.1);border-color:rgba(0,230,118,.35);color:var(--green)';
+
+  await feLoadAccounts();
+  renderJeTab();
+  renderCbaTab();
+  renderDocTab();
+});
+
+window.switchFeTab=function(tab){
+  document.getElementById('tab-je').style.display=tab==='je'?'block':'none';
+  document.getElementById('tab-cba').style.display=tab==='cba'?'block':'none';
+  document.getElementById('tab-doc').style.display=tab==='doc'?'block':'none';
+  document.querySelectorAll('#fe-tabs .nav-link').forEach(b=>{
+    const isA=b.getAttribute('onclick').includes("'"+tab+"'");
+    b.classList.toggle('active',isA);
+    b.style.background=isA?'rgba(0,230,118,.1)':'var(--bg-3)';
+    b.style.borderColor=isA?'rgba(0,230,118,.35)':'var(--border)';
+    b.style.color=isA?'var(--green)':'var(--text-sub)';
+  });
+};
+
+async function feLoadAccounts(){
+  try{
+    [feAccounts, feCashBankAccounts] = await Promise.all([fbGet('accounts'), fbGet('cash_bank_accounts')]);
+  }catch(e){ toast('خطأ في تحميل الحسابات: '+e.message,'error'); }
+}
+
+function feAccountOptions(filterFn){
+  return feAccounts.filter(a=>a.postable!==false && (!filterFn||filterFn(a)))
+    .map(a=>`<option value="${a._id}">${escapeHtml(a.code+' — '+a.name_ar)}</option>`).join('');
+}
+
+// ══════════════════════════════════════════════════════
+//  TAB 1 — Manual Journal Entry
+// ══════════════════════════════════════════════════════
+let feJeLineCount=0;
+
+function renderJeTab(){
+  document.getElementById('tab-je').innerHTML = renderSectionContainer({
+    title:'قيد يومية يدوي', description:'كل قيد يجب أن يكون متزنًا (إجمالي المدين = إجمالي الدائن) قبل الترحيل',
+    contentHtml: `
+      <div class="row g-3 mb-3">
+        <div class="col-md-4">
+          <label class="form-label small text-gray">التاريخ</label>
+          <input type="date" id="je-date" class="form-control form-control-sm" value="${todayStr()}">
+        </div>
+        <div class="col-md-8">
+          <label class="form-label small text-gray">الوصف</label>
+          <input type="text" id="je-desc" class="form-control form-control-sm" placeholder="وصف القيد (اختياري)">
+        </div>
+      </div>
+      <table class="table table-sm" id="je-lines-table">
+        <thead><tr><th>الحساب</th><th style="width:140px">مدين</th><th style="width:140px">دائن</th><th style="width:40px"></th></tr></thead>
+        <tbody id="je-lines-body"></tbody>
+      </table>
+      <button class="btn btn-sm btn-outline-secondary mb-3" onclick="feAddJeLine()"><i class="bi bi-plus-lg me-1"></i>إضافة سطر</button>
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3" style="font-size:.85rem">
+        <div>إجمالي المدين: <b id="je-total-debit" class="mono">٠</b> — إجمالي الدائن: <b id="je-total-credit" class="mono">٠</b></div>
+        <div id="je-balance-indicator"></div>
+      </div>
+      <button class="action-btn" id="je-submit-btn" onclick="feSubmitJournalEntry()"><i class="bi bi-check-lg me-1"></i> ترحيل القيد</button>
+    `,
+  });
+  document.getElementById('je-lines-body').innerHTML='';
+  feAddJeLine(); feAddJeLine();
+}
+
+function feAddJeLine(){
+  const row=document.createElement('tr');
+  row.dataset.lineId = 'jel'+(++feJeLineCount);
+  row.innerHTML = `
+    <td><select class="form-select form-select-sm je-line-account"><option value="">اختر حسابًا...</option>${feAccountOptions()}</select></td>
+    <td><input type="number" step="0.01" min="0" class="form-control form-control-sm je-line-debit" oninput="feOnJeAmountInput(this,'debit')"></td>
+    <td><input type="number" step="0.01" min="0" class="form-control form-control-sm je-line-credit" oninput="feOnJeAmountInput(this,'credit')"></td>
+    <td><button class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove();feRecalcJeTotals()" title="حذف السطر"><i class="bi bi-trash"></i></button></td>
+  `;
+  document.getElementById('je-lines-body').appendChild(row);
+}
+
+window.feAddJeLine=feAddJeLine;
+
+window.feOnJeAmountInput=function(input, side){
+  const row=input.closest('tr');
+  const other = side==='debit' ? row.querySelector('.je-line-credit') : row.querySelector('.je-line-debit');
+  if(+input.value>0) other.value='';
+  feRecalcJeTotals();
+};
+
+window.feRecalcJeTotals=function(){
+  let totalDebit=0, totalCredit=0;
+  document.querySelectorAll('#je-lines-body tr').forEach(row=>{
+    totalDebit += +row.querySelector('.je-line-debit').value || 0;
+    totalCredit += +row.querySelector('.je-line-credit').value || 0;
+  });
+  totalDebit = Math.round(totalDebit*100)/100; totalCredit = Math.round(totalCredit*100)/100;
+  document.getElementById('je-total-debit').textContent = ar(totalDebit);
+  document.getElementById('je-total-credit').textContent = ar(totalCredit);
+  const balanced = totalDebit>0 && totalDebit===totalCredit;
+  document.getElementById('je-balance-indicator').innerHTML = balanced
+    ? '<span style="color:var(--green)"><i class="bi bi-check-circle-fill me-1"></i>متزن</span>'
+    : '<span style="color:var(--red)"><i class="bi bi-exclamation-triangle-fill me-1"></i>غير متزن</span>';
+  return {totalDebit, totalCredit, balanced};
+};
+
+window.feSubmitJournalEntry=async function(){
+  // Read every field BEFORE any async call or DOM mutation, per this
+  // codebase's own modal-lifecycle discipline (docs/certification/
+  // MODAL_LIFECYCLE.md) -- applies here too even without a modal, since
+  // the table rows are rebuilt on success.
+  const date = document.getElementById('je-date').value;
+  const description = document.getElementById('je-desc').value.trim();
+  const lines = [];
+  document.querySelectorAll('#je-lines-body tr').forEach(row=>{
+    const accountId = row.querySelector('.je-line-account').value;
+    const debit = +row.querySelector('.je-line-debit').value || 0;
+    const credit = +row.querySelector('.je-line-credit').value || 0;
+    if(accountId && (debit>0 || credit>0)) lines.push({accountId, debit: debit||undefined, credit: credit||undefined});
+  });
+
+  if(!date){ toast('التاريخ مطلوب','error'); return; }
+  if(lines.length<2){ toast('يجب إدخال سطرين على الأقل','error'); return; }
+  const {balanced} = feRecalcJeTotals();
+  if(!balanced){ toast('القيد غير متزن — تأكد أن إجمالي المدين يساوي إجمالي الدائن','error'); return; }
+
+  const btn=document.getElementById('je-submit-btn');
+  btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> جارٍ الترحيل...';
+  const r = await postJournalEntry({date, description: description||null, sourceType:'manual', lines});
+  btn.disabled=false; btn.innerHTML='<i class="bi bi-check-lg me-1"></i> ترحيل القيد';
+
+  if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
+  toast('تم ترحيل القيد بنجاح','success');
+  renderJeTab();
+};
+
+// ══════════════════════════════════════════════════════
+//  TAB 2 — Cash / Bank Accounts
+// ══════════════════════════════════════════════════════
+function renderCbaTab(){
+  document.getElementById('tab-cba').innerHTML =
+    renderSectionContainer({
+      title:'إضافة حساب نقدي/بنكي جديد', description:'',
+      contentHtml: `
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label small text-gray">الاسم</label>
+            <input type="text" id="cba-name" class="form-control form-control-sm" placeholder="مثال: بنك المزرعة">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small text-gray">النوع</label>
+            <select id="cba-type" class="form-select form-select-sm">
+              <option value="cash">نقدية</option>
+              <option value="bank">بنك</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small text-gray">الحساب المرتبط (دليل الحسابات)</label>
+            <select id="cba-linked" class="form-select form-select-sm">
+              <option value="">اختر حسابًا...</option>
+              ${feAccountOptions(a=>a.type==='ASSET')}
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small text-gray">الرصيد الافتتاحي</label>
+            <input type="number" step="0.01" min="0" id="cba-opening" class="form-control form-control-sm" value="0">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small text-gray">تاريخ الافتتاح</label>
+            <input type="date" id="cba-opening-date" class="form-control form-control-sm" value="${todayStr()}">
+          </div>
+        </div>
+        <button class="action-btn mt-3" id="cba-submit-btn" onclick="feSubmitCashBankAccount()"><i class="bi bi-plus-lg me-1"></i> إضافة الحساب</button>
+      `,
+    }) +
+    renderSectionContainer({
+      title:'الحسابات الحالية', description:'',
+      contentHtml: '<div id="cba-list">'+feCbaListLoadingHtml()+'</div>',
+    });
+  feRefreshCbaList();
+}
+
+function feCbaListLoadingHtml(){ return '<div class="text-center py-3"><div class="spinner"></div></div>'; }
+
+async function feRefreshCbaList(){
+  const el=document.getElementById('cba-list');
+  if(!feCashBankAccounts.length){
+    el.innerHTML='<div class="empty-state py-4"><i class="bi bi-inbox" style="font-size:2rem;opacity:.4"></i><p class="mt-2">لا توجد حسابات بعد</p></div>';
+    return;
+  }
+  const balances = await Promise.all(feCashBankAccounts.map(c=>getCashBankBalance(c._id)));
+  el.innerHTML = `
+    <table class="table table-sm">
+      <thead><tr><th>الاسم</th><th>النوع</th><th class="text-end">الرصيد الحالي</th></tr></thead>
+      <tbody>
+        ${feCashBankAccounts.map((c,i)=>`<tr><td>${escapeHtml(c.name)}</td><td>${c.type==='bank'?'بنك':'نقدية'}</td><td class="text-end mono">${balances[i].ok?ar(balances[i].balance)+' '+getSettings().currency:'—'}</td></tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+window.feSubmitCashBankAccount=async function(){
+  const name = document.getElementById('cba-name').value.trim();
+  const type = document.getElementById('cba-type').value;
+  const linkedAccountId = document.getElementById('cba-linked').value;
+  const openingBalance = +document.getElementById('cba-opening').value || 0;
+  const openingDate = document.getElementById('cba-opening-date').value;
+
+  if(!name){ toast('الاسم مطلوب','error'); return; }
+  if(!linkedAccountId){ toast('يرجى اختيار الحساب المرتبط','error'); return; }
+
+  const btn=document.getElementById('cba-submit-btn');
+  btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> جارٍ الإضافة...';
+  const r = await createCashBankAccount({name, type, linkedAccountId, openingBalance, openingDate});
+  btn.disabled=false; btn.innerHTML='<i class="bi bi-plus-lg me-1"></i> إضافة الحساب';
+
+  if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
+  toast('تمت إضافة الحساب بنجاح','success');
+  await feLoadAccounts();
+  renderCbaTab();
+};
+
+// ══════════════════════════════════════════════════════
+//  TAB 3 — Source Documents
+// ══════════════════════════════════════════════════════
+function renderDocTab(){
+  document.getElementById('tab-doc').innerHTML =
+    renderSectionContainer({
+      title:'مستند مصدر جديد', description:'أنواع الحيوانات/المخزون/الأصول/القروض لها نماذج مخصصة قادمة لاحقًا — هذا النموذج للمستندات العامة فقط',
+      contentHtml: `
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label small text-gray">النوع</label>
+            <select id="doc-type" class="form-select form-select-sm">
+              ${FE_DOC_TYPES.map(t=>`<option value="${t.v}">${t.l}</option>`).join('')}
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small text-gray">التاريخ</label>
+            <input type="date" id="doc-date" class="form-control form-control-sm" value="${todayStr()}">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small text-gray">الإجمالي</label>
+            <input type="number" step="0.01" min="0.01" id="doc-total" class="form-control form-control-sm">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small text-gray">اسم الطرف الآخر (اختياري)</label>
+            <input type="text" id="doc-counterparty" class="form-control form-control-sm">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small text-gray">ملاحظات</label>
+            <input type="text" id="doc-notes" class="form-control form-control-sm">
+          </div>
+        </div>
+        <button class="action-btn mt-3" id="doc-submit-btn" onclick="feSubmitSourceDocument()"><i class="bi bi-plus-lg me-1"></i> إنشاء المستند (مسودة)</button>
+      `,
+    }) +
+    renderSectionContainer({
+      title:'مستندات بانتظار الترحيل', description:'',
+      contentHtml: '<div id="doc-draft-list">'+feCbaListLoadingHtml()+'</div>',
+    });
+  feRefreshDraftDocs();
+}
+
+async function feRefreshDraftDocs(){
+  const el=document.getElementById('doc-draft-list');
+  const docs = (await fbGet('source_documents')).filter(d=>d.status==='DRAFT');
+  if(!docs.length){
+    el.innerHTML='<div class="empty-state py-4"><i class="bi bi-inbox" style="font-size:2rem;opacity:.4"></i><p class="mt-2">لا توجد مستندات بانتظار الترحيل</p></div>';
+    return;
+  }
+  const typeLabel = t => (FE_DOC_TYPES.find(x=>x.v===t)||{l:t}).l;
+  el.innerHTML = `
+    <table class="table table-sm">
+      <thead><tr><th>الرقم</th><th>النوع</th><th>التاريخ</th><th class="text-end">الإجمالي</th><th></th></tr></thead>
+      <tbody>
+        ${docs.map(d=>`<tr>
+          <td>${escapeHtml(d.documentNumber||'')}</td>
+          <td>${escapeHtml(typeLabel(d.type))}</td>
+          <td>${escapeHtml(d.date||'')}</td>
+          <td class="text-end mono">${ar(d.total)} ${getSettings().currency}</td>
+          <td><button class="btn btn-sm btn-outline-success" onclick="feOpenPostDocModal('${d._id}')"><i class="bi bi-send-check me-1"></i>ترحيل</button></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+window.feOpenPostDocModal=function(docId){
+  showModal(renderFarmModal({
+    icon:'bi-send-check-fill', title:'ترحيل المستند',
+    bodyHtml: `
+      <div class="mb-2">
+        <label class="form-label small text-gray">الحساب المدين</label>
+        <select id="pd-debit" class="form-select form-select-sm">${feAccountOptions()}</select>
+      </div>
+      <div class="mb-2">
+        <label class="form-label small text-gray">الحساب الدائن</label>
+        <select id="pd-credit" class="form-select form-select-sm">${feAccountOptions()}</select>
+      </div>
+      <div class="mb-2">
+        <label class="form-label small text-gray">المبلغ المسدد الآن (اتركه فارغًا إن لم يُسدد شيء بعد)</label>
+        <input type="number" step="0.01" min="0" id="pd-paid" class="form-control form-control-sm">
+      </div>
+    `,
+    footerHtml: `<div class="d-flex gap-2 mt-3">
+      <button class="action-btn flex-grow-1" onclick="feConfirmPostDoc('${docId}')">تأكيد الترحيل</button>
+      <button class="btn btn-outline-secondary" onclick="closeModal()">إلغاء</button>
+    </div>`,
+  }));
+};
+
+window.feConfirmPostDoc=async function(docId){
+  // Read the modal's own fields BEFORE closeModal(), per this
+  // codebase's certified modal-lifecycle rule.
+  const debitAccountId = document.getElementById('pd-debit').value;
+  const creditAccountId = document.getElementById('pd-credit').value;
+  const paidVal = document.getElementById('pd-paid').value;
+  const paidAmount = paidVal===''? undefined : (+paidVal||0);
+  closeModal();
+
+  if(!debitAccountId || !creditAccountId){ toast('يرجى اختيار الحسابين المدين والدائن','error'); return; }
+  if(debitAccountId===creditAccountId){ toast('لا يمكن أن يكون الحساب المدين والدائن نفس الحساب','error'); return; }
+
+  const opts = {debitAccountId, creditAccountId};
+  if(paidAmount!==undefined) opts.paidAmount = paidAmount;
+  const r = await postSourceDocument(docId, opts);
+  if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
+  toast('تم ترحيل المستند بنجاح','success');
+  feRefreshDraftDocs();
+};
+
+window.feSubmitSourceDocument=async function(){
+  const type = document.getElementById('doc-type').value;
+  const date = document.getElementById('doc-date').value;
+  const total = +document.getElementById('doc-total').value || 0;
+  const counterpartyName = document.getElementById('doc-counterparty').value.trim();
+  const notes = document.getElementById('doc-notes').value.trim();
+
+  if(!total || total<=0){ toast('يرجى إدخال إجمالي صحيح','error'); return; }
+
+  const btn=document.getElementById('doc-submit-btn');
+  btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> جارٍ الإنشاء...';
+  const r = await createSourceDocument({
+    type, total, date: date||undefined, operationId: genId(),
+    counterpartyName: counterpartyName||null, notes: notes||null,
+  });
+  btn.disabled=false; btn.innerHTML='<i class="bi bi-plus-lg me-1"></i> إنشاء المستند (مسودة)';
+
+  if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
+  toast('تم إنشاء المستند كمسودة — يمكنك ترحيله من القائمة أدناه','success');
+  renderDocTab();
+};
+</script>
+</body>
+</html>
