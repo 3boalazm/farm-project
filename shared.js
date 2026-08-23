@@ -6524,6 +6524,36 @@ window.runMonthEndClose=async function(periodKey){
   return {ok:true, journalEntryId:journalEntryId, netIncome:netIncome, closed:true};
 };
 
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — FINANCIAL INTEGRITY ENGINE (Phase 33). One
+//  composed health signal for the whole accounting engine, same
+//  "pure composition, never recalculate" discipline shared.js's own
+//  evaluateOperationalPriority already established (see also Phase 28's
+//  getFinancialDashboardKPIs): combines the real outputs of the Data
+//  Quality Scan (Phase 29), Trial Balance (Phase 26), and Balance Sheet
+//  (Phase 24) into a single `healthy` boolean a dashboard badge/alert
+//  can key off of, without re-deriving any of their logic itself.
+// ══════════════════════════════════════════════════════════════
+
+window.getFinancialIntegrityStatus=async function(){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+
+  var asOf=todayStr();
+  var scan=await window.runFinancialDataQualityScan();
+  if(!scan.ok) return scan;
+  var trialBalance=await window.getTrialBalance(asOf);
+  if(!trialBalance.ok) return trialBalance;
+  var balanceSheet=await window.getBalanceSheet(asOf);
+  if(!balanceSheet.ok) return balanceSheet;
+
+  return {
+    ok:true, asOf:asOf,
+    healthy:scan.issueCount===0 && trialBalance.balanced && balanceSheet.balanced,
+    dataQualityIssueCount:scan.issueCount, dataQualityIssues:scan.issues,
+    trialBalanceBalanced:trialBalance.balanced, balanceSheetBalanced:balanceSheet.balanced,
+  };
+};
+
 // ══════════════════════════════════════════════════════
 // Animal Identity Service
 // ══════════════════════════════════════════════════════
