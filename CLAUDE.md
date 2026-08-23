@@ -83,6 +83,7 @@ Because primary auth isn't Firebase Auth, [database.rules.json](database.rules.j
 | Full architecture, all three engineering threads | `docs/architecture/` |
 | Weight or Birth subsystem specifics | `docs/certification/WEIGHT.md` / `BIRTH.md` |
 | Modal-lifecycle rules | `docs/certification/MODAL_LIFECYCLE.md` |
+| Double-entry accounting engine (journal entries, financial statements, reconciliation, etc. — separate from the simple `finance` collection covered under Finance docs above) | `docs/certification/ACCOUNTING-ENGINE.md` |
 | Task automation, Weight/Health/Production Intelligence, or the Unified Decision Engine (Sprints 1-6) | `docs/features/` -- start with `docs/features/EXECUTIVE-DASHBOARD.md` for how they surface, or the specific `*-ANALYSIS.md`/`*-INTELLIGENCE.md` pair for the domain you're touching |
 | What's decided vs. still open | `docs/decisions/INDEX.md`, `docs/backlog/OPEN_DECISIONS.md` |
 | What's safe to work on next | `docs/backlog/VERIFIED_BACKLOG.md` |
