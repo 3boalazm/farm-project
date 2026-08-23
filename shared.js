@@ -3742,6 +3742,7 @@ window.postJournalEntry=async function(opts){
     var id=await fbPost('journal_entries',entry);
     fbCacheInvalidate('journal_entries');
     await logActivity('add','journal_entries','قيد محاسبي: '+(entry.description||entry.sourceType)+' — '+ar(v.totalDebit)+' '+getSettings().currency);
+    _recordFinancialAudit('POST','journal_entry',id,{totalDebit:v.totalDebit, totalCredit:v.totalCredit, sourceType:entry.sourceType});
     return {ok:true, id:id, entry:entry};
   }catch(e){ return {ok:false, error:e.message}; }
 };
@@ -3763,6 +3764,7 @@ window.reverseJournalEntry=async function(originalId,opts){
   var swappedLines=(original.lines||[]).map(function(l){
     return Object.assign({},l,{debit:l.credit||0, credit:l.debit||0});
   });
+  _recordFinancialAudit('REVERSE','journal_entry',originalId,{});
   return await window.postJournalEntry({
     date:opts.date||todayStr(),
     description:'عكس قيد: '+(original.description||original._id),
@@ -3877,6 +3879,7 @@ window.postSourceDocument=async function(documentId,opts){
     });
     fbCacheInvalidate('source_documents');
     await logActivity('post','source_documents','ترحيل '+doc.documentNumber);
+    _recordFinancialAudit('POST','source_document',documentId,{type:doc.type, total:doc.total, status:newStatus});
     return {ok:true, id:documentId, journalEntryId:posted.id, status:newStatus};
   }catch(e){ return {ok:false, error:e.message}; }
 };
@@ -3924,6 +3927,7 @@ window.recordPaymentAgainstDocument=async function(documentId,opts){
     });
     fbCacheInvalidate('source_documents');
     await logActivity('pay','source_documents','سداد '+ar(amount)+' '+getSettings().currency+' على '+doc.documentNumber);
+    _recordFinancialAudit('PAY','source_document',documentId,{amount:amount, newStatus:newStatus});
     return {ok:true, journalEntryId:posted.id, paidAmount:newPaid, remainingAmount:newRemaining, status:newStatus};
   }catch(e){ return {ok:false, error:e.message}; }
 };
@@ -3942,6 +3946,7 @@ window.voidSourceDocument=async function(documentId){
     await fbPatch('source_documents',documentId,{status:'VOID'});
     fbCacheInvalidate('source_documents');
     await logActivity('void','source_documents','إلغاء مسودة '+doc.documentNumber);
+    _recordFinancialAudit('VOID','source_document',documentId,{});
     return {ok:true};
   }catch(e){ return {ok:false, error:e.message}; }
 };
@@ -3965,6 +3970,7 @@ window.cancelPostedSourceDocument=async function(documentId){
     await fbPatch('source_documents',documentId,{status:'CANCELLED'});
     fbCacheInvalidate('source_documents');
     await logActivity('cancel','source_documents','إلغاء '+doc.documentNumber);
+    _recordFinancialAudit('VOID','source_document',documentId,{reversalEntryId:rev.id});
     return {ok:true, reversalEntryId:rev.id};
   }catch(e){ return {ok:false, error:e.message}; }
 };
@@ -4811,6 +4817,7 @@ window.allocateCost=async function(opts){
     var id=await fbPost('cost_allocations',record);
     fbCacheInvalidate('cost_allocations');
     await logActivity('add','cost_allocations','توزيع تكلفة قيد '+opts.sourceJournalEntryId+' على '+opts.allocations.length+' مركز');
+    _recordFinancialAudit('ALLOCATE','cost_allocation',id,{sourceJournalEntryId:opts.sourceJournalEntryId, totalAmount:record.totalAmount});
     return {ok:true, id:id};
   }catch(e){ return {ok:false, error:e.message}; }
 };
@@ -5487,6 +5494,7 @@ window.closeFiscalPeriod=async function(periodKey){
     await fbPatch('fiscal_periods',periodKey,{status:'CLOSED', closedAt:new Date().toISOString(), closedBy:(getUser()&&getUser().name)||null});
     fbCacheInvalidate('fiscal_periods');
     await logActivity('close_period','fiscal_periods','إغلاق فترة مالية: '+periodKey);
+    _recordFinancialAudit('CLOSE_PERIOD','fiscal_period',periodKey,{});
     return {ok:true};
   }catch(e){ return {ok:false, error:e.message}; }
 };
@@ -5505,6 +5513,7 @@ window.lockFiscalPeriod=async function(periodKey){
     await fbPatch('fiscal_periods',periodKey,{status:'LOCKED', lockedAt:new Date().toISOString(), lockedBy:(getUser()&&getUser().name)||null});
     fbCacheInvalidate('fiscal_periods');
     await logActivity('lock_period','fiscal_periods','قفل نهائي لفترة مالية: '+periodKey);
+    _recordFinancialAudit('LOCK_PERIOD','fiscal_period',periodKey,{});
     return {ok:true};
   }catch(e){ return {ok:false, error:e.message}; }
 };
@@ -5521,8 +5530,58 @@ window.reopenFiscalPeriod=async function(periodKey,reason){
     await fbPatch('fiscal_periods',periodKey,{status:'OPEN', reopenedAt:new Date().toISOString(), reopenedBy:(getUser()&&getUser().name)||null, reopenReason:reason});
     fbCacheInvalidate('fiscal_periods');
     await logActivity('reopen_period','fiscal_periods','إعادة فتح فترة مالية: '+periodKey+' — '+reason);
+    _recordFinancialAudit('REOPEN_PERIOD','fiscal_period',periodKey,{reason:reason});
     return {ok:true};
   }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — FINANCIAL AUDIT TRAIL (Phase 18). One new
+//  collection (financial_audit_log), write-once like activity_log. This
+//  is deliberately NOT bolted onto all ~30 functions across Phases 2-17
+//  individually -- it's wired into the small set of CHOKEPOINTS every
+//  one of those functions already funnels through (postJournalEntry,
+//  reverseJournalEntry, postSourceDocument, recordPaymentAgainstDocument,
+//  voidSourceDocument, cancelPostedSourceDocument, allocateCost, and the
+//  fiscal-period transitions) -- the exact same "one gate covers
+//  everything already built" reasoning as Phase 17's period-lock check.
+//
+//  Fire-and-forget by design: a failed audit write never blocks or
+//  rolls back the real financial operation that triggered it (matching
+//  this app's existing "best-effort, never block the underlying action"
+//  precedent from the original Inventory Transaction Engine). The
+//  general activity_log is unaffected and keeps logging its own
+//  human-readable Arabic sentences as it always has -- this is a
+//  parallel, STRUCTURED log specifically for financial entities, with
+//  real entity/entityId/action fields a later report can query on,
+//  not prose.
+//
+//  CREATE and EDIT_DRAFT (from the Master Prompt's own action list) are
+//  not used here: this engine has no draft-editing workflow -- every
+//  document is created once and posted, so logging a phantom "EDIT_DRAFT"
+//  action that can never actually happen would be exactly the kind of
+//  fabricated completeness this whole project refuses to produce.
+// ══════════════════════════════════════════════════════════════
+
+function _recordFinancialAudit(action,entity,entityId,details){
+  try{
+    fbPost('financial_audit_log',{
+      actor:(getUser()&&getUser().name)||null, actorRole:(getUser()&&getUser().role)||null,
+      timestamp:new Date().toISOString(), action:action, entity:entity, entityId:entityId||null,
+      details:details||null,
+    }).catch(function(){ /* best-effort -- the real operation already succeeded or failed on its own merits */ });
+  }catch(e){ /* synchronous guard, same reasoning */ }
+}
+
+window.getFinancialAuditTrail=async function(entity,entityId){
+  var log=await fbGet('financial_audit_log');
+  var rows=log.filter(function(r){
+    if(entity && r.entity!==entity) return false;
+    if(entityId && r.entityId!==entityId) return false;
+    return true;
+  });
+  rows.sort(function(a,b){return (a.timestamp||'').localeCompare(b.timestamp||'');});
+  return {ok:true, entries:rows};
 };
 
 // ══════════════════════════════════════════════════════

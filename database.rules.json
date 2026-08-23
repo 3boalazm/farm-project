@@ -351,6 +351,18 @@
       }
     },
 
+    // ── Accounting Engine (Phase 18): Financial Audit Trail. Write-once
+    //    at the rules level, exactly like activity_log -- an audit
+    //    record that could itself be edited or deleted after the fact
+    //    would defeat the entire point of it existing. ─────────────────
+    "financial_audit_log": {
+      ".read":  "auth != null",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      "$id": {
+        ".validate": "newData.hasChild('action') && newData.hasChild('entity') && (!data.exists())"
+      }
+    },
+
     // ── Users: read needed for the PIN-login screen (matches by pin_hash
     //    client-side); write restricted to admin only -- prevents any
     //    signed-in session from granting itself 'role':'admin' or
