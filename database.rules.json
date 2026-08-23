@@ -277,6 +277,27 @@
       }
     },
 
+    // ── Accounting Engine (Phase 8): Cost Centers + Cost Allocations.
+    //    Allocations are a management-reporting attribution layer over
+    //    already-posted, immutable journal entries -- write-once, like
+    //    animal_cost_ledger, since re-allocating the same source entry
+    //    under the same operationId should return the existing record,
+    //    never silently overwrite a prior attribution. ──────────────────
+    "cost_centers": {
+      ".read":  "auth != null",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      "$id": {
+        ".validate": "newData.hasChild('name') && newData.hasChild('type')"
+      }
+    },
+    "cost_allocations": {
+      ".read":  "auth != null",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      "$id": {
+        ".validate": "newData.hasChild('sourceJournalEntryId') && newData.hasChild('totalAmount') && newData.hasChild('allocations') && (!data.exists())"
+      }
+    },
+
     // ── Users: read needed for the PIN-login screen (matches by pin_hash
     //    client-side); write restricted to admin only -- prevents any
     //    signed-in session from granting itself 'role':'admin' or

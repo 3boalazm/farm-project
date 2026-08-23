@@ -4716,6 +4716,133 @@ window.postAnimalDeath=async function(opts){
   return {ok:true, journalEntryId:posted.id, costBasisKnown:true, amount:costBasis.knownCost};
 };
 
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — FARM COST ACCOUNTING (Phase 8). Two new
+//  collections (cost_centers, cost_allocations). This is deliberately a
+//  MANAGEMENT-reporting layer, not an accounting-truth one (see Phase
+//  48's own eventual distinction): allocating a cost across cost centers
+//  never touches the original, already-posted, immutable journal entry
+//  -- it's a separate, additive attribution record on top of it. Every
+//  allocation states its own method explicitly; nothing is force-split
+//  when there's no real basis to split it on (a farm with one barn and
+//  one activity has no reason to fabricate a percentage breakdown).
+// ══════════════════════════════════════════════════════════════
+
+var COST_CENTER_TYPES=['farm','barn','animal_group','batch','breeding_group',
+  'milk_production','fattening','nursery','quarantine','maintenance'];
+var ALLOCATION_METHODS=['DIRECT','PER_ANIMAL','BY_QUANTITY','BY_WEIGHT','BY_DAYS','BY_PRODUCTION','BY_PERCENTAGE','MANUAL'];
+
+window.createCostCenter=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.name||COST_CENTER_TYPES.indexOf(opts.type)===-1) return {ok:false, error:'بيانات ناقصة (الاسم والنوع مطلوبان)'};
+  var record={
+    name:opts.name, type:opts.type, parentId:opts.parentId||null, active:true,
+    createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+  };
+  try{
+    var id=await fbPost('cost_centers',record);
+    fbCacheInvalidate('cost_centers');
+    await logActivity('add','cost_centers','إضافة مركز تكلفة: '+record.name);
+    return {ok:true, id:id};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Attributes an amount already posted in a REAL journal entry across one
+// or more cost centers. Never touches the original entry (immutable,
+// per Phase 1). Every allocation line states its own method; the sum of
+// all lines must equal totalAmount EXACTLY -- if it doesn't, this is
+// rejected outright rather than silently absorbing the difference into
+// the last line (that would be inventing evidence for the remainder).
+window.allocateCost=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  if(!opts.sourceJournalEntryId) return {ok:false, error:'معرّف القيد المصدر مطلوب'};
+  var totalAmount=+opts.totalAmount;
+  if(!totalAmount||isNaN(totalAmount)||totalAmount<=0) return {ok:false, error:'إجمالي المبلغ يجب أن يكون صحيحًا'};
+  if(!Array.isArray(opts.allocations)||!opts.allocations.length) return {ok:false, error:'توزيع واحد على الأقل مطلوب'};
+
+  var existingAllocs=await fbGet('cost_allocations');
+  var dupe=existingAllocs.find(function(a){return a.operationId===opts.operationId;});
+  if(dupe) return {ok:true, id:dupe._id, idempotent:true};
+
+  var entries=await fbGet('journal_entries');
+  var source=entries.find(function(e){return e._id===opts.sourceJournalEntryId;});
+  if(!source) return {ok:false, error:'القيد المصدر غير موجود'};
+
+  var centers=await fbGet('cost_centers');
+  var sumAllocated=0;
+  for(var i=0;i<opts.allocations.length;i++){
+    var a=opts.allocations[i];
+    if(ALLOCATION_METHODS.indexOf(a.method)===-1) return {ok:false, error:'طريقة توزيع غير صالحة: '+a.method};
+    if(!centers.some(function(c){return c._id===a.costCenterId;})) return {ok:false, error:'مركز تكلفة غير موجود: '+a.costCenterId};
+    var amt=+a.amount;
+    if(!amt||isNaN(amt)||amt<=0) return {ok:false, error:'كل سطر توزيع يجب أن يحمل مبلغًا صحيحًا'};
+    sumAllocated+=amt;
+  }
+  sumAllocated=Math.round(sumAllocated*100)/100;
+  if(sumAllocated!==Math.round(totalAmount*100)/100){
+    return {ok:false, error:'مجموع التوزيعات ('+sumAllocated+') لا يساوي إجمالي المبلغ ('+totalAmount+')'};
+  }
+
+  var record={
+    sourceJournalEntryId:opts.sourceJournalEntryId, sourceDate:source.date||null,
+    totalAmount:Math.round(totalAmount*100)/100, allocations:opts.allocations,
+    operationId:opts.operationId, createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+  };
+  try{
+    var id=await fbPost('cost_allocations',record);
+    fbCacheInvalidate('cost_allocations');
+    await logActivity('add','cost_allocations','توزيع تكلفة قيد '+opts.sourceJournalEntryId+' على '+opts.allocations.length+' مركز');
+    return {ok:true, id:id};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Real allocated cost for one cost center, date-filtered by the SOURCE
+// journal entry's own date (not the allocation record's creation date).
+window.getCostByCenter=async function(costCenterId,startDate,endDate){
+  var allocs=await fbGet('cost_allocations');
+  var total=0; var matches=[];
+  allocs.forEach(function(rec){
+    if(startDate && rec.sourceDate<startDate) return;
+    if(endDate && rec.sourceDate>endDate) return;
+    (rec.allocations||[]).forEach(function(a){
+      if(a.costCenterId!==costCenterId) return;
+      total+=(+a.amount||0);
+      matches.push({sourceJournalEntryId:rec.sourceJournalEntryId, date:rec.sourceDate, amount:+a.amount||0, method:a.method});
+    });
+  });
+  return {ok:true, total:Math.round(total*100)/100, entries:matches};
+};
+
+// Surfaces expense-side journal lines that have never been allocated to
+// any cost center -- visibility into what's real but not yet attributed,
+// rather than hiding the gap (Phase 8's own "Unallocated Costs" ask).
+// An expense line is identified by its account's type, resolved from the
+// Chart of Accounts, not by guessing from the description text.
+window.getUnallocatedCosts=async function(startDate,endDate){
+  var entries=await fbGet('journal_entries');
+  var accounts=await fbGet('accounts');
+  var allocs=await fbGet('cost_allocations');
+  var allocatedEntryIds={};
+  allocs.forEach(function(a){ allocatedEntryIds[a.sourceJournalEntryId]=true; });
+  var expenseAccountIds={};
+  accounts.forEach(function(a){ if(a.type==='EXPENSE') expenseAccountIds[a._id]=true; });
+
+  var unallocated=[];
+  entries.forEach(function(e){
+    if(startDate && e.date<startDate) return;
+    if(endDate && e.date>endDate) return;
+    if(allocatedEntryIds[e._id]) return;
+    var expenseAmount=0;
+    (e.lines||[]).forEach(function(l){ if(expenseAccountIds[l.accountId]) expenseAmount+=(+l.debit||0); });
+    if(expenseAmount>0) unallocated.push({journalEntryId:e._id, date:e.date, description:e.description, amount:Math.round(expenseAmount*100)/100});
+  });
+  var total=Math.round(unallocated.reduce(function(s,u){return s+u.amount;},0)*100)/100;
+  return {ok:true, total:total, entries:unallocated};
+};
+
 // ══════════════════════════════════════════════════════
 // Animal Identity Service
 // ══════════════════════════════════════════════════════
