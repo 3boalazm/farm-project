@@ -6338,17 +6338,63 @@ window.getAnimalProfitability=async function(animalId){
 // Ranks several animals by realized profitability. Animals still
 // `active` (no sale or death yet) are separated out, never mixed into
 // the ranking with a guessed netResult.
+//
+// Phase 38 (Performance): deliberately does NOT call getAnimalProfitability
+// in a per-animal loop -- that would rescan the entire journal_entries/
+// source_documents/animal_cost_ledger collections once per animal
+// (O(animals x entries), a real cost once a herd and its ledger both
+// grow into the hundreds/thousands). Instead every collection is
+// fetched exactly once and reduced into per-animal lookup maps in a
+// single pass, then each requested animal is resolved from those maps
+// in O(1) -- same exact logic and results as getAnimalProfitability,
+// restructured for O(entries + docs + ledger + animals) instead.
 window.rankAnimalProfitability=async function(animalIds){
   if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
   if(!Array.isArray(animalIds)||!animalIds.length) return {ok:false, error:'قائمة حيوانات واحدة على الأقل مطلوبة'};
 
-  var results=[];
-  for(var i=0;i<animalIds.length;i++){
-    results.push(await window.getAnimalProfitability(animalIds[i]));
-  }
-  var realized=results.filter(function(r){return r.ok && r.netResult!=null;})
+  var docs=await fbGet('source_documents');
+  var saleDocByAnimal={};
+  docs.forEach(function(d){
+    if(d.type==='animal_sale' && d.sourceType==='animal' && d.sourceId && d.journalEntryId) saleDocByAnimal[d.sourceId]=d;
+  });
+
+  var entries=await fbGet('journal_entries');
+  var costOfSaleByAnimal={}, writeOffByAnimal={};
+  entries.forEach(function(e){
+    if(e.sourceType==='animal_sale_cogs'){
+      (e.lines||[]).forEach(function(l){
+        if(l.relatedAnimalId && l.accountId===COST_OF_ANIMAL_SALES_ACCOUNT) costOfSaleByAnimal[l.relatedAnimalId]=(costOfSaleByAnimal[l.relatedAnimalId]||0)+(+l.debit||0);
+      });
+    }else if(e.sourceType==='animal_death_writeoff'){
+      (e.lines||[]).forEach(function(l){
+        if(l.relatedAnimalId && l.accountId===LOSS_ON_LIVESTOCK_ACCOUNT) writeOffByAnimal[l.relatedAnimalId]=(writeOffByAnimal[l.relatedAnimalId]||0)+(+l.debit||0);
+      });
+    }
+  });
+
+  var ledger=await fbGet('animal_cost_ledger');
+  var costBasisByAnimal={};
+  ledger.forEach(function(l){ costBasisByAnimal[l.animalId]=(costBasisByAnimal[l.animalId]||0)+(+l.amount||0); });
+
+  var results=animalIds.map(function(animalId){
+    var saleDoc=saleDocByAnimal[animalId];
+    var revenue=saleDoc?saleDoc.total:0;
+    var costOfSale=Math.round((costOfSaleByAnimal[animalId]||0)*100)/100;
+    var writeOffLoss=Math.round((writeOffByAnimal[animalId]||0)*100)/100;
+    var outcome=saleDoc?'sold':(writeOffLoss>0?'died':'active');
+    var netResult = outcome==='sold' ? Math.round((revenue-costOfSale)*100)/100
+                  : outcome==='died' ? -writeOffLoss
+                  : null;
+    return {
+      ok:true, animalId:animalId, outcome:outcome,
+      revenue:revenue, costOfSale:costOfSale, writeOffLoss:writeOffLoss,
+      netResult:netResult, currentCostBasis:Math.round((costBasisByAnimal[animalId]||0)*100)/100,
+    };
+  });
+
+  var realized=results.filter(function(r){return r.netResult!=null;})
     .sort(function(a,b){return b.netResult-a.netResult;});
-  var stillActive=results.filter(function(r){return r.ok && r.netResult==null;});
+  var stillActive=results.filter(function(r){return r.netResult==null;});
 
   return {ok:true, realized:realized, stillActive:stillActive};
 };
@@ -6372,13 +6418,19 @@ window.getFinancialDashboardKPIs=async function(periodStartDate,periodEndDate){
   if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
   if(!periodStartDate||!periodEndDate) return {ok:false, error:'التاريخ من وإلى مطلوبان'};
 
-  var incomeStatement=await window.getIncomeStatement(periodStartDate,periodEndDate);
+  // Phase 38 (Performance): these four calls don't depend on each
+  // other's results -- fetched in parallel instead of four sequential
+  // awaits, same error-priority order preserved below.
+  var results=await Promise.all([
+    window.getIncomeStatement(periodStartDate,periodEndDate),
+    window.getBalanceSheet(periodEndDate),
+    window.getTrialBalance(periodEndDate),
+    window.getCashFlowStatement(periodStartDate,periodEndDate), // optional -- no cash/bank accounts yet is not fatal to the rest of the dashboard
+  ]);
+  var incomeStatement=results[0], balanceSheet=results[1], trialBalance=results[2], cashFlow=results[3];
   if(!incomeStatement.ok) return incomeStatement;
-  var balanceSheet=await window.getBalanceSheet(periodEndDate);
   if(!balanceSheet.ok) return balanceSheet;
-  var trialBalance=await window.getTrialBalance(periodEndDate);
   if(!trialBalance.ok) return trialBalance;
-  var cashFlow=await window.getCashFlowStatement(periodStartDate,periodEndDate); // optional -- no cash/bank accounts yet is not fatal to the rest of the dashboard
 
   var netIncome=incomeStatement.netIncome;
   var totalRevenue=incomeStatement.totalRevenue;
@@ -6539,11 +6591,15 @@ window.getFinancialIntegrityStatus=async function(){
   if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
 
   var asOf=todayStr();
-  var scan=await window.runFinancialDataQualityScan();
+  // Phase 38 (Performance): independent calls, fetched in parallel.
+  var results=await Promise.all([
+    window.runFinancialDataQualityScan(),
+    window.getTrialBalance(asOf),
+    window.getBalanceSheet(asOf),
+  ]);
+  var scan=results[0], trialBalance=results[1], balanceSheet=results[2];
   if(!scan.ok) return scan;
-  var trialBalance=await window.getTrialBalance(asOf);
   if(!trialBalance.ok) return trialBalance;
-  var balanceSheet=await window.getBalanceSheet(asOf);
   if(!balanceSheet.ok) return balanceSheet;
 
   return {
@@ -6577,10 +6633,22 @@ window.validateFinancialReportsCrossConsistency=async function(asOfDate){
   var checks=[];
   var SINCE_INCEPTION='1900-01-01';
 
-  var balanceSheet=await window.getBalanceSheet(asOfDate);
+  // Phase 38 (Performance): balanceSheet, incomeStatement, trialBalance,
+  // accounts, and cash_bank_accounts are all independent fetches --
+  // only the COMPARISONS below need them together, not the fetching
+  // itself -- so all five run in parallel instead of five sequential
+  // awaits.
+  var fetched=await Promise.all([
+    window.getBalanceSheet(asOfDate),
+    window.getIncomeStatement(SINCE_INCEPTION,asOfDate),
+    window.getTrialBalance(asOfDate),
+    fbGet('accounts'),
+    fbGet('cash_bank_accounts'),
+  ]);
+  var balanceSheet=fetched[0], incomeStatement=fetched[1], trialBalance=fetched[2], accounts=fetched[3], cbas=fetched[4];
   if(!balanceSheet.ok) return balanceSheet;
-  var incomeStatement=await window.getIncomeStatement(SINCE_INCEPTION,asOfDate);
   if(!incomeStatement.ok) return incomeStatement;
+  if(!trialBalance.ok) return trialBalance;
 
   var earningsLine=balanceSheet.equity.find(function(e){return e.accountId===null;});
   var bsEarnings=earningsLine?earningsLine.balance:0;
@@ -6590,9 +6658,6 @@ window.validateFinancialReportsCrossConsistency=async function(asOfDate){
     balanceSheetValue:bsEarnings, incomeStatementValue:incomeStatement.netIncome,
   });
 
-  var trialBalance=await window.getTrialBalance(asOfDate);
-  if(!trialBalance.ok) return trialBalance;
-  var accounts=await fbGet('accounts');
   var accountTypeById={}; accounts.forEach(function(a){ accountTypeById[a._id]=a.type; });
   var tbAssetSum=0;
   trialBalance.rows.forEach(function(r){ if(accountTypeById[r.accountId]==='ASSET') tbAssetSum+=(r.debit-r.credit); });
@@ -6603,7 +6668,6 @@ window.validateFinancialReportsCrossConsistency=async function(asOfDate){
     trialBalanceValue:tbAssetSum, balanceSheetValue:balanceSheet.totalAssets,
   });
 
-  var cbas=await fbGet('cash_bank_accounts');
   if(cbas.length){
     var cashFlow=await window.getCashFlowStatement(SINCE_INCEPTION,asOfDate);
     if(cashFlow.ok){
