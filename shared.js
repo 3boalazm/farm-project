@@ -6268,6 +6268,70 @@ window.getTrialBalance=async function(asOfDate){
   };
 };
 
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — FARM PROFITABILITY (Phase 27). Per-animal
+//  realized P&L, built entirely on evidence Phases 2/7 already posted
+//  -- no new collection, nothing stored. Revenue comes from the real
+//  posted 'animal_sale' source_document for this animal; cost of sale
+//  comes from the real 'animal_sale_cogs' journal entry's line tagged
+//  relatedAnimalId (Phase 7); write-off loss comes from the real
+//  'animal_death_writeoff' entry the same way. An animal that hasn't
+//  been sold or hasn't died yet has no realized outcome -- netResult
+//  is null, never a fabricated zero or an unrealized-gain guess.
+// ══════════════════════════════════════════════════════════════
+
+window.getAnimalProfitability=async function(animalId){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!animalId) return {ok:false, error:'معرّف الحيوان مطلوب'};
+
+  var costBasis=await window.getAnimalCostBasis(animalId);
+
+  var docs=await fbGet('source_documents');
+  var saleDoc=docs.find(function(d){return d.type==='animal_sale' && d.sourceType==='animal' && d.sourceId===animalId && d.journalEntryId;});
+  var revenue=saleDoc?saleDoc.total:0;
+
+  var entries=await fbGet('journal_entries');
+  var costOfSale=0, writeOffLoss=0;
+  entries.forEach(function(e){
+    if(e.sourceType==='animal_sale_cogs'){
+      (e.lines||[]).forEach(function(l){ if(l.relatedAnimalId===animalId && l.accountId===COST_OF_ANIMAL_SALES_ACCOUNT) costOfSale+=(+l.debit||0); });
+    }else if(e.sourceType==='animal_death_writeoff'){
+      (e.lines||[]).forEach(function(l){ if(l.relatedAnimalId===animalId && l.accountId===LOSS_ON_LIVESTOCK_ACCOUNT) writeOffLoss+=(+l.debit||0); });
+    }
+  });
+  costOfSale=Math.round(costOfSale*100)/100;
+  writeOffLoss=Math.round(writeOffLoss*100)/100;
+
+  var outcome=saleDoc?'sold':(writeOffLoss>0?'died':'active');
+  var netResult = outcome==='sold' ? Math.round((revenue-costOfSale)*100)/100
+                : outcome==='died' ? -writeOffLoss
+                : null;
+
+  return {
+    ok:true, animalId:animalId, outcome:outcome,
+    revenue:revenue, costOfSale:costOfSale, writeOffLoss:writeOffLoss,
+    netResult:netResult, currentCostBasis:costBasis.knownCost,
+  };
+};
+
+// Ranks several animals by realized profitability. Animals still
+// `active` (no sale or death yet) are separated out, never mixed into
+// the ranking with a guessed netResult.
+window.rankAnimalProfitability=async function(animalIds){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!Array.isArray(animalIds)||!animalIds.length) return {ok:false, error:'قائمة حيوانات واحدة على الأقل مطلوبة'};
+
+  var results=[];
+  for(var i=0;i<animalIds.length;i++){
+    results.push(await window.getAnimalProfitability(animalIds[i]));
+  }
+  var realized=results.filter(function(r){return r.ok && r.netResult!=null;})
+    .sort(function(a,b){return b.netResult-a.netResult;});
+  var stillActive=results.filter(function(r){return r.ok && r.netResult==null;});
+
+  return {ok:true, realized:realized, stillActive:stillActive};
+};
+
 // ══════════════════════════════════════════════════════
 // Animal Identity Service
 // ══════════════════════════════════════════════════════
