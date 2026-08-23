@@ -34,7 +34,7 @@ test.describe('Forecasting (Phase 21)', () => {
     ];
     await setupForecastMocks(page, { journal_entries: entries, forecasts: [] });
     const r = await page.evaluate(() => window.createForecast({
-      targetPeriodKey: '2026-04', accountId: '6100',
+      operationId: 'op1', targetPeriodKey: '2026-04', accountId: '6100',
       sourcePeriods: [
         { periodKey: '2026-01', startDate: '2026-01-01', endDate: '2026-01-31' },
         { periodKey: '2026-02', startDate: '2026-02-01', endDate: '2026-02-28' },
@@ -52,8 +52,26 @@ test.describe('Forecasting (Phase 21)', () => {
 
   test('createForecast: rejects with no source periods', async ({ page }) => {
     await setupForecastMocks(page, { journal_entries: [], forecasts: [] });
-    const r = await page.evaluate(() => window.createForecast({ targetPeriodKey: '2026-04', accountId: '6100', sourcePeriods: [] }));
+    const r = await page.evaluate(() => window.createForecast({ operationId: 'op1', targetPeriodKey: '2026-04', accountId: '6100', sourcePeriods: [] }));
     expect(r.ok).toBe(false);
+  });
+
+  test('createForecast: rejects with no operationId', async ({ page }) => {
+    await setupForecastMocks(page, { journal_entries: [], forecasts: [] });
+    const r = await page.evaluate(() => window.createForecast({ targetPeriodKey: '2026-04', accountId: '6100', sourcePeriods: [{ periodKey: '2026-01', startDate: '2026-01-01', endDate: '2026-01-31' }] }));
+    expect(r.ok).toBe(false);
+  });
+
+  test('createForecast: idempotent -- a retried call with the same operationId returns the existing forecast, no duplicate created', async ({ page }) => {
+    const entries = [{ _id: 'j1', date: '2026-01-10', lines: [{ accountId: '6100', debit: 500 }] }];
+    await setupForecastMocks(page, { journal_entries: entries, forecasts: [] });
+    const opts = { operationId: 'op-retry', targetPeriodKey: '2026-04', accountId: '6100', sourcePeriods: [{ periodKey: '2026-01', startDate: '2026-01-01', endDate: '2026-01-31' }] };
+    const r1 = await page.evaluate((o) => window.createForecast(o), opts);
+    const r2 = await page.evaluate((o) => window.createForecast(o), opts);
+    expect(r2.idempotent).toBe(true);
+    expect(r2.id).toBe(r1.id);
+    const posts = await page.evaluate(() => window._writeLog.filter((w) => w.c === 'forecasts'));
+    expect(posts.length).toBe(1);
   });
 
   test('getForecastVsActual: once the target period has real data, compares forecast against the real actual and computes variance', async ({ page }) => {
@@ -86,7 +104,7 @@ test.describe('Forecasting (Phase 21)', () => {
       window.fbPost = async (c, d) => { window._writeLog.push({ op: 'post', c, d }); return 'id'; };
     }, { journal_entries: [] });
     const r = await page.evaluate(() => window.createForecast({
-      targetPeriodKey: '2026-04', accountId: '6100', sourcePeriods: [{ periodKey: '2026-01', startDate: '2026-01-01', endDate: '2026-01-31' }],
+      operationId: 'op1', targetPeriodKey: '2026-04', accountId: '6100', sourcePeriods: [{ periodKey: '2026-01', startDate: '2026-01-01', endDate: '2026-01-31' }],
     }));
     expect(r.ok).toBe(false);
     const writes = await page.evaluate(() => window._writeLog);

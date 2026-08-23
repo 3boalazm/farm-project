@@ -38,7 +38,7 @@ test.describe('Bank Reconciliation (Phase 23)', () => {
     ];
     await setupReconMocks(page, { cash_bank_accounts: CBA, journal_entries: entries, bank_reconciliations: [] });
     const r = await page.evaluate(() => window.reconcileBankAccount({
-      cashBankAccountId: 'cba1', statementDate: '2026-01-31', statementBalance: 800,
+      operationId: 'op1', cashBankAccountId: 'cba1', statementDate: '2026-01-31', statementBalance: 800,
       clearedJournalEntryIds: ['j1', 'j2'],
     }));
     expect(r.ok).toBe(true);
@@ -58,7 +58,7 @@ test.describe('Bank Reconciliation (Phase 23)', () => {
     ];
     await setupReconMocks(page, { cash_bank_accounts: CBA, journal_entries: entries, bank_reconciliations: [] });
     const r = await page.evaluate(() => window.reconcileBankAccount({
-      cashBankAccountId: 'cba1', statementDate: '2026-01-31', statementBalance: 1000,
+      operationId: 'op1', cashBankAccountId: 'cba1', statementDate: '2026-01-31', statementBalance: 1000,
       clearedJournalEntryIds: ['j1'],
     }));
     expect(r.ok).toBe(true);
@@ -73,7 +73,7 @@ test.describe('Bank Reconciliation (Phase 23)', () => {
     const entries = [{ _id: 'j1', date: '2026-01-05', lines: [{ accountId: '1200', debit: 1000 }] }];
     await setupReconMocks(page, { cash_bank_accounts: CBA, journal_entries: entries, bank_reconciliations: [] });
     const r = await page.evaluate(() => window.reconcileBankAccount({
-      cashBankAccountId: 'cba1', statementDate: '2026-01-31', statementBalance: 950, // bank says 950, books say 1000
+      operationId: 'op1', cashBankAccountId: 'cba1', statementDate: '2026-01-31', statementBalance: 950, // bank says 950, books say 1000
       clearedJournalEntryIds: ['j1'],
     }));
     expect(r.ok).toBe(true);
@@ -89,9 +89,29 @@ test.describe('Bank Reconciliation (Phase 23)', () => {
     ];
     await setupReconMocks(page, { cash_bank_accounts: CBA, journal_entries: entries, bank_reconciliations: [] });
     const r = await page.evaluate(() => window.reconcileBankAccount({
-      cashBankAccountId: 'cba1', statementDate: '2026-01-31', statementBalance: 500, clearedJournalEntryIds: ['j1'],
+      operationId: 'op1', cashBankAccountId: 'cba1', statementDate: '2026-01-31', statementBalance: 500, clearedJournalEntryIds: ['j1'],
     }));
     expect(r.bookBalance).toBe(500);
+  });
+
+  test('rejects with no operationId', async ({ page }) => {
+    await setupReconMocks(page, { cash_bank_accounts: CBA, journal_entries: [], bank_reconciliations: [] });
+    const r = await page.evaluate(() => window.reconcileBankAccount({ cashBankAccountId: 'cba1', statementDate: '2026-01-31', statementBalance: 0, clearedJournalEntryIds: [] }));
+    expect(r.ok).toBe(false);
+  });
+
+  test('idempotent: a retried call with the same operationId returns the existing reconciliation, no duplicate created or double-patch of the account', async ({ page }) => {
+    const entries = [{ _id: 'j1', date: '2026-01-05', lines: [{ accountId: '1200', debit: 300 }] }];
+    await setupReconMocks(page, { cash_bank_accounts: CBA, journal_entries: entries, bank_reconciliations: [] });
+    const opts = { operationId: 'op-retry', cashBankAccountId: 'cba1', statementDate: '2026-01-31', statementBalance: 300, clearedJournalEntryIds: ['j1'] };
+    const r1 = await page.evaluate((o) => window.reconcileBankAccount(o), opts);
+    const r2 = await page.evaluate((o) => window.reconcileBankAccount(o), opts);
+    expect(r2.idempotent).toBe(true);
+    expect(r2.id).toBe(r1.id);
+    const posts = await page.evaluate(() => window._writeLog.filter((w) => w.op === 'post' && w.c === 'bank_reconciliations'));
+    const patches = await page.evaluate(() => window._writeLog.filter((w) => w.op === 'patch' && w.c === 'cash_bank_accounts'));
+    expect(posts.length).toBe(1);
+    expect(patches.length).toBe(1);
   });
 
   test('getBankReconciliationHistory: returns only this account\'s reconciliations, newest statementDate first', async ({ page }) => {
@@ -118,7 +138,7 @@ test.describe('Bank Reconciliation (Phase 23)', () => {
       window.fbPatch = async (c, id, d) => { window._writeLog.push({ op: 'patch', c, id, d }); };
     }, { cash_bank_accounts: CBA, journal_entries: [] });
     const r = await page.evaluate(() => window.reconcileBankAccount({
-      cashBankAccountId: 'cba1', statementDate: '2026-01-31', statementBalance: 0, clearedJournalEntryIds: [],
+      operationId: 'op1', cashBankAccountId: 'cba1', statementDate: '2026-01-31', statementBalance: 0, clearedJournalEntryIds: [],
     }));
     expect(r.ok).toBe(false);
     const writes = await page.evaluate(() => window._writeLog);

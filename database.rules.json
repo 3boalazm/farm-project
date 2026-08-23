@@ -395,7 +395,16 @@
       ".read":  "auth != null",
       ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
-        ".validate": "newData.hasChild('targetPeriodKey') && newData.hasChild('accountId') && newData.hasChild('forecastValue') && (!data.exists())"
+        // Phase 32 (Idempotency Hardening): requires operationId on every
+        // record, matching createForecast's own new dedup guard in
+        // shared.js. Note this rule's own !data.exists() cannot by itself
+        // prevent a DUPLICATE record on retry (fbPost always mints a
+        // fresh push key, so data.exists() is always false for it) --
+        // that protection genuinely lives in the application-level
+        // operationId scan before the write, same as every other
+        // dedup-guarded collection in this engine. What this validate
+        // clause protects is the record's own immutability once created.
+        ".validate": "newData.hasChild('targetPeriodKey') && newData.hasChild('accountId') && newData.hasChild('forecastValue') && newData.hasChild('operationId') && (!data.exists())"
       }
     },
 
@@ -408,7 +417,11 @@
       ".read":  "auth != null",
       ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
-        ".validate": "newData.hasChild('cashBankAccountId') && newData.hasChild('statementDate') && newData.hasChild('statementBalance') && (!data.exists())"
+        // Phase 32 (Idempotency Hardening): requires operationId, matching
+        // reconcileBankAccount's own new dedup guard in shared.js. See the
+        // forecasts rule above for why the real duplicate-prevention lives
+        // at the application level, not in this !data.exists() clause.
+        ".validate": "newData.hasChild('cashBankAccountId') && newData.hasChild('statementDate') && newData.hasChild('statementBalance') && newData.hasChild('operationId') && (!data.exists())"
       }
     },
 

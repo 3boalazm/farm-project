@@ -5873,8 +5873,18 @@ function _computeAccountActualForRange(entries,accountId,startDate,endDate,costC
 window.createForecast=async function(opts){
   opts=opts||{};
   if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
   if(!opts.targetPeriodKey||!opts.accountId) return {ok:false, error:'الفترة المستهدفة والحساب مطلوبان'};
   if(!Array.isArray(opts.sourcePeriods)||!opts.sourcePeriods.length) return {ok:false, error:'فترة مصدر واحدة على الأقل مطلوبة'};
+
+  // Phase 32 (Idempotency Hardening): createForecast previously had no
+  // dedup guard at all -- unlike almost every other Phase 2+ mutating
+  // function, a retried call (offline retry, double-tap, network blip)
+  // would silently create a second forecast record for the same real
+  // event. Same dedup pattern createSourceDocument already uses.
+  var existingForecasts=await fbGet('forecasts');
+  var forecastDupe=existingForecasts.find(function(f){return f.operationId===opts.operationId;});
+  if(forecastDupe) return {ok:true, id:forecastDupe._id, idempotent:true, forecastValue:forecastDupe.forecastValue, sourcePeriods:forecastDupe.sourcePeriods, method:forecastDupe.method};
 
   var entries=await fbGet('journal_entries');
   var sourceActuals=opts.sourcePeriods.map(function(p){
@@ -5887,6 +5897,7 @@ window.createForecast=async function(opts){
       targetPeriodKey:opts.targetPeriodKey, accountId:opts.accountId, costCenterId:opts.costCenterId||null,
       method:'AVERAGE_PRIOR_PERIODS', sourcePeriods:sourceActuals, forecastValue:forecastValue,
       assumptions:opts.assumptions||'متوسط بسيط للفترات المصدر المذكورة -- بدون أي نموذج ذكاء اصطناعي',
+      operationId:opts.operationId,
       createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
     });
     fbCacheInvalidate('forecasts');
@@ -6025,7 +6036,17 @@ window.getCashFlowStatement=async function(startDate,endDate){
 window.reconcileBankAccount=async function(opts){
   opts=opts||{};
   if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
   if(!opts.cashBankAccountId||!opts.statementDate||opts.statementBalance==null) return {ok:false, error:'الحساب وتاريخ الكشف ورصيد الكشف مطلوبة'};
+
+  // Phase 32 (Idempotency Hardening): reconcileBankAccount previously had
+  // no dedup guard -- a retried call (offline retry, double-tap, network
+  // blip) would silently create a second reconciliation record for the
+  // same real bank statement AND double-patch lastReconciledDate. Same
+  // dedup pattern createSourceDocument already uses.
+  var existingRecons=await fbGet('bank_reconciliations');
+  var reconDupe=existingRecons.find(function(r){return r.operationId===opts.operationId;});
+  if(reconDupe) return {ok:true, id:reconDupe._id, idempotent:true, bookBalance:reconDupe.bookBalance, clearedBalance:reconDupe.clearedBalance, statementBalance:reconDupe.statementBalance, difference:reconDupe.difference, matched:reconDupe.matched, outstandingItems:reconDupe.outstandingItems};
 
   var cbas=await fbGet('cash_bank_accounts');
   var cba=cbas.find(function(c){return c._id===opts.cashBankAccountId;});
@@ -6055,7 +6076,7 @@ window.reconcileBankAccount=async function(opts){
     cashBankAccountId:opts.cashBankAccountId, statementDate:opts.statementDate,
     statementBalance:statementBalance, bookBalance:bookBalance, clearedBalance:clearedBalance, difference:difference,
     clearedJournalEntryIds:opts.clearedJournalEntryIds||[], outstandingItems:outstandingItems,
-    matched:difference===0,
+    matched:difference===0, operationId:opts.operationId,
     reconciledBy:(getUser()&&getUser().name)||null, reconciledAt:new Date().toISOString(),
   };
   try{
