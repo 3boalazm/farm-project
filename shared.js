@@ -4057,6 +4057,7 @@ window.createCashBankAccount=async function(opts){
 // summing from journal_entries alone already includes it exactly once;
 // adding the stored field on top would double-count every opening balance.
 window.getCashBankBalance=async function(cashBankAccountId){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
   var accounts=await fbGet('cash_bank_accounts');
   var cba=accounts.find(function(a){return a._id===cashBankAccountId;});
   if(!cba) return {ok:false, error:'الحساب غير موجود'};
@@ -4075,6 +4076,7 @@ window.getCashBankBalance=async function(cashBankAccountId){
 // line(s) in the same posting) -- date-range filterable per Phase 3's
 // own requirement.
 window.getCashBankTransactionHistory=async function(cashBankAccountId,startDate,endDate){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
   var accounts=await fbGet('cash_bank_accounts');
   var cba=accounts.find(function(a){return a._id===cashBankAccountId;});
   if(!cba) return {ok:false, error:'الحساب غير موجود'};
@@ -4252,6 +4254,7 @@ function _isOpenReceivable(doc){
 }
 
 window.getCustomerBalance=async function(customerId){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
   var docs=await fbGet('source_documents');
   var open=docs.filter(function(d){return _isOpenReceivable(d) && d.counterpartyId===customerId;});
   var balance=open.reduce(function(s,d){return s+(+d.remainingAmount||0);},0);
@@ -4259,6 +4262,7 @@ window.getCustomerBalance=async function(customerId){
 };
 
 window.getCustomerStatement=async function(customerId){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
   var docs=await fbGet('source_documents');
   var mine=docs.filter(function(d){return d.type==='sales_invoice' && d.counterpartyId===customerId;});
   mine.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');});
@@ -4269,6 +4273,7 @@ window.getCustomerStatement=async function(customerId){
 // is -- an invoice with no dueDate is never counted as overdue (missing
 // information stays missing, it is not assumed current or overdue).
 window.getARAging=async function(asOfDate){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
   asOfDate=asOfDate||todayStr();
   var docs=await fbGet('source_documents');
   var buckets={current:[], d1_30:[], d31_60:[], d61_90:[], d90_plus:[], noDueDate:[]};
@@ -4370,6 +4375,7 @@ function _isOpenPayable(doc){
 }
 
 window.getSupplierBalance=async function(supplierId){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
   var docs=await fbGet('source_documents');
   var open=docs.filter(function(d){return _isOpenPayable(d) && d.counterpartyId===supplierId;});
   var balance=open.reduce(function(s,d){return s+(+d.remainingAmount||0);},0);
@@ -4377,6 +4383,7 @@ window.getSupplierBalance=async function(supplierId){
 };
 
 window.getSupplierStatement=async function(supplierId){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
   var docs=await fbGet('source_documents');
   var mine=docs.filter(function(d){return d.type==='purchase_invoice' && d.counterpartyId===supplierId;});
   mine.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');});
@@ -4384,6 +4391,7 @@ window.getSupplierStatement=async function(supplierId){
 };
 
 window.getAPAging=async function(asOfDate){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
   asOfDate=asOfDate||todayStr();
   var docs=await fbGet('source_documents');
   var buckets={current:[], d1_30:[], d31_60:[], d61_90:[], d90_plus:[], noDueDate:[]};
@@ -4635,6 +4643,7 @@ window.recordAnimalCost=async function(opts){
 // total of, say, 500 (some evidence, possibly not all of it) are both
 // reported as exactly what they are, nothing more.
 window.getAnimalCostBasis=async function(animalId){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
   var ledger=await fbGet('animal_cost_ledger');
   var mine=ledger.filter(function(l){return l.animalId===animalId;});
   var byType={};
@@ -6090,6 +6099,7 @@ window.reconcileBankAccount=async function(opts){
 };
 
 window.getBankReconciliationHistory=async function(cashBankAccountId){
+  if(!can('finance')) return []; // preserves this function's existing plain-array contract -- callers use .length/.map directly, never {ok,...}
   var recs=await fbGet('bank_reconciliations');
   return recs.filter(function(r){return r.cashBankAccountId===cashBankAccountId;})
     .sort(function(a,b){return (b.statementDate||'').localeCompare(a.statementDate||'');});

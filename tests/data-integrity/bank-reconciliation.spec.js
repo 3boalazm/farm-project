@@ -144,4 +144,13 @@ test.describe('Bank Reconciliation (Phase 23)', () => {
     const writes = await page.evaluate(() => window._writeLog);
     expect(writes).toEqual([]);
   });
+
+  test('permission: a role without can("finance") gets an empty array from getBankReconciliationHistory, not real data (preserves the function\'s plain-array contract -- ok:false would break every caller\'s .length/.map usage)', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('farm_user', JSON.stringify({ name: 'S', role: 'supervisor' })));
+    await page.goto(`${BASE_URL}/dashboard.html`);
+    await page.waitForTimeout(600);
+    await page.evaluate((ov) => { window.fbGet = async (c) => (ov[c] !== undefined ? ov[c] : []); }, { bank_reconciliations: [{ _id: 'r1', cashBankAccountId: 'cba1', statementDate: '2026-01-31' }] });
+    const r = await page.evaluate(() => window.getBankReconciliationHistory('cba1'));
+    expect(r).toEqual([]);
+  });
 });

@@ -174,4 +174,17 @@ test.describe('Cash & Bank (Phase 3)', () => {
     const writes = await page.evaluate(() => window._writeLog);
     expect(writes).toEqual([]);
   });
+
+  test('permission: a role without can("finance") cannot read a balance or transaction history either', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('farm_user', JSON.stringify({ name: 'S', role: 'supervisor' })));
+    await page.goto(`${BASE_URL}/dashboard.html`);
+    await page.waitForTimeout(600);
+    await page.evaluate((ov) => {
+      window.fbGet = async (c) => (ov[c] !== undefined ? ov[c] : []);
+    }, { accounts: ACCOUNTS, cash_bank_accounts: [{ _id: 'cb1', name: 'نقدية المزرعة', linkedAccountId: '1110' }], journal_entries: [] });
+    const balance = await page.evaluate(() => window.getCashBankBalance('cb1'));
+    const history = await page.evaluate(() => window.getCashBankTransactionHistory('cb1'));
+    expect(balance.ok).toBe(false);
+    expect(history.ok).toBe(false);
+  });
 });

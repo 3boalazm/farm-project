@@ -187,4 +187,13 @@ test.describe('Animal Accounting (Phase 7)', () => {
     const writes = await page.evaluate(() => window._writeLog);
     expect(writes).toEqual([]);
   });
+
+  test('permission: a role without can("finance") cannot read an animal\'s cost basis either', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('farm_user', JSON.stringify({ name: 'S', role: 'supervisor' })));
+    await page.goto(`${BASE_URL}/dashboard.html`);
+    await page.waitForTimeout(600);
+    await page.evaluate((ov) => { window.fbGet = async (c) => (ov[c] !== undefined ? ov[c] : []); }, { animal_cost_ledger: [{ _id: 'c1', animalId: 'a1', costType: 'purchase', amount: 1000 }] });
+    const r = await page.evaluate(() => window.getAnimalCostBasis('a1'));
+    expect(r.ok).toBe(false);
+  });
 });

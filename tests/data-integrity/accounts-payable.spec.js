@@ -134,4 +134,15 @@ test.describe('Accounts Payable (Phase 5)', () => {
     const writes = await page.evaluate(() => window._writeLog);
     expect(writes).toEqual([]);
   });
+
+  test('permission: a role without can("finance") cannot read a supplier balance or AP aging either', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('farm_user', JSON.stringify({ name: 'S', role: 'supervisor' })));
+    await page.goto(`${BASE_URL}/dashboard.html`);
+    await page.waitForTimeout(600);
+    await page.evaluate((ov) => { window.fbGet = async (c) => (ov[c] !== undefined ? ov[c] : []); }, { accounts: ACCOUNTS, source_documents: [] });
+    const balance = await page.evaluate(() => window.getSupplierBalance('s1'));
+    const aging = await page.evaluate(() => window.getAPAging());
+    expect(balance.ok).toBe(false);
+    expect(aging.ok).toBe(false);
+  });
 });
