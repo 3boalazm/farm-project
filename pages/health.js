@@ -106,15 +106,15 @@ function renderHealthPage(s){
           <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
             <span class="type-badge ${r.status==='active'?'badge-tasmeen':'badge-tarbiya'}">${r.status==='active'?'قيد العلاج':'مكتمل'}</span>
             ${inW?`<span class="type-badge badge-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>سحب ${ar(Math.max(0,dLeft))} يوم</span>`:''}
-            <span class="fw-bold">${r.animal_breed||'—'} ${r.animal_tag?`<span class="text-gray">#${r.animal_tag}</span>`:''}</span>
+            <span class="fw-bold">${escapeHtml(r.animal_breed||'—')} ${r.animal_tag?`<span class="text-gray">#${escapeHtml(r.animal_tag)}</span>`:''}</span>
           </div>
           <div style="font-size:.85rem">
-            <span class="text-gray">التشخيص: </span><strong>${r.diagnosis}</strong>
-            <span class="text-gray mx-2">|</span><span class="text-gray">الدواء: </span><strong>${r.medication}</strong>
-            ${r.dosage?`<span class="text-gray"> — ${r.dosage}</span>`:''}
+            <span class="text-gray">التشخيص: </span><strong>${escapeHtml(r.diagnosis||'')}</strong>
+            <span class="text-gray mx-2">|</span><span class="text-gray">الدواء: </span><strong>${escapeHtml(r.medication||'')}</strong>
+            ${r.dosage?`<span class="text-gray"> — ${escapeHtml(r.dosage)}</span>`:''}
           </div>
           ${r.bcs?`<small class="text-gray mt-1 d-block">تقييم الحالة الجسمانية (BCS): <strong>${r.bcs}/5</strong></small>`:''}
-          <small class="text-gray">${r.date||'—'} ${r.barn?`• ${r.barn}`:''}</small>
+          <small class="text-gray">${r.date||'—'} ${r.barn?`• ${escapeHtml(r.barn)}`:''}</small>
         </div>
         <div class="d-flex gap-2 flex-shrink-0">
           ${r.status==='active'&&can('health')?`<button class="action-btn primary sm" onclick="event.stopPropagation();completeHealth('${r._id}')"><i class="bi bi-check-lg" aria-hidden="true"></i><span class="visually-hidden">إكمال العلاج</span></button>`:''}

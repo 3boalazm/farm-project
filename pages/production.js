@@ -435,8 +435,8 @@ function renderSummaryTab(el) {
           rowsHtml: topMilk.map((a, i) => `
             <tr>
               <td class="fw-bold accent-text">${ar(i+1)}</td>
-              <td class="fw-bold">${a.tag}</td>
-              <td class="text-gray">${a.breed || '—'}</td>
+              <td class="fw-bold">${escapeHtml(a.tag||'')}</td>
+              <td class="text-gray">${escapeHtml(a.breed || '—')}</td>
               <td class="blue-text fw-bold">${ar(a.total.toFixed(1))} ل</td>
               <td class="text-gray">${ar((a.total/a.count).toFixed(2))} ل</td>
             </tr>`).join('')

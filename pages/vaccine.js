@@ -57,7 +57,7 @@ function renderVaccPage(s){
   ${upcoming.length>0?`<div style="background:rgba(255,193,7,.08);border:1px solid rgba(255,193,7,.25);border-radius:16px;padding:16px 20px;margin-bottom:16px">
     <div class="fw-bold mb-2" style="color:var(--yellow)"><i class="bi bi-alarm-fill me-2"></i>تحصينات قادمة خلال ٧ أيام</div>
     ${upcoming.map(v=>`<div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
-      <span class="type-badge badge-yellow">${v.name}</span>
+      <span class="type-badge badge-yellow">${escapeHtml(v.name||'')}</span>
       <small class="text-gray">${v.target_section||'—'} • ${ar(+v.count||0)} رأس • بعد ${ar(daysUntil(v.scheduled_date))} يوم (${v.scheduled_date})</small>
       ${can('health')?`<button class="action-btn primary sm" aria-label="تعليم كمنجز" onclick="markDone('${v._id}')"><i class="bi bi-check-lg"></i> تنفيذ الآن</button>`:''}
     </div>`).join('')}

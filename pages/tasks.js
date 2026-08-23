@@ -284,7 +284,7 @@ function renderTaskCard(t, today) {
   const autoBadge = t.auto_generated ? `<span class="type-badge" style="background:var(--purple)22;color:var(--purple);border:1px solid var(--purple)44;font-size:.62rem" title="مصدر الحدث: ${AUTO_EVENT_LABELS[t.auto_source_type]||t.auto_source_type||''}"><i class="bi bi-robot me-1"></i>مولّدة تلقائيًا — ${AUTO_EVENT_LABELS[t.auto_source_type]||''}</span>` : '';
 
   return `
-  <div class="task-card ${statusClass}" role="article" aria-label="مهمة: ${t.title}">
+  <div class="task-card ${statusClass}" role="article" aria-label="مهمة: ${escapeHtml(t.title||'')}">
     <div class="d-flex align-items-start gap-3">
       <button class="task-checkbox ${t.status === 'done' ? 'checked' : ''}" onclick="toggleTaskDone('${t._id}')"
         aria-label="${t.status === 'done' ? 'إلغاء إنجاز المهمة' : 'تعليم كمنجزة'}" title="${t.status === 'done' ? 'تم الإنجاز' : 'انقر للإنجاز'}">
@@ -403,7 +403,7 @@ window.openTaskModal = function(presetData) {
       '<h4><i class="bi bi-plus-circle accent-text" aria-hidden="true"></i> ' + (d._id ? 'تعديل مهمة' : 'مهمة جديدة') + '</h4>' +
 
       '<label for="t-title">عنوان المهمة *</label>' +
-      '<input class="field" id="t-title" value="' + (d.title || '') + '" placeholder="مثال: تنظيف جمالون ج١ع١" aria-required="true">' +
+      '<input class="field" id="t-title" value="' + escapeHtml(d.title || '') + '" placeholder="مثال: تنظيف جمالون ج١ع١" aria-required="true">' +
 
       '<div class="row g-2">' +
         '<div class="col-6">' +

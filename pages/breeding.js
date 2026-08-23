@@ -58,8 +58,8 @@ function renderBreedingPage(s){
   if(upcoming.length){
     upcomingHtml='<div class="births-section mb-4"><div class="fw-bold mb-2" style="color:var(--yellow)"><i class="bi bi-alarm-fill me-2"></i>ولادات متوقعة خلال ١٥ يوم — '+ar(upcoming.length)+' إناث</div>'+
       upcoming.map(r=>{var d=daysUntil(r.expected_birth);return'<div class="d-flex align-items-center gap-2 mt-2 flex-wrap">'+
-        '<span class="type-badge badge-yellow">'+(r.female_tag||r.female_breed||'—')+'</span>'+
-        '<small class="text-gray">'+r.female_breed+' • '+r.expected_birth+' <span style="color:'+(d<=3?'var(--red)':'var(--orange)')+'">('+(d===0?'اليوم!':d<0?'تأخرت!':'بعد '+ar(d)+' يوم')+')</span></small>'+
+        '<span class="type-badge badge-yellow">'+escapeHtml(r.female_tag||r.female_breed||'—')+'</span>'+
+        '<small class="text-gray">'+escapeHtml(r.female_breed||'')+' • '+r.expected_birth+' <span style="color:'+(d<=3?'var(--red)':'var(--orange)')+'">('+(d===0?'اليوم!':d<0?'تأخرت!':'بعد '+ar(d)+' يوم')+')</span></small>'+
         '<button class="action-btn primary sm" onclick="markBorn(\''+r._id+'\')"><i class="bi bi-stars"></i> تسجيل الولادة</button>'+
       '</div>';}).join('')+
     '</div>';
@@ -69,7 +69,7 @@ function renderBreedingPage(s){
   if(returnHeat.length){
     returnHeatHtml='<div style="background:rgba(244,67,54,.06);border:1px solid rgba(244,67,54,.25);border-radius:14px;padding:14px 18px;margin-bottom:16px">'+
       '<div class="fw-bold mb-2 red-text"><i class="bi bi-arrow-repeat me-2"></i>إناث يحتجن إعادة تقريع — '+ar(returnHeat.length)+'</div>'+
-      returnHeat.map(r=>'<div class="d-flex gap-2 mt-1 flex-wrap"><span class="type-badge badge-danger">'+(r.female_tag||r.female_breed)+'</span><small class="text-gray">آخر تقريع: '+r.mating_date+' (منذ '+ar(daysSince(r.mating_date))+' يوم)</small><button class="action-btn primary sm" onclick="openBModal(null,\''+encodeURIComponent(r.female_tag||'')+'\',\''+encodeURIComponent(r.female_breed||'')+'\',\''+encodeURIComponent(r.female_species||'goat')+'\')"><i class="bi bi-plus-lg"></i> إعادة تقريع</button></div>').join('')+
+      returnHeat.map(r=>'<div class="d-flex gap-2 mt-1 flex-wrap"><span class="type-badge badge-danger">'+escapeHtml(r.female_tag||r.female_breed||'')+'</span><small class="text-gray">آخر تقريع: '+r.mating_date+' (منذ '+ar(daysSince(r.mating_date))+' يوم)</small><button class="action-btn primary sm" onclick="openBModal(null,\''+encodeURIComponent(r.female_tag||'')+'\',\''+encodeURIComponent(r.female_breed||'')+'\',\''+encodeURIComponent(r.female_species||'goat')+'\')"><i class="bi bi-plus-lg"></i> إعادة تقريع</button></div>').join('')+
     '</div>';
   }
 
@@ -260,8 +260,8 @@ window.openBModal=function(id, prefTag, prefBreed, prefSpecies, jumpToBorn){
       '<div class="col-6"><label>سلالة الأنثى</label><select class="field" id="b-fb">'+((sp==='sheep'?s.sheepBreeds:s.goatBreeds).map(b=>'<option value="'+b+'" '+((r.female_breed||decodeURIComponent(prefBreed||''))===b?'selected':'')+'>'+b+'</option>')).join('')+'</select></div>'+
     '</div>'+
     '<div class="row g-2">'+
-      '<div class="col-6"><label>ترقيم الأنثى (الأم) *</label><input class="field" id="b-ft" value="'+(r.female_tag||decodeURIComponent(prefTag||''))+'" placeholder="F-101"></div>'+
-      '<div class="col-6"><label>ترقيم الفحل</label><input class="field" id="b-mt" value="'+(r.male_tag||'')+'" placeholder="M-001"></div>'+
+      '<div class="col-6"><label>ترقيم الأنثى (الأم) *</label><input class="field" id="b-ft" value="'+escapeHtml(r.female_tag||decodeURIComponent(prefTag||''))+'" placeholder="F-101"></div>'+
+      '<div class="col-6"><label>ترقيم الفحل</label><input class="field" id="b-mt" value="'+escapeHtml(r.male_tag||'')+'" placeholder="M-001"></div>'+
     '</div>'+
     '<div class="row g-2">'+
       '<div class="col-6"><label>سلالة الفحل</label><select class="field" id="b-mb">'+allBreeds.map(b=>'<option value="'+b+'" '+(r.male_breed===b?'selected':'')+'>'+b+'</option>').join('')+'</select></div>'+
