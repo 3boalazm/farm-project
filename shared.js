@@ -6554,6 +6554,72 @@ window.getFinancialIntegrityStatus=async function(){
   };
 };
 
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — REPORT VALIDATION (Phase 37). Cross-checks
+//  figures that SHOULD agree across genuinely independent computation
+//  paths in this engine -- not the same balanced-check repeated, but a
+//  real cross-validation that would catch one report's logic silently
+//  drifting from another's. getBalanceSheet computes its own
+//  revenue/expense totals internally rather than calling
+//  getIncomeStatement; getTrialBalance and getBalanceSheet each sum
+//  ASSET balances with separate code; getCashFlowStatement's
+//  closingCash is computed from journal_entries directly, not from
+//  getBalanceSheet's asset rows. Since-inception windows use
+//  '1900-01-01' as a start date safely earlier than any realistic farm
+//  record, string-comparable the same way every date filter in this
+//  engine already works.
+// ══════════════════════════════════════════════════════════════
+
+window.validateFinancialReportsCrossConsistency=async function(asOfDate){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!asOfDate) return {ok:false, error:'التاريخ مطلوب'};
+
+  var checks=[];
+  var SINCE_INCEPTION='1900-01-01';
+
+  var balanceSheet=await window.getBalanceSheet(asOfDate);
+  if(!balanceSheet.ok) return balanceSheet;
+  var incomeStatement=await window.getIncomeStatement(SINCE_INCEPTION,asOfDate);
+  if(!incomeStatement.ok) return incomeStatement;
+
+  var earningsLine=balanceSheet.equity.find(function(e){return e.accountId===null;});
+  var bsEarnings=earningsLine?earningsLine.balance:0;
+  checks.push({
+    name:'BALANCE_SHEET_EARNINGS_MATCHES_INCOME_STATEMENT',
+    pass:Math.round((bsEarnings-incomeStatement.netIncome)*100)/100===0,
+    balanceSheetValue:bsEarnings, incomeStatementValue:incomeStatement.netIncome,
+  });
+
+  var trialBalance=await window.getTrialBalance(asOfDate);
+  if(!trialBalance.ok) return trialBalance;
+  var accounts=await fbGet('accounts');
+  var accountTypeById={}; accounts.forEach(function(a){ accountTypeById[a._id]=a.type; });
+  var tbAssetSum=0;
+  trialBalance.rows.forEach(function(r){ if(accountTypeById[r.accountId]==='ASSET') tbAssetSum+=(r.debit-r.credit); });
+  tbAssetSum=Math.round(tbAssetSum*100)/100;
+  checks.push({
+    name:'TRIAL_BALANCE_ASSETS_MATCH_BALANCE_SHEET_ASSETS',
+    pass:tbAssetSum===balanceSheet.totalAssets,
+    trialBalanceValue:tbAssetSum, balanceSheetValue:balanceSheet.totalAssets,
+  });
+
+  var cbas=await fbGet('cash_bank_accounts');
+  if(cbas.length){
+    var cashFlow=await window.getCashFlowStatement(SINCE_INCEPTION,asOfDate);
+    if(cashFlow.ok){
+      var cashAccountIds={}; cbas.forEach(function(c){ cashAccountIds[c.linkedAccountId]=true; });
+      var bsCashSum=Math.round(balanceSheet.assets.filter(function(a){return cashAccountIds[a.accountId];}).reduce(function(s,a){return s+a.balance;},0)*100)/100;
+      checks.push({
+        name:'CASH_FLOW_CLOSING_CASH_MATCHES_BALANCE_SHEET_CASH_ACCOUNTS',
+        pass:bsCashSum===cashFlow.closingCash,
+        cashFlowValue:cashFlow.closingCash, balanceSheetValue:bsCashSum,
+      });
+    }
+  }
+
+  return {ok:true, asOfDate:asOfDate, allPass:checks.every(function(c){return c.pass;}), checks:checks};
+};
+
 // ══════════════════════════════════════════════════════
 // Animal Identity Service
 // ══════════════════════════════════════════════════════
