@@ -720,7 +720,7 @@ function openEditAnimal(){
       <div class="col-6"><label>الغرض</label><select class="field" id="e-purpose"><option value="tarbiya" ${animal.purpose==='tarbiya'?'selected':''}>تربية</option><option value="tasmeen" ${animal.purpose==='tasmeen'?'selected':''}>تسمين</option><option value="birth" ${animal.purpose==='birth'?'selected':''}>لم يُحدد بعد (مولود)</option></select></div>
     </div>
     <div class="row g-2">
-      <div class="col-6"><label>السلالة</label><select class="field" id="e-breed">${breeds.map(b=>`<option ${b===animal.breed?'selected':''}>${b}</option>`).join('')}</select></div>
+      <div class="col-6"><label>السلالة</label><select class="field" id="e-breed">${breeds.map(b=>`<option ${b===animal.breed?'selected':''}>${escapeHtml(b)}</option>`).join('')}</select></div>
       <div class="col-6"><label>الجنس</label><select class="field" id="e-gender"><option value="female" ${animal.gender==='female'?'selected':''}>أنثى</option><option value="male" ${animal.gender==='male'?'selected':''}>ذكر</option></select></div>
     </div>
     <div class="row g-2">

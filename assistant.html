@@ -754,7 +754,7 @@ window.editAndConfirm = function() {
     '<h4><i class="bi bi-pencil-square accent-text"></i> تعديل البيانات</h4>' +
     '<div class="row g-2">' +
       '<div class="col-6"><label>النوع</label><select class="field" id="ea-sp"><option value="goat" '+(d.species==='goat'?'selected':'')+'>ماعز</option><option value="sheep" '+(d.species==='sheep'?'selected':'')+'>أغنام</option></select></div>' +
-      '<div class="col-6"><label>السلالة</label><select class="field" id="ea-breed">'+allBreeds.map(function(b){return'<option '+(d.breed===b?'selected':'')+'>'+b+'</option>';}).join('')+'<option value="مواليد" '+(d.breed==='مواليد'?'selected':'')+'>مواليد</option></select></div>' +
+      '<div class="col-6"><label>السلالة</label><select class="field" id="ea-breed">'+allBreeds.map(function(b){return'<option '+(d.breed===b?'selected':'')+'>'+escapeHtml(b)+'</option>';}).join('')+'<option value="مواليد" '+(d.breed==='مواليد'?'selected':'')+'>مواليد</option></select></div>' +
     '</div><div class="row g-2">' +
       '<div class="col-6"><label>الجنس</label><select class="field" id="ea-gen"><option value="male" '+(d.gender==='male'?'selected':'')+'>ذكر ♂</option><option value="female" '+(d.gender==='female'?'selected':'')+'>أنثى ♀</option></select></div>' +
       '<div class="col-6"><label>الغرض</label><select class="field" id="ea-pur"><option value="tarbiya" '+(d.purpose==='tarbiya'?'selected':'')+'>تربية</option><option value="tasmeen" '+(d.purpose==='tasmeen'?'selected':'')+'>تسمين</option><option value="birth" '+(d.purpose==='birth'?'selected':'')+'>مواليد</option></select></div>' +

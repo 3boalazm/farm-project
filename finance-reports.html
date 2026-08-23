@@ -147,7 +147,7 @@ window.loadFinanceReports=async function(){
 
 function frRenderIncomeStatement(r){
   if(!r.revenue.length && !r.expense.length) return '<div class="empty-state py-4"><i class="bi bi-inbox" style="font-size:2rem;opacity:.4"></i><p class="mt-2">لا يوجد نشاط في هذه الفترة</p></div>';
-  const rows=(list,cls)=>list.map(x=>`<tr><td>${x.name}</td><td class="text-end ${cls}">${frMoney(x.amount)}</td></tr>`).join('');
+  const rows=(list,cls)=>list.map(x=>`<tr><td>${escapeHtml(x.name)}</td><td class="text-end ${cls}">${frMoney(x.amount)}</td></tr>`).join('');
   return `
     <table class="table table-sm">
       <thead><tr><th>الإيرادات</th><th class="text-end"></th></tr></thead>
@@ -163,7 +163,7 @@ function frRenderIncomeStatement(r){
 }
 
 function frRenderBalanceSheet(r){
-  const rows=list=>list.map(x=>`<tr><td>${x.name}</td><td class="text-end">${frMoney(x.balance)}</td></tr>`).join('');
+  const rows=list=>list.map(x=>`<tr><td>${escapeHtml(x.name)}</td><td class="text-end">${frMoney(x.balance)}</td></tr>`).join('');
   return `
     <div class="row g-3">
       <div class="col-md-4">
@@ -193,7 +193,7 @@ function frRenderBalanceSheet(r){
 
 function frRenderTrialBalance(r){
   if(!r.rows.length) return '<div class="empty-state py-4"><i class="bi bi-inbox" style="font-size:2rem;opacity:.4"></i><p class="mt-2">لا توجد أرصدة</p></div>';
-  const rows=r.rows.map(x=>`<tr><td>${x.name}</td><td class="text-end">${x.debit?frMoney(x.debit):''}</td><td class="text-end">${x.credit?frMoney(x.credit):''}</td></tr>`).join('');
+  const rows=r.rows.map(x=>`<tr><td>${escapeHtml(x.name)}</td><td class="text-end">${x.debit?frMoney(x.debit):''}</td><td class="text-end">${x.credit?frMoney(x.credit):''}</td></tr>`).join('');
   return `
     <table class="table table-sm">
       <thead><tr><th>الحساب</th><th class="text-end">مدين</th><th class="text-end">دائن</th></tr></thead>

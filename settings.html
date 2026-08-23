@@ -218,8 +218,8 @@ function renderBreedColors(){
   grid.innerHTML=allBreeds.map((item,i)=>{
     const saved=savedColors[item.b]||defaultColors[i%defaultColors.length];
     return '<div class="col-6 col-md-4 col-lg-3"><div class="d-flex align-items-center gap-2 p-2" style="background:rgba(255,255,255,.04);border-radius:10px;border:1px solid #2a2a2a">'+
-      '<input type="color" value="'+saved+'" data-breed="'+item.b+'" style="width:36px;height:36px;border:none;border-radius:8px;cursor:pointer;background:none;padding:0">'+
-      '<div style="font-size:.82rem;font-weight:600">'+item.b+'</div>'+
+      '<input type="color" value="'+saved+'" data-breed="'+escapeHtml(item.b)+'" style="width:36px;height:36px;border:none;border-radius:8px;cursor:pointer;background:none;padding:0">'+
+      '<div style="font-size:.82rem;font-weight:600">'+escapeHtml(item.b)+'</div>'+
     '</div></div>';
   }).join('');
 }
