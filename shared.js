@@ -6225,6 +6225,49 @@ window.getAccountLedger=async function(accountId,startDate,endDate){
   };
 };
 
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — TRIAL BALANCE (Phase 26). The classic proof
+//  that the ledger balances: every postable account's cumulative
+//  balance since inception through asOfDate, shown in the literal
+//  debit/credit-column format (NOT normal-balance-signed like the
+//  General Ledger/Balance Sheet) -- a net debit balance lists under
+//  Debit, a net credit balance lists under Credit, whichever side the
+//  account actually nets to. totalDebit must equal totalCredit by
+//  double-entry construction (Phase 1's own balanced-entry
+//  validation); `balanced` is a live self-check of that invariant, not
+//  an assumption.
+// ══════════════════════════════════════════════════════════════
+
+window.getTrialBalance=async function(asOfDate){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!asOfDate) return {ok:false, error:'التاريخ مطلوب'};
+
+  var accounts=await fbGet('accounts');
+  var entries=await fbGet('journal_entries');
+  var balances={};
+  entries.forEach(function(e){
+    if(e.date>asOfDate) return;
+    (e.lines||[]).forEach(function(l){ balances[l.accountId]=(balances[l.accountId]||0)+(+l.debit||0)-(+l.credit||0); });
+  });
+
+  var rows=[], totalDebit=0, totalCredit=0;
+  accounts.forEach(function(a){
+    if(a.postable===false) return;
+    var raw=Math.round((balances[a._id]||0)*100)/100;
+    if(raw===0) return;
+    var debit=raw>0?raw:0, credit=raw<0?-raw:0;
+    rows.push({accountId:a._id, name:a.name_ar, type:a.type, debit:debit, credit:credit});
+    totalDebit=Math.round((totalDebit+debit)*100)/100;
+    totalCredit=Math.round((totalCredit+credit)*100)/100;
+  });
+
+  return {
+    ok:true, asOfDate:asOfDate, rows:rows,
+    totalDebit:totalDebit, totalCredit:totalCredit,
+    balanced:totalDebit===totalCredit,
+  };
+};
+
 // ══════════════════════════════════════════════════════
 // Animal Identity Service
 // ══════════════════════════════════════════════════════
