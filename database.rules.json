@@ -203,7 +203,16 @@
       ".read":  "auth != null",
       ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' && (!data.exists() || data.child('status').val() !== 'POSTED')",
       "$id": {
-        ".validate": "newData.hasChild('date') && newData.hasChild('lines') && newData.hasChild('status')",
+        // Phase 31 (Security Hardening): the balanced-debit-credit
+        // invariant Phase 1's own _validateJournalLines already enforces
+        // in the engine is now ALSO enforced here, at the rules level --
+        // defense in depth against exactly the risk class Phase 29's
+        // data-quality scan exists to detect (data written outside the
+        // normal engine path, e.g. direct console/REST access). Every
+        // entry postJournalEntry ever writes already carries totalDebit/
+        // totalCredit (see shared.js), so this closes a real gap rather
+        // than assuming a shape that isn't actually produced.
+        ".validate": "newData.hasChild('date') && newData.hasChild('lines') && newData.hasChild('status') && newData.child('lines').hasChildren() && newData.hasChild('totalDebit') && newData.hasChild('totalCredit') && newData.child('totalDebit').val() === newData.child('totalCredit').val()",
         "status": { ".validate": "newData.val() === 'DRAFT' || newData.val() === 'POSTED' || newData.val() === 'REVERSED'" }
       }
     },
