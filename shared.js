@@ -3612,6 +3612,11 @@ var DEFAULT_CHART_OF_ACCOUNTS=[
   {code:'6700',name_ar:'إيجار',name_en:'Rent',type:'EXPENSE',parentId:'6000'},
   {code:'6800',name_ar:'إهلاك',name_en:'Depreciation',type:'EXPENSE',parentId:'6000'},
   {code:'6900',name_ar:'مصروفات أخرى',name_en:'Other Expenses',type:'EXPENSE',parentId:'6000'},
+  // Added in Phase 6 (Inventory Accounting): a physical-count adjustment
+  // can go either direction (found extra stock vs. shrinkage/loss) --
+  // this ONE account absorbs both rather than inventing a separate
+  // "found inventory" revenue line with no real business meaning here.
+  {code:'6950',name_ar:'فروقات جرد المخزون',name_en:'Inventory Adjustment / Shrinkage',type:'EXPENSE',parentId:'6000'},
 ];
 
 function _accountNormalBalance(type,contra){
@@ -3832,9 +3837,22 @@ window.postSourceDocument=async function(documentId,opts){
     sourceType:'source_document', sourceId:documentId, lines:lines,
   });
   if(!posted.ok) return posted;
-  var newStatus=(+doc.paidAmount||0)>=doc.total ? 'PAID' : 'POSTED';
+  // opts.paidAmount (Phase 6 addition, backward-compatible: every prior
+  // caller omits it, so this is exactly the old `(+doc.paidAmount||0)`
+  // behavior -- 0 -- unchanged): lets a caller whose OWN posted lines
+  // already fully settle the document in cash (e.g. a straight cash
+  // inventory purchase, Debit Inventory / Credit Cash with no AP leg at
+  // all) declare that settlement as part of THIS SAME posting, instead
+  // of it looking like an unpaid bill that then needs a separate,
+  // second, redundant payment posting.
+  var settledNow=opts.paidAmount!=null ? Math.round((+opts.paidAmount)*100)/100 : (+doc.paidAmount||0);
+  var newStatus=settledNow>=doc.total ? 'PAID' : (settledNow>0 ? 'PARTIALLY_PAID' : 'POSTED');
   try{
-    await fbPatch('source_documents',documentId,{status:newStatus, journalEntryId:posted.id, postedAt:new Date().toISOString(), postedBy:(getUser()&&getUser().name)||null});
+    await fbPatch('source_documents',documentId,{
+      status:newStatus, journalEntryId:posted.id, paidAmount:settledNow,
+      remainingAmount:Math.round((doc.total-settledNow)*100)/100,
+      postedAt:new Date().toISOString(), postedBy:(getUser()&&getUser().name)||null,
+    });
     fbCacheInvalidate('source_documents');
     await logActivity('post','source_documents','ترحيل '+doc.documentNumber);
     return {ok:true, id:documentId, journalEntryId:posted.id, status:newStatus};
@@ -4342,6 +4360,186 @@ window.getAPAging=async function(asOfDate){
     totals[k]=Math.round(buckets[k].reduce(function(s,d){return s+(+d.remainingAmount||0);},0)*100)/100;
   });
   return {ok:true, asOfDate:asOfDate, buckets:buckets, totals:totals};
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — INVENTORY ACCOUNTING (Phase 6). No new
+//  collection. Wraps the EXISTING, proven inventory ledger
+//  (recordInventoryTransaction, from the original Inventory Transaction
+//  Engine v1.7) rather than replacing it -- stock quantity always moves
+//  through that one function, exactly as before. This phase only adds
+//  the financial side that Phase 0's audit found was built once but
+//  never actually wired into the live app (purchaseFeed/purchaseMedicine
+//  were orphaned): a real, traceable journal entry alongside every
+//  costed inventory movement, using a genuine weighted-average cost
+//  maintained on the item record itself.
+//
+//  Scope, stated honestly: PURCHASE and CONSUMPTION are fully costed and
+//  posted here. ADJUSTMENT (a physical-count correction, either
+//  direction) posts against the new 6950 account. RETURN-to-supplier and
+//  formal WRITE_OFF are NOT implemented in this pass -- they need their
+//  own AP-reversal / cost-basis handling this phase doesn't have evidence
+//  to invent safely yet; calling recordInventoryTransaction directly for
+//  those reasons still moves stock exactly as it always has, it just
+//  won't (yet) post an accompanying journal entry.
+// ══════════════════════════════════════════════════════════════
+
+var INVENTORY_ASSET_ACCOUNT={feeds:'1410', meds:'1420'};
+var INVENTORY_EXPENSE_ACCOUNT={feeds:'6100', meds:'6200'};
+var INVENTORY_ADJUSTMENT_ACCOUNT='6950';
+
+function _weightedAverageCost(oldQty,oldAvgCost,addedQty,addedUnitCost){
+  var totalQty=oldQty+addedQty;
+  if(totalQty<=0) return addedUnitCost; // stock started at/below zero -- the new cost is the only real evidence
+  return Math.round(((oldQty*oldAvgCost+addedQty*addedUnitCost)/totalQty)*10000)/10000;
+}
+
+// Used by postInventoryConsumption/postInventoryAdjustment below, which
+// (unlike postInventoryPurchase) post a plain journal entry rather than
+// going through a source_document -- so they need their OWN idempotency
+// check, done here BEFORE any stock is touched, not after.
+async function _findExistingJournalBySource(sourceType,sourceId){
+  var entries=await fbGet('journal_entries');
+  return entries.find(function(e){return e.sourceType===sourceType && e.sourceId===sourceId;})||null;
+}
+
+// Debit Inventory (asset) at actual unit cost, Credit AP or Cash.
+// IDEMPOTENCY ORDER MATTERS: createSourceDocument's operationId check is
+// resolved FIRST, before recordInventoryTransaction ever touches real
+// stock -- a replay that hits the idempotent branch returns immediately
+// having moved nothing a second time. Only a genuinely new operationId
+// reaches the stock-quantity move (reason:'purchase', the exact same
+// mechanism this app used before this phase existed), the weighted-
+// average cost update, and finally the financial posting through the
+// same source-document primitives AR/AP use -- 'credit' leaves a real
+// open payable against the named supplier; 'cash' settles in the same
+// posting via postSourceDocument's paidAmount option, never a second,
+// fabricated entry.
+window.postInventoryPurchase=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var invAccountId=INVENTORY_ASSET_ACCOUNT[opts.itemType];
+  if(!invAccountId) return {ok:false, error:'نوع صنف غير صالح'};
+  var quantity=+opts.quantity, unitCost=+opts.unitCost;
+  if(!quantity||quantity<=0) return {ok:false, error:'الكمية يجب أن تكون صحيحة'};
+  if(unitCost==null||isNaN(unitCost)||unitCost<0) return {ok:false, error:'تكلفة الوحدة يجب أن تكون صحيحة'};
+  if(opts.paymentMode!=='cash' && opts.paymentMode!=='credit') return {ok:false, error:'طريقة الدفع يجب أن تكون cash أو credit'};
+  if(opts.paymentMode==='cash' && !opts.cashAccountId) return {ok:false, error:'الحساب النقدي مطلوب للشراء الكاش'};
+  var total=Math.round(quantity*unitCost*100)/100;
+
+  var created=await window.createSourceDocument({
+    type:'inventory_purchase', total:total, date:opts.date,
+    dueDate:opts.paymentMode==='credit'?opts.dueDate:null, operationId:opts.operationId,
+    counterpartyId:opts.supplierId||null, counterpartyName:opts.supplierName||null,
+    notes:'شراء '+ar(quantity)+' '+(opts.itemName||''),
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return {ok:true, id:created.id, document:created.document, idempotent:true};
+
+  var stockResult=await window.recordInventoryTransaction(opts.itemType,opts.itemName,quantity,'purchase',opts.operationId);
+  if(!stockResult||!stockResult.matched){
+    // The financial document already exists in DRAFT with nothing posted
+    // against it -- void it so it doesn't sit around looking like a real,
+    // pending purchase that never actually happened.
+    await window.voidSourceDocument(created.id).catch(function(){});
+    return {ok:false, error:stockResult?'الصنف غير موجود في المخزون':'خطأ في تسجيل حركة المخزون'};
+  }
+
+  var newAvgCost=_weightedAverageCost(stockResult.before,+stockResult.item.cost_per_unit||0,quantity,unitCost);
+  var table=INVENTORY_COLLECTION[opts.itemType];
+  try{ await fbPatch(table,stockResult.item._id,{cost_per_unit:newAvgCost}); fbCacheInvalidate(table); }
+  catch(e){ /* stock quantity already moved -- a failed cost update doesn't roll that back, matching this app's existing best-effort inventory precedent (recordInventoryTransaction never blocks the underlying action either) */ }
+
+  var posted=await window.postSourceDocument(created.id,{
+    debitAccountId:invAccountId,
+    creditAccountId:opts.paymentMode==='cash'?opts.cashAccountId:AP_ACCOUNT_ID,
+    paidAmount:opts.paymentMode==='cash'?total:0,
+  });
+  if(!posted.ok) return posted;
+  return {ok:true, id:created.id, journalEntryId:posted.journalEntryId, status:posted.status, newAvgCost:newAvgCost};
+};
+
+// Debit the item type's expense account at the item's CURRENT weighted-
+// average cost, Credit Inventory. IDEMPOTENCY ORDER MATTERS here too:
+// _findExistingJournalBySource is checked BEFORE recordInventoryTransaction
+// touches real stock. Reuses recordInventoryTransaction for the actual
+// stock decrease (reason caller-supplied, e.g. 'feeding' / 'treatment' --
+// unchanged from before this phase). This is an explicit, opt-in costed-
+// consumption call: it does NOT retrofit the existing consumeFeed/
+// consumeMedicine call sites used elsewhere in the live app (health.js
+// treatments, etc.) -- wiring THOSE into accounting is a UI/integration
+// decision, not something this engine-only pass makes unilaterally for
+// flows it hasn't verified end-to-end this session.
+window.postInventoryConsumption=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var invAccountId=INVENTORY_ASSET_ACCOUNT[opts.itemType];
+  var expAccountId=INVENTORY_EXPENSE_ACCOUNT[opts.itemType];
+  if(!invAccountId||!expAccountId) return {ok:false, error:'نوع صنف غير صالح'};
+  var quantity=+opts.quantity;
+  if(!quantity||quantity<=0) return {ok:false, error:'الكمية يجب أن تكون صحيحة'};
+
+  var existing=await _findExistingJournalBySource('inventory_consumption',opts.operationId);
+  if(existing) return {ok:true, journalEntryId:existing._id, idempotent:true};
+
+  var stockResult=await window.recordInventoryTransaction(opts.itemType,opts.itemName,-Math.abs(quantity),opts.reason||'consumption',opts.operationId);
+  if(!stockResult||!stockResult.matched) return {ok:false, error:stockResult?'الصنف غير موجود في المخزون':'خطأ في تسجيل حركة المخزون'};
+
+  var unitCost=+stockResult.item.cost_per_unit||0;
+  var total=Math.round(Math.abs(stockResult.actualDelta)*unitCost*100)/100;
+  if(total<=0){
+    // Zero-cost item (never purchased with a recorded cost): the stock
+    // movement above is real and already happened; there's simply
+    // nothing to post financially, not an error.
+    return {ok:true, id:null, journalEntryId:null, posted:false, reason:'لا توجد تكلفة مسجّلة لهذا الصنف'};
+  }
+  var posted=await window.postJournalEntry({
+    date:opts.date||todayStr(), description:'استهلاك '+ar(Math.abs(stockResult.actualDelta))+' '+(opts.itemName||'')+(opts.reason?(' — '+opts.reason):''),
+    sourceType:'inventory_consumption', sourceId:opts.operationId,
+    lines:[{accountId:expAccountId, debit:total, relatedAnimalId:opts.relatedAnimalId||null},
+           {accountId:invAccountId, credit:total}],
+  });
+  if(!posted.ok) return posted;
+  return {ok:true, journalEntryId:posted.id, amount:total};
+};
+
+// A physical-count correction, either direction, against 6950 (see
+// header comment for why one account absorbs both). Same idempotency
+// ordering as consumption above: checked before inventoryCorrection ever
+// touches real stock. Reuses inventoryCorrection() for the actual
+// stock-quantity fix -- the SAME mechanism the live inventory.html page
+// already uses for this exact purpose -- then posts the financial side
+// at the item's current cost.
+window.postInventoryAdjustment=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var invAccountId=INVENTORY_ASSET_ACCOUNT[opts.itemType];
+  if(!invAccountId) return {ok:false, error:'نوع صنف غير صالح'};
+
+  var existing=await _findExistingJournalBySource('inventory_adjustment',opts.operationId);
+  if(existing) return {ok:true, journalEntryId:existing._id, idempotent:true};
+
+  var corrected=await window.inventoryCorrection({itemType:opts.itemType, itemName:opts.itemName, newQuantity:opts.newQuantity, sourceId:opts.operationId});
+  if(!corrected.ok) return corrected;
+  if(corrected.unchanged) return {ok:true, posted:false, reason:'لا يوجد فرق فعلي في الكمية'};
+  var items=await fbGet(INVENTORY_COLLECTION[opts.itemType]);
+  var item=items.find(function(i){return i.name===opts.itemName;});
+  var unitCost=+(item&&item.cost_per_unit)||0;
+  var delta=corrected.after-corrected.before;
+  var total=Math.round(Math.abs(delta)*unitCost*100)/100;
+  if(total<=0) return {ok:true, posted:false, reason:'لا توجد تكلفة مسجّلة لهذا الصنف'};
+  var lines=delta>0
+    ? [{accountId:invAccountId, debit:total},{accountId:INVENTORY_ADJUSTMENT_ACCOUNT, credit:total}]   // found extra stock
+    : [{accountId:INVENTORY_ADJUSTMENT_ACCOUNT, debit:total},{accountId:invAccountId, credit:total}];  // shrinkage/loss
+  var posted=await window.postJournalEntry({
+    date:opts.date||todayStr(), description:'تسوية جرد: '+(opts.itemName||'')+' ('+(delta>0?'+':'')+ar(delta)+')',
+    sourceType:'inventory_adjustment', sourceId:opts.operationId, lines:lines,
+  });
+  if(!posted.ok) return posted;
+  return {ok:true, journalEntryId:posted.id, amount:total, direction:delta>0?'gain':'shrinkage'};
 };
 
 // ══════════════════════════════════════════════════════
