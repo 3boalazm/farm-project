@@ -304,11 +304,11 @@ function renderAnimals(){
     var menuBtn=can('admin')?
       '<button class="icon-btn" onclick="event.preventDefault();event.stopPropagation();openAnimalMenu(\''+a._id+'\',\''+encodeURIComponent(a.breed||'')+'\',\''+encodeURIComponent(a.tag||'')+'\',\''+(a.status||'alive')+'\')" aria-label="خيارات" title="خيارات"><i class="bi bi-three-dots-vertical"></i></button>':'';
     var badgesHtml=
-      (a.tag?'<span class="type-badge badge-gray">#'+a.tag+'</span>':'')+
+      (a.tag?'<span class="type-badge badge-gray">#'+escapeHtml(a.tag)+'</span>':'')+
       '<span class="type-badge '+purposeCls+'">'+purposeLabel+'</span>'+
       '<span class="type-badge '+(a.gender==='male'?'badge-blue':'badge-purple')+'" style="font-size:.68rem">'+(a.gender==='male'?'♂ ذكر':'♀ أنثى')+'</span>'+
       (a.status!=='alive'?'<span class="type-badge '+statusCls+'">'+statusLabel+'</span>':'')+
-      (a.barn?'<span class="type-badge badge-gray" style="font-size:.68rem"><i class="bi bi-building me-1"></i>'+a.barn+'</span>':'');
+      (a.barn?'<span class="type-badge badge-gray" style="font-size:.68rem"><i class="bi bi-building me-1"></i>'+escapeHtml(a.barn)+'</span>':'');
     var metaText=(a.species==='goat'?'ماعز':'أغنام')+(a.birth_date?' • مواليد: '+a.birth_date:' • غير محدد');
 
     if(isCards){
@@ -317,7 +317,7 @@ function renderAnimals(){
         '<div class="animal-card-v2__top">'+
           '<div class="animal-card-v2__avatar">'+(a.species==='goat'?'🐐':'🐑')+'</div>'+
           '<div style="min-width:0;flex:1">'+
-            '<div class="animal-card-v2__name">'+(a.breed||'—')+'</div>'+
+            '<div class="animal-card-v2__name">'+escapeHtml(a.breed||'—')+'</div>'+
             (!a.tag?'<div class="animal-card-v2__tag">غير مرقّم</div>':'')+
           '</div>'+
         '</div>'+
@@ -332,7 +332,7 @@ function renderAnimals(){
         '<div class="animal-avatar">'+(a.species==='goat'?'🐐':'🐑')+'</div>'+
         '<div class="flex-grow-1" style="min-width:0">'+
           '<div class="d-flex gap-2 flex-wrap align-items-center">'+
-            '<span class="fw-bold">'+(a.breed||'—')+'</span>'+
+            '<span class="fw-bold">'+escapeHtml(a.breed||'—')+'</span>'+
             badgesHtml+
           '</div>'+
           '<small class="text-gray">'+metaText+'</small>'+
@@ -1035,7 +1035,7 @@ window.openAnimalMenu=function(id,breed,tag,status){
   var tagD=decodeURIComponent(tag);
   var label=breedD+(tagD?' #'+tagD:'');
   showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()" style="max-width:360px">'+
-    '<div class="fw-bold mb-3">'+label+'</div>'+
+    '<div class="fw-bold mb-3">'+escapeHtml(label)+'</div>'+
     '<div class="d-flex flex-column gap-2">'+
       '<a href="animal-detail.html?id='+id+'" class="action-btn" style="justify-content:flex-start;gap:10px"><i class="bi bi-eye-fill green-text"></i> عرض البروفايل الكامل</a>'+
       (status==='alive'?'<button class="action-btn" style="justify-content:flex-start;gap:10px" onclick="closeModal();openMarkQuarantine(\''+id+'\',\''+encodeURIComponent(label)+'\')"><i class="bi bi-shield-fill-exclamation" style="color:var(--yellow)"></i> نقل للحجر الصحي</button>':'')+
@@ -1052,17 +1052,17 @@ window.openMarkDeathSingle=function(id,labelEnc){
   var a=animals.find(function(x){return x._id===id;})||{};
   var deathId=genDeathId();
   showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:540px;max-height:92vh;overflow-y:auto">'+
-    '<h4 style="color:var(--red)"><i class="bi bi-x-octagon-fill"></i> تسجيل نفوق: '+lbl+'</h4>'+
+    '<h4 style="color:var(--red)"><i class="bi bi-x-octagon-fill"></i> تسجيل نفوق: '+escapeHtml(lbl)+'</h4>'+
 
     // ── الترقيم + السلالة (read-only)
     '<div class="row g-2">'+
       '<div class="col-6">'+
         '<label>الترقيم</label>'+
-        '<input class="field" value="'+(a.tag||'—')+'" readonly style="background:var(--bg-3);opacity:.7">'+
+        '<input class="field" value="'+escapeHtml(a.tag||'—')+'" readonly style="background:var(--bg-3);opacity:.7">'+
       '</div>'+
       '<div class="col-6">'+
         '<label>السلالة</label>'+
-        '<input class="field" value="'+(a.breed||'—')+'" readonly style="background:var(--bg-3);opacity:.7">'+
+        '<input class="field" value="'+escapeHtml(a.breed||'—')+'" readonly style="background:var(--bg-3);opacity:.7">'+
       '</div>'+
     '</div>'+
 
@@ -1386,7 +1386,7 @@ window._beSubmit=async function(){
 window.openMarkQuarantine = function(id, labelEnc) {
   var lbl = decodeURIComponent(labelEnc);
   showModal(renderFarmModal({
-    icon:'bi-shield-fill-exclamation', color:'var(--yellow)', title:'نقل للحجر الصحي: ' + lbl,
+    icon:'bi-shield-fill-exclamation', color:'var(--yellow)', title:'نقل للحجر الصحي: ' + escapeHtml(lbl),
     style:'max-width:480px',
     bodyHtml:
     '<div class="mb-3 p-3" style="background:rgba(255,193,7,.08);border:1px solid rgba(255,193,7,.3);border-radius:10px;font-size:.82rem">' +
@@ -1430,7 +1430,7 @@ window.openMarkSold = function(id, labelEnc) {
   var lbl = decodeURIComponent(labelEnc);
   var s = getSettings();
   showModal(renderFarmModal({
-    icon:'bi-cash-coin', color:'var(--blue)', title:'تسجيل بيع: ' + lbl,
+    icon:'bi-cash-coin', color:'var(--blue)', title:'تسجيل بيع: ' + escapeHtml(lbl),
     style:'max-width:480px',
     bodyHtml:
     '<div class="row g-2">' +

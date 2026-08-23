@@ -164,11 +164,11 @@ function renderDetail(s){
   // already used by animals.html and dashboard.html, just with this
   // page's own species-specific middle crumb.
   renderPageHeaderV2({
-    title: `${animal.breed||'—'} ${animal.tag?'<span class="type-badge badge-gray" style="font-size:.8rem">#'+animal.tag+'</span>':''}`,
+    title: `${escapeHtml(animal.breed||'—')} ${animal.tag?'<span class="type-badge badge-gray" style="font-size:.8rem">#'+escapeHtml(animal.tag)+'</span>':''}`,
     breadcrumb: [
       {label:'القطيع', href:'animals.html'},
       {label:backSectionLabel, href:backSectionHref},
-      {label:(animal.breed||'—')+(animal.tag?' #'+animal.tag:'')}
+      {label:escapeHtml(animal.breed||'—')+(animal.tag?' #'+escapeHtml(animal.tag):'')}
     ]
   });
 
@@ -179,12 +179,12 @@ function renderDetail(s){
       <div class="d-flex align-items-center gap-3">
         <div style="font-size:4rem;line-height:1">${animal.species==='goat'?'🐐':'🐑'}</div>
         <div>
-          <h3 class="fw-bold mb-1">${animal.breed||'غير معروف'} ${animal.tag?`<span class="type-badge badge-gray" style="font-size:.8rem">#${animal.tag}</span>`:''}</h3>
+          <h3 class="fw-bold mb-1">${escapeHtml(animal.breed||'غير معروف')} ${animal.tag?`<span class="type-badge badge-gray" style="font-size:.8rem">#${escapeHtml(animal.tag)}</span>`:''}</h3>
           <div class="d-flex gap-2 flex-wrap">
             <span class="type-badge ${animal.purpose==='tasmeen'?'badge-tasmeen':animal.purpose==='birth'?'badge-blue':'badge-tarbiya'}">${{tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[animal.purpose]||animal.purpose||'—'}</span>
             <span class="type-badge ${animal.status==='alive'?'badge-tarbiya':'badge-danger'}">${animal.status==='alive'?'حي':'نافق'}</span>
             ${isFemale?`<span class="type-badge ${pregnancyStatus==='pregnant'?'badge-blue':pregnancyStatus==='inseminated'?'badge-yellow':pregnancyStatus==='with_kid'?'badge-tarbiya':'badge-gray'}">${getPregnancyLabel(pregnancyStatus)}</span>`:''}
-            ${animal.barn?`<span class="type-badge badge-gray"><i class="bi bi-building me-1" style="font-size:.65rem"></i>${animal.barn}</span>`:''}
+            ${animal.barn?`<span class="type-badge badge-gray"><i class="bi bi-building me-1" style="font-size:.65rem"></i>${escapeHtml(animal.barn)}</span>`:''}
           </div>
         </div>
       </div>
@@ -226,7 +226,7 @@ function renderDetail(s){
     <a href="health.html" class="tag-link" style="color:var(--red);border-color:rgba(244,67,54,.3)"><i class="bi bi-heart-pulse-fill"></i> السجل الصحي</a>
     <a href="breeding.html" class="tag-link" style="color:var(--purple);border-color:rgba(156,39,176,.3)"><i class="bi bi-diagram-2-fill"></i> التكاثر</a>
     <a href="vaccine.html" class="tag-link" style="color:var(--green);border-color:rgba(0,230,118,.3)"><i class="bi bi-bandaid-fill"></i> التحصين</a>
-    ${animal.barn?`<a href="barns.html" class="tag-link" style="color:var(--blue);border-color:rgba(33,150,243,.3)"><i class="bi bi-building"></i> ${animal.barn}</a>`:''}
+    ${animal.barn?`<a href="barns.html" class="tag-link" style="color:var(--blue);border-color:rgba(33,150,243,.3)"><i class="bi bi-building"></i> ${escapeHtml(animal.barn)}</a>`:''}
   </div>
 
   <!-- Activity Timeline — NEW section, migrated architecture. Unifies
@@ -276,8 +276,8 @@ function renderDetail(s){
               '<span class="type-badge '+(r.status==='active'?'badge-tasmeen':'badge-tarbiya')+'">'+(r.status==='active'?'قيد العلاج':'مكتمل')+'</span>'+
               (inW?'<span class="type-badge badge-danger">سحب '+ar(dLeft)+' يوم</span>':'')+
             '</div>'+
-            '<div style="font-size:.85rem"><span class="text-gray">التشخيص: </span><strong>'+(r.diagnosis||'—')+'</strong> <span class="text-gray mx-1">|</span> <span class="text-gray">الدواء: </span><strong>'+(r.medication||'—')+'</strong></div>'+
-            '<small class="text-gray">'+(r.date||'—')+(r.vet_name?' | د. '+r.vet_name:'')+(r.barn?' | '+r.barn:'')+'</small>'+
+            '<div style="font-size:.85rem"><span class="text-gray">التشخيص: </span><strong>'+escapeHtml(r.diagnosis||'—')+'</strong> <span class="text-gray mx-1">|</span> <span class="text-gray">الدواء: </span><strong>'+escapeHtml(r.medication||'—')+'</strong></div>'+
+            '<small class="text-gray">'+(r.date||'—')+(r.vet_name?' | د. '+escapeHtml(r.vet_name):'')+(r.barn?' | '+escapeHtml(r.barn):'')+'</small>'+
           '</div></div></div>';
       }).join('')+
       (healthRecs.length>4?'<div class="text-center mt-2"><small class="text-gray">و '+ar(healthRecs.length-4)+' سجل أقدم — <a href="health.html" style="color:var(--orange)">عرض الكل</a></small></div>':'')}
@@ -295,7 +295,7 @@ function renderDetail(s){
         var d=r.expected_birth?Math.ceil((new Date(r.expected_birth)-new Date())/86400000):null;
         return'<div class="record-card" style="margin-bottom:8px">'+
           '<div class="d-flex gap-2 flex-wrap mb-1"><span class="type-badge '+sc.cls+'">'+sc.l+'</span>'+(r.offspring_count>=2?'<span class="type-badge badge-purple">توائم</span>':'')+'</div>'+
-          '<div style="font-size:.85rem;color:var(--text-sub)">'+( isFemale?'الفحل: <strong>'+(r.male_tag||r.male_breed||'—')+'</strong>':'الأم: <strong>'+(r.female_tag||r.female_breed||'—')+'</strong>')+'</div>'+
+          '<div style="font-size:.85rem;color:var(--text-sub)">'+( isFemale?'الفحل: <strong>'+escapeHtml(r.male_tag||r.male_breed||'—')+'</strong>':'الأم: <strong>'+escapeHtml(r.female_tag||r.female_breed||'—')+'</strong>')+'</div>'+
           '<small class="text-gray">التقريع: '+(r.mating_date||'—')+( r.expected_birth?' | موعد الولادة: '+r.expected_birth+(r.status==='pregnant'&&d!==null?' <span style="color:'+(d<=0?'var(--red)':d<=7?'var(--orange)':'var(--gray)')+'">('+(d===0?'اليوم!':d<0?'تأخرت!':'بعد '+ar(d)+' يوم')+')</span>':''): '')+( r.status==='born'&&r.offspring_count?' | المواليد: '+ar(r.offspring_count):'')+'</small>'+
         '</div>';
       }).join('')+
@@ -312,7 +312,7 @@ function renderDetail(s){
     ${offspring.length===0?`<div class="text-gray text-center py-3" style="font-size:.85rem">لا توجد مواليد مسجّلة</div>`:`
     <div class="table-responsive"><table class="data-table">
       <thead><tr><th>الترقيم</th><th>الجنس</th><th>تاريخ الميلاد</th><th>الحالة</th><th>عرض</th></tr></thead>
-      <tbody>${offspring.map(o=>`<tr><td class="fw-bold">${o.tag||'—'}</td><td>${o.gender==='male'?'♂ ذكر':'♀ أنثى'}</td><td class="text-gray">${o.birth_date||'—'}</td><td><span class="type-badge ${o.status==='alive'?'badge-tarbiya':'badge-danger'}" style="font-size:.7rem">${o.status==='alive'?'حي':'نافق'}</span></td><td><a href="animal-detail.html?id=${o._id}" class="btn-link">عرض</a></td></tr>`).join('')}</tbody>
+      <tbody>${offspring.map(o=>`<tr><td class="fw-bold">${escapeHtml(o.tag||'—')}</td><td>${o.gender==='male'?'♂ ذكر':'♀ أنثى'}</td><td class="text-gray">${o.birth_date||'—'}</td><td><span class="type-badge ${o.status==='alive'?'badge-tarbiya':'badge-danger'}" style="font-size:.7rem">${o.status==='alive'?'حي':'نافق'}</span></td><td><a href="animal-detail.html?id=${o._id}" class="btn-link">عرض</a></td></tr>`).join('')}</tbody>
     </table></div>`}
   </div>
 
@@ -423,10 +423,10 @@ window.renderAnimalConsumption=async function(animal){
     var html='<div class="wonder-card p-3 mb-3"><h6 class="fw-bold mb-2"><i class="bi bi-clipboard2-pulse me-2" style="color:var(--orange)"></i>استهلاك العلف والعلاج</h6>';
     if(myTreatments.length){
       html+='<div class="mb-2"><small class="text-gray d-block mb-1">آخر العلاجات المُسجَّلة لهذا الحيوان</small>'+
-        myTreatments.map(function(h){return '<div style="font-size:.78rem">'+h.date+' — '+(h.medication||'—')+'</div>';}).join('')+'</div>';
+        myTreatments.map(function(h){return '<div style="font-size:.78rem">'+h.date+' — '+escapeHtml(h.medication||'—')+'</div>';}).join('')+'</div>';
     }
     if(animal.barn){
-      html+='<div class="text-gray" style="font-size:.78rem">استهلاك علف جمالون '+animal.barn+' هذا الشهر: '+ar(Math.round(barnMonthKg))+' كجم (على مستوى الجمالون بأكمله، لا يوجد تتبّع مباشر لكل حيوان)</div>';
+      html+='<div class="text-gray" style="font-size:.78rem">استهلاك علف جمالون '+escapeHtml(animal.barn)+' هذا الشهر: '+ar(Math.round(barnMonthKg))+' كجم (على مستوى الجمالون بأكمله، لا يوجد تتبّع مباشر لكل حيوان)</div>';
     }
     html+='</div>';
     container.innerHTML=html;
@@ -725,15 +725,15 @@ function openEditAnimal(){
     </div>
     <div class="row g-2">
       <div class="col-6"><label>تاريخ الميلاد</label><input type="date" class="field" id="e-bdate" value="${animal.birth_date||''}"></div>
-      <div class="col-6"><label>رقم الترقيم</label><input class="field" id="e-tag" value="${animal.tag||''}"></div>
+      <div class="col-6"><label>رقم الترقيم</label><input class="field" id="e-tag" value="${escapeHtml(animal.tag||'')}"></div>
     </div>
     <div class="row g-2">
-      <div class="col-6"><label>رقم الأم</label><input class="field" id="e-mother-tag" value="${animal.mother_tag||''}" placeholder="F-101"></div>
-      <div class="col-6"><label>رقم الأب</label><input class="field" id="e-father-tag" value="${animal.father_tag||''}" placeholder="M-001"></div>
+      <div class="col-6"><label>رقم الأم</label><input class="field" id="e-mother-tag" value="${escapeHtml(animal.mother_tag||'')}" placeholder="F-101"></div>
+      <div class="col-6"><label>رقم الأب</label><input class="field" id="e-father-tag" value="${escapeHtml(animal.father_tag||'')}" placeholder="M-001"></div>
     </div>
     <label>الجمالون/العنبر</label>
     <select class="field" id="e-barn">${barns.map(b=>`<option value="${b}" ${animal.barn===b?'selected':''}>${b||'— غير محدد —'}</option>`).join('')}</select>
-    <label>ملاحظات</label><textarea class="field" id="e-notes" rows="2">${animal.notes||''}</textarea>
+    <label>ملاحظات</label><textarea class="field" id="e-notes" rows="2">${escapeHtml(animal.notes||'')}</textarea>
     <div class="d-flex gap-2 justify-content-end mt-3">
       <button class="action-btn" onclick="closeModal()">إلغاء</button>
       <button class="action-btn primary" onclick="submitEditAnimal()">حفظ</button>
@@ -807,7 +807,7 @@ function openAddOffspring(){
   const s=getSettings();
   showModal(`<div class="farm-modal" onclick="event.stopPropagation()">
     <h4><i class="bi bi-stars accent-text"></i> تسجيل مولود جديد</h4>
-    <div class="d-flex gap-2 p-2 mb-3" style="background:rgba(0,230,118,.06);border-radius:10px;font-size:.82rem"><i class="bi bi-info-circle-fill green-text"></i><span class="text-gray">الأم: <strong>${animal.breed} ${animal.tag?'#'+animal.tag:''}</strong></span></div>
+    <div class="d-flex gap-2 p-2 mb-3" style="background:rgba(0,230,118,.06);border-radius:10px;font-size:.82rem"><i class="bi bi-info-circle-fill green-text"></i><span class="text-gray">الأم: <strong>${escapeHtml(animal.breed||'')} ${animal.tag?'#'+escapeHtml(animal.tag):''}</strong></span></div>
     <div class="row g-2">
       <div class="col-6"><label>جنس المولود</label><select class="field" id="o-gender"><option value="female">أنثى</option><option value="male">ذكر</option></select></div>
       <div class="col-6"><label>عدد المواليد</label><input type="number" class="field" id="o-qty" value="1" min="1" max="5"></div>
