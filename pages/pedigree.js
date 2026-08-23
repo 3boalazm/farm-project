@@ -73,7 +73,7 @@ function render() {
           ${_allAnimals
             .filter(a => a.tag || a.breed)
             .slice(0, 250)
-            .map(a => `<option value="${a._id}"${a._id === _currentId ? ' selected' : ''}>${a.tag ? '#' + a.tag + ' • ' : ''}${a.breed || '—'} ${a.gender === 'female' ? '♀' : '♂'}</option>`)
+            .map(a => `<option value="${a._id}"${a._id === _currentId ? ' selected' : ''}>${a.tag ? '#' + escapeHtml(a.tag) + ' • ' : ''}${escapeHtml(a.breed || '—')} ${a.gender === 'female' ? '♀' : '♂'}</option>`)
             .join('')}
         </select>
       </div>
@@ -235,10 +235,10 @@ function renderNode(animal, role, gender) {
   const cls = animal.gender === 'female' ? 'female' : 'male';
   const icon = animal.species === 'goat' ? '🐐' : '🐑';
   const ageStr = animal.birth_date ? calcAge(animal.birth_date) : '';
-  return `<a href="pedigree.html?id=${animal._id}" class="ped-node ${cls}" aria-label="${animal.breed || ''} ${animal.tag || ''}">
+  return `<a href="pedigree.html?id=${animal._id}" class="ped-node ${cls}" aria-label="${escapeHtml(animal.breed || '')} ${escapeHtml(animal.tag || '')}">
     <div class="ped-icon" aria-hidden="true">${icon}</div>
-    <div class="ped-name">${animal.tag ? '#' + animal.tag : (animal.breed || '—')}</div>
-    <div class="ped-meta">${animal.breed || ''} ${animal.gender === 'female' ? '♀' : '♂'}</div>
+    <div class="ped-name">${animal.tag ? '#' + escapeHtml(animal.tag) : escapeHtml(animal.breed || '—')}</div>
+    <div class="ped-meta">${escapeHtml(animal.breed || '')} ${animal.gender === 'female' ? '♀' : '♂'}</div>
     ${ageStr ? `<div class="ped-meta">${ageStr}</div>` : ''}
     ${role ? `<div class="ped-meta" style="color:var(--orange);font-weight:600">${role}</div>` : ''}
   </a>`;
@@ -248,10 +248,10 @@ function renderCenterNode(animal) {
   const icon = animal.species === 'goat' ? '🐐' : '🐑';
   const ageStr = animal.birth_date ? calcAge(animal.birth_date) : '';
   const statusBadgeHtml = (typeof statusBadge === 'function') ? statusBadge(animal.status || 'alive') : '';
-  return `<div class="ped-node center" role="region" aria-label="الحيوان المحدد: ${animal.breed} ${animal.tag||''}">
+  return `<div class="ped-node center" role="region" aria-label="الحيوان المحدد: ${escapeHtml(animal.breed || '')} ${escapeHtml(animal.tag||'')}">
     <div class="ped-icon" aria-hidden="true">${icon}</div>
-    <div class="ped-name">${animal.tag ? '#' + animal.tag : (animal.breed || '—')}</div>
-    <div class="ped-meta">${animal.breed || ''} ${animal.gender === 'female' ? '♀' : '♂'}</div>
+    <div class="ped-name">${animal.tag ? '#' + escapeHtml(animal.tag) : escapeHtml(animal.breed || '—')}</div>
+    <div class="ped-meta">${escapeHtml(animal.breed || '')} ${animal.gender === 'female' ? '♀' : '♂'}</div>
     ${ageStr ? `<div class="ped-meta">${ageStr}</div>` : ''}
     <div style="margin-top:6px">${statusBadgeHtml}</div>
     <a href="animal-detail.html?id=${animal._id}" class="action-btn sm primary" style="margin-top:6px;padding:3px 10px;font-size:.72rem" aria-label="عرض البروفايل الكامل"><i class="bi bi-eye-fill" aria-hidden="true"></i> البروفايل</a>
@@ -314,8 +314,8 @@ window.filterPedSearch = function(q) {
     return;
   }
   resEl.innerHTML = '<div class="d-flex flex-wrap gap-2">' +
-    matches.map(a => `<button class="action-btn sm" onclick="selectAnimal('${a._id}')" style="font-size:.78rem" aria-label="اختيار ${a.breed} ${a.tag||''}">
-      ${a.species === 'goat' ? '🐐' : '🐑'} ${a.tag ? '#'+a.tag+' • ' : ''}${a.breed||'—'} ${a.gender === 'female' ? '♀' : '♂'}
+    matches.map(a => `<button class="action-btn sm" onclick="selectAnimal('${a._id}')" style="font-size:.78rem" aria-label="اختيار ${escapeHtml(a.breed || '')} ${escapeHtml(a.tag||'')}">
+      ${a.species === 'goat' ? '🐐' : '🐑'} ${a.tag ? '#'+escapeHtml(a.tag)+' • ' : ''}${escapeHtml(a.breed||'—')} ${a.gender === 'female' ? '♀' : '♂'}
     </button>`).join('') +
   '</div>';
 };
