@@ -266,7 +266,7 @@ function renderNavbarV2(activePage=''){
   const html=`
   <div class="rail-v2-mobile-bar">
     <button class="menu-btn" onclick="toggleRailDrawerMobile()" aria-label="القائمة" title="القائمة" data-hint="القائمة" id="railV2MobileMenuBtn"><i class="bi bi-list"></i></button>
-    <span class="fw-bold">${s.farmName}</span>
+    <span class="fw-bold">${escapeHtml(s.farmName||'')}</span>
     <button class="menu-btn" onclick="toggleRailPanel()" aria-label="لوحة المستخدم" title="لوحة المستخدم" data-hint="لوحة المستخدم" id="railV2MobilePanelBtn"><i class="bi bi-person-circle"></i></button>
   </div>
 
@@ -274,20 +274,20 @@ function renderNavbarV2(activePage=''){
 
   <aside class="rail-v2" aria-label="التنقل الرئيسي">
     <div class="rail-v2__logo-row">
-      <button type="button" class="rail-v2__logo" onclick="toggleRailExpanded()" aria-label="${s.farmName} — توسيع/طي القائمة" title="توسيع/طي القائمة" data-hint="توسيع/طي القائمة">${logoHtml}</button>
+      <button type="button" class="rail-v2__logo" onclick="toggleRailExpanded()" aria-label="${escapeHtml(s.farmName||'')} — توسيع/طي القائمة" title="توسيع/طي القائمة" data-hint="توسيع/طي القائمة">${logoHtml}</button>
     </div>
     <nav class="rail-v2__nav">${railSections}</nav>
     <div class="rail-v2__bottom">
       <button class="rail-v2__btn" onclick="toggleTheme()" id="theme-toggle-btn" title="تبديل المظهر" data-hint="تبديل المظهر"><i class="bi bi-circle-half" id="theme-icon"></i></button>
-      <button class="rail-v2__avatar" onclick="toggleRailPanel()" aria-label="لوحة المستخدم" title="لوحة المستخدم" data-hint="لوحة المستخدم">${(u?.name||'م').slice(0,1)}</button>
+      <button class="rail-v2__avatar" onclick="toggleRailPanel()" aria-label="لوحة المستخدم" title="لوحة المستخدم" data-hint="لوحة المستخدم">${escapeHtml((u?.name||'م').slice(0,1))}</button>
     </div>
   </aside>
 
   <button class="rail-v2-toggle" id="railV2ToggleBtn" onclick="toggleRailPanel()" aria-label="إخفاء/إظهار اللوحة الجانبية" title="إخفاء/إظهار اللوحة" data-hint="إخفاء/إظهار اللوحة"><i class="bi bi-layout-sidebar-inset"></i></button>
   <aside class="rail-v2-panel" id="railV2Panel" aria-label="لوحة المستخدم">
     <div class="rail-v2-panel__profile">
-      <div class="rail-v2-panel__avatar">${(u?.name||'م').slice(0,1)}</div>
-      <div><div class="fw-bold">${u?.name||'مدير'}</div>
+      <div class="rail-v2-panel__avatar">${escapeHtml((u?.name||'م').slice(0,1))}</div>
+      <div><div class="fw-bold">${escapeHtml(u?.name||'مدير')}</div>
       <small style="color:${ROLES[u?.role||'admin']?.color}">${ROLES[u?.role||'admin']?.label}</small></div>
     </div>
     <div class="rail-v2-panel__actions">
@@ -297,7 +297,7 @@ function renderNavbarV2(activePage=''){
     <a href="assistant.html" class="action-btn primary sm" style="width:100%;justify-content:center;margin-bottom:16px" data-hint="اسأل المساعد الذكي"><i class="bi bi-robot"></i> المساعد الذكي</a>
 
     <div class="rail-v2-panel__info">
-      <div class="rail-v2-panel__info-row"><i class="bi bi-house-door"></i><span>${s.farmName}</span></div>
+      <div class="rail-v2-panel__info-row"><i class="bi bi-house-door"></i><span>${escapeHtml(s.farmName||'')}</span></div>
       <div class="rail-v2-panel__info-row"><i class="bi bi-calendar3"></i><span>${todayAr()}</span></div>
     </div>
 
@@ -1054,7 +1054,7 @@ window.openUnifiedBirthModal=function(defaultSpecies){
         '<input type="number" class="field" id="ub-amount" placeholder="0" min="0">'+
       '</div>'+
     '</div>'+
-    '<label>سُجِّل بواسطة</label><input class="field" id="ub-addedby" value="'+(u?.name||'')+'">'+
+    '<label>سُجِّل بواسطة</label><input class="field" id="ub-addedby" value="'+escapeHtml(u?.name||'')+'">'+
     '<label>ملاحظات</label><textarea class="field" id="ub-notes" rows="2"></textarea>'+
     '<div class="d-flex gap-2 justify-content-end mt-3">'+
       '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
