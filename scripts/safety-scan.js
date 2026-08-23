@@ -134,6 +134,66 @@ for (const rel of allJsHtml) {
 }
 console.log('  (`.innerHTML=` is a pervasive, already-established pattern across this codebase -- not individually flagged per file; a wholesale migration is out of this scan\'s scope.)');
 
+// ── Check 4: XSS-fix regression guard (2026-08-24) ──────────────
+// Not a general new-vulnerability detector (that needs a real audit pass,
+// see docs/repository/XSS-AUDIT-2026-08-23.md/XSS-FIX-2026-08-24.md) --
+// a simple, maintainable tripwire for the specific 25 sinks fixed in that
+// pass. Each entry: the file, and the exact escapeHtml(...) expression
+// that was inserted there. A future edit that removes the expression
+// (e.g. someone "simplifies" the line back to the raw field) fails
+// CRITICAL. Deliberately a flat string-presence check, not a line/anchor
+// match -- simpler and far less prone to false positives from harmless
+// reformatting nearby.
+console.log('\n-- Check 4: XSS-fix regression guard (sinks fixed 2026-08-24) --');
+const XSS_FIX_SITES = [
+  { file: 'shared.js', mustContain: 'title=escapeHtml(title)' },
+  { file: 'shared.js', mustContain: 'eventType=escapeHtml(eventType)' },
+  { file: 'dashboard.html', mustContain: 'escapeHtml(t.title' },
+  { file: 'dashboard.html', mustContain: 'escapeHtml(r.module)' },
+  { file: 'dashboard.html', mustContain: 'escapeHtml(r.animalTag||r.animalId)' },
+  { file: path.join('pages', 'reports.js'), mustContain: 'escapeHtml(r.description' },
+  { file: path.join('pages', 'reports.js'), mustContain: 'escapeHtml(r.animal_tag' },
+  { file: path.join('pages', 'reports.js'), mustContain: 'escapeHtml(med.name' },
+  { file: path.join('pages', 'reports.js'), mustContain: 'escapeHtml(m2.med' },
+  { file: path.join('pages', 'reports.js'), mustContain: 'escapeHtml(w.animalTag)' },
+  { file: path.join('pages', 'reports.js'), mustContain: 'escapeHtml(h.animalTag)' },
+  { file: path.join('pages', 'reports.js'), mustContain: 'escapeHtml(h.evidence' },
+  { file: path.join('pages', 'reports.js'), mustContain: 'escapeHtml(t.item_name)' },
+  { file: path.join('pages', 'reports.js'), mustContain: 'escapeHtml(c.feed_name)' },
+  { file: 'barns.html', mustContain: 'escapeHtml(b)' },
+  { file: 'barns.html', mustContain: 'escapeHtml(a.breed)' },
+  { file: 'barns.html', mustContain: "escapeHtml(a.tag||'—')" },
+  { file: path.join('pages', 'farm_profile.js'), mustContain: 'escapeHtml((u.name' },
+  { file: 'births.html', mustContain: 'escapeHtml(breed)' },
+  { file: 'goats.html', mustContain: 'escapeHtml(a.breed||' },
+  { file: 'sheep.html', mustContain: 'escapeHtml(a.breed||' },
+  { file: path.join('pages', 'pedigree.js'), mustContain: 'escapeHtml(a.tag)' },
+  { file: path.join('pages', 'pedigree.js'), mustContain: 'escapeHtml(animal.breed' },
+  { file: 'assistant.html', mustContain: 'escapeHtml(String(text))' },
+  { file: 'assistant.html', mustContain: 'escapeHtml(fieldLabels[k]||k)' },
+  { file: 'assistant.html', mustContain: 'escapeHtml(d.mother_tag' },
+  { file: 'assistant.html', mustContain: 'escapeHtml(_farmContext)' },
+];
+let xssRegressions = 0;
+const xssFilesChecked = new Set();
+for (const { file, mustContain } of XSS_FIX_SITES) {
+  let content;
+  try {
+    content = readFile(file);
+  } catch (e) {
+    console.log(`  CRITICAL  ${file} -- file no longer exists (was a fixed XSS sink)`);
+    criticalCount++; xssRegressions++;
+    continue;
+  }
+  if (content.includes(mustContain)) {
+    xssFilesChecked.add(file);
+  } else {
+    console.log(`  CRITICAL  ${file} -- fixed XSS sink lost its call: "${mustContain}"`);
+    criticalCount++; xssRegressions++;
+  }
+}
+if (xssRegressions === 0) console.log(`  OK    ${xssFilesChecked.size} files, ${XSS_FIX_SITES.length} fixed sinks -- all still present, no regressions.`);
+
 // ── Summary ──────────────────────────────────────────────────────
 console.log(`\n=== Summary: ${criticalCount} CRITICAL, ${reviewCount} REVIEW ===`);
 if (criticalCount > 0) {
