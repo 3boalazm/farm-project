@@ -3573,6 +3573,13 @@ var DEFAULT_CHART_OF_ACCOUNTS=[
   {code:'1120',name_ar:'عهدة نثرية',name_en:'Petty Cash',type:'ASSET',parentId:'1100'},
   {code:'1200',name_ar:'البنك',name_en:'Bank',type:'ASSET',parentId:'1000'},
   {code:'1300',name_ar:'ذمم مدينة',name_en:'Accounts Receivable',type:'ASSET',parentId:'1000'},
+  // Added in Phase 19 (Legacy Migration): the OLD `finance` collection
+  // never recorded which cash/bank/AR/AP account a record actually
+  // touched -- only that money moved. Rather than guessing a specific
+  // real account (which would be inventing evidence), every migrated
+  // record's cash-side leg posts here instead, clearly separated from
+  // genuine, evidenced post-migration activity.
+  {code:'1350',name_ar:'حساب ترحيل بيانات قديمة',name_en:'Legacy Migration Clearing Account',type:'ASSET',parentId:'1000'},
   {code:'1400',name_ar:'المخزون',name_en:'Inventory',type:'ASSET',parentId:'1000',postable:false},
   {code:'1410',name_ar:'مخزون الأعلاف',name_en:'Feed Inventory',type:'ASSET',parentId:'1400'},
   {code:'1420',name_ar:'مخزون الأدوية',name_en:'Medicine Inventory',type:'ASSET',parentId:'1400'},
@@ -5582,6 +5589,146 @@ window.getFinancialAuditTrail=async function(entity,entityId){
   });
   rows.sort(function(a,b){return (a.timestamp||'').localeCompare(b.timestamp||'');});
   return {ok:true, entries:rows};
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — LEGACY FINANCE MIGRATION (Phase 19). No new
+//  collection for the legacy data itself -- the existing `finance`
+//  collection is NEVER deleted, edited, or written to by anything in
+//  this engine; migration only ever READS it and creates NEW,
+//  traceable journal_entries elsewhere, tagged 'legacy_migration' with
+//  the original record's own Firebase key as sourceId (so it can always
+//  be traced back to exactly the source record it came from, and a
+//  re-run is naturally idempotent via Phase 6's
+//  _findExistingJournalBySource pattern).
+//
+//  Per the Phase 0 baseline audit: the old `finance` collection never
+//  recorded WHICH cash/bank/AR/AP account actually moved -- only that
+//  money did. Rather than inventing a specific account (which would be
+//  fabricating evidence the old record never captured), every migrated
+//  record's cash-side leg posts against 1350 (Legacy Migration Clearing
+//  Account) instead of a real cash/bank account. Also per that same
+//  audit: legacy `type:'loss'` records were never consumed by any
+//  report and have no settled account mapping -- they are surfaced as
+//  AMBIGUOUS here, never silently migrated with a guessed treatment.
+//
+//  IMPORTANT: this file only builds and tests the migration MACHINERY.
+//  Actually running it against this farm's real, live `finance` history
+//  is a deliberate, separate decision for a human to make and review --
+//  nothing in this codebase invokes these functions automatically.
+// ══════════════════════════════════════════════════════════════
+
+var LEGACY_MIGRATION_CLEARING_ACCOUNT='1350';
+
+var LEGACY_CATEGORY_ACCOUNT_MAP={
+  'بيع حيوانات':'4100', 'بيع ألبان':'4200', 'بيع صوف':'4300', 'بيع سماد':'4400', 'إيراد آخر':'4900',
+  'أعلاف ومواد تغذية':'6100',
+  'أدوية وتحصينات':'6200', 'أدوية وعلاجات':'6200', // both map to Medicine Expense -- the second string is the confirmed mismatch found in the Phase 0 audit (medicinePurchase() posted this exact spelling, never actually reachable from the live UI, but present in legacy data if it was ever called)
+  'عمالة':'6300', 'كهرباء ومياه':'6400', 'صيانة معدات':'6500', 'نقل وشحن':'6600', 'إيجار':'6700', 'مصروف آخر':'6900',
+};
+
+function _classifyLegacyRecord(rec){
+  if(rec.type==='loss') return {bucket:'ambiguous', reason:'نوع "loss" لا يوجد له تصنيف محاسبي محسوم بعد -- لم يُقرأ من أي تقرير في النظام القديم'};
+  if(rec.type!=='income' && rec.type!=='expense') return {bucket:'unmapped', reason:'نوع سجل غير معروف: '+rec.type};
+  var accountId=LEGACY_CATEGORY_ACCOUNT_MAP[rec.category];
+  if(!accountId) return {bucket:'unmapped', reason:'فئة غير مُعرَّفة في خريطة الترحيل: '+(rec.category||'—')};
+  if(!(+rec.amount>0)) return {bucket:'unmapped', reason:'مبلغ غير صالح'};
+  if(!rec.date) return {bucket:'unmapped', reason:'لا يوجد تاريخ'};
+  return {bucket:'migratable', accountId:accountId};
+}
+
+// Read-only. Never writes anything -- exactly the Master Prompt's own
+// "DO NOT proceed if unexplained differences are material" spirit,
+// applied before a single write is even attempted.
+window.analyzeLegacyFinanceMigration=async function(){
+  var legacy=await fbGet('finance');
+  var migratedEntries=await fbGet('journal_entries');
+  var alreadyMigratedIds={};
+  migratedEntries.forEach(function(e){ if(e.sourceType==='legacy_migration') alreadyMigratedIds[e.sourceId]=true; });
+
+  var report={recordCount:legacy.length, totalIncome:0, totalExpense:0, byCategory:{},
+    migratable:[], ambiguous:[], unmapped:[], alreadyMigrated:[]};
+  legacy.forEach(function(rec){
+    if(rec.type==='income') report.totalIncome+=(+rec.amount||0);
+    if(rec.type==='expense') report.totalExpense+=(+rec.amount||0);
+    var cat=rec.category||'—';
+    report.byCategory[cat]=(report.byCategory[cat]||0)+(+rec.amount||0);
+
+    if(alreadyMigratedIds[rec._id]){ report.alreadyMigrated.push(rec._id); return; }
+    var cls=_classifyLegacyRecord(rec);
+    if(cls.bucket==='migratable') report.migratable.push({id:rec._id, accountId:cls.accountId, amount:+rec.amount});
+    else report[cls.bucket].push({id:rec._id, reason:cls.reason, record:rec});
+  });
+  report.totalIncome=Math.round(report.totalIncome*100)/100;
+  report.totalExpense=Math.round(report.totalExpense*100)/100;
+  Object.keys(report.byCategory).forEach(function(k){ report.byCategory[k]=Math.round(report.byCategory[k]*100)/100; });
+  return {ok:true, report:report};
+};
+
+// The real executor. dryRun:true (default) simulates and reports without
+// writing -- opts.dryRun must be explicitly set to false to actually
+// post anything. Every migrated entry is dated with the ORIGINAL
+// record's own date (never today's date), preserving real chronology.
+window.migrateLegacyFinanceRecords=async function(opts){
+  opts=opts||{};
+  var dryRun=opts.dryRun!==false;
+  if(!dryRun && !can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+
+  var analysis=await window.analyzeLegacyFinanceMigration();
+  var result={dryRun:dryRun, migrated:0, skipped:analysis.report.ambiguous.length+analysis.report.unmapped.length,
+    alreadyMigrated:analysis.report.alreadyMigrated.length, errors:[]};
+
+  var legacy=await fbGet('finance');
+  var byId={}; legacy.forEach(function(r){ byId[r._id]=r; });
+
+  for(var i=0;i<analysis.report.migratable.length;i++){
+    var m=analysis.report.migratable[i];
+    var rec=byId[m.id];
+    if(!rec) continue;
+    if(dryRun){ result.migrated++; continue; }
+    var lines=rec.type==='income'
+      ? [{accountId:LEGACY_MIGRATION_CLEARING_ACCOUNT, debit:m.amount},{accountId:m.accountId, credit:m.amount}]
+      : [{accountId:m.accountId, debit:m.amount},{accountId:LEGACY_MIGRATION_CLEARING_ACCOUNT, credit:m.amount}];
+    var posted=await window.postJournalEntry({
+      date:rec.date, description:'LEGACY_MIGRATED: '+(rec.description||rec.category||rec._id),
+      sourceType:'legacy_migration', sourceId:rec._id, lines:lines,
+    });
+    if(posted.ok) result.migrated++;
+    else result.errors.push({id:m.id, error:posted.error});
+  }
+  return {ok:true, result:result, skippedDetail:{ambiguous:analysis.report.ambiguous, unmapped:analysis.report.unmapped}};
+};
+
+// Compares legacy `finance` totals against what migration actually
+// posted (summed straight from journal_entries, never trusted from a
+// stored counter) -- any gap must be fully explained by what's
+// documented as skipped, or the migration isn't reconciled.
+window.getLegacyMigrationReconciliation=async function(){
+  var legacy=await fbGet('finance');
+  var entries=await fbGet('journal_entries');
+  var legacyIncome=0, legacyExpense=0;
+  legacy.forEach(function(r){
+    if(r.type==='income') legacyIncome+=(+r.amount||0);
+    if(r.type==='expense') legacyExpense+=(+r.amount||0);
+  });
+  var migratedIncome=0, migratedExpense=0, migratedCount=0;
+  entries.forEach(function(e){
+    if(e.sourceType!=='legacy_migration') return;
+    migratedCount++;
+    (e.lines||[]).forEach(function(l){
+      if(l.accountId===LEGACY_MIGRATION_CLEARING_ACCOUNT){
+        if((+l.debit||0)>0) migratedIncome+=(+l.debit||0); // clearing debited = an income record
+        if((+l.credit||0)>0) migratedExpense+=(+l.credit||0); // clearing credited = an expense record
+      }
+    });
+  });
+  legacyIncome=Math.round(legacyIncome*100)/100; legacyExpense=Math.round(legacyExpense*100)/100;
+  migratedIncome=Math.round(migratedIncome*100)/100; migratedExpense=Math.round(migratedExpense*100)/100;
+  return {
+    ok:true, legacyRecordCount:legacy.length, migratedEntryCount:migratedCount,
+    legacyIncome:legacyIncome, migratedIncome:migratedIncome, incomeGap:Math.round((legacyIncome-migratedIncome)*100)/100,
+    legacyExpense:legacyExpense, migratedExpense:migratedExpense, expenseGap:Math.round((legacyExpense-migratedExpense)*100)/100,
+  };
 };
 
 // ══════════════════════════════════════════════════════
