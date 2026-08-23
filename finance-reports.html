@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <!-- Performance hints -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://farm-mz99-default-rtdb.europe-west1.firebasedatabase.app" crossorigin>
+  <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+  <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
+
+<script>(function(){var t=localStorage.getItem('farm_theme');if(t==='light')document.documentElement.classList.add('light-mode');}());</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>التقارير المالية — بيان المزرعة</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="media/logo-icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="media/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="media/favicon-16.png">
+<link rel="apple-touch-icon" href="media/apple-touch-icon.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="page-wrap rail-v2-content">
+  <div id="page-header"></div>
+
+  <div class="wonder-card mb-4">
+    <div class="d-flex flex-wrap align-items-end gap-3">
+      <div>
+        <label class="form-label small text-gray mb-1">من تاريخ</label>
+        <input type="date" id="fr-start" class="form-control form-control-sm">
+      </div>
+      <div>
+        <label class="form-label small text-gray mb-1">إلى تاريخ</label>
+        <input type="date" id="fr-end" class="form-control form-control-sm">
+      </div>
+      <button class="action-btn" onclick="loadFinanceReports()"><i class="bi bi-arrow-clockwise me-1"></i> تحديث</button>
+      <span id="fr-health-badge"></span>
+    </div>
+  </div>
+
+  <div id="fr-kpis" class="kpi-grid mb-4"></div>
+  <div id="fr-body"></div>
+
+  <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
+    © <span id="footer-year"></span> <span id="footer-farm"></span><br>
+    <small style="font-size:.72rem;color:var(--text-muted)">إشراف: لواء أحمد رجب نوح | تطوير: جندي مصطفى محمد إبراهيم</small>
+  </footer>
+</div>
+<script src="config.js"></script>
+<script src="firebase.js"></script>
+<script src="nav.js"></script>
+<script src="shared.js"></script>
+<script src="offline-sync.js" defer></script>
+<script src="pages/datepicker.js" defer></script>
+<script>
+'use strict';
+
+function frMoney(n){
+  if(n===null||n===undefined) return '—';
+  return ar(Math.round(n*100)/100)+' '+getSettings().currency;
+}
+
+document.addEventListener('DOMContentLoaded', async ()=>{
+  if(!requireAuth())return;
+  if(!can('finance')){
+    document.body.innerHTML='<div class="page-wrap"><div class="empty-state" style="padding-top:100px"><i class="bi bi-shield-x" style="font-size:3rem;display:block;margin-bottom:10px;opacity:.4"></i><p>غير مصرح بالوصول</p><a href="dashboard.html" class="action-btn">الرئيسية</a></div></div>';
+    return;
+  }
+  initFirebase();
+  const s=getSettings();
+  document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
+  document.getElementById('footer-farm').textContent=s.farmName;
+  renderNavbarV2('finance-reports.html');
+  renderPageHeader('<i class="bi bi-graph-up-arrow accent-text"></i> التقارير المالية',
+    'قائمة الدخل، الميزانية العمومية، ميزان المراجعة، والتدفق النقدي — من دفتر الأستاذ الفعلي مباشرة','');
+
+  const today=todayStr();
+  const monthStart=today.slice(0,7)+'-01';
+  document.getElementById('fr-start').value=monthStart;
+  document.getElementById('fr-end').value=today;
+
+  await loadFinanceReports();
+});
+
+window.loadFinanceReports=async function(){
+  const startDate=document.getElementById('fr-start').value;
+  const endDate=document.getElementById('fr-end').value;
+  if(!startDate||!endDate){ toast('يرجى تحديد الفترة','error'); return; }
+
+  document.getElementById('fr-kpis').innerHTML=[1,2,3,4,5,6].map(()=>renderKPICard({loading:true})).join('');
+  document.getElementById('fr-body').innerHTML='<div class="text-center py-5"><div class="spinner"></div><div class="text-gray mt-2">جاري تحميل التقارير...</div></div>';
+  document.getElementById('fr-health-badge').innerHTML='';
+
+  const [kpis, integrity] = await Promise.all([
+    getFinancialDashboardKPIs(startDate,endDate),
+    getFinancialIntegrityStatus(),
+  ]);
+
+  if(!kpis.ok){
+    document.getElementById('fr-kpis').innerHTML='';
+    document.getElementById('fr-body').innerHTML=`<div class="empty-state py-5"><i class="bi bi-exclamation-triangle" style="font-size:2.5rem;opacity:.4"></i><p class="mt-2">${kpis.error||'تعذر تحميل التقارير'}</p></div>`;
+    return;
+  }
+
+  if(integrity.ok){
+    const badgeColor=integrity.healthy?'var(--green)':'var(--red)';
+    const badgeLabel=integrity.healthy?'دفتر الأستاذ متزن':'يوجد خلل في البيانات المالية';
+    document.getElementById('fr-health-badge').innerHTML=`<span style="background:${badgeColor}22;color:${badgeColor};border:1px solid ${badgeColor}55;border-radius:20px;padding:4px 12px;font-size:.78rem;font-weight:700"><i class="bi bi-${integrity.healthy?'check-circle-fill':'exclamation-triangle-fill'} me-1"></i>${badgeLabel}${!integrity.healthy?' ('+ar(integrity.dataQualityIssueCount)+')':''}</span>`;
+  }
+
+  document.getElementById('fr-kpis').innerHTML=[
+    renderKPICard({label:'الإيرادات', value:frMoney(kpis.revenue), status:'normal'}),
+    renderKPICard({label:'المصروفات', value:frMoney(kpis.expense), status:'normal'}),
+    renderKPICard({label:'صافي الدخل', value:frMoney(kpis.netIncome), status:kpis.netIncome>=0?'normal':'alert'}),
+    renderKPICard({label:'إجمالي الأصول', value:frMoney(kpis.totalAssets), status:'normal'}),
+    renderKPICard({label:'صافي التدفق النقدي', value:kpis.netCashFlow===null?null:frMoney(kpis.netCashFlow), status:'normal'}),
+    renderKPICard({label:'هامش الربح الصافي', value:kpis.netProfitMarginPercent===null?null:ar(kpis.netProfitMarginPercent)+'%', status:'normal'}),
+  ].join('');
+
+  const [incomeStatement, balanceSheet, trialBalance] = await Promise.all([
+    getIncomeStatement(startDate,endDate),
+    getBalanceSheet(endDate),
+    getTrialBalance(endDate),
+  ]);
+
+  let html='';
+
+  html+=renderSectionContainer({
+    title:'قائمة الدخل', description:startDate+' → '+endDate,
+    contentHtml: !incomeStatement.ok ? `<div class="text-gray">${incomeStatement.error}</div>` : frRenderIncomeStatement(incomeStatement),
+  });
+
+  html+=renderSectionContainer({
+    title:'الميزانية العمومية', description:'كما في '+endDate,
+    contentHtml: !balanceSheet.ok ? `<div class="text-gray">${balanceSheet.error}</div>` : frRenderBalanceSheet(balanceSheet),
+  });
+
+  html+=renderSectionContainer({
+    title:'ميزان المراجعة', description:'كما في '+endDate,
+    contentHtml: !trialBalance.ok ? `<div class="text-gray">${trialBalance.error}</div>` : frRenderTrialBalance(trialBalance),
+  });
+
+  document.getElementById('fr-body').innerHTML=html;
+};
+
+function frRenderIncomeStatement(r){
+  if(!r.revenue.length && !r.expense.length) return '<div class="empty-state py-4"><i class="bi bi-inbox" style="font-size:2rem;opacity:.4"></i><p class="mt-2">لا يوجد نشاط في هذه الفترة</p></div>';
+  const rows=(list,cls)=>list.map(x=>`<tr><td>${x.name}</td><td class="text-end ${cls}">${frMoney(x.amount)}</td></tr>`).join('');
+  return `
+    <table class="table table-sm">
+      <thead><tr><th>الإيرادات</th><th class="text-end"></th></tr></thead>
+      <tbody>${rows(r.revenue,'')}</tbody>
+      <tfoot><tr class="fw-bold"><td>إجمالي الإيرادات</td><td class="text-end">${frMoney(r.totalRevenue)}</td></tr></tfoot>
+    </table>
+    <table class="table table-sm">
+      <thead><tr><th>المصروفات</th><th class="text-end"></th></tr></thead>
+      <tbody>${rows(r.expense,'')}</tbody>
+      <tfoot><tr class="fw-bold"><td>إجمالي المصروفات</td><td class="text-end">${frMoney(r.totalExpense)}</td></tr></tfoot>
+    </table>
+    <div class="fw-bold mt-2" style="font-size:1.05rem;color:${r.netIncome>=0?'var(--green)':'var(--red)'}">صافي الدخل: ${frMoney(r.netIncome)}</div>`;
+}
+
+function frRenderBalanceSheet(r){
+  const rows=list=>list.map(x=>`<tr><td>${x.name}</td><td class="text-end">${frMoney(x.balance)}</td></tr>`).join('');
+  return `
+    <div class="row g-3">
+      <div class="col-md-4">
+        <table class="table table-sm">
+          <thead><tr><th>الأصول</th><th class="text-end"></th></tr></thead>
+          <tbody>${rows(r.assets)}</tbody>
+          <tfoot><tr class="fw-bold"><td>الإجمالي</td><td class="text-end">${frMoney(r.totalAssets)}</td></tr></tfoot>
+        </table>
+      </div>
+      <div class="col-md-4">
+        <table class="table table-sm">
+          <thead><tr><th>الخصوم</th><th class="text-end"></th></tr></thead>
+          <tbody>${rows(r.liabilities)}</tbody>
+          <tfoot><tr class="fw-bold"><td>الإجمالي</td><td class="text-end">${frMoney(r.totalLiabilities)}</td></tr></tfoot>
+        </table>
+      </div>
+      <div class="col-md-4">
+        <table class="table table-sm">
+          <thead><tr><th>حقوق الملكية</th><th class="text-end"></th></tr></thead>
+          <tbody>${rows(r.equity)}</tbody>
+          <tfoot><tr class="fw-bold"><td>الإجمالي</td><td class="text-end">${frMoney(r.totalEquity)}</td></tr></tfoot>
+        </table>
+      </div>
+    </div>
+    <div class="mt-2" style="color:${r.balanced?'var(--green)':'var(--red)'}"><i class="bi bi-${r.balanced?'check-circle':'exclamation-triangle'} me-1"></i>${r.balanced?'الميزانية متزنة':'الميزانية غير متزنة'}</div>`;
+}
+
+function frRenderTrialBalance(r){
+  if(!r.rows.length) return '<div class="empty-state py-4"><i class="bi bi-inbox" style="font-size:2rem;opacity:.4"></i><p class="mt-2">لا توجد أرصدة</p></div>';
+  const rows=r.rows.map(x=>`<tr><td>${x.name}</td><td class="text-end">${x.debit?frMoney(x.debit):''}</td><td class="text-end">${x.credit?frMoney(x.credit):''}</td></tr>`).join('');
+  return `
+    <table class="table table-sm">
+      <thead><tr><th>الحساب</th><th class="text-end">مدين</th><th class="text-end">دائن</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr class="fw-bold"><td>الإجمالي</td><td class="text-end">${frMoney(r.totalDebit)}</td><td class="text-end">${frMoney(r.totalCredit)}</td></tr></tfoot>
+    </table>
+    <div style="color:${r.balanced?'var(--green)':'var(--red)'}"><i class="bi bi-${r.balanced?'check-circle':'exclamation-triangle'} me-1"></i>${r.balanced?'متزن':'غير متزن'}</div>`;
+}
+</script>
+</body>
+</html>

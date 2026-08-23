@@ -31,6 +31,7 @@ var FARM_NAV = [
   {section: 'المالية', items: [
     {href:'finance.html',   icon:'bi-wallet2',             label:'المالية',               perm:'finance'},
     {href:'cost.html',      icon:'bi-calculator-fill',     label:'حاسبة التكاليف',        perm:'finance'},
+    {href:'finance-reports.html', icon:'bi-graph-up-arrow', label:'التقارير المالية',      perm:'finance'},
     {href:'reports.html',   icon:'bi-graph-up',            label:'التقارير',              perm:'reports'},
     {href:'analytics.html', icon:'bi-bar-chart-line-fill', label:'التحليلات',             perm:'reports'},
   ]},
