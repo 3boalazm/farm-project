@@ -5839,6 +5839,87 @@ window.getBudgetVsActual=async function(opts){
   return {ok:true, periodKey:opts.periodKey, accountId:opts.accountId, budget:budget, actual:actual, variance:variance, variancePercent:variancePercent};
 };
 
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — FORECASTING (Phase 21). One new collection
+//  (forecasts). Rule-based only -- the single supported method is
+//  AVERAGE_PRIOR_PERIODS (average of N real, already-closed source
+//  periods' actuals), exactly the Master Prompt's own suggested
+//  starting method. No AI, no black-box model: every forecast exposes
+//  its method, its exact source periods, and the real actual figure
+//  each source period contributed, so the number is fully explainable,
+//  not just produced. A forecast NEVER touches journal_entries or any
+//  other accounting record -- it's a read+compute+store-for-later-
+//  comparison operation, structurally incapable of altering the ledger.
+// ══════════════════════════════════════════════════════════════
+
+function _computeAccountActualForRange(entries,accountId,startDate,endDate,costCenterId){
+  var total=0;
+  entries.forEach(function(e){
+    if(startDate && e.date<startDate) return;
+    if(endDate && e.date>endDate) return;
+    (e.lines||[]).forEach(function(l){
+      if(l.accountId!==accountId) return;
+      if(costCenterId && l.costCenterId!==costCenterId) return;
+      total+=(+l.debit||0)-(+l.credit||0);
+    });
+  });
+  return Math.round(Math.abs(total)*100)/100;
+}
+
+// sourcePeriods: [{periodKey, startDate, endDate}, ...] -- each one a
+// REAL, already-elapsed period the caller supplies (this function never
+// guesses date ranges on its own). The forecast is the plain average of
+// each source period's own real actual.
+window.createForecast=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.targetPeriodKey||!opts.accountId) return {ok:false, error:'الفترة المستهدفة والحساب مطلوبان'};
+  if(!Array.isArray(opts.sourcePeriods)||!opts.sourcePeriods.length) return {ok:false, error:'فترة مصدر واحدة على الأقل مطلوبة'};
+
+  var entries=await fbGet('journal_entries');
+  var sourceActuals=opts.sourcePeriods.map(function(p){
+    return {periodKey:p.periodKey, actual:_computeAccountActualForRange(entries,opts.accountId,p.startDate,p.endDate,opts.costCenterId)};
+  });
+  var forecastValue=Math.round((sourceActuals.reduce(function(s,p){return s+p.actual;},0)/sourceActuals.length)*100)/100;
+
+  try{
+    var id=await fbPost('forecasts',{
+      targetPeriodKey:opts.targetPeriodKey, accountId:opts.accountId, costCenterId:opts.costCenterId||null,
+      method:'AVERAGE_PRIOR_PERIODS', sourcePeriods:sourceActuals, forecastValue:forecastValue,
+      assumptions:opts.assumptions||'متوسط بسيط للفترات المصدر المذكورة -- بدون أي نموذج ذكاء اصطناعي',
+      createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+    });
+    fbCacheInvalidate('forecasts');
+    await logActivity('add','forecasts','تنبؤ لفترة '+opts.targetPeriodKey);
+    return {ok:true, id:id, forecastValue:forecastValue, sourcePeriods:sourceActuals, method:'AVERAGE_PRIOR_PERIODS'};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Compares a stored forecast against the target period's REAL actual --
+// but only once the caller supplies that target period's own date range
+// (this function never assumes "now" means the target period has
+// elapsed). If no actual data exists yet for the target range, actual
+// is returned as null, not zero -- an un-elapsed or data-free period is
+// genuinely unknown, not confirmed at zero.
+window.getForecastVsActual=async function(forecastId,targetStartDate,targetEndDate){
+  var forecasts=await fbGet('forecasts');
+  var f=forecasts.find(function(x){return x._id===forecastId;});
+  if(!f) return {ok:false, error:'التنبؤ غير موجود'};
+  var entries=await fbGet('journal_entries');
+  var matchingEntries=entries.filter(function(e){
+    return (!targetStartDate||e.date>=targetStartDate) && (!targetEndDate||e.date<=targetEndDate)
+      && (e.lines||[]).some(function(l){return l.accountId===f.accountId;});
+  });
+  var actual=matchingEntries.length
+    ? _computeAccountActualForRange(entries,f.accountId,targetStartDate,targetEndDate,f.costCenterId)
+    : null;
+  return {
+    ok:true, targetPeriodKey:f.targetPeriodKey, method:f.method, sourcePeriods:f.sourcePeriods,
+    forecast:f.forecastValue, actual:actual,
+    variance:actual!=null ? Math.round((actual-f.forecastValue)*100)/100 : null,
+  };
+};
+
 // ══════════════════════════════════════════════════════
 // Animal Identity Service
 // ══════════════════════════════════════════════════════

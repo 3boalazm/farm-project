@@ -377,6 +377,19 @@
       }
     },
 
+    // ── Accounting Engine (Phase 21): Forecasts. Write-once, like
+    //    animal_cost_ledger -- a forecast records what was predicted AT
+    //    THE TIME it was made; it is never edited after the fact (that
+    //    would defeat comparing it honestly against the real actual
+    //    once the target period elapses). ───────────────────────────
+    "forecasts": {
+      ".read":  "auth != null",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      "$id": {
+        ".validate": "newData.hasChild('targetPeriodKey') && newData.hasChild('accountId') && newData.hasChild('forecastValue') && (!data.exists())"
+      }
+    },
+
     // ── Users: read needed for the PIN-login screen (matches by pin_hash
     //    client-side); write restricted to admin only -- prevents any
     //    signed-in session from granting itself 'role':'admin' or
