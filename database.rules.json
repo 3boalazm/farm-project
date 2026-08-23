@@ -323,6 +323,21 @@
       }
     },
 
+    // ── Accounting Engine (Phase 15): Loan register. Receipt posts
+    //    through source_documents (type 'loan'); principal/interest
+    //    payments are plain journal entries keyed by a composite
+    //    sourceId, same pattern as Phase 14's depreciation. This record
+    //    DOES get patched (status -> 'paid_off' once the real remaining
+    //    principal, computed from journal_entries, reaches zero) -- unlike
+    //    animal_cost_ledger/cost_allocations, so no write-once guard here.
+    "loans": {
+      ".read":  "auth != null",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      "$id": {
+        ".validate": "newData.hasChild('lenderName') && newData.hasChild('principalAmount')"
+      }
+    },
+
     // ── Users: read needed for the PIN-login screen (matches by pin_hash
     //    client-side); write restricted to admin only -- prevents any
     //    signed-in session from granting itself 'role':'admin' or

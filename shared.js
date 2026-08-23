@@ -3614,6 +3614,10 @@ var DEFAULT_CHART_OF_ACCOUNTS=[
   {code:'6600',name_ar:'نقل وشحن',name_en:'Transport',type:'EXPENSE',parentId:'6000'},
   {code:'6700',name_ar:'إيجار',name_en:'Rent',type:'EXPENSE',parentId:'6000'},
   {code:'6800',name_ar:'إهلاك',name_en:'Depreciation',type:'EXPENSE',parentId:'6000'},
+  // Added in Phase 15 (Loans): interest is a real expense, and must
+  // never be mixed with principal repayment (which only ever touches
+  // 2300, a liability -- it is never itself an expense or revenue).
+  {code:'6850',name_ar:'فوائد قروض',name_en:'Loan Interest Expense',type:'EXPENSE',parentId:'6000'},
   {code:'6900',name_ar:'مصروفات أخرى',name_en:'Other Expenses',type:'EXPENSE',parentId:'6000'},
   // Added in Phase 6 (Inventory Accounting): a physical-count adjustment
   // can go either direction (found extra stock vs. shrinkage/loss) --
@@ -5211,6 +5215,132 @@ window.postDepreciation=async function(opts){
   });
   if(!posted.ok) return posted;
   return {ok:true, journalEntryId:posted.id, amount:thisAmount, remainingAfter:Math.round((remaining-thisAmount)*100)/100};
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — LOANS (Phase 15). One new collection (loans).
+//  Receipt is a Phase 2 source_document (type 'loan', already in the
+//  enum): Debit Cash / Credit Loans-and-Financing (2300) -- principal
+//  only, NEVER classified as revenue. Principal payments and interest
+//  payments are two structurally separate kinds of journal entry
+//  (composite-sourceId idempotency, same pattern as Phase 14's
+//  depreciation): principal only ever touches 2300 (a liability), never
+//  6850; interest only ever touches 6850 (a real expense), never 2300 --
+//  the Master Prompt's "never mix principal with interest" is enforced
+//  by construction, not by a runtime check, since each function can only
+//  post to its own one account pairing.
+// ══════════════════════════════════════════════════════════════
+
+window.postLoanReceipt=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.lenderName) return {ok:false, error:'اسم الجهة المقرضة مطلوب'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var principal=+opts.principalAmount;
+  if(!principal||isNaN(principal)||principal<=0) return {ok:false, error:'مبلغ القرض يجب أن يكون صحيحًا'};
+  if(!opts.cashAccountId) return {ok:false, error:'الحساب النقدي/البنكي مطلوب'};
+
+  var loanId;
+  try{
+    loanId=await fbPost('loans',{
+      lenderName:opts.lenderName, principalAmount:Math.round(principal*100)/100,
+      interestRate:opts.interestRate!=null?+opts.interestRate:null, startDate:opts.date||todayStr(),
+      status:'active', createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+    });
+    fbCacheInvalidate('loans');
+  }catch(e){ return {ok:false, error:e.message}; }
+
+  var created=await window.createSourceDocument({
+    type:'loan', total:principal, date:opts.date, operationId:opts.operationId,
+    counterpartyName:opts.lenderName, sourceType:'loan', sourceId:loanId, notes:'استلام قرض من: '+opts.lenderName,
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return {ok:true, loanId:loanId, documentId:created.id, idempotent:true};
+  var posted=await window.postSourceDocument(created.id,{
+    debitAccountId:opts.cashAccountId, creditAccountId:'2300', paidAmount:principal,
+  });
+  if(!posted.ok) return posted;
+  return {ok:true, loanId:loanId, documentId:created.id, journalEntryId:posted.journalEntryId};
+};
+
+window.getLoanRemainingPrincipal=async function(loanId){
+  var loans=await fbGet('loans');
+  var loan=loans.find(function(l){return l._id===loanId;});
+  if(!loan) return {ok:false, error:'القرض غير موجود'};
+  var entries=await fbGet('journal_entries');
+  var prefix=loanId+'::';
+  var paid=0;
+  entries.forEach(function(e){
+    if(e.sourceType!=='loan_principal_payment'||typeof e.sourceId!=='string'||e.sourceId.indexOf(prefix)!==0) return;
+    (e.lines||[]).forEach(function(l){ if(l.accountId==='2300') paid+=(+l.debit||0); });
+  });
+  paid=Math.round(paid*100)/100;
+  return {ok:true, principalAmount:loan.principalAmount, principalPaid:paid, remainingPrincipal:Math.round((loan.principalAmount-paid)*100)/100};
+};
+
+// Debit 2300 (reduces the liability), Credit Cash. Refuses to overpay
+// beyond the real remaining principal -- same "never invent/overshoot"
+// discipline as Phase 14's depreciation cap.
+window.postLoanPrincipalPayment=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.loanId||!opts.operationId) return {ok:false, error:'معرّف القرض وoperationId مطلوبان'};
+  var amount=+opts.amount;
+  if(!amount||isNaN(amount)||amount<=0) return {ok:false, error:'يرجى إدخال مبلغ صحيح'};
+  if(!opts.cashAccountId) return {ok:false, error:'الحساب النقدي/البنكي مطلوب'};
+
+  var compositeId=opts.loanId+'::'+opts.operationId;
+  var existing=await _findExistingJournalBySource('loan_principal_payment',compositeId);
+  if(existing) return {ok:true, journalEntryId:existing._id, idempotent:true};
+
+  var balance=await window.getLoanRemainingPrincipal(opts.loanId);
+  if(!balance.ok) return balance;
+  if(amount>balance.remainingPrincipal+0.001) return {ok:false, error:'المبلغ أكبر من أصل القرض المتبقي'};
+
+  var posted=await window.postJournalEntry({
+    date:opts.date||todayStr(), description:'سداد أصل قرض',
+    sourceType:'loan_principal_payment', sourceId:compositeId,
+    lines:[{accountId:'2300', debit:amount},{accountId:opts.cashAccountId, credit:amount}],
+  });
+  if(!posted.ok) return posted;
+  if(Math.round((balance.remainingPrincipal-amount)*100)/100<=0){
+    try{ await fbPatch('loans',opts.loanId,{status:'paid_off'}); fbCacheInvalidate('loans'); }catch(e){/* payment already posted correctly regardless */}
+  }
+  return {ok:true, journalEntryId:posted.id, remainingAfter:Math.round((balance.remainingPrincipal-amount)*100)/100};
+};
+
+// Debit Interest Expense (6850), Credit Cash -- a real, separate expense
+// event. Never touches 2300 or the loan's principal balance at all.
+window.postLoanInterestPayment=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.loanId||!opts.operationId) return {ok:false, error:'معرّف القرض وoperationId مطلوبان'};
+  var amount=+opts.amount;
+  if(!amount||isNaN(amount)||amount<=0) return {ok:false, error:'يرجى إدخال مبلغ صحيح'};
+  if(!opts.cashAccountId) return {ok:false, error:'الحساب النقدي/البنكي مطلوب'};
+
+  var compositeId=opts.loanId+'::'+opts.operationId;
+  var existing=await _findExistingJournalBySource('loan_interest_payment',compositeId);
+  if(existing) return {ok:true, journalEntryId:existing._id, idempotent:true};
+
+  var posted=await window.postJournalEntry({
+    date:opts.date||todayStr(), description:'سداد فائدة قرض',
+    sourceType:'loan_interest_payment', sourceId:compositeId,
+    lines:[{accountId:'6850', debit:amount},{accountId:opts.cashAccountId, credit:amount}],
+  });
+  if(!posted.ok) return posted;
+  return {ok:true, journalEntryId:posted.id, amount:amount};
+};
+
+window.getInterestPaidOnLoan=async function(loanId){
+  var entries=await fbGet('journal_entries');
+  var prefix=loanId+'::';
+  var total=0;
+  entries.forEach(function(e){
+    if(e.sourceType!=='loan_interest_payment'||typeof e.sourceId!=='string'||e.sourceId.indexOf(prefix)!==0) return;
+    (e.lines||[]).forEach(function(l){ if(l.accountId==='6850') total+=(+l.debit||0); });
+  });
+  return {ok:true, totalInterestPaid:Math.round(total*100)/100};
 };
 
 // ══════════════════════════════════════════════════════
