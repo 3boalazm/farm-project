@@ -4913,6 +4913,52 @@ window.getFeedCostPerDay=async function(startDate,endDate){
   return {ok:true, days:days};
 };
 
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — HEALTH & MEDICINE COSTING (Phase 11). No new
+//  collection -- the exact same reporting pattern as Phase 10 (Feed
+//  Costing), over journal_entries lines posted against the Veterinary/
+//  Medicine Expense account (6200) instead of Feed Expense (6100). Same
+//  attributed-vs-unattributed split, same reasoning for why: a treatment
+//  logged without a specific animal (e.g. a barn-wide vaccination pass)
+//  stays in "unattributed" rather than being guessed onto one animal.
+// ══════════════════════════════════════════════════════════════
+
+var MEDICINE_EXPENSE_ACCOUNT='6200';
+
+function _expenseLinesForAccount(entries,accountId,startDate,endDate){
+  var rows=[];
+  entries.forEach(function(e){
+    if(startDate && e.date<startDate) return;
+    if(endDate && e.date>endDate) return;
+    (e.lines||[]).forEach(function(l){
+      if(l.accountId===accountId && (+l.debit||0)>0){
+        rows.push({journalEntryId:e._id, date:e.date, amount:+l.debit, relatedAnimalId:l.relatedAnimalId||null, relatedBarnId:l.relatedBarnId||null});
+      }
+    });
+  });
+  return rows;
+}
+
+window.getMedicineCostSummary=async function(startDate,endDate){
+  var entries=await fbGet('journal_entries');
+  var rows=_expenseLinesForAccount(entries,MEDICINE_EXPENSE_ACCOUNT,startDate,endDate);
+  var total=0, byAnimal={}, unattributed=0;
+  rows.forEach(function(r){
+    total+=r.amount;
+    if(r.relatedAnimalId) byAnimal[r.relatedAnimalId]=(byAnimal[r.relatedAnimalId]||0)+r.amount;
+    else unattributed+=r.amount;
+  });
+  Object.keys(byAnimal).forEach(function(k){ byAnimal[k]=Math.round(byAnimal[k]*100)/100; });
+  return {ok:true, total:Math.round(total*100)/100, byAnimal:byAnimal, unattributed:Math.round(unattributed*100)/100, recordCount:rows.length};
+};
+
+window.getMedicineCostPerAnimal=async function(animalId,startDate,endDate){
+  var entries=await fbGet('journal_entries');
+  var rows=_expenseLinesForAccount(entries,MEDICINE_EXPENSE_ACCOUNT,startDate,endDate).filter(function(r){return r.relatedAnimalId===animalId;});
+  var total=rows.reduce(function(s,r){return s+r.amount;},0);
+  return {ok:true, total:Math.round(total*100)/100, entries:rows};
+};
+
 // ══════════════════════════════════════════════════════
 // Animal Identity Service
 // ══════════════════════════════════════════════════════
