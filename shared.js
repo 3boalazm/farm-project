@@ -6007,6 +6007,73 @@ window.getCashFlowStatement=async function(startDate,endDate){
   };
 };
 
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — BANK RECONCILIATION (Phase 23). One new
+//  collection (bank_reconciliations, write-once -- a reconciliation is
+//  a dated snapshot, never edited after the fact). Compares the real
+//  book balance (summed straight from journal_entries, same evidence
+//  source as getCashBankBalance) as of a statement date against a
+//  bank-supplied statement balance. The caller supplies which journal
+//  entries the bank statement has actually cleared
+//  (clearedJournalEntryIds) -- this function never guesses which
+//  transactions cleared. Everything not marked cleared is reported as
+//  an outstanding item (e.g. a check written but not yet cashed). A
+//  non-zero `difference` is reported plainly, never forced to zero --
+//  a real discrepancy must surface, not be hidden.
+// ══════════════════════════════════════════════════════════════
+
+window.reconcileBankAccount=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.cashBankAccountId||!opts.statementDate||opts.statementBalance==null) return {ok:false, error:'الحساب وتاريخ الكشف ورصيد الكشف مطلوبة'};
+
+  var cbas=await fbGet('cash_bank_accounts');
+  var cba=cbas.find(function(c){return c._id===opts.cashBankAccountId;});
+  if(!cba) return {ok:false, error:'الحساب غير موجود'};
+
+  var entries=await fbGet('journal_entries');
+  var clearedSet={};
+  (opts.clearedJournalEntryIds||[]).forEach(function(id){ clearedSet[id]=true; });
+
+  var bookBalance=0, clearedBalance=0, outstandingItems=[];
+  entries.forEach(function(e){
+    if(e.date>opts.statementDate) return; // only transactions up to the statement date are in scope
+    (e.lines||[]).forEach(function(l){
+      if(l.accountId!==cba.linkedAccountId) return;
+      var delta=(+l.debit||0)-(+l.credit||0);
+      bookBalance+=delta;
+      if(clearedSet[e._id]) clearedBalance+=delta;
+      else outstandingItems.push({journalEntryId:e._id, date:e.date, description:e.description, amount:Math.round(delta*100)/100});
+    });
+  });
+  bookBalance=Math.round(bookBalance*100)/100;
+  clearedBalance=Math.round(clearedBalance*100)/100;
+  var statementBalance=Math.round((+opts.statementBalance)*100)/100;
+  var difference=Math.round((statementBalance-clearedBalance)*100)/100;
+
+  var record={
+    cashBankAccountId:opts.cashBankAccountId, statementDate:opts.statementDate,
+    statementBalance:statementBalance, bookBalance:bookBalance, clearedBalance:clearedBalance, difference:difference,
+    clearedJournalEntryIds:opts.clearedJournalEntryIds||[], outstandingItems:outstandingItems,
+    matched:difference===0,
+    reconciledBy:(getUser()&&getUser().name)||null, reconciledAt:new Date().toISOString(),
+  };
+  try{
+    var id=await fbPost('bank_reconciliations',record);
+    fbCacheInvalidate('bank_reconciliations');
+    await fbPatch('cash_bank_accounts',opts.cashBankAccountId,{lastReconciledDate:opts.statementDate, lastReconciledAt:record.reconciledAt, lastReconciledBy:record.reconciledBy});
+    fbCacheInvalidate('cash_bank_accounts');
+    await logActivity('add','bank_reconciliations','تسوية بنكية: '+cba.name+' بتاريخ '+opts.statementDate);
+    return {ok:true, id:id, bookBalance:bookBalance, clearedBalance:clearedBalance, statementBalance:statementBalance, difference:difference, matched:record.matched, outstandingItems:outstandingItems};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+window.getBankReconciliationHistory=async function(cashBankAccountId){
+  var recs=await fbGet('bank_reconciliations');
+  return recs.filter(function(r){return r.cashBankAccountId===cashBankAccountId;})
+    .sort(function(a,b){return (b.statementDate||'').localeCompare(a.statementDate||'');});
+};
+
 // ══════════════════════════════════════════════════════
 // Animal Identity Service
 // ══════════════════════════════════════════════════════
