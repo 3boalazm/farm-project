@@ -260,6 +260,20 @@ function toggleNotifSound(){
 
 // Admin reset section is now rendered by renderAdminResetSection() in the init block above.
 
+// Defense in depth: renderAdminResetSection() already hides these buttons
+// from non-admins, but that's a UI-only check. Every window.reset* function
+// below is globally callable (e.g. from the browser console), and the
+// underlying collections' Firebase rules require only auth != null, not
+// role === 'admin' -- so without this second check, any signed-in
+// non-admin could trigger a full destructive wipe directly, bypassing the
+// UI entirely. See docs/repository/RISK_REGISTER.md for the rules-layer
+// gap this compensates for.
+function _requireAdminForReset(){
+  var u=getUser();
+  if(!u||u.role!=='admin'){toast('هذا الإجراء للمدير فقط','error');return false;}
+  return true;
+}
+
 async function _deleteTable(table){
   try{
     if(!FB_URL){toast('Firebase غير متصل','error');return false;}
@@ -281,6 +295,7 @@ async function _deleteTable(table){
 }
 
 window.resetAnimals=async function(){
+  if(!_requireAdminForReset())return;
   if(!confirm('مسح كل بيانات القطيع؟\nحيوانات + أوزان + سجلات النافق'))return;
   toast('جاري المسح...','info');
   var r1=await _deleteTable('animals');
@@ -290,6 +305,7 @@ window.resetAnimals=async function(){
 };
 
 window.resetFinance=async function(){
+  if(!_requireAdminForReset())return;
   if(!confirm('مسح كل البيانات المالية؟'))return;
   toast('جاري المسح...','info');
   const ok=await _deleteTable('finance');
@@ -298,6 +314,7 @@ window.resetFinance=async function(){
 };
 
 window.resetHealth=async function(){
+  if(!_requireAdminForReset())return;
   if(!confirm('مسح سجلات الصحة والتحصين والتكاثر؟'))return;
   toast('جاري المسح...','info');
   const results=await Promise.all([_deleteTable('health'),_deleteTable('vaccinations'),_deleteTable('breeding')]);
@@ -307,6 +324,7 @@ window.resetHealth=async function(){
 };
 
 window.resetActivity=async function(){
+  if(!_requireAdminForReset())return;
   if(!confirm('مسح كل سجل الأنشطة والإشعارات؟'))return;
   toast('جاري المسح...','info');
   const results=await Promise.all([_deleteTable('activity_log'),_deleteTable('login_notifications')]);
@@ -315,6 +333,7 @@ window.resetActivity=async function(){
 };
 
 window.resetNotifications=async function(){
+  if(!_requireAdminForReset())return;
   if(!confirm('مسح كل الإشعارات؟'))return;
   const results=await Promise.all([_deleteTable('notifications'),_deleteTable('login_notifications')]);
   const allOk=results.every(Boolean);
@@ -322,6 +341,7 @@ window.resetNotifications=async function(){
 };
 
 window.resetEverything=async function(){
+  if(!_requireAdminForReset())return;
   if(!confirm('⚠️ مسح كل بيانات المزرعة بالكامل؟\nلا يمكن التراجع!'))return;
   const conf=prompt('اكتب "تأكيد" للمتابعة:');
   if(conf!=='تأكيد'){toast('تم الإلغاء','info');return;}
