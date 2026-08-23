@@ -88,9 +88,9 @@ function renderFinancePage(s){
     rowsHtml: recs.map(r=>`<tr>
       <td class="text-gray">${r.date||'—'}</td>
       <td><span class="type-badge ${r.type==='income'?'badge-tarbiya':'badge-tasmeen'}">${r.type==='income'?'إيراد':'مصروف'}</span></td>
-      <td>${r.category||'—'}</td>
-      <td>${r.description||'—'}</td>
-      <td class="text-gray">${r.barn||'—'}</td>
+      <td>${escapeHtml(r.category||'—')}</td>
+      <td>${escapeHtml(r.description||'—')}</td>
+      <td class="text-gray">${escapeHtml(r.barn||'—')}</td>
       <td class="fw-bold ${r.type==='income'?'green-text':'accent-text'}">${r.type==='income'?'+':'-'}${(+r.amount||0).toLocaleString('ar-EG')}</td>
       <td><div class="d-flex gap-1">
         <button class="icon-btn edit" onclick="openFinModal('${r._id}')" aria-label="تعديل" title="تعديل"><i class="bi bi-pencil"></i></button>
@@ -150,8 +150,8 @@ window.openFinModal=function(id){
       <div class="col-6"><label>المبلغ (${s.currency}) *</label><input type="number" class="field" id="f-amount" value="${r.amount||''}" min="0" step="0.01"></div>
       <div class="col-6"><label>الجمالون</label><select class="field" id="f-barn">${barns.map(b=>`<option value="${b}" ${r.barn===b?'selected':''}>${b||'— الكل —'}</option>`).join('')}</select></div>
     </div>
-    <label>القائم بالمعاملة</label><input class="field" id="f-by" value="${r.added_by||getUser()?.name||''}" placeholder="اسم الشخص">
-    <label>الوصف</label><input class="field" id="f-desc" value="${r.description||''}" placeholder="تفاصيل المعاملة">
+    <label>القائم بالمعاملة</label><input class="field" id="f-by" value="${escapeHtml(r.added_by||getUser()?.name||'')}" placeholder="اسم الشخص">
+    <label>الوصف</label><input class="field" id="f-desc" value="${escapeHtml(r.description||'')}" placeholder="تفاصيل المعاملة">
     <div class="d-flex gap-2 justify-content-end mt-3">
       <button class="action-btn" onclick="closeModal()">إلغاء</button>
       <button class="action-btn primary" onclick="submitFin()">حفظ</button>
