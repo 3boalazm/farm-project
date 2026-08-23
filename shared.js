@@ -6167,6 +6167,64 @@ window.getBalanceSheet=async function(asOfDate){
   };
 };
 
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — GENERAL LEDGER (Phase 25). Generalizes the
+//  same evidence-only pattern Phase 3's getCashBankTransactionHistory
+//  already used (opening balance + chronological running balance) to
+//  ANY account, not just cash/bank -- the actual general ledger detail
+//  view every other report (Trial Balance, Financial Statements) is
+//  ultimately drillable down into. Balances are shown signed in the
+//  account's own normal-balance direction (via the existing
+//  _accountNormalBalance helper from Phase 1), so a liability/equity/
+//  revenue account with its normal credit balance displays positive,
+//  matching how getBalanceSheet/getIncomeStatement already present
+//  those types -- never the raw debit-minus-credit sign uniformly.
+// ══════════════════════════════════════════════════════════════
+
+window.getAccountLedger=async function(accountId,startDate,endDate){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!accountId) return {ok:false, error:'الحساب مطلوب'};
+
+  var accounts=await fbGet('accounts');
+  var acc=accounts.find(function(a){return a._id===accountId;});
+  if(!acc) return {ok:false, error:'الحساب غير موجود'};
+
+  var normalBalance=_accountNormalBalance(acc.type,acc.contra);
+  var sign=normalBalance==='credit'?-1:1;
+
+  var entries=(await fbGet('journal_entries')).slice().sort(function(a,b){
+    return (a.date||'').localeCompare(b.date||'') || (a._id||'').localeCompare(b._id||'');
+  });
+
+  var opening=0;
+  entries.forEach(function(e){
+    if(!startDate || e.date>=startDate) return;
+    (e.lines||[]).forEach(function(l){ if(l.accountId===accountId) opening+=sign*((+l.debit||0)-(+l.credit||0)); });
+  });
+  opening=Math.round(opening*100)/100;
+
+  var running=opening, rows=[];
+  entries.forEach(function(e){
+    if(startDate && e.date<startDate) return;
+    if(endDate && e.date>endDate) return;
+    (e.lines||[]).forEach(function(l){
+      if(l.accountId!==accountId) return;
+      running=Math.round((running+sign*((+l.debit||0)-(+l.credit||0)))*100)/100;
+      rows.push({
+        journalEntryId:e._id, date:e.date, description:e.description,
+        debit:+l.debit||0, credit:+l.credit||0, runningBalance:running,
+        sourceType:e.sourceType, sourceId:e.sourceId,
+      });
+    });
+  });
+
+  return {
+    ok:true, accountId:accountId, accountName:acc.name_ar, normalBalance:normalBalance,
+    startDate:startDate||null, endDate:endDate||null,
+    openingBalance:opening, closingBalance:running, rows:rows,
+  };
+};
+
 // ══════════════════════════════════════════════════════
 // Animal Identity Service
 // ══════════════════════════════════════════════════════
