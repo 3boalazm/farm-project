@@ -131,18 +131,18 @@ function renderPurchaseTab(){
     title:'شراء حيوان', description:'يسجّل تكلفة الأساس تلقائيًا لاستخدامها لاحقًا عند البيع أو النفوق',
     contentHtml: !faAnimals.length ? faEmptyHtml('لا توجد حيوانات مسجّلة في القطيع بعد') : `
       <div class="row g-3">
-        <div class="col-md-3"><label class="form-label small text-gray">الحيوان</label>
-          <select id="ap-animal" class="form-select form-select-sm">${faAnimalOptions()}</select>
+        <div class="col-12 col-md-3"><label class="form-label small text-gray">الحيوان</label>
+          <select id="ap-animal" class="form-select form-select-sm"><option value="">اختر حيوانًا...</option>${faAnimalOptions()}</select>
         </div>
-        <div class="col-md-2"><label class="form-label small text-gray">المبلغ</label><input type="number" step="0.01" min="0.01" id="ap-amount" class="form-control form-control-sm"></div>
-        <div class="col-md-2"><label class="form-label small text-gray">التاريخ</label><input type="date" id="ap-date" class="form-control form-control-sm" value="${todayStr()}"></div>
-        <div class="col-md-2"><label class="form-label small text-gray">طريقة الدفع</label>
+        <div class="col-12 col-md-2"><label class="form-label small text-gray">المبلغ</label><input type="number" step="0.01" min="0.01" id="ap-amount" class="form-control form-control-sm"></div>
+        <div class="col-12 col-md-2"><label class="form-label small text-gray">التاريخ</label><input type="date" id="ap-date" class="form-control form-control-sm" value="${todayStr()}"></div>
+        <div class="col-12 col-md-2"><label class="form-label small text-gray">طريقة الدفع</label>
           <select id="ap-mode" class="form-select form-select-sm" onchange="faPaymentModeToggle('ap')">
             <option value="cash">نقدًا</option><option value="credit">آجل (ذمم دائنة)</option>
           </select>
         </div>
-        <div class="col-md-3" id="ap-cash-wrap"><label class="form-label small text-gray">الحساب النقدي/البنكي</label>
-          <select id="ap-cash" class="form-select form-select-sm">${faCbaOptions()}</select>
+        <div class="col-12 col-md-3" id="ap-cash-wrap"><label class="form-label small text-gray">الحساب النقدي/البنكي</label>
+          <select id="ap-cash" class="form-select form-select-sm"><option value="">اختر حسابًا...</option>${faCbaOptions()}</select>
         </div>
       </div>
       <button class="action-btn mt-3" id="ap-submit-btn" onclick="faSubmitPurchase()"><i class="bi bi-cart-plus me-1"></i> تسجيل الشراء</button>
@@ -182,21 +182,21 @@ function renderSaleTab(){
     title:'بيع حيوان', description:'تُحسب تكلفة البيع تلقائيًا من تكلفة الأساس المسجّلة، إن وُجدت',
     contentHtml: !faAnimals.length ? faEmptyHtml('لا توجد حيوانات مسجّلة في القطيع بعد') : `
       <div class="row g-3">
-        <div class="col-md-3"><label class="form-label small text-gray">الحيوان</label>
-          <select id="as-animal" class="form-select form-select-sm" onchange="faShowCostBasisPreview()">${faAnimalOptions()}</select>
+        <div class="col-12 col-md-3"><label class="form-label small text-gray">الحيوان</label>
+          <select id="as-animal" class="form-select form-select-sm" onchange="faShowCostBasisPreview()"><option value="">اختر حيوانًا...</option>${faAnimalOptions()}</select>
         </div>
-        <div class="col-md-2"><label class="form-label small text-gray">سعر البيع</label><input type="number" step="0.01" min="0.01" id="as-price" class="form-control form-control-sm"></div>
-        <div class="col-md-2"><label class="form-label small text-gray">حساب الإيراد</label>
-          <select id="as-revenue" class="form-select form-select-sm">${faAccountOptions(a=>a.type==='REVENUE')}</select>
+        <div class="col-12 col-md-2"><label class="form-label small text-gray">سعر البيع</label><input type="number" step="0.01" min="0.01" id="as-price" class="form-control form-control-sm"></div>
+        <div class="col-12 col-md-2"><label class="form-label small text-gray">حساب الإيراد</label>
+          <select id="as-revenue" class="form-select form-select-sm"><option value="">اختر حسابًا...</option>${faAccountOptions(a=>a.type==='REVENUE')}</select>
         </div>
-        <div class="col-md-2"><label class="form-label small text-gray">التاريخ</label><input type="date" id="as-date" class="form-control form-control-sm" value="${todayStr()}"></div>
-        <div class="col-md-2"><label class="form-label small text-gray">طريقة الدفع</label>
+        <div class="col-12 col-md-2"><label class="form-label small text-gray">التاريخ</label><input type="date" id="as-date" class="form-control form-control-sm" value="${todayStr()}"></div>
+        <div class="col-12 col-md-2"><label class="form-label small text-gray">طريقة الدفع</label>
           <select id="as-mode" class="form-select form-select-sm" onchange="faPaymentModeToggle('as')">
             <option value="cash">نقدًا</option><option value="credit">آجل (ذمم مدينة)</option>
           </select>
         </div>
-        <div class="col-md-3" id="as-cash-wrap"><label class="form-label small text-gray">الحساب النقدي/البنكي</label>
-          <select id="as-cash" class="form-select form-select-sm">${faCbaOptions()}</select>
+        <div class="col-12 col-md-3" id="as-cash-wrap"><label class="form-label small text-gray">الحساب النقدي/البنكي</label>
+          <select id="as-cash" class="form-select form-select-sm"><option value="">اختر حسابًا...</option>${faCbaOptions()}</select>
         </div>
       </div>
       <div id="as-cost-preview" class="mt-2" style="font-size:.85rem"></div>
@@ -226,6 +226,7 @@ window.faSubmitSale=async function(){
   const cashAccountId = document.getElementById('as-cash').value;
 
   if(!animal){ toast('يرجى اختيار حيوان','error'); return; }
+  if(!revenueAccountId){ toast('يرجى اختيار حساب الإيراد','error'); return; }
   if(!salePrice||salePrice<=0){ toast('يرجى إدخال سعر بيع صحيح','error'); return; }
   if(paymentMode==='cash' && !cashAccountId){ toast('يرجى اختيار الحساب النقدي/البنكي','error'); return; }
 
@@ -250,10 +251,10 @@ function renderDeathTab(){
     title:'الأثر المحاسبي لنفوق حيوان', description:'هذا النموذج للأثر المحاسبي فقط (إعدام تكلفة الأساس) — تسجيل حالة الحيوان نفسه (نافق) يتم من صفحة "النافق" المخصصة',
     contentHtml: !faAnimals.length ? faEmptyHtml('لا توجد حيوانات مسجّلة في القطيع بعد') : `
       <div class="row g-3">
-        <div class="col-md-4"><label class="form-label small text-gray">الحيوان</label>
-          <select id="ad-animal" class="form-select form-select-sm" onchange="faShowDeathCostPreview()">${faAnimalOptions()}</select>
+        <div class="col-12 col-md-4"><label class="form-label small text-gray">الحيوان</label>
+          <select id="ad-animal" class="form-select form-select-sm" onchange="faShowDeathCostPreview()"><option value="">اختر حيوانًا...</option>${faAnimalOptions()}</select>
         </div>
-        <div class="col-md-3"><label class="form-label small text-gray">التاريخ</label><input type="date" id="ad-date" class="form-control form-control-sm" value="${todayStr()}"></div>
+        <div class="col-12 col-md-3"><label class="form-label small text-gray">التاريخ</label><input type="date" id="ad-date" class="form-control form-control-sm" value="${todayStr()}"></div>
       </div>
       <div id="ad-cost-preview" class="mt-2" style="font-size:.85rem"></div>
       <button class="action-btn mt-3" id="ad-submit-btn" onclick="faSubmitDeath()"><i class="bi bi-file-earmark-minus me-1"></i> تسجيل الأثر المحاسبي</button>
@@ -296,8 +297,8 @@ function renderCcTab(){
       title:'مركز تكلفة جديد', description:'',
       contentHtml:`
         <div class="row g-3">
-          <div class="col-md-5"><label class="form-label small text-gray">الاسم</label><input type="text" id="cc-name" class="form-control form-control-sm" placeholder="مثال: عنبر رقم 1"></div>
-          <div class="col-md-5"><label class="form-label small text-gray">النوع</label>
+          <div class="col-12 col-md-5"><label class="form-label small text-gray">الاسم</label><input type="text" id="cc-name" class="form-control form-control-sm" placeholder="مثال: عنبر رقم 1"></div>
+          <div class="col-12 col-md-5"><label class="form-label small text-gray">النوع</label>
             <select id="cc-type" class="form-select form-select-sm">${FA_COST_CENTER_TYPES.map(t=>`<option value="${t.v}">${t.l}</option>`).join('')}</select>
           </div>
         </div>
@@ -312,9 +313,9 @@ function faRefreshCcList(){
   const el=document.getElementById('cc-list');
   if(!faCostCenters.length){ el.innerHTML=faEmptyHtml('لا توجد مراكز تكلفة بعد'); return; }
   const typeLabel = t => (FA_COST_CENTER_TYPES.find(x=>x.v===t)||{l:t}).l;
-  el.innerHTML=`<table class="table table-sm"><thead><tr><th>الاسم</th><th>النوع</th></tr></thead><tbody>
+  el.innerHTML=`<div style="overflow-x:auto"><table class="table table-sm"><thead><tr><th>الاسم</th><th>النوع</th></tr></thead><tbody>
     ${faCostCenters.map(c=>`<tr><td>${escapeHtml(c.name)}</td><td>${escapeHtml(typeLabel(c.type))}</td></tr>`).join('')}
-  </tbody></table>`;
+  </tbody></table></div>`;
 }
 
 window.faSubmitCostCenter=async function(){

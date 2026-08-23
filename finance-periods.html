@@ -103,9 +103,9 @@ function renderPeriodsTab(){
       title:'فتح فترة مالية جديدة', description:'',
       contentHtml:`
         <div class="row g-3">
-          <div class="col-md-3"><label class="form-label small text-gray">المعرّف (مثال: 2026-01)</label><input type="text" id="fp-key" class="form-control form-control-sm" placeholder="2026-01"></div>
-          <div class="col-md-3"><label class="form-label small text-gray">تاريخ البداية</label><input type="date" id="fp-start" class="form-control form-control-sm"></div>
-          <div class="col-md-3"><label class="form-label small text-gray">تاريخ النهاية</label><input type="date" id="fp-end" class="form-control form-control-sm"></div>
+          <div class="col-12 col-md-3"><label class="form-label small text-gray">المعرّف (مثال: 2026-01)</label><input type="text" id="fp-key" class="form-control form-control-sm" placeholder="2026-01"></div>
+          <div class="col-12 col-md-3"><label class="form-label small text-gray">تاريخ البداية</label><input type="date" id="fp-start" class="form-control form-control-sm"></div>
+          <div class="col-12 col-md-3"><label class="form-label small text-gray">تاريخ النهاية</label><input type="date" id="fp-end" class="form-control form-control-sm"></div>
         </div>
         <button class="action-btn mt-3" id="fp-submit-btn" onclick="fpSubmitPeriod()"><i class="bi bi-plus-lg me-1"></i> فتح الفترة</button>
       `,
@@ -118,13 +118,13 @@ function fpRefreshPeriodList(){
   const el=document.getElementById('fp-list');
   if(!fpPeriods.length){ el.innerHTML=fpEmptyHtml('لا توجد فترات مالية بعد'); return; }
   const sorted = fpPeriods.slice().sort((a,b)=>(b.periodKey||'').localeCompare(a.periodKey||''));
-  el.innerHTML = `<table class="table table-sm"><thead><tr><th>الفترة</th><th>من</th><th>إلى</th><th>الحالة</th><th></th></tr></thead><tbody>
+  el.innerHTML = `<div style="overflow-x:auto"><table class="table table-sm" style="min-width:560px"><thead><tr><th>الفترة</th><th>من</th><th>إلى</th><th>الحالة</th><th></th></tr></thead><tbody>
     ${sorted.map(p=>`<tr>
       <td>${escapeHtml(p.periodKey)}</td><td>${escapeHtml(p.startDate)}</td><td>${escapeHtml(p.endDate)}</td>
       <td><span style="color:${FP_STATUS_COLOR[p.status]}"><i class="bi bi-circle-fill me-1" style="font-size:.5rem"></i>${FP_STATUS_LABEL[p.status]||p.status}</span></td>
-      <td>${fpPeriodActions(p)}</td>
+      <td style="white-space:nowrap">${fpPeriodActions(p)}</td>
     </tr>`).join('')}
-  </tbody></table>`;
+  </tbody></table></div>`;
 }
 
 function fpPeriodActions(p){
@@ -189,13 +189,13 @@ function renderReconTab(){
       title:'تسوية حساب نقدي/بنكي', description:'حدد الحساب وتاريخ الكشف، ثم علّم الحركات التي ظهرت فعليًا في كشف البنك',
       contentHtml: !fpCbas.length ? fpEmptyHtml('لا توجد حسابات نقدية/بنكية بعد') : `
         <div class="row g-3 mb-3">
-          <div class="col-md-4"><label class="form-label small text-gray">الحساب</label>
+          <div class="col-12 col-md-4"><label class="form-label small text-gray">الحساب</label>
             <select id="rc-account" class="form-select form-select-sm" onchange="fpLoadReconTransactions()">
               ${fpCbas.map(c=>`<option value="${c._id}">${escapeHtml(c.name)}</option>`).join('')}
             </select>
           </div>
-          <div class="col-md-3"><label class="form-label small text-gray">تاريخ الكشف</label><input type="date" id="rc-date" class="form-control form-control-sm" value="${todayStr()}" onchange="fpLoadReconTransactions()"></div>
-          <div class="col-md-3"><label class="form-label small text-gray">رصيد الكشف البنكي</label><input type="number" step="0.01" id="rc-balance" class="form-control form-control-sm"></div>
+          <div class="col-12 col-md-3"><label class="form-label small text-gray">تاريخ الكشف</label><input type="date" id="rc-date" class="form-control form-control-sm" value="${todayStr()}" onchange="fpLoadReconTransactions()"></div>
+          <div class="col-12 col-md-3"><label class="form-label small text-gray">رصيد الكشف البنكي</label><input type="number" step="0.01" id="rc-balance" class="form-control form-control-sm"></div>
         </div>
         <div id="rc-transactions">${fpEmptyHtml('اختر حسابًا لعرض حركاته')}</div>
         <button class="action-btn mt-3" id="rc-submit-btn" onclick="fpSubmitReconciliation()"><i class="bi bi-check2-square me-1"></i> تنفيذ التسوية</button>
@@ -205,47 +205,77 @@ function renderReconTab(){
   if(fpCbas.length) fpLoadReconTransactions();
 }
 
+// Set of journal entry ids already cleared by a PRIOR reconciliation for
+// the account currently loaded -- populated by fpLoadReconTransactions,
+// read by fpSubmitReconciliation. Kept as page state rather than
+// re-derived at submit time so submit doesn't have to re-fetch it.
+let fpAlreadyClearedIds = new Set();
+
 window.fpLoadReconTransactions=async function(){
   const cbaId = document.getElementById('rc-account').value;
   const statementDate = document.getElementById('rc-date').value;
   const el = document.getElementById('rc-transactions');
   el.innerHTML = '<div class="text-center py-3"><div class="spinner"></div></div>';
-  const hist = await getCashBankTransactionHistory(cbaId, null, statementDate);
+
+  const [hist, priorRecons] = await Promise.all([
+    getCashBankTransactionHistory(cbaId, null, statementDate),
+    getBankReconciliationHistory(cbaId),
+  ]);
   if(!hist.ok){ el.innerHTML = `<div class="text-gray">${hist.error}</div>`; return; }
-  if(!hist.rows.length){ el.innerHTML = fpEmptyHtml('لا توجد حركات حتى هذا التاريخ'); return; }
-  el.innerHTML = `<table class="table table-sm">
-    <thead><tr><th style="width:36px"></th><th>التاريخ</th><th>الوصف</th><th class="text-end">مدين</th><th class="text-end">دائن</th></tr></thead>
-    <tbody>
-      ${hist.rows.map(r=>`<tr>
-        <td><input type="checkbox" class="rc-cleared-check" data-je-id="${r.journalEntryId}" checked></td>
-        <td>${escapeHtml(r.date||'')}</td><td>${escapeHtml(r.description||'')}</td>
-        <td class="text-end mono">${r.debit?ar(r.debit):''}</td>
-        <td class="text-end mono">${r.credit?ar(r.credit):''}</td>
-      </tr>`).join('')}
-    </tbody>
-  </table>`;
-  fpRefreshReconHistory(cbaId);
+
+  // Only list transactions NOT already cleared by an earlier reconciliation
+  // -- otherwise every reconciliation after the first would re-show the
+  // account's ENTIRE history pre-checked, forcing the user to manually
+  // notice and uncheck everything already settled, every single time.
+  // The already-cleared set is still included when submitting (below), so
+  // the real reconciled total stays correct -- this only changes what's
+  // shown for review, not what's counted.
+  fpAlreadyClearedIds = new Set();
+  priorRecons.forEach(r => (r.clearedJournalEntryIds||[]).forEach(id => fpAlreadyClearedIds.add(id)));
+  const newRows = hist.rows.filter(r => !fpAlreadyClearedIds.has(r.journalEntryId));
+
+  if(!newRows.length){
+    el.innerHTML = fpEmptyHtml(priorRecons.length ? 'لا توجد حركات جديدة غير مُسوّاة منذ آخر تسوية' : 'لا توجد حركات حتى هذا التاريخ');
+  }else{
+    el.innerHTML = `<div style="overflow-x:auto"><table class="table table-sm" style="min-width:480px">
+      <thead><tr><th style="width:36px"></th><th>التاريخ</th><th>الوصف</th><th class="text-end">مدين</th><th class="text-end">دائن</th></tr></thead>
+      <tbody>
+        ${newRows.map(r=>`<tr>
+          <td><input type="checkbox" class="rc-cleared-check" data-je-id="${r.journalEntryId}" checked></td>
+          <td>${escapeHtml(r.date||'')}</td><td>${escapeHtml(r.description||'')}</td>
+          <td class="text-end mono">${r.debit?ar(r.debit):''}</td>
+          <td class="text-end mono">${r.credit?ar(r.credit):''}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>`;
+  }
+  await fpRefreshReconHistory(cbaId);
 };
 
 async function fpRefreshReconHistory(cbaId){
   const el = document.getElementById('rc-history');
   const hist = await getBankReconciliationHistory(cbaId);
   if(!hist.length){ el.innerHTML = fpEmptyHtml('لا توجد تسويات سابقة لهذا الحساب'); return; }
-  el.innerHTML = `<table class="table table-sm"><thead><tr><th>تاريخ الكشف</th><th class="text-end">رصيد الكشف</th><th class="text-end">الفرق</th><th>الحالة</th></tr></thead><tbody>
+  el.innerHTML = `<div style="overflow-x:auto"><table class="table table-sm"><thead><tr><th>تاريخ الكشف</th><th class="text-end">رصيد الكشف</th><th class="text-end">الفرق</th><th>الحالة</th></tr></thead><tbody>
     ${hist.map(r=>`<tr>
       <td>${escapeHtml(r.statementDate)}</td>
       <td class="text-end mono">${ar(r.statementBalance)}</td>
       <td class="text-end mono" style="color:${r.matched?'var(--green)':'var(--red)'}">${ar(r.difference)}</td>
       <td>${r.matched?'<span style="color:var(--green)">مطابقة</span>':'<span style="color:var(--red)">فرق</span>'}</td>
     </tr>`).join('')}
-  </tbody></table>`;
+  </tbody></table></div>`;
 }
 
 window.fpSubmitReconciliation=async function(){
   const cashBankAccountId = document.getElementById('rc-account').value;
   const statementDate = document.getElementById('rc-date').value;
   const statementBalance = document.getElementById('rc-balance').value;
-  const clearedJournalEntryIds = Array.from(document.querySelectorAll('.rc-cleared-check:checked')).map(cb=>cb.dataset.jeId);
+  // The submitted total must cover everything cleared as of this
+  // statement, not just what's newly checked -- items already cleared by
+  // an earlier reconciliation (never shown in this pass's checklist, see
+  // fpLoadReconTransactions) are included automatically here.
+  const newlyChecked = Array.from(document.querySelectorAll('.rc-cleared-check:checked')).map(cb=>cb.dataset.jeId);
+  const clearedJournalEntryIds = Array.from(new Set([...fpAlreadyClearedIds, ...newlyChecked]));
 
   if(!cashBankAccountId){ toast('يرجى اختيار الحساب','error'); return; }
   if(statementBalance===''){ toast('يرجى إدخال رصيد كشف الحساب','error'); return; }

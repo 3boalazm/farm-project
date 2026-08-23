@@ -129,19 +129,21 @@ function renderJeTab(){
     title:'قيد يومية يدوي', description:'كل قيد يجب أن يكون متزنًا (إجمالي المدين = إجمالي الدائن) قبل الترحيل',
     contentHtml: `
       <div class="row g-3 mb-3">
-        <div class="col-md-4">
+        <div class="col-12 col-md-4">
           <label class="form-label small text-gray">التاريخ</label>
           <input type="date" id="je-date" class="form-control form-control-sm" value="${todayStr()}">
         </div>
-        <div class="col-md-8">
+        <div class="col-12 col-md-8">
           <label class="form-label small text-gray">الوصف</label>
           <input type="text" id="je-desc" class="form-control form-control-sm" placeholder="وصف القيد (اختياري)">
         </div>
       </div>
-      <table class="table table-sm" id="je-lines-table">
-        <thead><tr><th>الحساب</th><th style="width:140px">مدين</th><th style="width:140px">دائن</th><th style="width:40px"></th></tr></thead>
+      <div style="overflow-x:auto">
+      <table class="table table-sm" id="je-lines-table" style="min-width:440px">
+        <thead><tr><th style="min-width:180px">الحساب</th><th style="width:120px">مدين</th><th style="width:120px">دائن</th><th style="width:40px"></th></tr></thead>
         <tbody id="je-lines-body"></tbody>
       </table>
+      </div>
       <button class="btn btn-sm btn-outline-secondary mb-3" onclick="feAddJeLine()"><i class="bi bi-plus-lg me-1"></i>إضافة سطر</button>
       <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3" style="font-size:.85rem">
         <div>إجمالي المدين: <b id="je-total-debit" class="mono">٠</b> — إجمالي الدائن: <b id="je-total-credit" class="mono">٠</b></div>
@@ -230,29 +232,29 @@ function renderCbaTab(){
       title:'إضافة حساب نقدي/بنكي جديد', description:'',
       contentHtml: `
         <div class="row g-3">
-          <div class="col-md-3">
+          <div class="col-12 col-md-3">
             <label class="form-label small text-gray">الاسم</label>
             <input type="text" id="cba-name" class="form-control form-control-sm" placeholder="مثال: بنك المزرعة">
           </div>
-          <div class="col-md-2">
+          <div class="col-12 col-md-2">
             <label class="form-label small text-gray">النوع</label>
             <select id="cba-type" class="form-select form-select-sm">
               <option value="cash">نقدية</option>
               <option value="bank">بنك</option>
             </select>
           </div>
-          <div class="col-md-3">
+          <div class="col-12 col-md-3">
             <label class="form-label small text-gray">الحساب المرتبط (دليل الحسابات)</label>
             <select id="cba-linked" class="form-select form-select-sm">
               <option value="">اختر حسابًا...</option>
               ${feAccountOptions(a=>a.type==='ASSET')}
             </select>
           </div>
-          <div class="col-md-2">
+          <div class="col-12 col-md-2">
             <label class="form-label small text-gray">الرصيد الافتتاحي</label>
             <input type="number" step="0.01" min="0" id="cba-opening" class="form-control form-control-sm" value="0">
           </div>
-          <div class="col-md-2">
+          <div class="col-12 col-md-2">
             <label class="form-label small text-gray">تاريخ الافتتاح</label>
             <input type="date" id="cba-opening-date" class="form-control form-control-sm" value="${todayStr()}">
           </div>
@@ -277,12 +279,14 @@ async function feRefreshCbaList(){
   }
   const balances = await Promise.all(feCashBankAccounts.map(c=>getCashBankBalance(c._id)));
   el.innerHTML = `
+    <div style="overflow-x:auto">
     <table class="table table-sm">
       <thead><tr><th>الاسم</th><th>النوع</th><th class="text-end">الرصيد الحالي</th></tr></thead>
       <tbody>
         ${feCashBankAccounts.map((c,i)=>`<tr><td>${escapeHtml(c.name)}</td><td>${c.type==='bank'?'بنك':'نقدية'}</td><td class="text-end mono">${balances[i].ok?ar(balances[i].balance)+' '+getSettings().currency:'—'}</td></tr>`).join('')}
       </tbody>
-    </table>`;
+    </table>
+    </div>`;
 }
 
 window.feSubmitCashBankAccount=async function(){
@@ -315,25 +319,25 @@ function renderDocTab(){
       title:'مستند مصدر جديد', description:'أنواع الحيوانات/المخزون/الأصول/القروض لها نماذج مخصصة قادمة لاحقًا — هذا النموذج للمستندات العامة فقط',
       contentHtml: `
         <div class="row g-3">
-          <div class="col-md-3">
+          <div class="col-12 col-md-3">
             <label class="form-label small text-gray">النوع</label>
             <select id="doc-type" class="form-select form-select-sm">
               ${FE_DOC_TYPES.map(t=>`<option value="${t.v}">${t.l}</option>`).join('')}
             </select>
           </div>
-          <div class="col-md-2">
+          <div class="col-12 col-md-2">
             <label class="form-label small text-gray">التاريخ</label>
             <input type="date" id="doc-date" class="form-control form-control-sm" value="${todayStr()}">
           </div>
-          <div class="col-md-2">
+          <div class="col-12 col-md-2">
             <label class="form-label small text-gray">الإجمالي</label>
             <input type="number" step="0.01" min="0.01" id="doc-total" class="form-control form-control-sm">
           </div>
-          <div class="col-md-3">
+          <div class="col-12 col-md-3">
             <label class="form-label small text-gray">اسم الطرف الآخر (اختياري)</label>
             <input type="text" id="doc-counterparty" class="form-control form-control-sm">
           </div>
-          <div class="col-md-2">
+          <div class="col-12 col-md-2">
             <label class="form-label small text-gray">ملاحظات</label>
             <input type="text" id="doc-notes" class="form-control form-control-sm">
           </div>
@@ -357,6 +361,7 @@ async function feRefreshDraftDocs(){
   }
   const typeLabel = t => (FE_DOC_TYPES.find(x=>x.v===t)||{l:t}).l;
   el.innerHTML = `
+    <div style="overflow-x:auto">
     <table class="table table-sm">
       <thead><tr><th>الرقم</th><th>النوع</th><th>التاريخ</th><th class="text-end">الإجمالي</th><th></th></tr></thead>
       <tbody>
@@ -368,7 +373,8 @@ async function feRefreshDraftDocs(){
           <td><button class="btn btn-sm btn-outline-success" onclick="feOpenPostDocModal('${d._id}')"><i class="bi bi-send-check me-1"></i>ترحيل</button></td>
         </tr>`).join('')}
       </tbody>
-    </table>`;
+    </table>
+    </div>`;
 }
 
 window.feOpenPostDocModal=function(docId){
@@ -377,11 +383,11 @@ window.feOpenPostDocModal=function(docId){
     bodyHtml: `
       <div class="mb-2">
         <label class="form-label small text-gray">الحساب المدين</label>
-        <select id="pd-debit" class="form-select form-select-sm">${feAccountOptions()}</select>
+        <select id="pd-debit" class="form-select form-select-sm"><option value="">اختر حسابًا...</option>${feAccountOptions()}</select>
       </div>
       <div class="mb-2">
         <label class="form-label small text-gray">الحساب الدائن</label>
-        <select id="pd-credit" class="form-select form-select-sm">${feAccountOptions()}</select>
+        <select id="pd-credit" class="form-select form-select-sm"><option value="">اختر حسابًا...</option>${feAccountOptions()}</select>
       </div>
       <div class="mb-2">
         <label class="form-label small text-gray">المبلغ المسدد الآن (اتركه فارغًا إن لم يُسدد شيء بعد)</label>
