@@ -173,6 +173,40 @@ const XSS_FIX_SITES = [
   { file: 'assistant.html', mustContain: 'escapeHtml(fieldLabels[k]||k)' },
   { file: 'assistant.html', mustContain: 'escapeHtml(d.mother_tag' },
   { file: 'assistant.html', mustContain: 'escapeHtml(_farmContext)' },
+
+  // ── Round 2 (2026-08-24): the 41+5 sinks found by the mandatory
+  // re-scan after round 1. Same flat string-presence pattern.
+  { file: 'animals.html', mustContain: "escapeHtml(a.tag)+'</span>'" },
+  { file: 'animals.html', mustContain: 'escapeHtml(a.barn)' },
+  { file: 'animals.html', mustContain: "escapeHtml(a.breed||'—')" },
+  { file: 'animals.html', mustContain: 'escapeHtml(label)' },
+  { file: 'animals.html', mustContain: 'escapeHtml(lbl)' },
+  { file: 'animal-detail.html', mustContain: "escapeHtml(animal.breed||'—')" },
+  { file: 'animal-detail.html', mustContain: "escapeHtml(animal.breed||'غير معروف')" },
+  { file: 'animal-detail.html', mustContain: 'escapeHtml(r.diagnosis' },
+  { file: 'animal-detail.html', mustContain: 'escapeHtml(r.medication' },
+  { file: 'animal-detail.html', mustContain: 'escapeHtml(r.male_tag||r.male_breed' },
+  { file: 'animal-detail.html', mustContain: 'escapeHtml(o.tag' },
+  { file: 'animal-detail.html', mustContain: "escapeHtml(animal.mother_tag||'')" },
+  { file: 'animal-detail.html', mustContain: "escapeHtml(animal.father_tag||'')" },
+  { file: 'animal-detail.html', mustContain: "escapeHtml(animal.notes||'')" }, // textarea-breakout fix
+  { file: 'animal-detail.html', mustContain: "id=\"e-breed\">${breeds.map(b=>`<option ${b===animal.breed?'selected':''}>${escapeHtml(b)}" },
+  { file: 'import.html', mustContain: 'escapeHtml(r.errors.join' },
+  { file: 'import.html', mustContain: 'escapeHtml(r.data[f])' },
+  { file: 'shared.js', mustContain: 'name=escapeHtml(name);' }, // renderInventoryStockIndicator
+  { file: path.join('pages', 'health.js'), mustContain: 'escapeHtml(r.animal_breed' },
+  { file: path.join('pages', 'health.js'), mustContain: "escapeHtml(r.diagnosis||'')" },
+  { file: path.join('pages', 'breeding.js'), mustContain: "escapeHtml(r.female_tag||r.female_breed||'—')" },
+  { file: path.join('pages', 'breeding.js'), mustContain: "escapeHtml(r.female_tag||decodeURIComponent(prefTag||''))" },
+  { file: path.join('pages', 'vaccine.js'), mustContain: "escapeHtml(v.name||'')" },
+  { file: path.join('pages', 'production.js'), mustContain: "escapeHtml(a.tag||'')" },
+  { file: path.join('pages', 'tasks.js'), mustContain: 'escapeHtml(t.title||\'\')}"' }, // aria-label
+  { file: path.join('pages', 'tasks.js'), mustContain: "escapeHtml(d.title || '')" },
+  { file: 'cost.html', mustContain: 'escapeHtml(cat)' },
+  { file: path.join('pages', 'reports.js'), mustContain: 'escapeHtml(b.breed)' }, // breed-catalog hardening
+  { file: 'settings.html', mustContain: 'escapeHtml(item.b)' },
+  { file: 'assistant.html', mustContain: "escapeHtml(b)+'</option>'" }, // ea-breed catalog option
+  { file: 'finance-reports.html', mustContain: 'escapeHtml(x.name)' },
 ];
 let xssRegressions = 0;
 const xssFilesChecked = new Set();
