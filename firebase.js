@@ -18,6 +18,24 @@ const ar=n=>String(n??'').replace(/\d/g,d=>AR[+d]);
 const todayStr=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
 function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
 
+// ── HTML Escaping ──────────────────────────────────────────
+// No escaping helper existed anywhere in this codebase before this pass
+// (confirmed by direct grep of shared.js/firebase.js) -- free-text fields
+// (notes, names, descriptions, reasons, diagnoses...) were concatenated
+// straight into `.innerHTML=` template strings across the app, a
+// confirmed, live-proven stored-XSS vector (see
+// docs/repository/RISK_REGISTER.md). This is the first, additive step:
+// a safe, dependency-free escaper every page already has access to
+// (firebase.js loads before every other script). Use it on any
+// user-editable text value interpolated into an HTML string -- never on
+// values that are already trusted HTML you're deliberately building
+// (icon markup, badges assembled from fixed config objects, etc.).
+function escapeHtml(s){
+  return String(s??'').replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+
 // ── PIN Hashing (Security Migration) ──────────────────────
 // Replaces plaintext PIN storage. Uses the browser's built-in Web
 // Crypto API (SHA-256) — no new library/dependency added. Salted with
