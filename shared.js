@@ -33,7 +33,13 @@ function toast(msg,type='success'){
   if(!wrap){wrap=document.createElement('div');wrap.id='toast-wrap';document.body.appendChild(wrap);}
   const el=document.createElement('div');
   el.className=`farm-toast t-${type}`;
-  el.innerHTML=`<i class="bi bi-${type==='success'?'check-circle-fill':type==='error'?'x-circle-fill':'info-circle-fill'}"></i> ${msg}`;
+  // XSS fix: toast() is called from hundreds of sites across this app,
+  // many with interpolated free-text data (breed names, error messages,
+  // etc.) -- confirmed by search that zero call sites intentionally pass
+  // raw HTML, so escaping here is safe and closes an enormous number of
+  // downstream call sites in one place rather than needing every caller
+  // fixed individually.
+  el.innerHTML=`<i class="bi bi-${type==='success'?'check-circle-fill':type==='error'?'x-circle-fill':'info-circle-fill'}"></i> ${escapeHtml(msg)}`;
   wrap.appendChild(el);
   setTimeout(()=>{el.style.opacity='0';},2700);
   setTimeout(()=>{el.remove();},3200);
