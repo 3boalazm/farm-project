@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <!-- Performance hints -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://farm-mz99-default-rtdb.europe-west1.firebasedatabase.app" crossorigin>
+  <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+  <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
+
+<script>(function(){var t=localStorage.getItem('farm_theme');if(t==='light')document.documentElement.classList.add('light-mode');}());</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>الفترات المالية والتسوية البنكية — بيان المزرعة</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="media/logo-icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="media/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="media/favicon-16.png">
+<link rel="apple-touch-icon" href="media/apple-touch-icon.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="page-wrap rail-v2-content">
+  <div id="page-header"></div>
+
+  <ul class="nav nav-pills mb-4 gap-2" id="fp-tabs">
+    <li><button class="nav-link active" onclick="switchFpTab('periods')"><i class="bi bi-calendar-range me-2"></i>الفترات المالية</button></li>
+    <li><button class="nav-link" onclick="switchFpTab('recon')"><i class="bi bi-bank2 me-2"></i>التسوية البنكية</button></li>
+  </ul>
+
+  <div id="tab-periods"></div>
+  <div id="tab-recon" style="display:none"></div>
+
+  <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
+    © <span id="footer-year"></span> <span id="footer-farm"></span><br>
+    <small style="font-size:.72rem;color:var(--text-muted)">إشراف: لواء أحمد رجب نوح | تطوير: جندي مصطفى محمد إبراهيم</small>
+  </footer>
+</div>
+<script src="config.js"></script>
+<script src="firebase.js"></script>
+<script src="nav.js"></script>
+<script src="shared.js"></script>
+<script src="offline-sync.js" defer></script>
+<script src="pages/datepicker.js" defer></script>
+<script>
+'use strict';
+
+let fpPeriods=[], fpCbas=[];
+const FP_STATUS_LABEL = {OPEN:'مفتوحة', CLOSED:'مغلقة (مُقفلة محاسبيًا)', LOCKED:'مقفلة نهائيًا'};
+const FP_STATUS_COLOR = {OPEN:'var(--green)', CLOSED:'var(--yellow)', LOCKED:'var(--red)'};
+
+document.addEventListener('DOMContentLoaded', async ()=>{
+  if(!requireAuth())return;
+  if(!can('finance')){
+    document.body.innerHTML='<div class="page-wrap"><div class="empty-state" style="padding-top:100px"><i class="bi bi-shield-x" style="font-size:3rem;display:block;margin-bottom:10px;opacity:.4"></i><p>غير مصرح بالوصول</p><a href="dashboard.html" class="action-btn">الرئيسية</a></div></div>';
+    return;
+  }
+  initFirebase();
+  const s=getSettings();
+  document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
+  document.getElementById('footer-farm').textContent=s.farmName;
+  renderNavbarV2('finance-periods.html');
+  renderPageHeader('<i class="bi bi-calendar2-check-fill accent-text"></i> الفترات المالية والتسوية البنكية',
+    'فتح وإقفال الفترات المحاسبية، وتسوية الحسابات النقدية/البنكية مقابل كشوف الحساب الفعلية','');
+
+  document.querySelectorAll('#fp-tabs .nav-link').forEach(b=>{
+    b.style.cssText='background:var(--bg-3);border:1px solid var(--border);color:var(--text-sub);border-radius:10px;padding:8px 16px;cursor:pointer;font-family:Cairo,sans-serif;font-size:.85rem;transition:.2s';
+  });
+  document.querySelector('#fp-tabs .nav-link.active').style.cssText+=';background:rgba(0,230,118,.1);border-color:rgba(0,230,118,.35);color:var(--green)';
+
+  await fpLoadAll();
+  renderPeriodsTab();
+  renderReconTab();
+});
+
+window.switchFpTab=function(tab){
+  document.getElementById('tab-periods').style.display = tab==='periods' ? 'block' : 'none';
+  document.getElementById('tab-recon').style.display = tab==='recon' ? 'block' : 'none';
+  document.querySelectorAll('#fp-tabs .nav-link').forEach(b=>{
+    const isA=b.getAttribute('onclick').includes("'"+tab+"'");
+    b.classList.toggle('active',isA);
+    b.style.background=isA?'rgba(0,230,118,.1)':'var(--bg-3)';
+    b.style.borderColor=isA?'rgba(0,230,118,.35)':'var(--border)';
+    b.style.color=isA?'var(--green)':'var(--text-sub)';
+  });
+};
+
+async function fpLoadAll(){
+  try{
+    [fpPeriods, fpCbas] = await Promise.all([fbGet('fiscal_periods'), fbGet('cash_bank_accounts')]);
+  }catch(e){ toast('خطأ في تحميل البيانات: '+e.message,'error'); }
+}
+function fpEmptyHtml(msg){ return `<div class="empty-state py-4"><i class="bi bi-inbox" style="font-size:2rem;opacity:.4"></i><p class="mt-2">${msg}</p></div>`; }
+
+// ══════════════════════════════════════════════════════
+//  TAB — Fiscal Periods
+// ══════════════════════════════════════════════════════
+function renderPeriodsTab(){
+  document.getElementById('tab-periods').innerHTML =
+    renderSectionContainer({
+      title:'فتح فترة مالية جديدة', description:'',
+      contentHtml:`
+        <div class="row g-3">
+          <div class="col-md-3"><label class="form-label small text-gray">المعرّف (مثال: 2026-01)</label><input type="text" id="fp-key" class="form-control form-control-sm" placeholder="2026-01"></div>
+          <div class="col-md-3"><label class="form-label small text-gray">تاريخ البداية</label><input type="date" id="fp-start" class="form-control form-control-sm"></div>
+          <div class="col-md-3"><label class="form-label small text-gray">تاريخ النهاية</label><input type="date" id="fp-end" class="form-control form-control-sm"></div>
+        </div>
+        <button class="action-btn mt-3" id="fp-submit-btn" onclick="fpSubmitPeriod()"><i class="bi bi-plus-lg me-1"></i> فتح الفترة</button>
+      `,
+    }) +
+    renderSectionContainer({title:'الفترات الحالية', description:'', contentHtml:'<div id="fp-list"></div>'});
+  fpRefreshPeriodList();
+}
+
+function fpRefreshPeriodList(){
+  const el=document.getElementById('fp-list');
+  if(!fpPeriods.length){ el.innerHTML=fpEmptyHtml('لا توجد فترات مالية بعد'); return; }
+  const sorted = fpPeriods.slice().sort((a,b)=>(b.periodKey||'').localeCompare(a.periodKey||''));
+  el.innerHTML = `<table class="table table-sm"><thead><tr><th>الفترة</th><th>من</th><th>إلى</th><th>الحالة</th><th></th></tr></thead><tbody>
+    ${sorted.map(p=>`<tr>
+      <td>${escapeHtml(p.periodKey)}</td><td>${escapeHtml(p.startDate)}</td><td>${escapeHtml(p.endDate)}</td>
+      <td><span style="color:${FP_STATUS_COLOR[p.status]}"><i class="bi bi-circle-fill me-1" style="font-size:.5rem"></i>${FP_STATUS_LABEL[p.status]||p.status}</span></td>
+      <td>${fpPeriodActions(p)}</td>
+    </tr>`).join('')}
+  </tbody></table>`;
+}
+
+function fpPeriodActions(p){
+  if(p.status==='OPEN') return `<button class="btn btn-sm btn-outline-warning" onclick="fpCloseMonth('${p._id}')"><i class="bi bi-lock me-1"></i>إقفال محاسبي</button>`;
+  if(p.status==='CLOSED') return `
+    <button class="btn btn-sm btn-outline-danger me-1" onclick="fpLockPeriod('${p._id}')"><i class="bi bi-lock-fill me-1"></i>قفل نهائي</button>
+    <button class="btn btn-sm btn-outline-secondary" onclick="fpReopenPeriod('${p._id}')"><i class="bi bi-unlock me-1"></i>إعادة فتح</button>`;
+  return '<span class="text-gray small">لا إجراء متاح</span>';
+}
+
+window.fpSubmitPeriod=async function(){
+  const periodKey = document.getElementById('fp-key').value.trim();
+  const startDate = document.getElementById('fp-start').value;
+  const endDate = document.getElementById('fp-end').value;
+  if(!periodKey||!startDate||!endDate){ toast('جميع الحقول مطلوبة','error'); return; }
+
+  const btn=document.getElementById('fp-submit-btn');
+  btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> جارٍ الفتح...';
+  const r = await createFiscalPeriod({periodKey, startDate, endDate});
+  btn.disabled=false; btn.innerHTML='<i class="bi bi-plus-lg me-1"></i> فتح الفترة';
+
+  if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
+  toast('تم فتح الفترة المالية بنجاح','success');
+  fpPeriods = await fbGet('fiscal_periods');
+  renderPeriodsTab();
+};
+
+window.fpCloseMonth=async function(periodKey){
+  if(!confirm('سيتم ترحيل قيد إقفال يصفّر الإيرادات والمصروفات لهذه الفترة إلى الأرباح المرحّلة، ثم قفل الفترة عن أي ترحيل جديد. هل تريد المتابعة؟')) return;
+  const r = await runMonthEndClose(periodKey);
+  if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
+  toast(r.journalEntryId ? `تم الإقفال — صافي الدخل: ${ar(r.netIncome)} ${getSettings().currency}` : 'تم قفل الفترة (لا يوجد نشاط لإقفاله)','success');
+  fpPeriods = await fbGet('fiscal_periods');
+  renderPeriodsTab();
+};
+
+window.fpLockPeriod=async function(periodKey){
+  if(!confirm('القفل النهائي إجراء لا يمكن التراجع عنه. هل أنت متأكد؟')) return;
+  const r = await lockFiscalPeriod(periodKey);
+  if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
+  toast('تم القفل النهائي للفترة','success');
+  fpPeriods = await fbGet('fiscal_periods');
+  renderPeriodsTab();
+};
+
+window.fpReopenPeriod=async function(periodKey){
+  const reason = prompt('سبب إعادة الفتح (مطلوب):');
+  if(!reason) return;
+  const r = await reopenFiscalPeriod(periodKey, reason);
+  if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
+  toast('تم إعادة فتح الفترة','success');
+  fpPeriods = await fbGet('fiscal_periods');
+  renderPeriodsTab();
+};
+
+// ══════════════════════════════════════════════════════
+//  TAB — Bank Reconciliation
+// ══════════════════════════════════════════════════════
+function renderReconTab(){
+  document.getElementById('tab-recon').innerHTML =
+    renderSectionContainer({
+      title:'تسوية حساب نقدي/بنكي', description:'حدد الحساب وتاريخ الكشف، ثم علّم الحركات التي ظهرت فعليًا في كشف البنك',
+      contentHtml: !fpCbas.length ? fpEmptyHtml('لا توجد حسابات نقدية/بنكية بعد') : `
+        <div class="row g-3 mb-3">
+          <div class="col-md-4"><label class="form-label small text-gray">الحساب</label>
+            <select id="rc-account" class="form-select form-select-sm" onchange="fpLoadReconTransactions()">
+              ${fpCbas.map(c=>`<option value="${c._id}">${escapeHtml(c.name)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="col-md-3"><label class="form-label small text-gray">تاريخ الكشف</label><input type="date" id="rc-date" class="form-control form-control-sm" value="${todayStr()}" onchange="fpLoadReconTransactions()"></div>
+          <div class="col-md-3"><label class="form-label small text-gray">رصيد الكشف البنكي</label><input type="number" step="0.01" id="rc-balance" class="form-control form-control-sm"></div>
+        </div>
+        <div id="rc-transactions">${fpEmptyHtml('اختر حسابًا لعرض حركاته')}</div>
+        <button class="action-btn mt-3" id="rc-submit-btn" onclick="fpSubmitReconciliation()"><i class="bi bi-check2-square me-1"></i> تنفيذ التسوية</button>
+      `,
+    }) +
+    renderSectionContainer({title:'سجل التسويات', description:'', contentHtml:'<div id="rc-history">'+fpEmptyHtml('اختر حسابًا لعرض سجل تسوياته')+'</div>'});
+  if(fpCbas.length) fpLoadReconTransactions();
+}
+
+window.fpLoadReconTransactions=async function(){
+  const cbaId = document.getElementById('rc-account').value;
+  const statementDate = document.getElementById('rc-date').value;
+  const el = document.getElementById('rc-transactions');
+  el.innerHTML = '<div class="text-center py-3"><div class="spinner"></div></div>';
+  const hist = await getCashBankTransactionHistory(cbaId, null, statementDate);
+  if(!hist.ok){ el.innerHTML = `<div class="text-gray">${hist.error}</div>`; return; }
+  if(!hist.rows.length){ el.innerHTML = fpEmptyHtml('لا توجد حركات حتى هذا التاريخ'); return; }
+  el.innerHTML = `<table class="table table-sm">
+    <thead><tr><th style="width:36px"></th><th>التاريخ</th><th>الوصف</th><th class="text-end">مدين</th><th class="text-end">دائن</th></tr></thead>
+    <tbody>
+      ${hist.rows.map(r=>`<tr>
+        <td><input type="checkbox" class="rc-cleared-check" data-je-id="${r.journalEntryId}" checked></td>
+        <td>${escapeHtml(r.date||'')}</td><td>${escapeHtml(r.description||'')}</td>
+        <td class="text-end mono">${r.debit?ar(r.debit):''}</td>
+        <td class="text-end mono">${r.credit?ar(r.credit):''}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>`;
+  fpRefreshReconHistory(cbaId);
+};
+
+async function fpRefreshReconHistory(cbaId){
+  const el = document.getElementById('rc-history');
+  const hist = await getBankReconciliationHistory(cbaId);
+  if(!hist.length){ el.innerHTML = fpEmptyHtml('لا توجد تسويات سابقة لهذا الحساب'); return; }
+  el.innerHTML = `<table class="table table-sm"><thead><tr><th>تاريخ الكشف</th><th class="text-end">رصيد الكشف</th><th class="text-end">الفرق</th><th>الحالة</th></tr></thead><tbody>
+    ${hist.map(r=>`<tr>
+      <td>${escapeHtml(r.statementDate)}</td>
+      <td class="text-end mono">${ar(r.statementBalance)}</td>
+      <td class="text-end mono" style="color:${r.matched?'var(--green)':'var(--red)'}">${ar(r.difference)}</td>
+      <td>${r.matched?'<span style="color:var(--green)">مطابقة</span>':'<span style="color:var(--red)">فرق</span>'}</td>
+    </tr>`).join('')}
+  </tbody></table>`;
+}
+
+window.fpSubmitReconciliation=async function(){
+  const cashBankAccountId = document.getElementById('rc-account').value;
+  const statementDate = document.getElementById('rc-date').value;
+  const statementBalance = document.getElementById('rc-balance').value;
+  const clearedJournalEntryIds = Array.from(document.querySelectorAll('.rc-cleared-check:checked')).map(cb=>cb.dataset.jeId);
+
+  if(!cashBankAccountId){ toast('يرجى اختيار الحساب','error'); return; }
+  if(statementBalance===''){ toast('يرجى إدخال رصيد كشف الحساب','error'); return; }
+
+  const btn=document.getElementById('rc-submit-btn');
+  btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> جارٍ التسوية...';
+  const r = await reconcileBankAccount({
+    cashBankAccountId, statementDate, statementBalance:+statementBalance,
+    clearedJournalEntryIds, operationId:genId(),
+  });
+  btn.disabled=false; btn.innerHTML='<i class="bi bi-check2-square me-1"></i> تنفيذ التسوية';
+
+  if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
+  toast(r.matched ? 'تمت التسوية بنجاح — مطابقة تمامًا' : `تمت التسوية — يوجد فرق قدره ${ar(r.difference)} ${getSettings().currency}`, r.matched?'success':'error');
+  await fpRefreshReconHistory(cashBankAccountId);
+};
+</script>
+</body>
+</html>
