@@ -940,7 +940,7 @@ window.openNotificationsPopup = async function(){
 
     // 0. Login notifications for admin
     if(isAdmin&&loginNotifs.length>0){
-      const today=new Date().toISOString().slice(0,10);
+      const today=todayStr();
       loginNotifs.filter(n=>n.date===today).slice(0,5).forEach(function(n){
         notifs.push({type:'info',cat:'تسجيلات الدخول',icon:'bi-box-arrow-in-right',title:'دخل: '+n.userName,msg:n.roleLabel+' — '+n.timestamp?.slice(11,16)||'',href:'activity.html'});
       });
@@ -2100,21 +2100,21 @@ var AUTO_TASK_RULES = {
   weight_alert: {
     category: 'inspection', priority: 'medium', role: 'supervisor',
     title: function(p){ return (p.alertTitle||'تنبيه وزن')+': '+(p.animal_tag||''); },
-    dueDate: function(p){ return p.todayStr||new Date().toISOString().slice(0,10); },
+    dueDate: function(p){ return p.todayStr||todayStr(); },
     relatedTag: function(p){ return p.animal_tag||null; },
   },
   // Sprint 3, Epic 3: health risk alerts, same reuse pattern again.
   health_risk_alert: {
     category: 'medical', priority: 'high', role: 'vet',
     title: function(p){ return (p.recommendation||'مراجعة صحية')+': '+(p.animal_tag||''); },
-    dueDate: function(p){ return p.todayStr||new Date().toISOString().slice(0,10); },
+    dueDate: function(p){ return p.todayStr||todayStr(); },
     relatedTag: function(p){ return p.animal_tag||null; },
   },
   // Sprint 4, Epic 4: production alerts, same reuse pattern again.
   production_alert: {
     category: 'inspection', priority: 'medium', role: 'supervisor',
     title: function(p){ return (p.alertTitle||'متابعة إنتاج')+': '+(p.animal_tag||''); },
-    dueDate: function(p){ return p.todayStr||new Date().toISOString().slice(0,10); },
+    dueDate: function(p){ return p.todayStr||todayStr(); },
     relatedTag: function(p){ return p.animal_tag||null; },
   },
 };
@@ -2370,7 +2370,7 @@ window.evaluateHealthRisk = async function(animalId, animalTag, barn){
     var myWeightAlerts = (allWeightAlerts||[]).filter(function(a){return a.animal_id===animalId&&a.status==='active';});
 
     var allVacc = await fbGet('vaccinations');
-    var today = new Date().toISOString().slice(0,10);
+    var today = todayStr();
     var myVacc = barn ? (allVacc||[]).filter(function(v){
       return v.target_section===barn && (v.status==='overdue' || (v.status==='pending' && v.scheduled_date && v.scheduled_date<today));
     }) : [];
