@@ -96,35 +96,57 @@ var FarmOfflineSync = (function() {
   }
 
   // ── Execute one op against Firebase ────────────────────────
+  // BUG FIX: this used to look for a global getAuthToken() function that
+  // is never defined anywhere in the codebase (typeof check always false),
+  // and even if it existed, attached the result as an Authorization:
+  // Bearer header -- but this app's real Firebase REST auth (fbUrl() in
+  // firebase.js) is the legacy `?auth=<token>` query-string style, not a
+  // header. Net effect: every replayed op went out with no valid auth at
+  // all against rules that require auth != null on almost every
+  // collection -- guaranteed 401, silently retried 5 times, then dropped
+  // forever with no user-facing notice. Confirmed live: a queued op
+  // synced 0/1, 401'd, and never reached Firebase. Now reuses
+  // _getValidAuthToken() (firebase.js, globally available since it's
+  // loaded before this script), the same token every other real request
+  // in the app already uses, attached the same way.
   function executeOp(op) {
-    var baseUrl = (window.FB_URL || '').replace(/\/$/, '');
+    // Second bug fixed alongside the auth one above: FB_URL is declared
+    // `let` in firebase.js, so it never attaches to `window` -- reading
+    // window.FB_URL was always undefined, meaning this function rejected
+    // with "Firebase URL not configured" before ever reaching the fetch,
+    // regardless of the auth issue. `let`/`const` top-level bindings ARE
+    // shared across separate <script> tags in the same document (unlike
+    // modules), so referencing the bare FB_URL here resolves correctly
+    // since firebase.js loads before this script on every page.
+    var baseUrl = (typeof FB_URL !== 'undefined' ? FB_URL : '').replace(/\/$/, '');
     if (!baseUrl) return Promise.reject(new Error('Firebase URL not configured'));
 
-    var headers = { 'Content-Type': 'application/json' };
-    var auth    = typeof getAuthToken === 'function' ? getAuthToken() : null;
-    if (auth) headers['Authorization'] = 'Bearer ' + auth;
+    return Promise.resolve(typeof _getValidAuthToken === 'function' ? _getValidAuthToken() : null)
+      .then(function(token) {
+        var qs = token ? '?auth=' + token : '';
+        var url  = baseUrl + '/' + op.collection;
+        var method = op.method;
+        var body;
 
-    var url  = baseUrl + '/' + op.collection;
-    var method = op.method;
-    var body;
+        if (method === 'POST') {
+          url += '.json' + qs;
+          body = JSON.stringify(Object.assign({}, op.data, { synced_at: new Date().toISOString() }));
+        } else if (method === 'PATCH' || method === 'PUT') {
+          url += '/' + op.docId + '.json' + qs;
+          body = JSON.stringify(Object.assign({}, op.data, { synced_at: new Date().toISOString() }));
+        } else if (method === 'DELETE') {
+          url += '/' + op.docId + '.json' + qs;
+          body = null;
+        }
 
-    if (method === 'POST') {
-      url += '.json';
-      body = JSON.stringify(Object.assign({}, op.data, { synced_at: new Date().toISOString() }));
-    } else if (method === 'PATCH' || method === 'PUT') {
-      url += '/' + op.docId + '.json';
-      body = JSON.stringify(Object.assign({}, op.data, { synced_at: new Date().toISOString() }));
-    } else if (method === 'DELETE') {
-      url += '/' + op.docId + '.json';
-      body = null;
-    }
-
-    return fetch(url, { method: method, headers: headers, body: body })
+        return fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: body });
+      })
       .then(function(res) {
-        if (!res.ok) throw new Error(method + ' ' + op.collection + ': ' + res.status);
+        if (!res.ok) throw new Error(method_label(op) + ': ' + res.status);
         return res;
       });
   }
+  function method_label(op) { return op.method + ' ' + op.collection; }
 
   // ── Sync all pending ops ────────────────────────────────────
   function syncNow() {
