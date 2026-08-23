@@ -5041,6 +5041,58 @@ window.getEmployeeBalance=async function(employeeId){
   return {ok:true, balance:Math.round(balance*100)/100, openAccrualCount:open.length};
 };
 
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — PRODUCTION COSTING (Phase 13). No new collection.
+//  Milk/wool/manure SALES are not a new posting recipe -- they're Phase
+//  4's createSalesInvoice, which already accepts any revenueAccountId
+//  (4200 milk / 4300 wool / 4400 manure), reused as-is rather than
+//  duplicated under a new name. What's genuinely new here is the MARGIN
+//  calculation, which ties three already-real sources together: revenue
+//  from journal_entries (this engine), attributable cost from Phase 8's
+//  cost-center allocations (this engine), and physical quantity from the
+//  pre-existing production_log collection (the app's own long-standing
+//  production records, untouched by this rebuild). Cost/revenue per unit
+//  is only ever computed when quantity > 0 -- never a division by zero
+//  masquerading as a real number.
+// ══════════════════════════════════════════════════════════════
+
+window.getProductionMargin=async function(opts){
+  opts=opts||{};
+  if(!opts.revenueAccountId) return {ok:false, error:'حساب الإيراد مطلوب'};
+  var entries=await fbGet('journal_entries');
+  var revenue=0;
+  entries.forEach(function(e){
+    if(opts.startDate && e.date<opts.startDate) return;
+    if(opts.endDate && e.date>opts.endDate) return;
+    (e.lines||[]).forEach(function(l){ if(l.accountId===opts.revenueAccountId) revenue+=(+l.credit||0); });
+  });
+  revenue=Math.round(revenue*100)/100;
+
+  var cost=0;
+  if(opts.costCenterId){
+    var costResult=await window.getCostByCenter(opts.costCenterId,opts.startDate,opts.endDate);
+    cost=costResult.total;
+  }
+
+  var quantity=0;
+  if(opts.productionLogType){
+    var log=await fbGet('production_log');
+    log.forEach(function(p){
+      if(p.type!==opts.productionLogType) return;
+      if(opts.startDate && p.date<opts.startDate) return;
+      if(opts.endDate && p.date>opts.endDate) return;
+      quantity+=(+p.quantity||0);
+    });
+  }
+
+  var grossMargin=Math.round((revenue-cost)*100)/100;
+  return {
+    ok:true, revenue:revenue, cost:cost, grossMargin:grossMargin, quantity:Math.round(quantity*100)/100,
+    costPerUnit:quantity>0 ? Math.round((cost/quantity)*100)/100 : null,
+    revenuePerUnit:quantity>0 ? Math.round((revenue/quantity)*100)/100 : null,
+  };
+};
+
 // ══════════════════════════════════════════════════════
 // Animal Identity Service
 // ══════════════════════════════════════════════════════
