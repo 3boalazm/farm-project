@@ -82,7 +82,7 @@ function renderWeightTable(wts){
     return'<tr><td class="text-gray">'+( w.date||"—")+'</td>'+
       '<td class="fw-bold green-text">'+ar(+w.weight||0)+' كجم</td>'+
       '<td class="'+( diff>0?"green-text":diff<0?"red-text":"text-gray")+'">'+( diff!==0?(diff>0?"+":"")+ar(Math.abs(diff)):"-")+'</td>'+
-      '<td class="text-gray" style="font-size:.78rem">'+( w.notes||"—")+'</td>'+
+      '<td class="text-gray" style="font-size:.78rem">'+escapeHtml( w.notes||"—")+'</td>'+
       '<td>'+( can("animals")? '<button class="icon-btn del" onclick="delWeight(\''+ w._id+'\')" title="حذف"><i class="bi bi-trash"></i></button>'  :"")+'</td></tr>';
   }).join("");
   return statsHtml+chartHtml+
@@ -216,10 +216,10 @@ function renderDetail(s){
 
   <!-- Info Grid -->
   <div class="row g-3 mb-4">
-    ${[['النوع',animal.species==='goat'?'🐐 ماعز':'🐑 أغنام'],['السلالة',animal.breed||'—'],['الجنس',animal.gender==='male'?'♂ ذكر':'♀ أنثى'],['الغرض',{tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[animal.purpose]||'—'],['العمر',age.years>0?ar(age.years)+' سنة و '+ar(age.months)+' شهر':ar(age.months)+' شهر'],['تاريخ الميلاد',animal.birth_date||'غير محدد'],['رقم الترقيم',animal.tag||'—'],['الجمالون/العنبر',animal.barn||'غير محدد'],['الأم',animal.mother_tag?`#${animal.mother_tag} ${animal.mother_breed?'('+animal.mother_breed+')':''}` :'—'],['الأب',animal.father_tag?`#${animal.father_tag}` :'—']].map(([k,v])=>`<div class="col-md-3 col-6"><div class="info-card"><div class="info-label">${k}</div><div class="info-value">${v}</div></div></div>`).join('')}
+    ${[['النوع',animal.species==='goat'?'🐐 ماعز':'🐑 أغنام'],['السلالة',escapeHtml(animal.breed||'—')],['الجنس',animal.gender==='male'?'♂ ذكر':'♀ أنثى'],['الغرض',{tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[animal.purpose]||'—'],['العمر',age.years>0?ar(age.years)+' سنة و '+ar(age.months)+' شهر':ar(age.months)+' شهر'],['تاريخ الميلاد',animal.birth_date||'غير محدد'],['رقم الترقيم',escapeHtml(animal.tag||'—')],['الجمالون/العنبر',escapeHtml(animal.barn||'غير محدد')],['الأم',animal.mother_tag?`#${escapeHtml(animal.mother_tag)} ${animal.mother_breed?'('+escapeHtml(animal.mother_breed)+')':''}` :'—'],['الأب',animal.father_tag?`#${escapeHtml(animal.father_tag)}` :'—']].map(([k,v])=>`<div class="col-md-3 col-6"><div class="info-card"><div class="info-label">${k}</div><div class="info-value">${v}</div></div></div>`).join('')}
   </div>
 
-  ${animal.notes?`<div class="section-card mb-4"><div class="info-label mb-2"><i class="bi bi-chat-left-text accent-text me-2"></i>ملاحظات</div><div>${animal.notes}</div></div>`:''}
+  ${animal.notes?`<div class="section-card mb-4"><div class="info-label mb-2"><i class="bi bi-chat-left-text accent-text me-2"></i>ملاحظات</div><div>${escapeHtml(animal.notes)}</div></div>`:''}
 
   <!-- Quick Links -->
   <div class="d-flex gap-2 flex-wrap mb-4">
@@ -325,7 +325,7 @@ function renderDetail(s){
     ${vaccinations.length===0?`<div class="text-gray text-center py-3" style="font-size:.85rem">لا توجد تطعيمات مسجّلة</div>`:`
     <div class="table-responsive"><table class="data-table">
       <thead><tr><th>اسم التطعيم</th><th>التاريخ</th><th>الجرعة التالية</th><th>ملاحظات</th></tr></thead>
-      <tbody>${vaccinations.map(v=>`<tr><td class="fw-bold">${v.name||'—'}</td><td class="text-gray">${v.date||'—'}</td><td class="text-gray">${v.next_date||'—'}</td><td class="text-gray">${v.notes||'—'}</td></tr>`).join('')}</tbody>
+      <tbody>${vaccinations.map(v=>`<tr><td class="fw-bold">${escapeHtml(v.name||'—')}</td><td class="text-gray">${v.date||'—'}</td><td class="text-gray">${v.next_date||'—'}</td><td class="text-gray">${escapeHtml(v.notes||'—')}</td></tr>`).join('')}</tbody>
     </table></div>`}
   </div>
 
@@ -341,7 +341,7 @@ function renderDetail(s){
     ${medications.length===0?`<div class="text-gray text-center py-3" style="font-size:.85rem">لا توجد أدوية مسجّلة</div>`:`
     <div class="table-responsive"><table class="data-table">
       <thead><tr><th>الدواء</th><th>تاريخ البدء</th><th>تاريخ الانتهاء</th><th>الجرعة</th><th>ملاحظات</th></tr></thead>
-      <tbody>${medications.map(m=>`<tr><td class="fw-bold">${m.name||'—'}</td><td class="text-gray">${m.start_date||'—'}</td><td class="text-gray">${m.end_date||'—'}</td><td>${m.dosage||'—'}</td><td class="text-gray">${m.notes||'—'}</td></tr>`).join('')}</tbody>
+      <tbody>${medications.map(m=>`<tr><td class="fw-bold">${escapeHtml(m.name||'—')}</td><td class="text-gray">${m.start_date||'—'}</td><td class="text-gray">${m.end_date||'—'}</td><td>${escapeHtml(m.dosage||'—')}</td><td class="text-gray">${escapeHtml(m.notes||'—')}</td></tr>`).join('')}</tbody>
     </table></div>`}
   </div>`;
   // Render weights section after innerHTML

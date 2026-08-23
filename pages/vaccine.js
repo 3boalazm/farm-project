@@ -78,19 +78,19 @@ function renderVaccPage(s){
         <div class="flex-grow-1">
           <div class="fw-bold mb-1 d-flex align-items-center gap-2 flex-wrap">
             <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${v.status==='done'?'var(--green)':v.status==='overdue'?'var(--red)':'var(--orange)'}"></span>
-            ${v.name}
+            ${escapeHtml(v.name||'')}
             <span class="type-badge ${v.status==='done'?'badge-tarbiya':v.status==='overdue'?'badge-danger':'badge-yellow'}" style="font-size:.7rem">${{done:'تم',overdue:'متأخر',pending:'انتظار'}[v.status]}</span>
           </div>
           <div class="d-flex gap-3 flex-wrap" style="font-size:.82rem">
-            <span class="text-gray"><i class="bi bi-building me-1"></i>${v.target_section||'كل الأقسام'}</span>
+            <span class="text-gray"><i class="bi bi-building me-1"></i>${escapeHtml(v.target_section||'كل الأقسام')}</span>
             <span class="text-gray"><i class="bi bi-collection me-1"></i>${ar(+v.count||0)} رأس</span>
             ${v.scheduled_date?`<span class="text-gray"><i class="bi bi-calendar3 me-1"></i>موعد: ${v.scheduled_date} ${d!==null&&v.status==='pending'?`<span style="color:${d<3?'var(--red)':'var(--orange)'}">(${d>0?'بعد '+ar(d)+' يوم':'اليوم!'})</span>`:''}</span>`:''}
             ${v.done_date?`<span class="green-text"><i class="bi bi-check-circle me-1"></i>نُفِّذ: ${v.done_date}</span>`:''}
-            ${v.executed_by?`<span class="text-gray"><i class="bi bi-person me-1"></i>${v.executed_by}</span>`:''}
+            ${v.executed_by?`<span class="text-gray"><i class="bi bi-person me-1"></i>${escapeHtml(v.executed_by)}</span>`:''}
           </div>
           <div class="progress-wonder"><div class="progress-bar-wonder" style="width:${v.progress||0}%;${v.status==='overdue'?'background:linear-gradient(90deg,var(--red),#ff8a65)':''}"></div></div>
           <small class="text-gray">${ar(v.progress||0)}٪</small>
-          ${v.notes?`<div class="text-gray mt-1" style="font-size:.78rem"><i class="bi bi-chat-left-text me-1"></i>${v.notes}</div>`:''}
+          ${v.notes?`<div class="text-gray mt-1" style="font-size:.78rem"><i class="bi bi-chat-left-text me-1"></i>${escapeHtml(v.notes)}</div>`:''}
         </div>
         <div class="d-flex gap-2 flex-wrap flex-shrink-0">
           ${v.status!=='done'&&can('health')?`<button class="action-btn primary sm" aria-label="تعليم كمنجز" onclick="markDone('${v._id}')"><i class="bi bi-check-lg"></i> تنفيذ</button>`:''}
@@ -238,10 +238,10 @@ window.openTemplates = async function() {
     return '<div class="wonder-card mb-2 p-3">' +
       '<div class="d-flex justify-content-between align-items-start gap-2">' +
         '<div>' +
-          '<div class="fw-bold">' + t.name + '</div>' +
-          '<small class="text-gray">' + t.target + ' | كل ' + (t.interval_months||12) + ' شهر' +
-            (t.vaccine_type ? ' | ' + t.vaccine_type : '') + '</small>' +
-          (t.notes ? '<div class="text-gray mt-1" style="font-size:.75rem">' + t.notes + '</div>' : '') +
+          '<div class="fw-bold">' + escapeHtml(t.name||'') + '</div>' +
+          '<small class="text-gray">' + escapeHtml(t.target||'') + ' | كل ' + (t.interval_months||12) + ' شهر' +
+            (t.vaccine_type ? ' | ' + escapeHtml(t.vaccine_type) : '') + '</small>' +
+          (t.notes ? '<div class="text-gray mt-1" style="font-size:.75rem">' + escapeHtml(t.notes) + '</div>' : '') +
         '</div>' +
         '<div class="d-flex gap-2 flex-shrink-0">' +
           delBtn +
@@ -282,15 +282,15 @@ window.applyTemplate = function(tpl, suggestedDate) {
   window._pendingTpl = tpl;
   showModal(
     '<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:500px">' +
-    '<h4><i class="bi bi-bandaid-fill accent-text me-2"></i>تطبيق قالب: ' + tpl.name + '</h4>' +
+    '<h4><i class="bi bi-bandaid-fill accent-text me-2"></i>تطبيق قالب: ' + escapeHtml(tpl.name||'') + '</h4>' +
     '<div class="mb-3 p-3" style="background:rgba(33,150,243,.07);border:1px solid rgba(33,150,243,.2);border-radius:10px;font-size:.82rem">' +
-      '<div class="fw-bold mb-1" style="color:var(--blue)">' + tpl.name + '</div>' +
-      '<div class="text-gray">' + tpl.target + ' | كل ' + (tpl.interval_months||12) + ' شهر</div>' +
-      (tpl.notes ? '<div class="text-gray">' + tpl.notes + '</div>' : '') +
+      '<div class="fw-bold mb-1" style="color:var(--blue)">' + escapeHtml(tpl.name||'') + '</div>' +
+      '<div class="text-gray">' + escapeHtml(tpl.target||'') + ' | كل ' + (tpl.interval_months||12) + ' شهر</div>' +
+      (tpl.notes ? '<div class="text-gray">' + escapeHtml(tpl.notes) + '</div>' : '') +
     '</div>' +
     '<div class="row g-2">' +
       '<div class="col-6"><label>التاريخ المقترح</label><input type="date" class="field" id="tpl-date" value="' + (suggestedDate||todayStr()) + '"></div>' +
-      '<div class="col-6"><label>القسم / العنبر</label><input class="field" id="tpl-section" value="' + tpl.target + '"></div>' +
+      '<div class="col-6"><label>القسم / العنبر</label><input class="field" id="tpl-section" value="' + escapeHtml(tpl.target||'') + '"></div>' +
     '</div>' +
     '<label>عدد الرؤوس</label><input type="number" class="field" id="tpl-count" value="0" min="0">' +
     '<label>ملاحظات</label><textarea class="field" id="tpl-notes" rows="2">' + (tpl.notes||'') + '</textarea>' +

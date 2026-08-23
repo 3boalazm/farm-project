@@ -117,7 +117,7 @@ function renderMain() {
   <button class="fab-btn" onclick="openProdEntry()" aria-label="تسجيل إنتاج سريع" title="تسجيل إنتاج"
     style="position:fixed;bottom:80px;left:20px;width:56px;height:56px;border-radius:50%;
       background:var(--orange);color:#fff;border:none;box-shadow:0 8px 24px rgba(16,185,129,.5);
-      font-size:1.4rem;cursor:pointer;z-index:1000;display:none;align-items:center;justify-content:center">
+      font-size:1.4rem;cursor:pointer;z-index:var(--z-fab);display:none;align-items:center;justify-content:center">
     <i class="bi bi-plus-lg"></i>
   </button>
   <style>
@@ -199,11 +199,11 @@ function renderMilkTab(el) {
     rowsHtml: milk.slice(0, 50).map(p => `
       <tr>
         <td class="text-gray">${p.date || '—'}</td>
-        <td class="fw-bold">${p.animal_tag || '—'}</td>
-        <td class="text-gray">${p.animal_breed || '—'}</td>
+        <td class="fw-bold">${escapeHtml(p.animal_tag || '—')}</td>
+        <td class="text-gray">${escapeHtml(p.animal_breed || '—')}</td>
         <td class="green-text fw-bold">${ar(+p.quantity || 0)} ل</td>
-        <td class="text-gray">${p.recorded_by || '—'}</td>
-        <td class="text-gray" style="font-size:.75rem">${p.notes || '—'}</td>
+        <td class="text-gray">${escapeHtml(p.recorded_by || '—')}</td>
+        <td class="text-gray" style="font-size:.75rem">${escapeHtml(p.notes || '—')}</td>
         <td><button class="action-btn sm danger" onclick="delProdRec('${p._id}')" aria-label="حذف السجل" style="padding:3px 8px"><i class="bi bi-trash" aria-hidden="true"></i></button></td>
       </tr>`).join('')
   }) : ''}`;
@@ -283,11 +283,11 @@ function renderWoolTab(el) {
     rowsHtml: wool.slice(0, 50).map(p => `
       <tr>
         <td class="text-gray">${p.date || '—'}</td>
-        <td class="fw-bold">${p.animal_tag || '—'}</td>
-        <td class="text-gray">${p.animal_breed || '—'}</td>
+        <td class="fw-bold">${escapeHtml(p.animal_tag || '—')}</td>
+        <td class="text-gray">${escapeHtml(p.animal_breed || '—')}</td>
         <td style="color:var(--yellow);font-weight:700">${ar((+p.quantity||0).toFixed(1))} كجم</td>
-        <td class="text-gray">${p.recorded_by || '—'}</td>
-        <td class="text-gray" style="font-size:.75rem">${p.notes || '—'}</td>
+        <td class="text-gray">${escapeHtml(p.recorded_by || '—')}</td>
+        <td class="text-gray" style="font-size:.75rem">${escapeHtml(p.notes || '—')}</td>
         <td><button class="action-btn sm danger" onclick="delProdRec('${p._id}')" aria-label="حذف السجل" style="padding:3px 8px"><i class="bi bi-trash" aria-hidden="true"></i></button></td>
       </tr>`).join('')
   }) : ''}`;
@@ -354,11 +354,11 @@ function renderWeightTab(el) {
     rowsHtml: weight.slice(0, 60).map(p => `
       <tr>
         <td class="text-gray">${p.date || '—'}</td>
-        <td class="fw-bold">${p.animal_tag || '—'}</td>
-        <td class="text-gray">${p.animal_breed || '—'}</td>
+        <td class="fw-bold">${escapeHtml(p.animal_tag || '—')}</td>
+        <td class="text-gray">${escapeHtml(p.animal_breed || '—')}</td>
         <td class="green-text fw-bold">${ar((+p.quantity||0).toFixed(1))} كجم</td>
-        <td class="text-gray">${p.recorded_by || '—'}</td>
-        <td class="text-gray" style="font-size:.75rem">${p.notes || '—'}</td>
+        <td class="text-gray">${escapeHtml(p.recorded_by || '—')}</td>
+        <td class="text-gray" style="font-size:.75rem">${escapeHtml(p.notes || '—')}</td>
         <td><button class="action-btn sm danger" onclick="delProdRec('${p._id}')" aria-label="حذف السجل" style="padding:3px 8px"><i class="bi bi-trash" aria-hidden="true"></i></button></td>
       </tr>`).join('')
   }) : ''}`;

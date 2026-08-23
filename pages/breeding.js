@@ -96,15 +96,15 @@ function renderBreedingPage(s){
               (r.offspring_count>=2?'<span class="type-badge badge-purple">توائم</span>':'')+
               (r.birth_amount?'<span class="type-badge badge-gray">💰 '+ar(r.birth_amount)+' '+getSettings().currency+'</span>':'')+
             '</div>'+
-            '<div style="font-size:.85rem"><span class="text-gray">الأنثى: </span><strong>'+(r.female_tag||r.mother_tag||'—')+' ('+(r.female_breed||'—')+')</strong>'+
-            ' <span class="text-gray mx-2">|</span><span class="text-gray">الفحل: </span><strong>'+(r.male_tag||'—')+' ('+(r.male_breed||'—')+')</strong></div>'+
+            '<div style="font-size:.85rem"><span class="text-gray">الأنثى: </span><strong>'+escapeHtml(r.female_tag||r.mother_tag||'—')+' ('+escapeHtml(r.female_breed||'—')+')</strong>'+
+            ' <span class="text-gray mx-2">|</span><span class="text-gray">الفحل: </span><strong>'+escapeHtml(r.male_tag||'—')+' ('+escapeHtml(r.male_breed||'—')+')</strong></div>'+
             '<small class="text-gray">التقريع: '+(r.mating_date||'—')+
             (r.expected_birth?' | الولادة المتوقعة: '+r.expected_birth+(r.status==='pregnant'&&d!==null?' <span style="color:'+(d<=0?'var(--red)':d<=7?'var(--orange)':'var(--gray)')+'">('+(d===0?'اليوم!':d<0?'تأخرت!':'بعد '+ar(d)+' يوم')+')</span>':''):'')+
             (r.status==='born'&&r.offspring_count?' | المواليد: '+ar(r.offspring_count)+' ('+ar(r.male_offspring||0)+' ذكور / '+ar(r.female_offspring||0)+' إناث)':'')+
-            (r.added_by?' | بقلم: '+r.added_by:'')+
-            (r.barn?' | '+r.barn:'')+
+            (r.added_by?' | بقلم: '+escapeHtml(r.added_by):'')+
+            (r.barn?' | '+escapeHtml(r.barn):'')+
             '</small>'+
-            (r.notes?'<div class="text-gray mt-1" style="font-size:.78rem">'+r.notes+'</div>':'')+
+            (r.notes?'<div class="text-gray mt-1" style="font-size:.78rem">'+escapeHtml(r.notes)+'</div>':'')+
           '</div>'+
           '<div class="d-flex gap-2 flex-shrink-0">'+
             (r.status==='pregnant'?'<button class="action-btn primary sm" onclick="markBorn(\''+r._id+'\')"><i class="bi bi-stars"></i> ولادة</button>':'')+

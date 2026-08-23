@@ -36,6 +36,19 @@ function escapeHtml(s){
   });
 }
 
+// For the common onclick="fn('${value}')" pattern -- a value that's both
+// a single-quoted JS string literal AND sits inside a double-quoted HTML
+// attribute. escapeHtml() alone is NOT enough here: the browser decodes
+// HTML entities (turning an escaped &#39; back into a literal ') BEFORE
+// handing the attribute's text to the JS parser on click, so an
+// HTML-only escape doesn't stop a value containing a quote from breaking
+// out of the JS string once the handler actually runs. This escapes for
+// the JS-string context first (backslash, then single-quote), then for
+// the HTML-attribute context, so both layers hold.
+function escapeJsAttr(s){
+  return escapeHtml(String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
+}
+
 // ── PIN Hashing (Security Migration) ──────────────────────
 // Replaces plaintext PIN storage. Uses the browser's built-in Web
 // Crypto API (SHA-256) — no new library/dependency added. Salted with
