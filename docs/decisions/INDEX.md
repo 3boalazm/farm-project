@@ -11,6 +11,7 @@
 | D-05 | Should the Undo system be connected? | Approved (deferred) — no evidenced need | Deliberately not implemented |
 | D-06 | Should Notifications gain a persisted producer? | Approved (deferred) — live-computed path already sufficient | Deliberately not implemented |
 | D-07 | `submitBirthDirect()` convergence onto `createOffspringAnimal()` | Approved, Implemented | `pages/breeding.js` |
+| D-08 | `custom_perms` is not resolved in Firebase RTDB rules (accounting collections stay admin-only in practice) | Approved (deferred) — fail-closed, no evidenced gap | Deliberately not implemented |
 | — | AI `add_birth`'s `father_tag`/`tag` support | **Open, deferred by D-03** | Not started |
 
 See individual files for full rationale, consequences, and historical-data strategy per decision.
