@@ -4,8 +4,8 @@
     {
       "name": "static-server",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["-y", "http-server", "-p", "8080", "-c-1"],
-      "port": 8080
+      "runtimeArgs": ["-y", "http-server", "-p", "8091", "-c-1"],
+      "port": 8091
     }
   ]
 }
