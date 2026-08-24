@@ -58,7 +58,7 @@ function renderVaccPage(s){
     <div class="fw-bold mb-2" style="color:var(--yellow)"><i class="bi bi-alarm-fill me-2"></i>تحصينات قادمة خلال ٧ أيام</div>
     ${upcoming.map(v=>`<div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
       <span class="type-badge badge-yellow">${escapeHtml(v.name||'')}</span>
-      <small class="text-gray">${v.target_section||'—'} • ${ar(+v.count||0)} رأس • بعد ${ar(daysUntil(v.scheduled_date))} يوم (${v.scheduled_date})</small>
+      <small class="text-gray">${escapeHtml(v.target_section||'—')} • ${ar(+v.count||0)} رأس • بعد ${ar(daysUntil(v.scheduled_date))} يوم (${v.scheduled_date})</small>
       ${can('health')?`<button class="action-btn primary sm" aria-label="تعليم كمنجز" onclick="markDone('${v._id}')"><i class="bi bi-check-lg"></i> تنفيذ الآن</button>`:''}
     </div>`).join('')}
   </div>`:''}
@@ -293,7 +293,7 @@ window.applyTemplate = function(tpl, suggestedDate) {
       '<div class="col-6"><label>القسم / العنبر</label><input class="field" id="tpl-section" value="' + escapeHtml(tpl.target||'') + '"></div>' +
     '</div>' +
     '<label>عدد الرؤوس</label><input type="number" class="field" id="tpl-count" value="0" min="0">' +
-    '<label>ملاحظات</label><textarea class="field" id="tpl-notes" rows="2">' + (tpl.notes||'') + '</textarea>' +
+    '<label>ملاحظات</label><textarea class="field" id="tpl-notes" rows="2">' + escapeHtml(tpl.notes||'') + '</textarea>' +
     '<div class="d-flex gap-2 justify-content-end mt-3">' +
       '<button class="action-btn" onclick="closeModal()">إلغاء</button>' +
       '<button class="action-btn primary" onclick="submitTpl()"><i class="bi bi-check-lg"></i> حفظ الجدول</button>' +

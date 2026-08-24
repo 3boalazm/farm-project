@@ -282,7 +282,7 @@ window.openBModal=function(id, prefTag, prefBreed, prefSpecies, jumpToBorn){
         '<div class="col-4"><label>إناث</label><input type="number" class="field" min="0" id="b-fem" value="'+(r.female_offspring||'')+'"></div>'+
       '</div>'+
       '<div class="row g-2">'+
-        '<div class="col-6"><label>أوزان المواليد (كجم)</label><input class="field" id="b-weights" value="'+(r.birth_weights||'')+'" placeholder="4.5, 3.8"></div>'+
+        '<div class="col-6"><label>أوزان المواليد (كجم)</label><input class="field" id="b-weights" value="'+escapeHtml(r.birth_weights||'')+'" placeholder="4.5, 3.8"></div>'+
         '<div class="col-6"><label data-hint="المبلغ المدفوع أو القيمة عند الولادة">المبلغ عند الولادة ('+s.currency+') <span class="info-tooltip" onclick="event.stopPropagation();showInfoModal(this)" data-tip="قيمة الولادة: تكلفة بيطري، ثمن الأم، أو قيمة المولود">!</span></label>'+
           '<input type="number" class="field" id="b-amount" value="'+(r.birth_amount||'')+'" placeholder="0"></div>'+
       '</div>'+
@@ -381,7 +381,7 @@ window.showFertilityReport=function(){
       '<div class="col-4"><div class="stat-mini"><div class="num yellow-text">'+ar(born.reduce((t,r)=>t+(+r.offspring_count||0),0))+'</div><div class="lbl">إجمالي المواليد</div></div></div>'+
     '</div>'+
     (totalMoney>0?'<div class="detail-row"><span class="detail-key">إجمالي مبالغ الولادات</span><span class="detail-val green-text">'+totalMoney.toLocaleString('ar-EG')+' '+getSettings().currency+'</span></div>':'')+
-    (topFemales.length?'<h6 class="fw-bold mt-3 mb-2">الإناث الأعلى إنتاجاً</h6><table class="tbl w-100"><thead><tr><th>الترقيم</th><th>السلالة</th><th>ولادات</th><th>مواليد</th></tr></thead><tbody>'+topFemales.map(f=>'<tr><td class="fw-bold">'+f.tag+'</td><td class="text-gray">'+f.breed+'</td><td>'+ar(f.count)+'</td><td class="green-text fw-bold">'+ar(f.offspring)+'</td></tr>').join('')+'</tbody></table>':'')+
+    (topFemales.length?'<h6 class="fw-bold mt-3 mb-2">الإناث الأعلى إنتاجاً</h6><table class="tbl w-100"><thead><tr><th>الترقيم</th><th>السلالة</th><th>ولادات</th><th>مواليد</th></tr></thead><tbody>'+topFemales.map(f=>'<tr><td class="fw-bold">'+escapeHtml(f.tag||'')+'</td><td class="text-gray">'+escapeHtml(f.breed||'')+'</td><td>'+ar(f.count)+'</td><td class="green-text fw-bold">'+ar(f.offspring)+'</td></tr>').join('')+'</tbody></table>':'')+
     '<div class="d-flex justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إغلاق</button></div>'+
   '</div>');
 };

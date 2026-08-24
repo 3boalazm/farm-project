@@ -158,7 +158,10 @@ var _sectionIconsV2={'القطيع':'bi-list-ul','الصحة والإنتاج':'
 function _railStrokeIcon(icon){ return (icon||'').replace(/-fill$/,''); }
 function renderNavbarV2(activePage=''){
   const s=getSettings();const u=getUser();
-  const logoHtml=s.logoUrl==='media/logo-icon.svg'?`<img class="logo-for-light" src="media/logo-icon.svg" alt=""><img class="logo-for-dark" src="media/logo-icon-dark.svg" alt="">`:s.logoUrl?`<img src="${s.logoUrl}" alt="">`:'🐐';
+  // XSS fix (2026-08-24): logoUrl is a free-text URL field set via
+  // openEditProfile() (pages/farm_profile.js) -- rendered on every page
+  // via this sidebar, so an attribute-breakout here was site-wide.
+  const logoHtml=s.logoUrl==='media/logo-icon.svg'?`<img class="logo-for-light" src="media/logo-icon.svg" alt=""><img class="logo-for-dark" src="media/logo-icon-dark.svg" alt="">`:s.logoUrl?`<img src="${escapeHtml(s.logoUrl)}" alt="">`:'🐐';
 
   const railSections=FARM_NAV.map(function(section,i){
     const visible=section.items.filter(function(p){return !p.perm||can(p.perm);});
@@ -616,10 +619,10 @@ function renderAnimalCard({ tag, breed, species='goat', status='alive', barn='',
   const speciesIcon = species === 'goat' ? 'bi-tropical-storm' : 'bi-cloud-fill';
   const inner = `
     <div class="d-flex justify-content-between align-items-start mb-2">
-      <div class="d-flex align-items-center gap-2"><i class="bi ${speciesIcon}" style="color:var(--green)"></i><span class="fw-bold" style="font-size:var(--text-sm)">${tag||'—'}</span></div>
+      <div class="d-flex align-items-center gap-2"><i class="bi ${speciesIcon}" style="color:var(--green)"></i><span class="fw-bold" style="font-size:var(--text-sm)">${escapeHtml(tag||'—')}</span></div>
       <span class="type-badge ${st.cls}">${st.label}</span>
     </div>
-    <div class="text-gray mb-2" style="font-size:var(--text-xs)">${breed}${barn?` • ${barn}`:''}</div>
+    <div class="text-gray mb-2" style="font-size:var(--text-xs)">${escapeHtml(breed||'')}${barn?` • ${escapeHtml(barn)}`:''}</div>
     ${quickActionsHtml?`<div class="d-flex gap-1">${quickActionsHtml}</div>`:''}`;
   return href ? `<a href="${href}" class="animal-card-v2" style="text-decoration:none;color:inherit;display:block">${inner}</a>` : `<div class="animal-card-v2">${inner}</div>`;
 }
@@ -745,7 +748,7 @@ function renderDonutSVG(segments, opts={}){
     offset+=dash;
     return el;
   }).join('');
-  const legend = segments.filter(s=>s.value>0).map(s=>`<span class="d-inline-flex align-items-center gap-1" style="font-size:var(--text-xs);margin:0 6px"><span style="width:8px;height:8px;border-radius:50%;background:${s.color};display:inline-block"></span>${s.label} (${ar(s.value)})</span>`).join('');
+  const legend = segments.filter(s=>s.value>0).map(s=>`<span class="d-inline-flex align-items-center gap-1" style="font-size:var(--text-xs);margin:0 6px"><span style="width:8px;height:8px;border-radius:50%;background:${s.color};display:inline-block"></span>${escapeHtml(s.label||'')} (${ar(s.value)})</span>`).join('');
   return `<div class="text-center"><svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${arcs}<text x="${cx}" y="${cy+6}" text-anchor="middle" font-size="20" font-weight="700" fill="var(--text)" font-family="Lexend">${ar(total)}</text></svg><div class="d-flex flex-wrap justify-content-center mt-2">${legend}</div></div>`;
 }
 

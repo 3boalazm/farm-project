@@ -429,7 +429,7 @@ window.openTaskModal = function(presetData) {
           '<label for="t-assign">المُكلَّف</label>' +
           '<select class="field" id="t-assign" aria-label="الشخص المُكلَّف">' +
             '<option value="">— غير محدد —</option>' +
-            workers.map(w => '<option value="' + w._id + '" data-name="' + (w.name||'') + '"' + (d.assigned_to === w._id ? ' selected' : '') + '>' + (w.name || w.email) + ' (' + (ROLES[w.role]?.label || w.role) + ')</option>').join('') +
+            workers.map(w => '<option value="' + w._id + '" data-name="' + escapeHtml(w.name||'') + '"' + (d.assigned_to === w._id ? ' selected' : '') + '>' + escapeHtml(w.name || w.email || '') + ' (' + (ROLES[w.role]?.label || w.role) + ')</option>').join('') +
           '</select>' +
         '</div>' +
         '<div class="col-6">' +
@@ -460,7 +460,7 @@ window.openTaskModal = function(presetData) {
       '</div>' +
 
       '<label for="t-notes">ملاحظات</label>' +
-      '<textarea class="field" id="t-notes" rows="2" placeholder="تفاصيل إضافية...">' + (d.notes || '') + '</textarea>' +
+      '<textarea class="field" id="t-notes" rows="2" placeholder="تفاصيل إضافية...">' + escapeHtml(d.notes || '') + '</textarea>' +
 
       '<div class="d-flex gap-2 justify-content-end mt-3">' +
         '<button class="action-btn" onclick="closeModal()" aria-label="إلغاء">إلغاء</button>' +

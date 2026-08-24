@@ -514,7 +514,7 @@ window.openProdEntry = function() {
       '<label>الحيوان *</label>' +
       '<select class="field" id="pr-animal" aria-label="اختيار الحيوان">' +
         '<option value="">— اختر حيواناً —</option>' +
-        tags.map(function(t){ return '<option value="' + t.id + '">' + t.label + '</option>'; }).join('') +
+        tags.map(function(t){ return '<option value="' + t.id + '">' + escapeHtml(t.label) + '</option>'; }).join('') +
       '</select>' +
       '<div class="row g-2">' +
         '<div class="col-6">' +
@@ -523,7 +523,7 @@ window.openProdEntry = function() {
         '</div>' +
         '<div class="col-6">' +
           '<label>مسجّل بواسطة</label>' +
-          '<input class="field" id="pr-by" value="' + (u?.name || '') + '" aria-label="اسم المسجّل">' +
+          '<input class="field" id="pr-by" value="' + escapeHtml(u?.name || '') + '" aria-label="اسم المسجّل">' +
         '</div>' +
       '</div>' +
       '<label>ملاحظات</label>' +

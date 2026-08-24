@@ -136,7 +136,7 @@ function renderEquipTable(){
   return renderDataTableWrapper({
     title: 'المعدات',
     headers: ['المعدة','النوع','الحالة','صيانة قادمة','ملاحظات',''],
-    rowsHtml: equipment.map(e=>{const d=e.next_maintenance?daysLeft(e.next_maintenance):null;return`<tr><td class="fw-bold">${escapeHtml(e.name||'—')}</td><td class="text-gray">${escapeHtml(e.type||'—')}</td><td><span class="type-badge ${e.status==='working'?'badge-tarbiya':e.status==='broken'?'badge-danger':'badge-yellow'}">${{working:'يعمل',broken:'معطل',maintenance:'صيانة'}[e.status]||e.status}</span></td><td class="${d!==null&&d<=30?'red-text':'text-gray'}">${e.next_maintenance||'—'} ${d!==null&&d<=30?`(${ar(d)} يوم)`:''}</td><td class="text-gray">${escapeHtml(e.notes||'—')}</td><td><div class="d-flex gap-1"><button class="icon-btn edit" onclick="openEditInv('equip','${e._id}')" aria-label="تعديل" title="تعديل"><i class="bi bi-pencil"></i></button><button class="icon-btn del" onclick="delInv('equip','${e._id}')" aria-label="حذف" title="حذف"><i class="bi bi-trash"></i></button></div></td></tr>`;}).join('')
+    rowsHtml: equipment.map(e=>{const d=e.next_maintenance?daysLeft(e.next_maintenance):null;return`<tr><td class="fw-bold">${escapeHtml(e.name||'—')}</td><td class="text-gray">${escapeHtml(e.type||'—')}</td><td><span class="type-badge ${e.status==='working'?'badge-tarbiya':e.status==='broken'?'badge-danger':'badge-yellow'}">${{working:'يعمل',broken:'معطل',maintenance:'صيانة'}[e.status]||escapeHtml(e.status||'')}</span></td><td class="${d!==null&&d<=30?'red-text':'text-gray'}">${e.next_maintenance||'—'} ${d!==null&&d<=30?`(${ar(d)} يوم)`:''}</td><td class="text-gray">${escapeHtml(e.notes||'—')}</td><td><div class="d-flex gap-1"><button class="icon-btn edit" onclick="openEditInv('equip','${e._id}')" aria-label="تعديل" title="تعديل"><i class="bi bi-pencil"></i></button><button class="icon-btn del" onclick="delInv('equip','${e._id}')" aria-label="حذف" title="حذف"><i class="bi bi-trash"></i></button></div></td></tr>`;}).join('')
   });
 }
 
@@ -269,11 +269,11 @@ window.openEditInv=function(type,id){
 };
 
 window.openUseModal=function(type,id,name,current){
-  showModal(`<div class="farm-modal narrow" onclick="event.stopPropagation()"><h4><i class="bi bi-dash-circle accent-text"></i> تسجيل استخدام: ${name}</h4>
+  showModal(`<div class="farm-modal narrow" onclick="event.stopPropagation()"><h4><i class="bi bi-dash-circle accent-text"></i> تسجيل استخدام: ${escapeHtml(name)}</h4>
     <p class="text-gray" style="font-size:.85rem">المتاح: <strong>${current}</strong></p>
     <label>الكمية المستخدمة *</label><input type="number" class="field" id="use-qty" step="0.5" min="0.5" max="${current}" placeholder="الكمية">
     <label>السبب</label><input class="field" id="use-reason" placeholder="علاج، تطعيم، تغذية...">
-    <div class="d-flex gap-2 justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إلغاء</button><button class="action-btn danger" onclick="submitUse('${type}','${id}','${name}',${current})">تسجيل الاستخدام</button></div>
+    <div class="d-flex gap-2 justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إلغاء</button><button class="action-btn danger" onclick="submitUse('${type}','${id}','${escapeJsAttr(name)}',${current})">تسجيل الاستخدام</button></div>
   </div>`);
 };
 window.submitUse=async function(type,id,name,current){

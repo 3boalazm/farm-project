@@ -15,7 +15,7 @@ function renderFarmProfile(s,animals,users){
 
   renderPageHeaderV2({
     title: '<i class="bi bi-building accent-text"></i> ملف المزرعة',
-    description: s.farmAddress||'',
+    description: escapeHtml(s.farmAddress||''),
     breadcrumb: [{label:'الرئيسية', href:'dashboard.html'}, {label:'ملف المزرعة'}],
     primaryAction: can('admin')?`<button class="action-btn primary" onclick="openEditProfile()"><i class="bi bi-pencil-fill"></i> تعديل</button>`:''
   });
@@ -26,16 +26,16 @@ function renderFarmProfile(s,animals,users){
   <div class="profile-header mb-4">
     <div class="d-flex align-items-start gap-4 flex-wrap">
       <div style="width:90px;height:90px;border-radius:20px;background:linear-gradient(135deg,var(--orange),#ff8a65);display:flex;align-items:center;justify-content:center;font-size:2.8rem;overflow:hidden;flex-shrink:0">
-        ${s.logoUrl?`<img src="${s.logoUrl}" style="width:100%;height:100%;object-fit:cover">`:'🐐'}
+        ${s.logoUrl?`<img src="${escapeHtml(s.logoUrl)}" style="width:100%;height:100%;object-fit:cover">`:'🐐'}
       </div>
       <div class="flex-grow-1">
-        <h2 class="fw-bold mb-1">${s.farmName}</h2>
+        <h2 class="fw-bold mb-1">${escapeHtml(s.farmName||'')}</h2>
         <div class="d-flex gap-3 flex-wrap text-gray" style="font-size:.85rem">
-          ${s.farmAddress?`<span><i class="bi bi-geo-alt-fill accent-text me-1"></i>${s.farmAddress}</span>`:''}
-          <span><i class="bi bi-cash accent-text me-1"></i>العملة: ${s.currency}</span>
+          ${s.farmAddress?`<span><i class="bi bi-geo-alt-fill accent-text me-1"></i>${escapeHtml(s.farmAddress)}</span>`:''}
+          <span><i class="bi bi-cash accent-text me-1"></i>العملة: ${escapeHtml(s.currency||'')}</span>
           <span><i class="bi bi-people-fill accent-text me-1"></i>${ar(users.length)} مستخدم</span>
         </div>
-        ${s.farmLat&&s.farmLng?`<div class="mt-2"><a href="https://www.google.com/maps?q=${s.farmLat},${s.farmLng}" target="_blank" class="action-btn sm"><i class="bi bi-map"></i> عرض على الخريطة</a></div>`:''}
+        ${s.farmLat&&s.farmLng?`<div class="mt-2"><a href="https://www.google.com/maps?q=${encodeURIComponent(s.farmLat)},${encodeURIComponent(s.farmLng)}" target="_blank" class="action-btn sm"><i class="bi bi-map"></i> عرض على الخريطة</a></div>`:''}
       </div>
     </div>
   </div>
@@ -45,7 +45,7 @@ function renderFarmProfile(s,animals,users){
     <div class="col-md-4">
       <div class="wonder-card">
         <div class="section-title mb-3"><i class="bi bi-building accent-text"></i> بيانات المزرعة</div>
-        ${[['الاسم',s.farmName],['المالك/المدير',s.ownerName],['العنوان',s.farmAddress||'—'],['العملة',s.currency],['أيام الحمل',ar(s.pregnancyDays)+' يوم'],['تنبيه التحصين قبل',ar(s.vaccinationAlertDays)+' يوم'],['أيام الفطام',ar(s.weaningDays)+' يوم']].map(([k,v])=>`<div class="info-row"><span class="info-label">${k}</span><span class="info-value fw-bold">${v}</span></div>`).join('')}
+        ${[['الاسم',escapeHtml(s.farmName||'')],['المالك/المدير',escapeHtml(s.ownerName||'')],['العنوان',escapeHtml(s.farmAddress||'—')],['العملة',escapeHtml(s.currency||'')],['أيام الحمل',ar(s.pregnancyDays)+' يوم'],['تنبيه التحصين قبل',ar(s.vaccinationAlertDays)+' يوم'],['أيام الفطام',ar(s.weaningDays)+' يوم']].map(([k,v])=>`<div class="info-row"><span class="info-label">${k}</span><span class="info-value fw-bold">${v}</span></div>`).join('')}
       </div>
     </div>
     <!-- Stats -->
@@ -108,8 +108,8 @@ window.openEditProfile=function(){
     <label>العنوان</label><input class="field" id="fp-address" value="${escapeHtml(s.farmAddress||'')}" placeholder="العامرية، الإسكندرية">
     <label>رابط شعار المزرعة (URL)</label><input class="field" id="fp-logo" value="${escapeHtml(s.logoUrl||'')}" placeholder="https://..." dir="ltr">
     <div class="row g-2">
-      <div class="col-6"><label>خط العرض (Latitude)</label><input class="field" id="fp-lat" value="${s.farmLat||''}" placeholder="30.9500" dir="ltr"></div>
-      <div class="col-6"><label>خط الطول (Longitude)</label><input class="field" id="fp-lng" value="${s.farmLng||''}" placeholder="29.7972" dir="ltr"></div>
+      <div class="col-6"><label>خط العرض (Latitude)</label><input class="field" id="fp-lat" value="${escapeHtml(s.farmLat||'')}" placeholder="30.9500" dir="ltr"></div>
+      <div class="col-6"><label>خط الطول (Longitude)</label><input class="field" id="fp-lng" value="${escapeHtml(s.farmLng||'')}" placeholder="29.7972" dir="ltr"></div>
     </div>
     <small class="text-gray d-block mb-2">الموقع الحالي: المزرعة النموذجية بالعامرية 30°57'00.2"N 29°47'50"E</small>
     <button class="action-btn sm mb-3" onclick="useDefaultLocation()"><i class="bi bi-geo-alt-fill"></i> استخدام موقع المزرعة الافتراضي</button>

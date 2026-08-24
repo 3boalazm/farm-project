@@ -759,9 +759,9 @@ window.editAndConfirm = function() {
       '<div class="col-6"><label>الجنس</label><select class="field" id="ea-gen"><option value="male" '+(d.gender==='male'?'selected':'')+'>ذكر ♂</option><option value="female" '+(d.gender==='female'?'selected':'')+'>أنثى ♀</option></select></div>' +
       '<div class="col-6"><label>الغرض</label><select class="field" id="ea-pur"><option value="tarbiya" '+(d.purpose==='tarbiya'?'selected':'')+'>تربية</option><option value="tasmeen" '+(d.purpose==='tasmeen'?'selected':'')+'>تسمين</option><option value="birth" '+(d.purpose==='birth'?'selected':'')+'>مواليد</option></select></div>' +
     '</div>' +
-    (d.count!==undefined?'<label>العدد</label><input type="number" class="field" id="ea-count" value="'+(d.count||1)+'" min="1">':'') +
+    (d.count!==undefined?'<label>العدد</label><input type="number" class="field" id="ea-count" value="'+escapeHtml(d.count||1)+'" min="1">':'') +
     (d.mother_tag!==undefined?'<label>رقم الأم</label><input class="field" id="ea-mtag" value="'+escapeHtml(d.mother_tag||'')+'">':'') +
-    '<label>تاريخ</label><input type="date" class="field" id="ea-date" value="'+(d.birth_date||d.date||todayStr())+'">' +
+    '<label>تاريخ</label><input type="date" class="field" id="ea-date" value="'+escapeHtml(d.birth_date||d.date||todayStr())+'">' +
     '<label>ملاحظات</label><input class="field" id="ea-notes" value="'+escapeHtml(d.notes||'')+'">' +
     '<div class="d-flex gap-2 justify-content-end mt-3">' +
       '<button class="action-btn" onclick="closeModal()">إلغاء</button>' +
@@ -842,9 +842,9 @@ window.openApiSettings = function() {
       '</ol>' +
     '</div>' +
     '<label>مفتاح Groq API</label>' +
-    '<input class="field" id="groq-key-input" type="password" value="' + current + '" placeholder="gsk_...">' +
+    '<input class="field" id="groq-key-input" type="password" value="' + escapeHtml(current) + '" placeholder="gsk_...">' +
     '<label class="mt-3">اسم الموديل</label>' +
-    '<input class="field" id="groq-model-input" type="text" value="' + model + '" placeholder="' + GROQ_DEFAULT_MODEL + '">' +
+    '<input class="field" id="groq-model-input" type="text" value="' + escapeHtml(model) + '" placeholder="' + GROQ_DEFAULT_MODEL + '">' +
     '<div style="font-size:.75rem;color:var(--text-muted);margin-top:6px;line-height:1.6">' +
       'الافتراضي <strong>llama-3.3-70b-versatile</strong> — أفضل موديل إنتاجي على Groq للعربي. ' +
       'بدائل: <strong>openai/gpt-oss-120b</strong> (أسرع وأرخص) أو <strong>llama-3.1-8b-instant</strong> (الأسرع، أقل دقة). ' +
