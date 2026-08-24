@@ -315,6 +315,9 @@ const XSS_FIX_SITES = [
   { file: 'barns.html', mustContain: "[a.purpose]||escapeHtml(a.purpose||'')" },
   { file: path.join('pages', 'inventory.js'), mustContain: "[e.status]||escapeHtml(e.status||'')" },
   { file: path.join('pages', 'reports.js'), mustContain: "[t.reason]||escapeHtml(t.reason||'')" },
+  // -- Round 5 (final independent acceptance-gate re-scan, post round-4) --
+  { file: 'assistant.html', mustContain: "escapeHtml(actionLabels[parsed.action]||'عملية')" }, // fallback branch missed by the adjacent LLM-JSON escaping fix
+  { file: 'animal-detail.html', mustContain: "escapeJsAttr(a._id)+'\\').then(function(){renderWeightAlertsSection(" }, // onclick JS-string + attribute breakout (URL-derived animalId re-embedded)
 ];
 let xssRegressions = 0;
 const xssFilesChecked = new Set();

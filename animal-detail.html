@@ -693,7 +693,7 @@ window.renderWeightAlertsSection=async function(animalId){
               (a.resolved_at?' — أُغلق: '+a.resolved_at.slice(0,16).replace('T',' '):'')+
             '</div>'+
           '</div>'+
-          (isActive&&can('animals')?'<button class="action-btn sm" onclick="window.resolveWeightAlert(\''+a._id+'\').then(function(){renderWeightAlertsSection(\''+animalId+'\');})"><i class="bi bi-check-lg"></i> إغلاق</button>':'')+
+          (isActive&&can('animals')?'<button class="action-btn sm" onclick="window.resolveWeightAlert(\''+escapeJsAttr(a._id)+'\').then(function(){renderWeightAlertsSection(\''+escapeJsAttr(animalId)+'\');})"><i class="bi bi-check-lg"></i> إغلاق</button>':'')+
         '</div></div>';
     }).join('');
     html+='</div>';
