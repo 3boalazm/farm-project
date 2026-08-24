@@ -316,7 +316,7 @@ window.openBreedEdit=function(sp, breedEnc){
   window._breedEditData={sp:sp,breed:breed,mTar:mTar,fTar:fTar,mTas:mTas,fTas:fTas};
 
   showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:480px">'+
-    '<h4><i class="bi bi-pencil-square" style="color:var(--blue)"></i> تعديل سلالة: '+breed+'</h4>'+
+    '<h4><i class="bi bi-pencil-square" style="color:var(--blue)"></i> تعديل سلالة: '+escapeHtml(breed)+'</h4>'+
     '<div class="mb-3 p-3" style="background:rgba(33,150,243,.06);border:1px solid rgba(33,150,243,.2);border-radius:10px;font-size:.82rem">'+
       'الأرقام الحالية: تربية ('+ar(mTar)+'♂ / '+ar(fTar)+'♀) | تسمين ('+ar(mTas)+'♂ / '+ar(fTas)+'♀)<br>'+
       '<span class="text-gray">الزيادة تضيف حيوانات — النقص يعطّل الزيادة</span>'+

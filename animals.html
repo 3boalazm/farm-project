@@ -129,7 +129,7 @@ function renderFilters(){
     '<div class="row g-2 align-items-end">'+
       '<div class="col-md-2">'+
         '<label class="text-gray" style="font-size:.72rem;font-weight:600">البحث</label>'+
-        '<input class="field" placeholder="ترقيم..." id="f-search" value="'+fSearch+'" oninput="fSearch=this.value;renderAnimals()">'+
+        '<input class="field" placeholder="ترقيم..." id="f-search" value="'+escapeHtml(fSearch)+'" oninput="fSearch=this.value;renderAnimals()">'+
       '</div>'+
       '<div class="col-md-2">'+
         '<label class="text-gray" style="font-size:.72rem;font-weight:600">النوع</label>'+
@@ -143,7 +143,7 @@ function renderFilters(){
         '<label class="text-gray" style="font-size:.72rem;font-weight:600">السلالة</label>'+
         '<select class="field" id="f-breed" onchange="fBreed=this.value;renderAnimals()">'+
           '<option value="all" '+(fBreed==='all'?'selected':'')+'>الكل</option>'+
-          breedList.map(function(b){return'<option value="'+b+'" '+(fBreed===b?'selected':'')+'>'+b+'</option>';}).join('')+
+          breedList.map(function(b){return'<option value="'+escapeHtml(b)+'" '+(fBreed===b?'selected':'')+'>'+escapeHtml(b)+'</option>';}).join('')+
         '</select>'+
       '</div>'+
       '<div class="col-md-1">'+
@@ -294,7 +294,7 @@ function renderAnimals(){
   // Rows
   var isCards=_viewMode==='cards';
   var rows=shown.map(function(a){
-    var purposeLabel={tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[a.purpose]||a.purpose||'—';
+    var purposeLabel={tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[a.purpose]||escapeHtml(a.purpose||'—');
     var purposeCls=a.purpose==='tasmeen'?'badge-tasmeen':a.purpose==='birth'?'badge-blue':'badge-tarbiya';
     var statusCls=a.status==='alive'?'badge-tarbiya':'badge-danger';
     var statusLabel=a.status==='alive'?'حي':'نافق';
@@ -512,7 +512,7 @@ window.doBulk=function(action){
         '<div class="col-6"><label>السلالة</label>'+
           '<select class="field" id="be-breed">'+
             '<option value="">— لا تغيير —</option>'+
-            allBreeds.map(function(b){return'<option value="'+b+'">'+b+'</option>';}).join('')+
+            allBreeds.map(function(b){return'<option value="'+escapeHtml(b)+'">'+escapeHtml(b)+'</option>';}).join('')+
           '</select></div>'+
         '<div class="col-6"><label>الجنس</label>'+
           '<select class="field" id="be-gender">'+
@@ -1686,12 +1686,12 @@ window._parseImpFile=function(file){
           _impRows.slice(0,8).map(function(r){
             return '<tr style="'+(r.errors.length?'background:rgba(244,67,54,.05)':'')+'">'+
               '<td class="text-gray">'+ar(r.row)+'</td>'+
-              '<td>'+({goat:'🐐ماعز',sheep:'🐑أغنام'}[r.data.species]||r.data.species||'—')+'</td>'+
-              '<td>'+(r.data.breed||'—')+'</td>'+
-              '<td>'+({male:'ذكر',female:'أنثى'}[r.data.gender]||r.data.gender||'—')+'</td>'+
-              '<td>'+({tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[r.data.purpose]||r.data.purpose||'—')+'</td>'+
-              '<td class="text-gray">'+(r.data.tag||'—')+'</td>'+
-              '<td class="text-gray">'+(r.data.barn||'—')+'</td>'+
+              '<td>'+({goat:'🐐ماعز',sheep:'🐑أغنام'}[r.data.species]||escapeHtml(r.data.species||'—'))+'</td>'+
+              '<td>'+escapeHtml(r.data.breed||'—')+'</td>'+
+              '<td>'+({male:'ذكر',female:'أنثى'}[r.data.gender]||escapeHtml(r.data.gender||'—'))+'</td>'+
+              '<td>'+({tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[r.data.purpose]||escapeHtml(r.data.purpose||'—'))+'</td>'+
+              '<td class="text-gray">'+escapeHtml(r.data.tag||'—')+'</td>'+
+              '<td class="text-gray">'+escapeHtml(r.data.barn||'—')+'</td>'+
               '<td>'+(r.errors.length?'<span class="red-text">❌</span>':'<span class="green-text">✅</span>')+'</td>'+
             '</tr>';
           }).join('')+
