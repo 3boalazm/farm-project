@@ -318,6 +318,12 @@ const XSS_FIX_SITES = [
   // -- Round 5 (final independent acceptance-gate re-scan, post round-4) --
   { file: 'assistant.html', mustContain: "escapeHtml(actionLabels[parsed.action]||'عملية')" }, // fallback branch missed by the adjacent LLM-JSON escaping fix
   { file: 'animal-detail.html', mustContain: "escapeJsAttr(a._id)+'\\').then(function(){renderWeightAlertsSection(" }, // onclick JS-string + attribute breakout (URL-derived animalId re-embedded)
+  // -- Round 6 (seventh independent re-scan) --
+  { file: 'animal-detail.html', mustContain: "escapeHtml(hf.evidence.join(' — '))" }, // forecastHealthRisk() evidence -- vaccination name (v.name) unescaped at the source in shared.js, escaped here at the render sink
+  // -- Round 7 (eighth independent re-scan) --
+  { file: path.join('pages', 'reports.js'), mustContain: '<span>${escapeHtml(e.cat)}</span>' }, // renderCatBars() finance category -- sibling of the already-fixed cost.html/pages/finance.js/reports.js instances of the same field
+  // -- Round 8 (ninth independent re-scan) -- defense-in-depth: no current free-text write path for feed_consumption.barn, but fixed anyway, same reasoning as prior defense-in-depth batches.
+  { file: path.join('pages', 'reports.js'), mustContain: "escapeHtml(c.barn||'—')" },
 ];
 let xssRegressions = 0;
 const xssFilesChecked = new Set();

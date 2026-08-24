@@ -270,7 +270,7 @@ async function renderFinanceAdvancedKPIs() {
 function renderCatBars(cats,total,color) {
   const entries=Object.entries(cats).map(([cat,recs])=>({cat:cat||'أخرى',total:recs.reduce((t,r)=>t+(+r.amount||0),0)})).sort((a,b)=>b.total-a.total);
   if(!entries.length)return'<div class="text-gray text-center py-3" style="font-size:.85rem">لا توجد بيانات</div>';
-  return entries.map(e=>{const pct=total>0?Math.round(e.total/total*100):0;return`<div class="finance-bar-wrap"><div class="lb"><span>${e.cat}</span><span class="fw-bold">${e.total.toLocaleString('ar-EG')} (${pct}٪)</span></div><div class="finance-bar"><div class="finance-bar-fill" style="width:${pct}%;background:${color}"></div></div></div>`;}).join('');
+  return entries.map(e=>{const pct=total>0?Math.round(e.total/total*100):0;return`<div class="finance-bar-wrap"><div class="lb"><span>${escapeHtml(e.cat)}</span><span class="fw-bold">${e.total.toLocaleString('ar-EG')} (${pct}٪)</span></div><div class="finance-bar"><div class="finance-bar-fill" style="width:${pct}%;background:${color}"></div></div></div>`;}).join('');
 }
 
 // ════════════════ TAB 3: HEALTH ═══════════════════════════
@@ -536,7 +536,7 @@ function renderInventoryTab(el, m) {
   <div class="mb-4">${renderDataTableWrapper({title:'آخر حركات المخزون (Transactions)', headers:['التاريخ','الصنف','السبب','التغيّر','قبل','بعد'],
     rowsHtml: txns.slice().sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||'')).slice(0,15).map(t=>`<tr><td class="text-gray">${t.date||'—'}</td><td class="fw-bold">${escapeHtml(t.item_name)}</td><td class="text-gray">${{treatment:'علاج',vaccination:'تحصين',feeding:'تغذية',purchase:'شراء',manual_adjustment:'تعديل يدوي'}[t.reason]||escapeHtml(t.reason||'')}</td><td class="${t.actual_delta<0?'red-text':'green-text'}">${t.actual_delta>0?'+':''}${ar(Math.round(t.actual_delta*100)/100)}</td><td class="text-gray">${ar(t.quantity_before)}</td><td class="text-gray">${ar(t.quantity_after)}</td></tr>`).join('')})}</div>
   <div class="mb-4">${renderDataTableWrapper({title:'سجل استهلاك العلف', headers:['التاريخ','الجمالون','العلف','الكمية (كجم)'],
-    rowsHtml: consumption.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,15).map(c=>`<tr><td class="text-gray">${c.date||'—'}</td><td>${c.barn||'—'}</td><td class="fw-bold">${escapeHtml(c.feed_name)}</td><td>${ar(c.quantity_kg)}</td></tr>`).join('')})}</div>`;
+    rowsHtml: consumption.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,15).map(c=>`<tr><td class="text-gray">${c.date||'—'}</td><td>${escapeHtml(c.barn||'—')}</td><td class="fw-bold">${escapeHtml(c.feed_name)}</td><td>${ar(c.quantity_kg)}</td></tr>`).join('')})}</div>`;
 }
 
 // ════════════════ TAB 7: WORKFLOW HISTORY (v1.4) ═══════════

@@ -491,7 +491,7 @@ window.renderAnimalForecast=async function(animalId, animalTag, barn){
           '<div class="d-flex justify-content-between align-items-center"><strong style="font-size:.88rem">توقع المخاطر الصحية (٣٠ يوم)</strong>'+
           '<span class="type-badge" style="background:var(--yellow)22;color:var(--yellow);font-size:.68rem">ثقة '+(CONF_LABEL[hf.confidence]||hf.confidence)+'</span></div>'+
           '<div class="text-gray mt-1" style="font-size:.78rem">الدرجة الحالية '+ar(hf.currentScore)+' ← المتوقعة '+ar(hf.projectedScore)+'/100</div>'+
-          '<div class="text-gray mt-1" style="font-size:.72rem">'+hf.evidence.join(' — ')+'</div></div>');
+          '<div class="text-gray mt-1" style="font-size:.72rem">'+escapeHtml(hf.evidence.join(' — '))+'</div></div>');
       }
     }
     // Sprint 12 (v1.5): breeding-window prediction, reuses
