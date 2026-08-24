@@ -207,6 +207,50 @@ const XSS_FIX_SITES = [
   { file: 'settings.html', mustContain: 'escapeHtml(item.b)' },
   { file: 'assistant.html', mustContain: "escapeHtml(b)+'</option>'" }, // ea-breed catalog option
   { file: 'finance-reports.html', mustContain: 'escapeHtml(x.name)' },
+
+  // ── Round 3 (independent acceptance-gate re-scan after round 2): 12
+  // more VULNERABLE sinks + defense-in-depth breed-catalog hardening
+  // extended to every remaining unescaped `<option>`/card builder found
+  // by the same audit. Same flat string-presence pattern.
+  { file: 'activity.html', mustContain: "escapeHtml(l.description||'—')" },
+  { file: 'activity.html', mustContain: "escapeHtml(l.userName||'—')" },
+  { file: path.join('pages', 'health.js'), mustContain: 'id="h-tag" value="${escapeHtml(r.animal_tag' },
+  { file: path.join('pages', 'health.js'), mustContain: 'id="h-vet" value="${escapeHtml(r.vet_name' },
+  { file: path.join('pages', 'health.js'), mustContain: 'id="h-diag" value="${escapeHtml(r.diagnosis' },
+  { file: path.join('pages', 'health.js'), mustContain: 'id="h-med" value="${escapeHtml(r.medication' },
+  { file: path.join('pages', 'health.js'), mustContain: 'id="h-dose" value="${escapeHtml(r.dosage' },
+  { file: path.join('pages', 'health.js'), mustContain: 'id="h-notes" rows="2">${escapeHtml(r.notes' },
+  { file: path.join('pages', 'breeding.js'), mustContain: 'id="nb-addedby" value="\'+escapeHtml(u?.name' },
+  { file: path.join('pages', 'breeding.js'), mustContain: 'id="b-addedby" value="\'+escapeHtml(r.added_by||u?.name' },
+  { file: path.join('pages', 'breeding.js'), mustContain: 'id="b-notes" rows="2">\'+escapeHtml(r.notes' }, // textarea-breakout fix
+  { file: path.join('pages', 'vaccine.js'), mustContain: 'id="v-name" value="${escapeHtml(v.name' },
+  { file: path.join('pages', 'vaccine.js'), mustContain: 'id="v-notes" rows="2">${escapeHtml(v.notes' }, // textarea-breakout fix
+  { file: path.join('pages', 'inventory.js'), mustContain: "feedNames.map(function(f){return '<option>'+escapeHtml(f)" },
+  { file: path.join('pages', 'inventory.js'), mustContain: 'id="fc-by" value="\'+escapeHtml(user?.name' },
+  { file: 'dead.html', mustContain: "'<option value=\"'+a._id+'\">'+(a.species==='goat'?'🐐':'🐑')+' '+escapeHtml(a.breed||'—')" },
+  { file: 'animals.html', mustContain: "escapeHtml(a.breed||'—')+(a.tag?' #'+escapeHtml(a.tag)" }, // openMarkDeath select options
+  { file: 'animals.html', mustContain: 'id="d-tag" value="\'+escapeHtml(first.tag' },
+  { file: 'dashboard.html', mustContain: "escapeHtml(a.breed||'')+(a.tag?' #'+escapeHtml(a.tag)" }, // openMarkDeathDash select options
+  { file: path.join('pages', 'finance.js'), mustContain: '<span class="text-gray">${escapeHtml(cat)}' }, // sibling of the already-fixed cost.html widget
+  { file: path.join('pages', 'farm_profile.js'), mustContain: 'id="fp-name" value="${escapeHtml(s.farmName' }, // localStorage-sourced, defense-in-depth
+
+  // Breed-catalog `<option>`/card interpolation, defense-in-depth (source:
+  // localStorage['farm_settings'], no in-app way to inject a malicious
+  // value today -- see docs/repository/XSS-AUDIT-2026-08-23.md's
+  // REQUIRES-FUTURE-HARDENING classification -- fixed anyway since it's
+  // the same one-line change as every VULNERABLE sink above).
+  { file: 'animal-detail.html', mustContain: "e-breed').innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(b=>`<option>${escapeHtml(b)}" },
+  { file: 'animal-detail.html', mustContain: 'id="o-breed">${s.goatBreeds.concat(s.sheepBreeds).map(b=>`<option value="${escapeHtml(b)}' },
+  { file: path.join('pages', 'health.js'), mustContain: 'value="${escapeHtml(b)}" ${r.animal_breed===b' },
+  { file: path.join('pages', 'breeding.js'), mustContain: "id=\"nb-breed\">'+allBreeds.map(b=>'<option value=\"'+escapeHtml(b)" },
+  { file: path.join('pages', 'breeding.js'), mustContain: "id=\"nb-mother-breed\">'+allBreeds.map(b=>'<option value=\"'+escapeHtml(b)" },
+  { file: path.join('pages', 'breeding.js'), mustContain: 'id="b-fb">\'+((sp===' },
+  { file: 'shared.js', mustContain: 'id="ub-breed">\'+s.goatBreeds.map(b=>\'<option>\'+escapeHtml(b)' },
+  { file: 'animals.html', mustContain: "s.goatBreeds.map(function(b){return'<option>'+escapeHtml(b)" },
+  { file: 'dashboard.html', mustContain: "s.goatBreeds.map(function(b){return'<option>'+escapeHtml(b)" },
+  { file: 'diary.html', mustContain: "'<div class=\"dd-card__name\">'+escapeHtml(breed)" },
+  { file: 'goats.html', mustContain: "'<div><div class=\"fw-bold\">'+escapeHtml(breed)" },
+  { file: 'sheep.html', mustContain: "'<div><div class=\"fw-bold\">'+escapeHtml(breed)" },
 ];
 let xssRegressions = 0;
 const xssFilesChecked = new Set();

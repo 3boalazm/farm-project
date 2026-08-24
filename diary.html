@@ -311,9 +311,9 @@ function breedCard(sp,breed,accent,isEdit,tarbiyaRow,tasmeenRow,idx){
 
   var html='<div class="dd-card" style="--dd-accent:'+accent+'" data-card-id="'+cardId+'">';
   html+='<div class="dd-card__head">';
-  html+='<div class="dd-card__avatar">'+breed.slice(0,1)+'</div>';
+  html+='<div class="dd-card__avatar">'+escapeHtml(breed.slice(0,1))+'</div>';
   html+='<div style="flex:1;min-width:0">';
-  html+='<div class="dd-card__name">'+breed+'</div>';
+  html+='<div class="dd-card__name">'+escapeHtml(breed)+'</div>';
   html+='<div class="dd-card__pill">'+(sp==='sheep'?'أغنام':'ماعز')+'</div>';
   html+='</div>';
   html+='<button type="button" class="dd-card__expand-btn no-print" title="تفاصيل الغرض" onclick="toggleCardExpand(\''+cardId+'\')">'+

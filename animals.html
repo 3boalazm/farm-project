@@ -849,7 +849,7 @@ window.openAddAnimal=function(){
       '<div class="col-6"><label>النوع</label><select class="field" id="m-sp" onchange="updateBreeds()"><option value="goat">ماعز</option><option value="sheep">أغنام</option></select></div>'+
       '<div class="col-6"><label>الغرض</label><select class="field" id="m-pur"><option value="tarbiya">تربية</option><option value="tasmeen">تسمين</option><option value="birth">مواليد</option></select></div>'+
     '</div>'+
-    '<label>السلالة</label><select class="field" id="m-breed">'+s.goatBreeds.map(function(b){return'<option>'+b+'</option>';}).join('')+'</select>'+
+    '<label>السلالة</label><select class="field" id="m-breed">'+s.goatBreeds.map(function(b){return'<option>'+escapeHtml(b)+'</option>';}).join('')+'</select>'+
     '<div class="row g-2">'+
       '<div class="col-6"><label>الجنس</label><select class="field" id="m-gender"><option value="female">أنثى ♀</option><option value="male">ذكر ♂</option></select></div>'+
       '<div class="col-6">'+
@@ -875,7 +875,7 @@ window.openAddAnimal=function(){
 window.updateBreeds=function(){
   var s=getSettings();var sp=document.getElementById('m-sp')?.value;
   var sel=document.getElementById('m-breed');
-  if(sel)sel.innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(function(b){return'<option>'+b+'</option>';}).join('');
+  if(sel)sel.innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(function(b){return'<option>'+escapeHtml(b)+'</option>';}).join('');
 };
 window.submitAddAnimal=async function(){
   var sp=document.getElementById('m-sp').value;
@@ -932,7 +932,7 @@ window.openMarkDeath=function(){
     '<label>الحيوان *</label>'+
     '<select class="field" id="d-id" onchange="onDeathAnimalChange()">'+
       alive.slice(0,300).map(function(a){
-        return'<option value="'+a._id+'">'+(a.breed||'—')+(a.tag?' #'+a.tag:'')+' ('+(a.gender==='male'?'ذكر':'أنثى')+')</option>';
+        return'<option value="'+a._id+'">'+escapeHtml(a.breed||'—')+(a.tag?' #'+escapeHtml(a.tag):'')+' ('+(a.gender==='male'?'ذكر':'أنثى')+')</option>';
       }).join('')+
     '</select>'+
 
@@ -940,11 +940,11 @@ window.openMarkDeath=function(){
     '<div class="row g-2">'+
       '<div class="col-6">'+
         '<label>الترقيم</label>'+
-        '<input class="field" id="d-tag" value="'+(first.tag||'—')+'" readonly style="background:var(--bg-3);opacity:.7">'+
+        '<input class="field" id="d-tag" value="'+escapeHtml(first.tag||'—')+'" readonly style="background:var(--bg-3);opacity:.7">'+
       '</div>'+
       '<div class="col-6">'+
         '<label>السلالة</label>'+
-        '<input class="field" id="d-breed" value="'+(first.breed||'—')+'" readonly style="background:var(--bg-3);opacity:.7">'+
+        '<input class="field" id="d-breed" value="'+escapeHtml(first.breed||'—')+'" readonly style="background:var(--bg-3);opacity:.7">'+
       '</div>'+
     '</div>'+
 
@@ -1273,7 +1273,7 @@ window.openBatchEntry=function(){
       '<div class="col-6">'+
         '<label>السلالة *</label>'+
         '<select class="field" id="be-breed">'+
-          s.goatBreeds.map(function(b){return'<option>'+b+'</option>';}).join('')+
+          s.goatBreeds.map(function(b){return'<option>'+escapeHtml(b)+'</option>';}).join('')+
         '</select>'+
       '</div>'+
     '</div>'+
@@ -1318,7 +1318,7 @@ window.openBatchEntry=function(){
 window._beUpdateBreeds=function(){
   var s=getSettings();var sp=document.getElementById('be-sp')?.value;
   var sel=document.getElementById('be-breed');
-  if(sel)sel.innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(function(b){return'<option>'+b+'</option>';}).join('');
+  if(sel)sel.innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(function(b){return'<option>'+escapeHtml(b)+'</option>';}).join('');
 };
 
 window._bePreview=function(){

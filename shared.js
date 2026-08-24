@@ -981,7 +981,7 @@ window.openUnifiedBirthModal=function(defaultSpecies){
     '<h4><i class="bi bi-stars" style="color:var(--yellow)"></i> تسجيل ولادة جديدة</h4>'+
     '<div class="row g-2">'+
       '<div class="col-6"><label>نوع المولود *</label><select class="field" id="ub-sp" onchange="_ubUpdateBreeds()"><option value="goat" '+(defaultSpecies==='goat'?'selected':'')+'>ماعز</option><option value="sheep" '+(defaultSpecies==='sheep'?'selected':'')+'>أغنام</option></select></div>'+
-      '<div class="col-6"><label>سلالة المولود *</label><select class="field" id="ub-breed">'+s.goatBreeds.map(b=>'<option>'+b+'</option>').join('')+'</select></div>'+
+      '<div class="col-6"><label>سلالة المولود *</label><select class="field" id="ub-breed">'+s.goatBreeds.map(b=>'<option>'+escapeHtml(b)+'</option>').join('')+'</select></div>'+
     '</div>'+
     '<div class="row g-2">'+
       '<div class="col-6"><label>الغرض</label><select class="field" id="ub-purpose"><option value="birth">مواليد</option><option value="tarbiya">تربية</option><option value="tasmeen">تسمين</option></select></div>'+
@@ -995,7 +995,7 @@ window.openUnifiedBirthModal=function(defaultSpecies){
       '<div class="fw-bold mb-2" style="font-size:.82rem;color:var(--yellow)"><i class="bi bi-person-heart me-1"></i>بيانات الأم (مطلوب)</div>'+
       '<div class="row g-2">'+
         '<div class="col-6"><label>رقم الأم *</label><input class="field" id="ub-mother-tag" placeholder="F-101"></div>'+
-        '<div class="col-6"><label>سلالة الأم *</label><select class="field" id="ub-mother-breed">'+allBreeds.map(b=>'<option>'+b+'</option>').join('')+'</select></div>'+
+        '<div class="col-6"><label>سلالة الأم *</label><select class="field" id="ub-mother-breed">'+allBreeds.map(b=>'<option>'+escapeHtml(b)+'</option>').join('')+'</select></div>'+
       '</div>'+
       '<div class="col-12"><label>رقم الأب</label><input class="field" id="ub-father-tag" placeholder="M-001"></div>'+
     '</div>'+
@@ -1025,7 +1025,7 @@ window._ubUpdateBreeds=function(){
   const s=getSettings();const sp=document.getElementById('ub-sp')?.value;
   const breeds=sp==='goat'?s.goatBreeds:s.sheepBreeds;
   const sel=document.getElementById('ub-breed');
-  if(sel)sel.innerHTML=breeds.map(b=>'<option>'+b+'</option>').join('');
+  if(sel)sel.innerHTML=breeds.map(b=>'<option>'+escapeHtml(b)+'</option>').join('');
 };
 
 // ── Mortality-statistics correction marker ──────────────

@@ -103,10 +103,10 @@ window.openEditProfile=function(){
   const s=getSettings();
   showModal(`<div class="farm-modal" onclick="event.stopPropagation()" style="max-height:92vh;overflow-y:auto">
     <h4><i class="bi bi-pencil-fill accent-text"></i> تعديل ملف المزرعة</h4>
-    <label>اسم المزرعة</label><input class="field" id="fp-name" value="${s.farmName}">
-    <label>اسم المالك/المدير</label><input class="field" id="fp-owner" value="${s.ownerName}">
-    <label>العنوان</label><input class="field" id="fp-address" value="${s.farmAddress||''}" placeholder="العامرية، الإسكندرية">
-    <label>رابط شعار المزرعة (URL)</label><input class="field" id="fp-logo" value="${s.logoUrl||''}" placeholder="https://..." dir="ltr">
+    <label>اسم المزرعة</label><input class="field" id="fp-name" value="${escapeHtml(s.farmName||'')}">
+    <label>اسم المالك/المدير</label><input class="field" id="fp-owner" value="${escapeHtml(s.ownerName||'')}">
+    <label>العنوان</label><input class="field" id="fp-address" value="${escapeHtml(s.farmAddress||'')}" placeholder="العامرية، الإسكندرية">
+    <label>رابط شعار المزرعة (URL)</label><input class="field" id="fp-logo" value="${escapeHtml(s.logoUrl||'')}" placeholder="https://..." dir="ltr">
     <div class="row g-2">
       <div class="col-6"><label>خط العرض (Latitude)</label><input class="field" id="fp-lat" value="${s.farmLat||''}" placeholder="30.9500" dir="ltr"></div>
       <div class="col-6"><label>خط الطول (Longitude)</label><input class="field" id="fp-lng" value="${s.farmLng||''}" placeholder="29.7972" dir="ltr"></div>

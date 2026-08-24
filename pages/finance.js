@@ -50,7 +50,7 @@ function renderFinancePage(s){
 
   const distributionHtml = topCats.length>0 ? renderChartContainer({
     title:'توزيع المصروفات', subtitle:'أعلى الفئات', state:'ready',
-    chartHtml: topCats.map(([cat,amt])=>{const pct=totalEx?Math.round(amt/totalEx*100):0;return`<div class="finance-bar-wrap"><div class="lb"><span class="text-gray">${cat}</span><span class="fw-bold accent-text">${amt.toLocaleString('ar-EG')} ${curr} (${pct}٪)</span></div><div class="finance-bar" role="presentation" aria-hidden="true"><div class="finance-bar-fill" style="width:${pct}%"></div></div></div>`;}).join('')
+    chartHtml: topCats.map(([cat,amt])=>{const pct=totalEx?Math.round(amt/totalEx*100):0;return`<div class="finance-bar-wrap"><div class="lb"><span class="text-gray">${escapeHtml(cat)}</span><span class="fw-bold accent-text">${amt.toLocaleString('ar-EG')} ${curr} (${pct}٪)</span></div><div class="finance-bar" role="presentation" aria-hidden="true"><div class="finance-bar-fill" style="width:${pct}%"></div></div></div>`;}).join('')
   }) : '';
 
   // Monthly Trend / Revenue vs Expense — NEW, was missing. A single grouped-bar

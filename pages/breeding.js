@@ -142,7 +142,7 @@ window.openBirthModal=function(){
     '<h4><i class="bi bi-stars" style="color:var(--yellow)"></i> تسجيل مواليد جديدة</h4>'+
     '<div class="row g-2">'+
       '<div class="col-6"><label>نوع المولود</label><select class="field" id="nb-sp"><option value="goat">ماعز</option><option value="sheep">أغنام</option></select></div>'+
-      '<div class="col-6"><label>سلالة المولود</label><select class="field" id="nb-breed">'+allBreeds.map(b=>'<option value="'+b+'">'+b+'</option>').join('')+'</select></div>'+
+      '<div class="col-6"><label>سلالة المولود</label><select class="field" id="nb-breed">'+allBreeds.map(b=>'<option value="'+escapeHtml(b)+'">'+escapeHtml(b)+'</option>').join('')+'</select></div>'+
     '</div>'+
     '<div class="row g-2">'+
       '<div class="col-6"><label>الغرض</label><select class="field" id="nb-pur"><option value="birth">مواليد</option><option value="tarbiya">تربية</option><option value="tasmeen">تسمين</option></select></div>'+
@@ -154,7 +154,7 @@ window.openBirthModal=function(){
     '</div>'+
     '<div class="row g-2">'+
       '<div class="col-6"><label>رقم الأم *</label><input class="field" id="nb-mother-tag" placeholder="F-101" required></div>'+
-      '<div class="col-6"><label>سلالة الأم *</label><select class="field" id="nb-mother-breed">'+allBreeds.map(b=>'<option value="'+b+'">'+b+'</option>').join('')+'</select></div>'+
+      '<div class="col-6"><label>سلالة الأم *</label><select class="field" id="nb-mother-breed">'+allBreeds.map(b=>'<option value="'+escapeHtml(b)+'">'+escapeHtml(b)+'</option>').join('')+'</select></div>'+
     '</div>'+
     '<div class="row g-2">'+
       '<div class="col-6"><label>رقم الأب</label><input class="field" id="nb-father-tag" placeholder="M-001"></div>'+
@@ -168,7 +168,7 @@ window.openBirthModal=function(){
         '<input type="number" class="field" id="nb-amount" placeholder="0" min="0">'+
       '</div>'+
     '</div>'+
-    '<label>سُجِّل بواسطة</label><input class="field" id="nb-addedby" value="'+(u?.name||'')+'" readonly>'+
+    '<label>سُجِّل بواسطة</label><input class="field" id="nb-addedby" value="'+escapeHtml(u?.name||'')+'" readonly>'+
     '<label>ملاحظات</label><textarea class="field" id="nb-notes" rows="2"></textarea>'+
     '<div class="d-flex gap-2 justify-content-end mt-3">'+
       '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
@@ -257,14 +257,14 @@ window.openBModal=function(id, prefTag, prefBreed, prefSpecies, jumpToBorn){
     '<h4><i class="bi bi-diagram-2-fill accent-text"></i> '+(id?'تعديل':'تسجيل')+' تقريع</h4>'+
     '<div class="row g-2">'+
       '<div class="col-6"><label>نوع الأنثى</label><select class="field" id="b-sp" onchange="window._updateBBreeds()"><option value="goat" '+(sp==='goat'?'selected':'')+'>ماعز</option><option value="sheep" '+(sp==='sheep'?'selected':'')+'>أغنام</option></select></div>'+
-      '<div class="col-6"><label>سلالة الأنثى</label><select class="field" id="b-fb">'+((sp==='sheep'?s.sheepBreeds:s.goatBreeds).map(b=>'<option value="'+b+'" '+((r.female_breed||decodeURIComponent(prefBreed||''))===b?'selected':'')+'>'+b+'</option>')).join('')+'</select></div>'+
+      '<div class="col-6"><label>سلالة الأنثى</label><select class="field" id="b-fb">'+((sp==='sheep'?s.sheepBreeds:s.goatBreeds).map(b=>'<option value="'+escapeHtml(b)+'" '+((r.female_breed||decodeURIComponent(prefBreed||''))===b?'selected':'')+'>'+escapeHtml(b)+'</option>')).join('')+'</select></div>'+
     '</div>'+
     '<div class="row g-2">'+
       '<div class="col-6"><label>ترقيم الأنثى (الأم) *</label><input class="field" id="b-ft" value="'+escapeHtml(r.female_tag||decodeURIComponent(prefTag||''))+'" placeholder="F-101"></div>'+
       '<div class="col-6"><label>ترقيم الفحل</label><input class="field" id="b-mt" value="'+escapeHtml(r.male_tag||'')+'" placeholder="M-001"></div>'+
     '</div>'+
     '<div class="row g-2">'+
-      '<div class="col-6"><label>سلالة الفحل</label><select class="field" id="b-mb">'+allBreeds.map(b=>'<option value="'+b+'" '+(r.male_breed===b?'selected':'')+'>'+b+'</option>').join('')+'</select></div>'+
+      '<div class="col-6"><label>سلالة الفحل</label><select class="field" id="b-mb">'+allBreeds.map(b=>'<option value="'+escapeHtml(b)+'" '+(r.male_breed===b?'selected':'')+'>'+escapeHtml(b)+'</option>').join('')+'</select></div>'+
       '<div class="col-6"><label>الجمالون/العنبر</label><select class="field" id="b-barn">'+barns.map(b=>'<option value="'+b+'" '+(r.barn===b?'selected':'')+'>'+( b||'— غير محدد —')+'</option>').join('')+'</select></div>'+
     '</div>'+
     '<div class="row g-2">'+
@@ -287,15 +287,15 @@ window.openBModal=function(id, prefTag, prefBreed, prefSpecies, jumpToBorn){
           '<input type="number" class="field" id="b-amount" value="'+(r.birth_amount||'')+'" placeholder="0"></div>'+
       '</div>'+
     '</div>'+
-    '<label>سُجِّل بواسطة</label><input class="field" id="b-addedby" value="'+(r.added_by||u?.name||'')+'">'+
-    '<label>ملاحظات</label><textarea class="field" id="b-notes" rows="2">'+(r.notes||'')+'</textarea>'+
+    '<label>سُجِّل بواسطة</label><input class="field" id="b-addedby" value="'+escapeHtml(r.added_by||u?.name||'')+'">'+
+    '<label>ملاحظات</label><textarea class="field" id="b-notes" rows="2">'+escapeHtml(r.notes||'')+'</textarea>'+
     '<div class="d-flex gap-2 justify-content-end mt-3">'+
       '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
       '<button class="action-btn primary" onclick="submitBreeding()">حفظ</button>'+
     '</div>'+
   '</div>');
 };
-window._updateBBreeds=function(){const s=getSettings();const sp=document.getElementById('b-sp')?.value;document.getElementById('b-fb').innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(b=>'<option>'+b+'</option>').join('');};
+window._updateBBreeds=function(){const s=getSettings();const sp=document.getElementById('b-sp')?.value;document.getElementById('b-fb').innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(b=>'<option>'+escapeHtml(b)+'</option>').join('');};
 window._calcExpBirth=function(){const d=document.getElementById('b-md')?.value;if(d){const dt=new Date(d);dt.setDate(dt.getDate()+(getSettings().pregnancyDays||150));document.getElementById('b-ed').value=dt.toISOString().slice(0,10);}};
 window._toggleBornFields=function(){const s=document.getElementById('b-st')?.value;if(document.getElementById('b-born-fields'))document.getElementById('b-born-fields').style.display=s==='born'?'block':'none';};
 

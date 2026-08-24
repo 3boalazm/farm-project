@@ -933,7 +933,7 @@ window.openAddAnimalDash=function(){
       '<div class="col-6"><label>النوع</label><select class="field" id="da-sp" onchange="window._daBreeds()"><option value="goat">ماعز</option><option value="sheep">أغنام</option></select></div>'+
       '<div class="col-6"><label>الغرض</label><select class="field" id="da-pur"><option value="tarbiya">تربية</option><option value="tasmeen">تسمين</option></select></div>'+
     '</div>'+
-    '<label>السلالة</label><select class="field" id="da-breed">'+s.goatBreeds.map(function(b){return'<option>'+b+'</option>';}).join('')+'</select>'+
+    '<label>السلالة</label><select class="field" id="da-breed">'+s.goatBreeds.map(function(b){return'<option>'+escapeHtml(b)+'</option>';}).join('')+'</select>'+
     '<div class="row g-2">'+
       '<div class="col-6"><label>الجنس</label><select class="field" id="da-g"><option value="female">أنثى</option><option value="male">ذكر</option></select></div>'+
       '<div class="col-6"><label>رقم الترقيم</label><input class="field" id="da-tag" placeholder="A-001"></div>'+
@@ -944,7 +944,7 @@ window.openAddAnimalDash=function(){
     '</div>'+
   '</div>');
 };
-window._daBreeds=function(){var s=getSettings();var sp=document.getElementById('da-sp')?.value;var b=document.getElementById('da-breed');if(b)b.innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(function(x){return'<option>'+x+'</option>';}).join('');};
+window._daBreeds=function(){var s=getSettings();var sp=document.getElementById('da-sp')?.value;var b=document.getElementById('da-breed');if(b)b.innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(function(x){return'<option>'+escapeHtml(x)+'</option>';}).join('');};
 window._daSubmit=async function(){
   var sp=document.getElementById('da-sp').value;
   var breed=document.getElementById('da-breed').value;
@@ -966,7 +966,7 @@ window.openMarkDeathDash=async function(){
   showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()">'+
     '<h4 style="color:var(--red)"><i class="bi bi-x-octagon"></i> تسجيل نفوق</h4>'+
     '<label>الحيوان</label><select class="field" id="dd-a"><option value="">— اختر —</option>'+
-      alive2.map(function(a){return'<option value="'+a._id+'">'+a.breed+(a.tag?' #'+a.tag:'')+(a.gender==='male'?' ذكر':' أنثى')+'</option>';}).join('')+
+      alive2.map(function(a){return'<option value="'+a._id+'">'+escapeHtml(a.breed||'')+(a.tag?' #'+escapeHtml(a.tag):'')+(a.gender==='male'?' ذكر':' أنثى')+'</option>';}).join('')+
     '</select>'+
     '<label>التاريخ</label><input type="date" class="field" id="dd-d" value="'+todayStr()+'">'+
     '<label>الوقت <span class="text-gray" style="font-weight:400">(اختياري)</span></label>'+

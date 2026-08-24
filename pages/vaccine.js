@@ -147,7 +147,7 @@ window.openVaccModal=function(id){
   const barns=['ج١ع١','ج١ع٢','ج٢ع١','ج٢ع٢','ج٣ع١','ج٣ع٢','ج٤ع١','ج٤ع٢','ج٥ع١','ج٥ع٢','كل الأقسام'];
   showModal(`<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:520px;max-height:92vh;overflow-y:auto">
     <h4><i class="bi bi-bandaid-fill accent-text"></i> ${id?'تعديل':'إضافة'} تحصين</h4>
-    <label>اسم التحصين *</label><input class="field" id="v-name" value="${v.name||''}" placeholder="مثال: تطعيم الجدري">
+    <label>اسم التحصين *</label><input class="field" id="v-name" value="${escapeHtml(v.name||'')}" placeholder="مثال: تطعيم الجدري">
     <label>القسم المستهدف</label>
     <select class="field" id="v-section">${barns.map(b=>`<option value="${b}" ${v.target_section===b?'selected':''}>${b}</option>`).join('')}</select>
     <div class="row g-2">
@@ -175,7 +175,7 @@ window.openVaccModal=function(id){
       <option value="biannual" ${v.repeat==='biannual'?'selected':''}>نصف سنوي</option>
       <option value="annual" ${v.repeat==='annual'?'selected':''}>سنوي</option>
     </select>
-    <label>ملاحظات</label><textarea class="field" id="v-notes" rows="2">${v.notes||''}</textarea>
+    <label>ملاحظات</label><textarea class="field" id="v-notes" rows="2">${escapeHtml(v.notes||'')}</textarea>
     <div class="d-flex gap-2 justify-content-end mt-3">
       <button class="action-btn" onclick="closeModal()">إلغاء</button>
       <button class="action-btn primary" onclick="submitVacc()">حفظ</button>

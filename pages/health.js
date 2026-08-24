@@ -202,20 +202,20 @@ window.openHealthModal=function(id){
     <h4><i class="bi bi-heart-pulse-fill accent-text"></i> ${id?'تعديل':'إضافة'} سجل صحي</h4>
     <div class="row g-2">
       <div class="col-6"><label>النوع</label><select class="field" id="h-sp" onchange="updateHBreeds()"><option value="goat" ${r.animal_species==='goat'?'selected':''}>ماعز</option><option value="sheep" ${r.animal_species==='sheep'?'selected':''}>أغنام</option></select></div>
-      <div class="col-6"><label>السلالة</label><select class="field" id="h-breed">${(r.animal_species==='sheep'?s.sheepBreeds:s.goatBreeds).map(b=>`<option value="${b}" ${r.animal_breed===b?'selected':''}>${b}</option>`).join('')}</select></div>
+      <div class="col-6"><label>السلالة</label><select class="field" id="h-breed">${(r.animal_species==='sheep'?s.sheepBreeds:s.goatBreeds).map(b=>`<option value="${escapeHtml(b)}" ${r.animal_breed===b?'selected':''}>${escapeHtml(b)}</option>`).join('')}</select></div>
     </div>
     <div class="row g-2">
-      <div class="col-6"><label>رقم الترقيم</label><input class="field" id="h-tag" value="${r.animal_tag||''}" placeholder="A-123"></div>
+      <div class="col-6"><label>رقم الترقيم</label><input class="field" id="h-tag" value="${escapeHtml(r.animal_tag||'')}" placeholder="A-123"></div>
       <div class="col-6"><label>الجمالون/العنبر</label><select class="field" id="h-barn">${barns.map(b=>`<option value="${b}" ${r.barn===b?'selected':''}>${b||'— غير محدد —'}</option>`).join('')}</select></div>
     </div>
     <div class="row g-2">
       <div class="col-6"><label>تاريخ العلاج *</label><input type="date" class="field" id="h-date" value="${r.date||todayStr()}"></div>
-      <div class="col-6"><label>اسم الطبيب</label><input class="field" id="h-vet" value="${r.vet_name||''}" placeholder="د. أحمد"></div>
+      <div class="col-6"><label>اسم الطبيب</label><input class="field" id="h-vet" value="${escapeHtml(r.vet_name||'')}" placeholder="د. أحمد"></div>
     </div>
-    <label>التشخيص *</label><input class="field" id="h-diag" value="${r.diagnosis||''}" placeholder="التشخيص">
+    <label>التشخيص *</label><input class="field" id="h-diag" value="${escapeHtml(r.diagnosis||'')}" placeholder="التشخيص">
     <div class="row g-2">
-      <div class="col-6"><label>الدواء *</label><input class="field" id="h-med" value="${r.medication||''}"></div>
-      <div class="col-6"><label>الجرعة</label><input class="field" id="h-dose" value="${r.dosage||''}" placeholder="5 مل"></div>
+      <div class="col-6"><label>الدواء *</label><input class="field" id="h-med" value="${escapeHtml(r.medication||'')}"></div>
+      <div class="col-6"><label>الجرعة</label><input class="field" id="h-dose" value="${escapeHtml(r.dosage||'')}" placeholder="5 مل"></div>
     </div>
     <div class="row g-2">
       <div class="col-6"><label>نهاية العلاج</label><input type="date" class="field" id="h-tend" value="${r.treatment_end||''}" onchange="calcWithdrawal()"></div>
@@ -233,7 +233,7 @@ window.openHealthModal=function(id){
       </div>
       <div class="col-6"><label>الحالة</label><select class="field" id="h-stat"><option value="active" ${r.status==='active'||!r.status?'selected':''}>قيد العلاج</option><option value="completed" ${r.status==='completed'?'selected':''}>مكتمل</option></select></div>
     </div>
-    <label>ملاحظات</label><textarea class="field" id="h-notes" rows="2">${r.notes||''}</textarea>
+    <label>ملاحظات</label><textarea class="field" id="h-notes" rows="2">${escapeHtml(r.notes||'')}</textarea>
     <div class="d-flex gap-2 justify-content-end mt-3">
       <button class="action-btn" onclick="closeModal()">إلغاء</button>
       <button class="action-btn primary" onclick="submitHealth()">حفظ</button>
@@ -243,7 +243,7 @@ window.openHealthModal=function(id){
 
 window.updateHBreeds=function(){
   const s=getSettings();const sp=document.getElementById('h-sp').value;
-  document.getElementById('h-breed').innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(b=>`<option value="${b}">${b}</option>`).join('');
+  document.getElementById('h-breed').innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(b=>`<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('');
 };
 
 window.calcWithdrawal=function(){

@@ -458,12 +458,12 @@ window.openLogConsumption = function() {
     '<label>نوع العلف *</label>'+
     '<select class="field" id="fc-feed">'+
       (feedNames.length
-        ? feedNames.map(function(f){return '<option>'+f+'</option>';}).join('')
+        ? feedNames.map(function(f){return '<option>'+escapeHtml(f)+'</option>';}).join('')
         : '<option value="">أضف أعلافاً في تبويب الأعلاف أولاً</option>')+
     '</select>'+
     '<div class="row g-2">'+
       '<div class="col-6"><label>الكمية (كجم) *</label><input type="number" class="field" id="fc-qty" step="0.5" min="0" placeholder="50"></div>'+
-      '<div class="col-6"><label>مسجّل بواسطة</label><input class="field" id="fc-by" value="'+(user?.name||'')+'"></div>'+
+      '<div class="col-6"><label>مسجّل بواسطة</label><input class="field" id="fc-by" value="'+escapeHtml(user?.name||'')+'"></div>'+
     '</div>'+
     '<label>ملاحظات</label><input class="field" id="fc-notes" placeholder="اختياري">'+
     '<div class="d-flex gap-2 justify-content-end mt-3">'+

@@ -740,7 +740,7 @@ function openEditAnimal(){
     </div>
   </div>`);
 }
-window.updateEBreeds=function(){const s=getSettings();const sp=document.getElementById('e-sp').value;document.getElementById('e-breed').innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(b=>`<option>${b}</option>`).join('');};
+window.updateEBreeds=function(){const s=getSettings();const sp=document.getElementById('e-sp').value;document.getElementById('e-breed').innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(b=>`<option>${escapeHtml(b)}</option>`).join('');};
 window.submitEditAnimal=async function(){
   const data={species:document.getElementById('e-sp').value,breed:document.getElementById('e-breed').value,gender:document.getElementById('e-gender').value,birth_date:document.getElementById('e-bdate').value||null,barn:document.getElementById('e-barn').value||null,notes:document.getElementById('e-notes').value.trim()};
   const newPurpose=document.getElementById('e-purpose').value;
@@ -818,7 +818,7 @@ function openAddOffspring(){
     </div>
     <div class="row g-2">
       <div class="col-6"><label>وزن الميلاد (كجم)</label><input type="number" class="field" id="o-weight" step="0.1" placeholder="3.5"></div>
-      <div class="col-6"><label>سلالة المولود</label><select class="field" id="o-breed">${s.goatBreeds.concat(s.sheepBreeds).map(b=>`<option value="${b}" ${b===animal.breed?'selected':''}>${b}</option>`).join('')}</select></div>
+      <div class="col-6"><label>سلالة المولود</label><select class="field" id="o-breed">${s.goatBreeds.concat(s.sheepBreeds).map(b=>`<option value="${escapeHtml(b)}" ${b===animal.breed?'selected':''}>${escapeHtml(b)}</option>`).join('')}</select></div>
     </div>
     <label>ملاحظات</label><textarea class="field" id="o-notes" rows="2"></textarea>
     <div class="d-flex gap-2 justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إلغاء</button><button class="action-btn primary" onclick="submitAddOffspring()">حفظ</button></div>
