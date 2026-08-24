@@ -339,6 +339,43 @@ async function main() {
   // assertion for a decision nobody has actually made. See
   // docs/repository/FIREBASE-RULES-EXECUTION-2026-08-24.md.
   // ══════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════
+  // source_documents: the status-rollback two-step bypass (found by an
+  // independent adversarial re-scan after the journal_entries/
+  // source_documents scoping fix above, execution-verified, then fixed
+  // in the SAME pass). The scoping fix only corrected WHERE data/newData
+  // resolve to -- it did not stop the rule's third clause from allowing
+  // status to move to ANY value (including back to 'DRAFT') as long as
+  // type/date/total stayed put in that one write. That let an admin:
+  // (1) set status:'DRAFT' on a POSTED document -- allowed, since
+  //     financial fields were untouched in that write; then
+  // (2) with status now reading 'DRAFT', freely rewrite total/type/date
+  //     in a second write -- allowed, since the second clause
+  //     ("status === 'DRAFT'") now applied.
+  // Fixed by also requiring newData's status not be 'DRAFT' in the third
+  // clause -- once a document leaves DRAFT, nothing can move it back.
+  // ══════════════════════════════════════════════════════════════════
+  console.log('\n-- source_documents: status-rollback two-step bypass (fixed) --');
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.database().ref('source_documents/sd-bypass-check').set({
+      type: 'sales_invoice', date: '2026-01-01', total: 100, operationId: 'op-sd-bypass-check', status: 'POSTED',
+    });
+  });
+  await test('[source_documents] step 1 of the bypass: rolling status back to DRAFT on a POSTED document is rejected', async () => {
+    await assertFails(admin.database().ref('source_documents/sd-bypass-check/status').set('DRAFT'));
+  });
+  await test('[source_documents] step 2 of the bypass: total is still frozen (the real status never changed)', async () => {
+    await assertFails(admin.database().ref('source_documents/sd-bypass-check/total').set(99999));
+  });
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.database().ref('source_documents/sd-legit-transition').set({
+      type: 'sales_invoice', date: '2026-01-01', total: 100, operationId: 'op-sd-legit-transition', status: 'POSTED',
+    });
+  });
+  await test('[source_documents] a real status transition (POSTED -> PARTIALLY_PAID) still works', async () => {
+    await assertSucceeds(admin.database().ref('source_documents/sd-legit-transition').update({ status: 'PARTIALLY_PAID', paidAmount: 50, remainingAmount: 50 }));
+  });
+
   console.log('\n-- Delete semantics (execution-verified; product decision pending, not a fixed bug) --');
   const HASCHILD_ONLY_COLLECTIONS = ['customers', 'suppliers', 'employees', 'loans', 'accounts', 'cash_bank_accounts', 'fixed_assets', 'cost_centers'];
   for (const name of HASCHILD_ONLY_COLLECTIONS) {

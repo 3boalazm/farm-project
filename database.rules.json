@@ -274,11 +274,32 @@
     //    (total) rewrite on a POSTED document succeeded against the real
     //    RTDB emulator when it should have been blocked. Moved the
     //    conditional clause into "$id" below, where data/newData
-    //    correctly scope to the one document actually being written. ────
+    //    correctly scope to the one document actually being written.
+    //
+    //    2026-08-24 fix #2 (adversarially found, execution-verified): the
+    //    third clause let status move to ANY value -- including back to
+    //    'DRAFT' -- as long as type/date/total stayed put in that same
+    //    write, since it never checked what status was being moved TO.
+    //    That allowed a two-step bypass: (1) set status:'DRAFT' on a
+    //    POSTED document (financial fields untouched, so this clause
+    //    allowed it), then (2) with status now reading 'DRAFT', the
+    //    second clause takes over and total/type/date become freely
+    //    editable again. Confirmed exploitable via direct emulator
+    //    execution of exactly those two writes. Fixed by also requiring
+    //    newData's status not be 'DRAFT' in the third clause -- once a
+    //    document leaves DRAFT, nothing can ever move it back, closing
+    //    the loop the original design left open. Every real status
+    //    transition this app performs (POSTED/PARTIALLY_PAID/PAID/
+    //    OVERDUE/VOID/CANCELLED, per shared.js's settleSourceDocument/
+    //    voidSourceDocument/cancelSourceDocument/flagOverdueDocuments)
+    //    never sets status back to 'DRAFT' on an existing record --
+    //    confirmed by reading every fbPatch('source_documents',...) call
+    //    site directly -- so this closes a real gap without touching any
+    //    legitimate workflow. ─────────────────────────────────────────
     "source_documents": {
       ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
-        ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' && (!data.exists() || data.child('status').val() === 'DRAFT' || (newData.child('type').val() === data.child('type').val() && newData.child('date').val() === data.child('date').val() && newData.child('total').val() === data.child('total').val()))",
+        ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' && (!data.exists() || data.child('status').val() === 'DRAFT' || (newData.child('status').val() !== 'DRAFT' && newData.child('type').val() === data.child('type').val() && newData.child('date').val() === data.child('date').val() && newData.child('total').val() === data.child('total').val()))",
         ".validate": "newData.hasChild('type') && newData.hasChild('date') && newData.hasChild('total') && newData.hasChild('operationId') && newData.hasChild('status')",
         "type": { ".validate": "newData.val() === 'sales_invoice' || newData.val() === 'purchase_invoice' || newData.val() === 'receipt' || newData.val() === 'payment' || newData.val() === 'expense_voucher' || newData.val() === 'transfer' || newData.val() === 'animal_sale' || newData.val() === 'animal_purchase' || newData.val() === 'inventory_purchase' || newData.val() === 'inventory_consumption' || newData.val() === 'labor_payment' || newData.val() === 'asset_purchase' || newData.val() === 'loan' || newData.val() === 'owner_capital' || newData.val() === 'owner_withdrawal'" },
         "status": { ".validate": "newData.val() === 'DRAFT' || newData.val() === 'POSTED' || newData.val() === 'PARTIALLY_PAID' || newData.val() === 'PAID' || newData.val() === 'OVERDUE' || newData.val() === 'VOID' || newData.val() === 'CANCELLED'" },
