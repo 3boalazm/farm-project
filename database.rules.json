@@ -12,6 +12,25 @@
     //  المفتوحة تاريخيًا، تأكد إن ده قرار متعمّد ومتزامن مع القواعد
     //  الفعلية المنشورة على Firebase Console -- رجوع هذا الملف وحده
     //  لا يغيّر أي حاجة على القاعدة الحقيقية المنشورة.
+    //
+    //  ⚠️ IMPORTANT — "auth != null" is NOT "a real logged-in app user".
+    //  firebase.js automatically signs every browser into an Anonymous
+    //  Auth session on its very first Firebase request, with zero user
+    //  interaction and no PIN required (_getValidAuthToken() in
+    //  firebase.js). That anonymous auth.uid satisfies "auth != null"
+    //  exactly the same as a real, PIN-verified user's auth.uid -- the
+    //  ONLY thing that distinguishes them is whether uid_lookup/{auth.uid}
+    //  exists (only signInWithFirebaseAuth(), called after a real PIN
+    //  success, ever writes there). For every collection below marked
+    //  ".read" with the full uid_lookup->users->role chain, this is
+    //  DELIBERATE and REQUIRED -- do not simplify it back down to a bare
+    //  "auth != null" for any collection containing financial or personal
+    //  data. The 17 accounting collections (Phase B, Authorization
+    //  Hardening) all use this pattern; most pre-existing collections
+    //  (animals, health, breeding, etc.) still use bare "auth != null"
+    //  for read, which is a known, separate, PRE-EXISTING characteristic
+    //  of this app's security model -- not something this pass changed,
+    //  and out of scope for it (see docs/certification/ACCOUNTING-ENGINE.md).
     // ══════════════════════════════════════════════════════════
 
     "animals": {
@@ -175,13 +194,20 @@
       }
     },
 
-    // ── Accounting Engine (Phase 1): Chart of Accounts. Read open to any
-    //    signed-in session (journal posting needs to resolve account
-    //    names/types client-side); write restricted to admin only, same
-    //    reasoning as finance/users -- account definitions are structural,
-    //    not day-to-day data entry. ──────────────────────────────────────
+    // ── Accounting Engine (Phase 1): Chart of Accounts.
+    //    Phase B (Authorization Hardening): read is now admin-gated, same
+    //    as write -- see the block comment at the top of this file for why
+    //    `auth != null` alone is NOT sufficient for any of the 17
+    //    accounting collections (an automatic Anonymous Auth session
+    //    satisfies it with zero login). `can('finance')` on the frontend
+    //    is only guaranteed true for role==='admin' (custom_perms grants
+    //    of 'finance' to a non-admin role exist as a real, Firebase-
+    //    persisted mechanism -- see users.html -- but are stored as a
+    //    bare array, which Firebase rules cannot safely resolve; honoring
+    //    them here is intentionally deferred, not silently ignored -- see
+    //    docs/certification/ACCOUNTING-ENGINE.md). ─────────────────────
     "accounts": {
-      ".read":  "auth != null",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".validate": "newData.hasChild('code') && newData.hasChild('name_ar') && newData.hasChild('type')",
@@ -198,11 +224,24 @@
     //    given entry's status is 'POSTED', this rule blocks every further
     //    write to that same id, full stop -- corrections must post a new
     //    reversing entry (reversesJournalEntryId) instead of touching the
-    //    original. ─────────────────────────────────────────────────────
+    //    original.
+    //
+    //    2026-08-24 fix (execution-verified, see
+    //    docs/repository/FIREBASE-RULES-EXECUTION-2026-08-24.md): the
+    //    POSTED-immutability clause used to live on THIS node's own
+    //    ".write" (one level above "$id"), where "data"/"newData" scope
+    //    to the whole journal_entries collection, not the specific entry
+    //    being written -- so data.child('status') never found a real
+    //    status field and the check was a permanent no-op, proven by
+    //    actually running it against the RTDB emulator (a whole-node
+    //    overwrite of a POSTED entry succeeded when it should not have).
+    //    Moved the conditional clause down into "$id" below, where
+    //    data/newData correctly scope to the one entry actually being
+    //    written. ─────────────────────────────────────────────────────
     "journal_entries": {
-      ".read":  "auth != null",
-      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' && (!data.exists() || data.child('status').val() !== 'POSTED')",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
+        ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' && (!data.exists() || data.child('status').val() !== 'POSTED')",
         // Phase 31 (Security Hardening): the balanced-debit-credit
         // invariant Phase 1's own _validateJournalLines already enforces
         // in the engine is now ALSO enforced here, at the rules level --
@@ -224,11 +263,22 @@
     //    exactly what the third clause below allows while still locking
     //    type/date/total. Corrections to a POSTED document happen by
     //    reversing its linked journal entry, never by editing this
-    //    record's financial fields directly. ─────────────────────────────
+    //    record's financial fields directly.
+    //
+    //    2026-08-24 fix (execution-verified, see
+    //    docs/repository/FIREBASE-RULES-EXECUTION-2026-08-24.md): same
+    //    scoping bug as journal_entries above -- this clause used to live
+    //    on THIS node's own ".write", one level above "$id", where data/
+    //    newData scope to the whole source_documents collection rather
+    //    than the specific document being written. A financial-field
+    //    (total) rewrite on a POSTED document succeeded against the real
+    //    RTDB emulator when it should have been blocked. Moved the
+    //    conditional clause into "$id" below, where data/newData
+    //    correctly scope to the one document actually being written. ────
     "source_documents": {
-      ".read":  "auth != null",
-      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' && (!data.exists() || data.child('status').val() === 'DRAFT' || (newData.child('type').val() === data.child('type').val() && newData.child('date').val() === data.child('date').val() && newData.child('total').val() === data.child('total').val()))",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
+        ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' && (!data.exists() || data.child('status').val() === 'DRAFT' || (newData.child('type').val() === data.child('type').val() && newData.child('date').val() === data.child('date').val() && newData.child('total').val() === data.child('total').val()))",
         ".validate": "newData.hasChild('type') && newData.hasChild('date') && newData.hasChild('total') && newData.hasChild('operationId') && newData.hasChild('status')",
         "type": { ".validate": "newData.val() === 'sales_invoice' || newData.val() === 'purchase_invoice' || newData.val() === 'receipt' || newData.val() === 'payment' || newData.val() === 'expense_voucher' || newData.val() === 'transfer' || newData.val() === 'animal_sale' || newData.val() === 'animal_purchase' || newData.val() === 'inventory_purchase' || newData.val() === 'inventory_consumption' || newData.val() === 'labor_payment' || newData.val() === 'asset_purchase' || newData.val() === 'loan' || newData.val() === 'owner_capital' || newData.val() === 'owner_withdrawal'" },
         "status": { ".validate": "newData.val() === 'DRAFT' || newData.val() === 'POSTED' || newData.val() === 'PARTIALLY_PAID' || newData.val() === 'PAID' || newData.val() === 'OVERDUE' || newData.val() === 'VOID' || newData.val() === 'CANCELLED'" },
@@ -242,7 +292,7 @@
     //    here, so there's nothing balance-shaped for this rule to have to
     //    protect beyond normal admin-only write. ────────────────────────
     "cash_bank_accounts": {
-      ".read":  "auth != null",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".validate": "newData.hasChild('name') && newData.hasChild('type') && newData.hasChild('linkedAccountId')",
@@ -254,7 +304,7 @@
     //    Receivable). Sales invoices themselves live in source_documents
     //    (type 'sales_invoice') -- this is only the customer master. ────
     "customers": {
-      ".read":  "auth != null",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".validate": "newData.hasChild('name')"
@@ -265,7 +315,7 @@
     //    Payable). Purchase bills themselves live in source_documents
     //    (type 'purchase_invoice') -- this is only the supplier master.
     "suppliers": {
-      ".read":  "auth != null",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".validate": "newData.hasChild('name')"
@@ -276,11 +326,24 @@
     //    write-once append log (never edited or deleted -- exactly like
     //    activity_log) of real, evidenced costs attributed to one animal.
     //    postAnimalSale/postAnimalDeath read this to decide whether a
-    //    Cost of Animal Sales / Loss on Livestock leg is even postable. ──
+    //    Cost of Animal Sales / Loss on Livestock leg is even postable.
+    //
+    //    2026-08-24 fix (execution-verified, see
+    //    docs/repository/FIREBASE-RULES-EXECUTION-2026-08-24.md): the
+    //    ".validate" clause's "!data.exists()" blocked a second WRITE to
+    //    an existing record, but Firebase does not apply ".validate" to a
+    //    DELETE (newData === null) -- so this "write-once" record could
+    //    still be silently deleted, contradicting its own stated purpose.
+    //    Moved ".write" down into "$id" (correctly scoping data/newData
+    //    to this one record) with an explicit delete guard:
+    //    data.exists() ? newData.exists() : true -- true on create
+    //    (data doesn't exist yet), false on delete of an existing record
+    //    (newData doesn't exist), unaffected for edits (.validate still
+    //    blocks those via !data.exists()). ─────────────────────────────
     "animal_cost_ledger": {
-      ".read":  "auth != null",
-      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
+        ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' && (data.exists() ? newData.exists() : true)",
         ".validate": "newData.hasChild('animalId') && newData.hasChild('costType') && newData.hasChild('amount') && (!data.exists())",
         "amount": { ".validate": "newData.isNumber() && newData.val() > 0" }
       }
@@ -293,16 +356,18 @@
     //    under the same operationId should return the existing record,
     //    never silently overwrite a prior attribution. ──────────────────
     "cost_centers": {
-      ".read":  "auth != null",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".validate": "newData.hasChild('name') && newData.hasChild('type')"
       }
     },
+    // 2026-08-24 fix: same delete-guard as animal_cost_ledger above --
+    // see docs/repository/FIREBASE-RULES-EXECUTION-2026-08-24.md.
     "cost_allocations": {
-      ".read":  "auth != null",
-      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
+        ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' && (data.exists() ? newData.exists() : true)",
         ".validate": "newData.hasChild('sourceJournalEntryId') && newData.hasChild('totalAmount') && newData.hasChild('allocations') && (!data.exists())"
       }
     },
@@ -311,7 +376,7 @@
     //    Accruals/payments themselves live in source_documents (type
     //    'labor_payment') -- this is only the employee master. ─────────
     "employees": {
-      ".read":  "auth != null",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".validate": "newData.hasChild('name')"
@@ -325,7 +390,7 @@
     //    period's straight-line amount. Accumulated depreciation is never
     //    stored here -- always derived from journal_entries. ────────────
     "fixed_assets": {
-      ".read":  "auth != null",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".validate": "newData.hasChild('name') && newData.hasChild('acquisitionCost') && newData.hasChild('usefulLifeMonths')"
@@ -340,7 +405,7 @@
     //    principal, computed from journal_entries, reaches zero) -- unlike
     //    animal_cost_ledger/cost_allocations, so no write-once guard here.
     "loans": {
-      ".read":  "auth != null",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".validate": "newData.hasChild('lenderName') && newData.hasChild('principalAmount')"
@@ -352,7 +417,7 @@
     //    every single posting) -- see shared.js's own header comment on
     //    why a matching rules-level lock isn't attempted this pass. ────
     "fiscal_periods": {
-      ".read":  "auth != null",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".validate": "newData.hasChild('periodKey') && newData.hasChild('startDate') && newData.hasChild('endDate') && newData.hasChild('status')",
@@ -363,11 +428,18 @@
     // ── Accounting Engine (Phase 18): Financial Audit Trail. Write-once
     //    at the rules level, exactly like activity_log -- an audit
     //    record that could itself be edited or deleted after the fact
-    //    would defeat the entire point of it existing. ─────────────────
+    //    would defeat the entire point of it existing.
+    //
+    //    2026-08-24 fix (execution-verified): that guarantee did not
+    //    actually hold before this fix -- ".validate" does not run on a
+    //    DELETE, so a "write-once" record here could still be silently
+    //    deleted, proven by running it against the real RTDB emulator.
+    //    Same delete-guard as animal_cost_ledger above; see
+    //    docs/repository/FIREBASE-RULES-EXECUTION-2026-08-24.md. ────────
     "financial_audit_log": {
-      ".read":  "auth != null",
-      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
+        ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' && (data.exists() ? newData.exists() : true)",
         ".validate": "newData.hasChild('action') && newData.hasChild('entity') && (!data.exists())"
       }
     },
@@ -377,7 +449,7 @@
     //    getBudgetVsActual in shared.js) -- normal admin write, not
     //    write-once, since the status transitions patch this record. ────
     "budgets": {
-      ".read":  "auth != null",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".validate": "newData.hasChild('periodKey') && newData.hasChild('accountId') && newData.hasChild('amount') && newData.hasChild('status')",
@@ -392,9 +464,12 @@
     //    would defeat comparing it honestly against the real actual
     //    once the target period elapses). ───────────────────────────
     "forecasts": {
-      ".read":  "auth != null",
-      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
+        // 2026-08-24 fix: same delete-guard as animal_cost_ledger above --
+        // ".validate" alone never blocked a DELETE, only an edit; see
+        // docs/repository/FIREBASE-RULES-EXECUTION-2026-08-24.md.
+        ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' && (data.exists() ? newData.exists() : true)",
         // Phase 32 (Idempotency Hardening): requires operationId on every
         // record, matching createForecast's own new dedup guard in
         // shared.js. Note this rule's own !data.exists() cannot by itself
@@ -414,9 +489,12 @@
     //    was performed; editing it after the fact would defeat its
     //    purpose as an audit record. ─────────────────────────────────
     "bank_reconciliations": {
-      ".read":  "auth != null",
-      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
+        // 2026-08-24 fix: same delete-guard as animal_cost_ledger above --
+        // ".validate" alone never blocked a DELETE, only an edit; see
+        // docs/repository/FIREBASE-RULES-EXECUTION-2026-08-24.md.
+        ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' && (data.exists() ? newData.exists() : true)",
         // Phase 32 (Idempotency Hardening): requires operationId, matching
         // reconcileBankAccount's own new dedup guard in shared.js. See the
         // forecasts rule above for why the real duplicate-prevention lives

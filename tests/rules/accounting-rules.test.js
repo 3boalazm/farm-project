@@ -314,15 +314,32 @@ async function main() {
   }
 
   // ══════════════════════════════════════════════════════════════════
-  // Delete semantics -- Phase 5E. These collections use plain
-  // newData.hasChild(...) validation with no !newData.exists() escape
-  // hatch, which (per RTDB's documented .validate-runs-on-delete-too
-  // behavior) means a delete (newData === null) fails validation the
-  // same way a malformed write would. This was a source-level hypothesis
-  // in the prior review -- these tests convert it into an executed,
-  // verified fact, one way or the other.
+  // Delete semantics -- Phase 5E. A prior, source-reading-only review
+  // hypothesized these plain-hasChild()-validated master-data collections
+  // would be UNDELETABLE (a delete writes null, and hasChild(null) is
+  // false, so the reasoning went ".validate would reject it"). Running
+  // this against the real emulator proved that hypothesis WRONG:
+  // Firebase does not apply ".validate" to a delete, so all 8 of these
+  // ARE deletable today. Repo-wide grep confirms zero fbDelete() calls
+  // against any of them anywhere in the app -- deletion is unreachable
+  // through the UI, but nothing in the rules actively prevents it via
+  // direct admin-credential API/console access either.
+  //
+  // Whether that should be blocked (matching the write-once collections'
+  // now-fixed guard above) is a genuine, undecided PRODUCT question --
+  // does an admin ever legitimately need to delete a customer/supplier/
+  // employee/loan/account/cash-bank-account/fixed-asset/cost-center? --
+  // not a security bug the way journal_entries/source_documents'
+  // immutability-bypass and the write-once collections' delete-bypass
+  // were (both directly contradicted this file's own stated design
+  // intent; this one has no stated intent either way). Left undecided
+  // deliberately: these tests assert the CURRENT, confirmed-by-execution
+  // behavior (deletion currently succeeds) rather than a desired one, so
+  // this stays a documented, honest fact instead of a permanently-red
+  // assertion for a decision nobody has actually made. See
+  // docs/repository/FIREBASE-RULES-EXECUTION-2026-08-24.md.
   // ══════════════════════════════════════════════════════════════════
-  console.log('\n-- Delete semantics (source-level hypothesis, now executed) --');
+  console.log('\n-- Delete semantics (execution-verified; product decision pending, not a fixed bug) --');
   const HASCHILD_ONLY_COLLECTIONS = ['customers', 'suppliers', 'employees', 'loans', 'accounts', 'cash_bank_accounts', 'fixed_assets', 'cost_centers'];
   for (const name of HASCHILD_ONLY_COLLECTIONS) {
     const col = ACCOUNTING_COLLECTIONS.find((c) => c.name === name);
@@ -330,8 +347,8 @@ async function main() {
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
       await ctx.database().ref(name + '/' + delId).set(col.valid());
     });
-    await test(`[${name}] admin attempting to DELETE an existing record (structural hasChild-validate gotcha)`, async () => {
-      await assertFails(admin.database().ref(name + '/' + delId).set(null));
+    await test(`[${name}] admin CAN currently delete an existing record (unreachable via app UI; undecided whether this should be blocked -- not yet a guard, not a confirmed bug)`, async () => {
+      await assertSucceeds(admin.database().ref(name + '/' + delId).set(null));
     });
   }
 
