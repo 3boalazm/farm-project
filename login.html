@@ -36,10 +36,15 @@
     <div class="row g-2 mb-4" id="role-btns"></div>
     <div class="pin-display mb-3" id="pin-display">____</div>
     <div class="row g-2" id="pin-pad" dir="ltr"></div>
-    
+
   </div>
-</div>
-<div style="text-align:center;margin-top:14px;font-size:.72rem;color:var(--gray)"><i class="bi bi-keyboard me-1"></i>يمكن الكتابة بالكيبورد | Tab للتنقل بين الأدوار | Enter للتأكيد</div>
+  <!-- BUG FIX (2026-10 audit): this hint used to sit AFTER the closing
+       </div> of .login-screen, followed by one stray, unmatched </div>.
+       The HTML parser silently drops an unmatched close tag, so nothing
+       crashed -- but the markup was invalid and the hint was styled
+       against <body> instead of the login container. Now nested correctly
+       inside .login-screen with the stray tag removed. -->
+  <div style="text-align:center;margin-top:14px;font-size:.72rem;color:var(--gray)"><i class="bi bi-keyboard me-1"></i>يمكن الكتابة بالكيبورد | Tab للتنقل بين الأدوار | Enter للتأكيد</div>
 </div>
 <div id="toast-wrap"></div>
 <script src="config.js"></script>
@@ -83,7 +88,23 @@
   }
 
   async function attemptLogin(){
-    const users=await Users.all();
+    // SECURITY FIX (2026-10 audit): this used Users.all(), which is fbGet()
+    // -- and fbGet() returns [] BOTH for a genuinely empty users collection
+    // AND for any failed request (offline, DNS blip, 5xx, expired token).
+    // The first-run bootstrap below is gated on `users.length===0`, so a
+    // network outage on a LIVE farm made the factory admin/1234 credential
+    // work again for anyone who typed it. fbGetSafe() distinguishes the two
+    // cases: a failed read now stops the attempt with a real message instead
+    // of falling through to the bootstrap.
+    const users=await (typeof fbGetSafe==='function' ? fbGetSafe('users') : Users.all());
+    if(users===null){
+      const disp=document.getElementById('pin-display');
+      disp.textContent='لا يوجد اتصال';
+      disp.style.color='var(--red)';
+      lPin='';
+      setTimeout(()=>{disp.textContent='____';disp.style.color='';},1800);
+      return;
+    }
     // SECURITY FIX: verify against pin_hash instead of comparing
     // plaintext pin. Candidates are narrowed by role+active first (no
     // crypto needed for that), then each candidate's stored pin_hash is
@@ -131,44 +152,40 @@
       // yet in the Firebase Console, this quietly does nothing and
       // login proceeds exactly as it did before — no regression.
       try{ await signInWithFirebaseAuth(user.id, lPin); }catch(e){ /* non-fatal */ }
-      // Log login activity
+      // Audit + login notification.
+      // BUG FIX (2026-10 audit): this block posted the SAME login event to
+      // activity_log TWICE -- once here, once again at the end of the
+      // throttled-notification block below it -- so every single login
+      // produced two identical audit rows and doubled the audit trail's
+      // growth rate for no reason (activity.html counts "إجمالي العمليات"
+      // straight off that collection). One write now, keeping the more
+      // descriptive of the two messages; the 5-minute login-notification
+      // throttle is unchanged.
       if(initFirebase()){
         try{
+          const _lastLoginKey='_last_login_log_'+user.id;
+          const _lastT=+localStorage.getItem(_lastLoginKey)||0;
+          const _now=Date.now();
+          if(_now-_lastT>300000){  // 5 minutes
+            localStorage.setItem(_lastLoginKey,_now);
+            await fbPost('login_notifications',{
+              userName:user.name, userRole:user.role,
+              roleLabel:ROLES[user.role]?.label||user.role,
+              timestamp:new Date().toISOString(),
+              date:todayStr(),
+              pushed:false
+            });
+          }  // end throttle check
           await fbPost('activity_log',{
             userId:user.id, userName:user.name, userRole:user.role,
             action:'login', resource:'system',
-            description:`تسجيل دخول — ${ROLES[user.role]?.label}`,
+            description:'تسجيل دخول — '+user.name+' ('+(ROLES[user.role]?.label||user.role)+')',
             date:todayStr(),
             timestamp:new Date().toISOString()
           });
-        }catch(e){}
+        }catch(e){console.warn('login log:',e);}
       }
-      // Log login notification — throttled (max once per 5 min per user)
-    if(initFirebase()){
-      try{
-        const _lastLoginKey='_last_login_log_'+user.id;
-        const _lastT=+localStorage.getItem(_lastLoginKey)||0;
-        const _now=Date.now();
-        if(_now-_lastT>300000){  // 5 minutes
-          localStorage.setItem(_lastLoginKey,_now);
-          await fbPost('login_notifications',{
-          userName:user.name, userRole:user.role,
-          roleLabel:ROLES[user.role]?.label||user.role,
-          timestamp:new Date().toISOString(),
-          date:todayStr(),
-          pushed:false
-        });
-        }  // end throttle check
-        await fbPost('activity_log',{
-          userId:user.id, userName:user.name, userRole:user.role,
-          action:'login', resource:'system',
-          description:'تسجيل دخول — '+user.name+' ('+( ROLES[user.role]?.label||user.role)+')',
-          date:todayStr(),
-          timestamp:new Date().toISOString()
-        });
-      }catch(e){console.warn('login log:',e);}
-    }
-    window.location.href='dashboard.html';
+      window.location.href='dashboard.html';
     } else {
       const disp=document.getElementById('pin-display');
       disp.textContent='خطأ!';

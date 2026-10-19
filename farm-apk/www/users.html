@@ -71,9 +71,9 @@ async function renderUsers(){
     <div class="col-md-6 col-lg-4">
       <div class="wonder-card" style="cursor:pointer" onclick="showUserDetail('${u.id}')">
         <div class="d-flex align-items-start gap-3">
-          <div class="user-avatar" style="width:48px;height:48px;font-size:1.2rem;background:${role.color}22;color:${role.color}">${u.name.slice(0,1)}</div>
+          <div class="user-avatar" style="width:48px;height:48px;font-size:1.2rem;background:${role.color}22;color:${role.color}">${escapeHtml((u.name||'').slice(0,1))}</div>
           <div class="flex-grow-1">
-            <div class="fw-bold mb-1">${u.name}</div>
+            <div class="fw-bold mb-1">${escapeHtml(u.name||'')}</div>
             <div class="d-flex gap-2 mb-1">
               <span class="type-badge role-badge-${u.role}" style="font-size:.72rem"><i class="bi ${role.icon}" style="margin-left:3px"></i>${role.label}</span>
               ${u.active?`<span class="type-badge badge-tarbiya" style="font-size:.65rem">نشط</span>`:`<span class="type-badge badge-danger" style="font-size:.65rem">غير نشط</span>`}
@@ -97,8 +97,8 @@ async function showUserDetail(id){
   const allowed=u.role==='admin'?Object.keys(perms):Object.keys(perms).filter(p=>(ROLE_PERMS[u.role]||(()=>false))(p));
   showModal(`<div class="farm-modal" onclick="event.stopPropagation()">
     <div class="d-flex align-items-center gap-3 mb-4">
-      <div class="user-avatar" style="width:56px;height:56px;font-size:1.4rem;background:${role.color}22;color:${role.color}">${u.name.slice(0,1)}</div>
-      <div><h4 class="mb-1">${u.name}</h4><span class="type-badge role-badge-${u.role}">${role.label}</span></div>
+      <div class="user-avatar" style="width:56px;height:56px;font-size:1.4rem;background:${role.color}22;color:${role.color}">${escapeHtml((u.name||'').slice(0,1))}</div>
+      <div><h4 class="mb-1">${escapeHtml(u.name||'')}</h4><span class="type-badge role-badge-${u.role}">${role.label}</span></div>
     </div>
     <h6 class="fw-bold mb-2 text-gray">الصلاحيات</h6>
     ${Object.entries(perms).map(([k,l])=>`<div class="d-flex justify-content-between py-2" style="border-bottom:1px solid #1e1e1e">
@@ -123,7 +123,7 @@ function showUserModal(u){
   const actPerms=u.custom_perms||defPerms;
   showModal(`<div class="farm-modal" onclick="event.stopPropagation()" style="max-height:92vh;overflow-y:auto">
     <h4><i class="bi bi-person-plus-fill accent-text"></i> ${isEdit?'تعديل':'إضافة'} مستخدم</h4>
-    <label>الاسم *</label><input class="field" id="u-name" value="${u.name||''}">
+    <label>الاسم *</label><input class="field" id="u-name" value="${escapeHtml(u.name||'')}">
     <label>الدور</label>
     <select class="field" id="u-role" onchange="window._fillDefPerms()">${Object.entries(ROLES).map(([k,v])=>`<option value="${k}" ${u.role===k?'selected':''}>${v.label}</option>`).join('')}</select>
     <label>رمز PIN ${isEdit?'(اتركه فارغاً للإبقاء)':'*'}</label>

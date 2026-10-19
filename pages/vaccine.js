@@ -231,7 +231,7 @@ window.openTemplates = async function() {
   var rows = allTpls.map(function(t) {
     var next = new Date();
     next.setMonth(next.getMonth() + (t.interval_months||6));
-    var nextStr = next.toISOString().slice(0,10);
+    var nextStr = toLocalDateStr(next);
     var delBtn = t.custom
       ? '<button class="action-btn sm danger" data-id="' + (t._id||'') + '" onclick="deleteTpl(this)" style="padding:3px 8px" aria-label="حذف" title="حذف"><i class="bi bi-trash"></i></button>'
       : '';

@@ -147,7 +147,7 @@ function renderAutoTab(){
       '<div class="wonder-card">'+
         '<div class="fw-bold mb-3"><i class="bi bi-pie-chart-fill accent-text me-2"></i>توزيع التكاليف حسب الفئة</div>'+
         (catRows.length===0?'<div class="text-gray text-center py-3">لا توجد بيانات مالية بعد — أضف مصروفات من صفحة المالية</div>':
-        catRows.map(([cat,amt])=>{const p=pct(amt);return'<div class="finance-bar-wrap"><div class="lb"><span>'+cat+'</span><span class="fw-bold" style="color:var(--orange)">'+amt.toLocaleString('ar-EG')+' '+CURR()+' ('+p+'٪)</span></div><div class="finance-bar"><div class="finance-bar-fill" style="width:'+p+'%"></div></div></div>';}).join(''))+
+        catRows.map(([cat,amt])=>{const p=pct(amt);return'<div class="finance-bar-wrap"><div class="lb"><span>'+escapeHtml(cat)+'</span><span class="fw-bold" style="color:var(--orange)">'+amt.toLocaleString('ar-EG')+' '+CURR()+' ('+p+'٪)</span></div><div class="finance-bar"><div class="finance-bar-fill" style="width:'+p+'%"></div></div></div>';}).join(''))+
       '</div>'+
     '</div>'+
     '<div class="col-lg-5">'+

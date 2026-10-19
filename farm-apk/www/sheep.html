@@ -109,7 +109,7 @@ function renderPage(){
     html+='<div class="col-lg-4 col-md-6"><div class="breed-card">';
     html+='<div class="breed-header">';
     html+='<div class="breed-icon">🐑</div>';
-    html+='<div><div class="fw-bold">'+breed+'</div>';
+    html+='<div><div class="fw-bold">'+escapeHtml(breed)+'</div>';
     html+='<small class="text-gray">'+ar(bs.totalAll)+' حيوان</small></div>';
     html+='</div>';
     html+='<div class="row g-2 mb-3">';
@@ -156,7 +156,7 @@ window.openAddGoat=function(){
   showModal('<div class="farm-modal" onclick="event.stopPropagation()">'+
     '<h4><i class="bi bi-plus-circle accent-text"></i> إضافة أغنام</h4>'+
     '<label>السلالة</label><select class="field" id="m-breed">'+
-      s.sheepBreeds.map(function(b){return'<option>'+b+'</option>';}).join('')+
+      s.sheepBreeds.map(function(b){return'<option>'+escapeHtml(b)+'</option>';}).join('')+
     '</select>'+
     '<label>الغرض</label><select class="field" id="m-purpose">'+
       '<option value="tarbiya">تربية</option>'+
@@ -228,17 +228,17 @@ window.openMarkDeathGoat=function(){
 
     '<label>الحيوان *</label>'+
     '<select class="field" id="d-id" onchange="onDeathAnimalChangeGoat()">'+
-      alive.slice(0,300).map(function(a){return'<option value="'+a._id+'">'+(a.breed||'—')+(a.tag?' #'+a.tag:'')+' ('+(a.gender==='male'?'ذكر':'أنثى')+')</option>';}).join('')+
+      alive.slice(0,300).map(function(a){return'<option value="'+a._id+'">'+escapeHtml(a.breed||'—')+(a.tag?' #'+escapeHtml(a.tag):'')+' ('+(a.gender==='male'?'ذكر':'أنثى')+')</option>';}).join('')+
     '</select>'+
 
     '<div class="row g-2">'+
       '<div class="col-6">'+
         '<label>الترقيم</label>'+
-        '<input class="field" id="d-tag" value="'+(first.tag||'—')+'" readonly style="background:var(--bg-3);opacity:.7">'+
+        '<input class="field" id="d-tag" value="'+escapeHtml(first.tag||'—')+'" readonly style="background:var(--bg-3);opacity:.7">'+
       '</div>'+
       '<div class="col-6">'+
         '<label>السلالة</label>'+
-        '<input class="field" id="d-breed" value="'+(first.breed||'—')+'" readonly style="background:var(--bg-3);opacity:.7">'+
+        '<input class="field" id="d-breed" value="'+escapeHtml(first.breed||'—')+'" readonly style="background:var(--bg-3);opacity:.7">'+
       '</div>'+
     '</div>'+
 
@@ -330,7 +330,7 @@ window.openBreedEdit=function(sp, breedEnc){
   window._breedEditData={sp:sp,breed:breed,mTar:mTar,fTar:fTar,mTas:mTas,fTas:fTas};
 
   showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:480px">'+
-    '<h4><i class="bi bi-pencil-square" style="color:var(--blue)"></i> تعديل سلالة: '+breed+'</h4>'+
+    '<h4><i class="bi bi-pencil-square" style="color:var(--blue)"></i> تعديل سلالة: '+escapeHtml(breed)+'</h4>'+
     '<div class="mb-3 p-3" style="background:rgba(33,150,243,.06);border:1px solid rgba(33,150,243,.2);border-radius:10px;font-size:.82rem">'+
       'الأرقام الحالية: تربية ('+ar(mTar)+'♂ / '+ar(fTar)+'♀) | تسمين ('+ar(mTas)+'♂ / '+ar(fTas)+'♀)<br>'+
       '<span class="text-gray">الزيادة تضيف حيوانات — النقص يعطّل الزيادة</span>'+

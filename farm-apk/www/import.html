@@ -217,7 +217,7 @@ function renderMappingUI(res, fileName) {
     '<div class="wonder-card mb-4">' +
       '<div class="d-flex justify-content-between align-items-center mb-3">' +
         '<h6 class="fw-bold mb-0"><i class="bi bi-diagram-3-fill accent-text me-2"></i>ربط الأعمدة</h6>' +
-        '<small class="text-gray">' + fileName + ' — ' + ar(_parsed.length) + ' صف</small>' +
+        '<small class="text-gray">' + escapeHtml(fileName) + ' — ' + ar(_parsed.length) + ' صف</small>' +
       '</div>' +
       '<p class="text-gray" style="font-size:.82rem;margin-bottom:12px">تأكد من صحة الربط بين أعمدة الملف وحقول النظام:</p>' +
       Object.keys(fieldLabels).map(function(field) {
@@ -228,10 +228,10 @@ function renderMappingUI(res, fileName) {
           '<select class="field mb-0" style="flex:1;height:32px;padding:0 8px;font-size:.8rem" onchange="updateMap(' + Object.keys(fieldLabels).indexOf(field) + ',this.value,\'' + field + '\')">' +
             '<option value="">— تجاهل —</option>' +
             _headers.map(function(h, i) {
-              return '<option value="' + i + '"' + (i === +currentCol ? ' selected' : '') + '>' + h + '</option>';
+              return '<option value="' + i + '"' + (i === +currentCol ? ' selected' : '') + '>' + escapeHtml(h) + '</option>';
             }).join('') +
           '</select>' +
-          '<div class="map-sample">' + (sampleVal ? '<span class="text-gray" style="font-size:.72rem">مثال: ' + String(sampleVal).slice(0,14) + '</span>' : '') + '</div>' +
+          '<div class="map-sample">' + (sampleVal ? '<span class="text-gray" style="font-size:.72rem">مثال: ' + escapeHtml(String(sampleVal).slice(0,14)) + '</span>' : '') + '</div>' +
         '</div>';
       }).join('') +
       '<div class="d-flex gap-2 justify-content-end mt-3">' +
@@ -291,11 +291,11 @@ window.runValidation = function() {
 
       // Date format
       if (field === 'birth_date' && val) {
-        if (val instanceof Date) { val = val.toISOString().slice(0,10); }
+        if (val instanceof Date) { val = toLocalDateStr(val); }
         else if (!/^\d{4}-\d{2}-\d{2}$/.test(val)) {
           // Try to parse
           var d = new Date(val);
-          if (!isNaN(d)) val = d.toISOString().slice(0,10);
+          if (!isNaN(d)) val = toLocalDateStr(d);
           else { warnings.push('تاريخ الميلاد بصيغة غير معروفة: ' + val); val = ''; }
         }
       }
@@ -349,13 +349,13 @@ function renderValidationResults(res) {
 
       (errRows.length ?
         '<div class="mb-3"><div class="fw-bold red-text mb-2"><i class="bi bi-x-circle-fill me-2"></i>صفوف بها أخطاء (يجب تصحيحها):</div>' +
-        errRows.slice(0,5).map(function(r){return '<div style="background:rgba(244,67,54,.06);border:1px solid rgba(244,67,54,.2);border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:.8rem"><span class="fw-bold red-text">صف '+ar(r.row)+':</span> '+r.errors.join(' | ')+'</div>';}).join('') +
+        errRows.slice(0,5).map(function(r){return '<div style="background:rgba(244,67,54,.06);border:1px solid rgba(244,67,54,.2);border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:.8rem"><span class="fw-bold red-text">صف '+ar(r.row)+':</span> '+escapeHtml(r.errors.join(' | '))+'</div>';}).join('') +
         (errRows.length>5?'<small class="text-gray">+ '+ar(errRows.length-5)+' صف بأخطاء أخرى</small>':'') +
         '</div>' : '') +
 
       (warnRows.length ?
         '<div class="mb-3"><div class="fw-bold" style="color:var(--orange)" ><i class="bi bi-exclamation-triangle-fill me-2"></i>تحذيرات (سيتم تجاهل الحقول المتأثرة):</div>' +
-        warnRows.slice(0,3).map(function(r){return '<div class="text-gray" style="font-size:.8rem;padding:4px 0">صف '+ar(r.row)+': '+r.warnings.join(' | ')+'</div>';}).join('') +
+        warnRows.slice(0,3).map(function(r){return '<div class="text-gray" style="font-size:.8rem;padding:4px 0">صف '+ar(r.row)+': '+escapeHtml(r.warnings.join(' | '))+'</div>';}).join('') +
         '</div>' : '') +
 
       '<div class="d-flex gap-2 flex-wrap">' +
@@ -379,8 +379,15 @@ function renderValidationResults(res) {
           var ico = r.errors.length ? '❌' : r.warnings.length ? '⚠️' : '✅';
           return '<tr style="'+(r.errors.length?'background:rgba(244,67,54,.04)':r.warnings.length?'background:rgba(255,193,7,.04)':'')+'">'+
             '<td class="text-gray">' + ar(r.row) + '</td>' +
-            '<td title="'+(r.errors.join(' | ')||r.warnings.join(' | '))+'">' + ico + '</td>' +
-            Object.values(_mapped).map(function(f){return '<td>'+(r.data[f]!==undefined?r.data[f]:'<span class="text-muted">—</span>')+'</td>';}).join('') +
+            '<td title="'+escapeHtml(r.errors.join(' | ')||r.warnings.join(' | '))+'">' + ico + '</td>' +
+            // XSS fix (2026-08-24): this PREVIEW render is the entry point --
+            // a malicious CSV/Excel cell value must render inert here.
+            // Deliberately escapes only the displayed copy, never r.data[f]
+            // itself: startExcelImport() below reads the exact same
+            // _validated[].data objects to write to Firebase, and imported
+            // records must keep their real original value, not an
+            // HTML-escaped one.
+            Object.values(_mapped).map(function(f){return '<td>'+(r.data[f]!==undefined?escapeHtml(r.data[f]):'<span class="text-muted">—</span>')+'</td>';}).join('') +
           '</tr>';
         }).join('') +
         (_validated.length > 15 ? '<tr><td colspan="20" class="text-center text-gray" style="padding:8px">+ ' + ar(_validated.length-15) + ' صف...</td></tr>' : '') +

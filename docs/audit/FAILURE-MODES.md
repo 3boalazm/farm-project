@@ -1,5 +1,7 @@
 # FAILURE-MODES.md
 
+> **UPDATE 2026-10 (see `FULL-AUDIT-2026-10.md`):** the `activity.html` failure mode below is fixed — the file is a real page now. Two new failure modes were found and fixed by the 2026-10 audit: a failed `fbGet` during `Users.init()` used to reset `users/admin1` to the factory PIN, and `login.html` accepted `admin/1234` during a network outage. Both are now covered by `tests/unit/02`.
+
 ## Network Failures
 Firebase unavailable: `fbGet` catches and returns `[]` (confirmed, `firebase.js`) — pages degrade to empty-state rendering, not crashes. Writes (`fbPost`/`fbPatch`) have no retry logic anywhere in this codebase (confirmed across every prior certification this engagement produced) — a failed write simply fails, surfaced via a generic toast in most cases.
 

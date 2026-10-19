@@ -1,5 +1,7 @@
 # THREAT-MODEL.md (STRIDE)
 
+> **UPDATE 2026-10 (see `FULL-AUDIT-2026-10.md`):** the Repudiation gap below is closed (`activity.html` exists and works). Two real elevation-of-privilege paths were found and fixed: `can('admin')` returned true for supervisors (20 admin-only guards, including the mortality-register wipe), and the read-only `visitor` role could mutate the herd. Spoofing (client-trusted `localStorage`) is unchanged and still structural — see O-01.
+
 ## Spoofing
 Auth is PIN-based, not session-token-based in the cryptographic sense — `localStorage['farm_user']` holds the trusted client state. **Anyone with browser DevTools access to a logged-in device can edit `localStorage['farm_user']` directly to claim any role, including admin**, since `can()` trusts this value without server-side verification (confirmed: `firebase.js`'s `can()` reads `getUser()`, which reads `localStorage` directly, no signature/token check). This is a real, structural limitation of the client-only permission model — not fixable without a genuine server-side auth layer, which is explicitly out of this mission's scope (architecture change).
 

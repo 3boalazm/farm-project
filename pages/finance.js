@@ -64,7 +64,7 @@ function renderFinancePage(s){
   const revExpTrendF=[];
   for(let i=5;i>=0;i--){
     const d=new Date(nowF.getFullYear(),nowF.getMonth()-i,1);
-    const mStr=d.toISOString().slice(0,7);
+    const mStr=toLocalMonthKey(d);
     const monthInc=finRecs.filter(r=>r.type==='income'&&(r.date||'').startsWith(mStr)).reduce((t,r)=>t+(+r.amount||0),0);
     const monthExp=finRecs.filter(r=>r.type==='expense'&&(r.date||'').startsWith(mStr)).reduce((t,r)=>t+(+r.amount||0),0);
     revExpTrendF.push({ label: arMonthsF[d.getMonth()].slice(0,3), values:[monthInc,monthExp] });

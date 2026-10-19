@@ -178,10 +178,23 @@ window.openBirthModal=function(){
 };
 
 window.submitBirthDirect=async function(){
+  // FIX (2026-10 audit): same two holes the certified _ubSubmit() in
+  // shared.js had — (1) no write-permission check, so the read-only visitor
+  // role (which legitimately holds can('animals') for VIEWING the herd) could
+  // create animals through this modal, and (2) qty read straight from the
+  // field with no bounds, so a typed -5 wrote offspring_count:-5 while the
+  // animals loop never ran, and a typed 50000 started an unbounded write
+  // loop. This is the deliberately-deferred fourth birth implementation
+  // (docs/certification/BIRTH.md); these guards are additive and change
+  // nothing about the record shape it writes.
+  if(!canWrite('animals')){toast('ليس لديك صلاحية لتسجيل المواليد','error');return;}
   const motherTag=document.getElementById('nb-mother-tag').value.trim();
   const motherBreed=document.getElementById('nb-mother-breed').value;
   if(!motherTag){toast('رقم الأم مطلوب','error');return;}
-  const s=getSettings();const qty=+document.getElementById('nb-qty').value||1;
+  const s=getSettings();
+  const qtyRaw=+document.getElementById('nb-qty').value;
+  if(!isFinite(qtyRaw)||qtyRaw<1||qtyRaw>10){toast('عدد المواليد يجب أن يكون بين ١ و ١٠','error');return;}
+  const qty=qtyRaw;
   const rec={
     female_tag:motherTag, mother_tag:motherTag,
     female_breed:motherBreed, mother_breed:motherBreed,
@@ -296,7 +309,7 @@ window.openBModal=function(id, prefTag, prefBreed, prefSpecies, jumpToBorn){
   '</div>');
 };
 window._updateBBreeds=function(){const s=getSettings();const sp=document.getElementById('b-sp')?.value;document.getElementById('b-fb').innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(b=>'<option>'+escapeHtml(b)+'</option>').join('');};
-window._calcExpBirth=function(){const d=document.getElementById('b-md')?.value;if(d){const dt=new Date(d);dt.setDate(dt.getDate()+(getSettings().pregnancyDays||150));document.getElementById('b-ed').value=dt.toISOString().slice(0,10);}};
+window._calcExpBirth=function(){const d=document.getElementById('b-md')?.value;if(d){document.getElementById('b-ed').value=shiftDateLocal(d,getSettings().pregnancyDays||150);}};
 window._toggleBornFields=function(){const s=document.getElementById('b-st')?.value;if(document.getElementById('b-born-fields'))document.getElementById('b-born-fields').style.display=s==='born'?'block':'none';};
 
 window.submitBreeding=async function(){

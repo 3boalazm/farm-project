@@ -182,7 +182,7 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
   const herdTrend = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now3.getFullYear(), now3.getMonth()-i, 1);
-    const monthEnd = new Date(d.getFullYear(), d.getMonth()+1, 0).toISOString().slice(0,10);
+    const monthEnd = monthEndLocal(d); // last LOCAL day of the month, not the UTC-shifted one
     const count = animals.filter(a => {
       if (!a.birth_date || a.birth_date > monthEnd) return false;
       if (a.status === 'dead' && a.died_at && a.died_at <= monthEnd) return false;
@@ -206,7 +206,7 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
   const prodTrend = [];
   for (let i = 13; i >= 0; i--) {
     const d = new Date(); d.setDate(d.getDate()-i);
-    const dStr = d.toISOString().slice(0,10);
+    const dStr = toLocalDateStr(d);
     const dayTotal = milkLog.filter(p => p.date === dStr).reduce((t,p)=>t+(+p.quantity||0),0);
     prodTrend.push({ label: String(d.getDate()), value: dayTotal });
   }
@@ -215,7 +215,7 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
   const revExpTrend = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now3.getFullYear(), now3.getMonth()-i, 1);
-    const mStr = d.toISOString().slice(0,7);
+    const mStr = toLocalMonthKey(d);
     const monthInc = finance.filter(r => r.type==='income' && (r.date||'').startsWith(mStr)).reduce((t,r)=>t+(+r.amount||0),0);
     const monthExp = finance.filter(r => r.type==='expense' && (r.date||'').startsWith(mStr)).reduce((t,r)=>t+(+r.amount||0),0);
     revExpTrend.push({ label: arMonths[d.getMonth()].slice(0,3), values: [monthInc, monthExp] });
@@ -270,8 +270,8 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
   const recentActivity = [...(activity||[])].sort((a,b)=>(b.timestamp||'').localeCompare(a.timestamp||'')).slice(0,6);
 
   renderPageHeaderV2({
-    title: 'مرحباً ' + getUser().name + ' 👋',
-    description: s.farmName + ' — ' + todayAr(),
+    title: 'مرحباً ' + escapeHtml(getUser().name||'') + ' 👋',
+    description: escapeHtml(s.farmName||'') + ' — ' + todayAr(),
     secondaryActions: `<a href="diary.html" class="action-btn" style="background:rgba(16,185,129,.1);border-color:rgba(16,185,129,.3);color:var(--orange)"><i class="bi bi-journal-text"></i> يومية المزرعة</a>
      <a href="assistant.html" class="action-btn" style="background:rgba(52,211,153,.1);border-color:rgba(52,211,153,.3);color:var(--green)"><i class="bi bi-robot"></i> المساعد الذكي</a>
      ${can('animals') ? `<button class="action-btn" onclick="openUnifiedBirthModal('goat')" style="background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.35);color:var(--yellow)"><i class="bi bi-stars"></i> مواليد</button>
@@ -314,7 +314,7 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
   const tableRows = breedData.map(b => `
     <tr style="border-bottom:1px solid var(--border-3)">
       <td style="padding:8px;color:var(--text-gray)">${b.species==='goat'?'ماعز':'أغنام'}</td>
-      <td style="padding:8px;font-weight:700">${b.breed}</td>
+      <td style="padding:8px;font-weight:700">${escapeHtml(b.breed||'')}</td>
       <td style="padding:8px">${arNum(b.tarbiya)}</td>
       <td style="padding:8px">${arNum(b.tasmeen)}</td>
       <td style="padding:8px;color:var(--yellow)">${arNum(b.births)}</td>
@@ -600,7 +600,7 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
         rowsHtml: upcomingTasks.map(t => {
           const isOverdue = t.date && t.date < today;
           const priLabel = {high:'عالية',medium:'متوسطة',low:'منخفضة'}[t.priority]||t.priority;
-          return `<tr><td class="${isOverdue?'text-danger fw-bold':'text-gray'}">${t.date||'—'}</td><td class="fw-bold">${t.title||'—'}</td><td>${priLabel}</td><td><span class="type-badge ${isOverdue?'badge-danger':t.status==='in_progress'?'badge-tasmeen':'badge-yellow'}">${isOverdue?'متأخرة':t.status==='in_progress'?'قيد التنفيذ':'معلّقة'}</span></td></tr>`;
+          return `<tr><td class="${isOverdue?'text-danger fw-bold':'text-gray'}">${t.date||'—'}</td><td class="fw-bold">${escapeHtml(t.title||'—')}</td><td>${priLabel}</td><td><span class="type-badge ${isOverdue?'badge-danger':t.status==='in_progress'?'badge-tasmeen':'badge-yellow'}">${isOverdue?'متأخرة':t.status==='in_progress'?'قيد التنفيذ':'معلّقة'}</span></td></tr>`;
         }).join('')
       })}
     </div>
@@ -611,7 +611,7 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
         title: 'الجدول الزمني التشغيلي',
         headers: ['التاريخ','النوع','التفاصيل','الحالة'],
         state: recentRecordsTop.length ? 'ready' : 'empty',
-        rowsHtml: recentRecordsTop.map(r => `<tr><td class="text-gray">${r.date}</td><td class="fw-bold">${r.type}</td><td>${r.module}</td><td><span class="type-badge ${r.statusCls}">${r.status}</span></td></tr>`).join('')
+        rowsHtml: recentRecordsTop.map(r => `<tr><td class="text-gray">${r.date}</td><td class="fw-bold">${r.type}</td><td>${escapeHtml(r.module)}</td><td><span class="type-badge ${r.statusCls}">${r.status}</span></td></tr>`).join('')
       })}
     </div>
 
@@ -714,7 +714,7 @@ window.renderInventoryExecCard = async function() {
                  + feeds.filter(function(f){return +f.quantity<=+f.min_quantity && +f.min_quantity>0;}).length;
     var outOfStock = meds.filter(function(m){return +m.quantity<=0;}).length + feeds.filter(function(f){return +f.quantity<=0;}).length;
     var feedRemaining = feeds.reduce(function(s,f){return s+((+f.quantity||0)*(+f.unit_weight||50));},0);
-    var thisMonth = new Date().toISOString().slice(0,7);
+    var thisMonth = toLocalMonthKey(new Date());
     var monthlyConsumptionKg = consumption.filter(function(c){return (c.date||'').startsWith(thisMonth);}).reduce(function(s,c){return s+(+c.quantity_kg||0);},0);
     if (lowStock===0 && outOfStock===0 && feedRemaining===0 && monthlyConsumptionKg===0) { container.innerHTML=''; return; }
     container.innerHTML = '<div class="wonder-card p-3" style="border-inline-start:3px solid '+(outOfStock>0?'var(--red)':lowStock>0?'var(--yellow)':'var(--green)')+'">'+
@@ -795,7 +795,7 @@ window.renderUnifiedPriorities = async function(animals, health, weightAlerts, p
 
     var LEVEL_COLOR={critical:'var(--red)',high:'var(--orange)',medium:'var(--yellow)',low:'var(--green)'};
     container.innerHTML = 'الأعلى أولوية: ' + top.map(function(r){
-      return '<a href="animal-detail.html?id='+r.animalId+'" style="color:'+(LEVEL_COLOR[r.level]||'var(--text)')+';text-decoration:none;font-weight:700" title="ثقة: '+(r.confidence==='high'?'عالية':'متوسطة')+' — '+r.contributingEngines.join('، ')+'">'+(r.animalTag||r.animalId)+' ('+ar(r.score)+')</a>';
+      return '<a href="animal-detail.html?id='+r.animalId+'" style="color:'+(LEVEL_COLOR[r.level]||'var(--text)')+';text-decoration:none;font-weight:700" title="ثقة: '+(r.confidence==='high'?'عالية':'متوسطة')+' — '+r.contributingEngines.join('، ')+'">'+escapeHtml(r.animalTag||r.animalId)+' ('+ar(r.score)+')</a>';
     }).join('، ');
   } catch(e) { container.innerHTML = ''; }
 };
@@ -898,8 +898,8 @@ function renderPieChart(data, total) {
     var xi2=cx+ir*Math.cos(ea-Math.PI/2), yi2=cy+ir*Math.sin(ea-Math.PI/2);
     var color = b.breed==='مواليد' ? (b.species==='goat'?'#ffc107':'#ff9800') : (sc[b.breed]||dc[i%dc.length]);
     var pct=Math.round(b.total/total*100);
-    paths+=`<path d="M ${xi} ${yi} A ${ir} ${ir} 0 ${lg} 1 ${xi2} ${yi2} L ${x2} ${y2} A ${r} ${r} 0 ${lg} 0 ${x1} ${y1} Z" fill="${color}" opacity=".85" stroke="var(--bg)" stroke-width="2"><title>${b.breed}: ${ar(b.total)}</title></path>`;
-    legend+=`<span style="font-size:.7rem;display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:${color};display:inline-block"></span>${b.breed} ${ar(pct)}٪</span>`;
+    paths+=`<path d="M ${xi} ${yi} A ${ir} ${ir} 0 ${lg} 1 ${xi2} ${yi2} L ${x2} ${y2} A ${r} ${r} 0 ${lg} 0 ${x1} ${y1} Z" fill="${color}" opacity=".85" stroke="var(--bg)" stroke-width="2"><title>${escapeHtml(b.breed||'')}: ${ar(b.total)}</title></path>`;
+    legend+=`<span style="font-size:.7rem;display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:${color};display:inline-block"></span>${escapeHtml(b.breed||'')} ${ar(pct)}٪</span>`;
     sa=ea;
   });
   var pc=document.getElementById('pie-container');
@@ -933,7 +933,7 @@ window.openAddAnimalDash=function(){
       '<div class="col-6"><label>النوع</label><select class="field" id="da-sp" onchange="window._daBreeds()"><option value="goat">ماعز</option><option value="sheep">أغنام</option></select></div>'+
       '<div class="col-6"><label>الغرض</label><select class="field" id="da-pur"><option value="tarbiya">تربية</option><option value="tasmeen">تسمين</option></select></div>'+
     '</div>'+
-    '<label>السلالة</label><select class="field" id="da-breed">'+s.goatBreeds.map(function(b){return'<option>'+b+'</option>';}).join('')+'</select>'+
+    '<label>السلالة</label><select class="field" id="da-breed">'+s.goatBreeds.map(function(b){return'<option>'+escapeHtml(b)+'</option>';}).join('')+'</select>'+
     '<div class="row g-2">'+
       '<div class="col-6"><label>الجنس</label><select class="field" id="da-g"><option value="female">أنثى</option><option value="male">ذكر</option></select></div>'+
       '<div class="col-6"><label>رقم الترقيم</label><input class="field" id="da-tag" placeholder="A-001"></div>'+
@@ -944,7 +944,7 @@ window.openAddAnimalDash=function(){
     '</div>'+
   '</div>');
 };
-window._daBreeds=function(){var s=getSettings();var sp=document.getElementById('da-sp')?.value;var b=document.getElementById('da-breed');if(b)b.innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(function(x){return'<option>'+x+'</option>';}).join('');};
+window._daBreeds=function(){var s=getSettings();var sp=document.getElementById('da-sp')?.value;var b=document.getElementById('da-breed');if(b)b.innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(function(x){return'<option>'+escapeHtml(x)+'</option>';}).join('');};
 window._daSubmit=async function(){
   var sp=document.getElementById('da-sp').value;
   var breed=document.getElementById('da-breed').value;
@@ -966,7 +966,7 @@ window.openMarkDeathDash=async function(){
   showModal('<div class="farm-modal narrow" onclick="event.stopPropagation()">'+
     '<h4 style="color:var(--red)"><i class="bi bi-x-octagon"></i> تسجيل نفوق</h4>'+
     '<label>الحيوان</label><select class="field" id="dd-a"><option value="">— اختر —</option>'+
-      alive2.map(function(a){return'<option value="'+a._id+'">'+a.breed+(a.tag?' #'+a.tag:'')+(a.gender==='male'?' ذكر':' أنثى')+'</option>';}).join('')+
+      alive2.map(function(a){return'<option value="'+a._id+'">'+escapeHtml(a.breed||'')+(a.tag?' #'+escapeHtml(a.tag):'')+(a.gender==='male'?' ذكر':' أنثى')+'</option>';}).join('')+
     '</select>'+
     '<label>التاريخ</label><input type="date" class="field" id="dd-d" value="'+todayStr()+'">'+
     '<label>الوقت <span class="text-gray" style="font-weight:400">(اختياري)</span></label>'+

@@ -8,10 +8,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   if(!can('finance')){document.getElementById('content').innerHTML='<div class="empty-state"><i class="bi bi-shield-x"></i><p>غير مصرح بالوصول للبيانات المالية</p></div>';renderNavbarV2('finance.html');return;}
 
   // FAB for mobile
-  addFAB('إضافة معاملة مالية', function(){
-    var btn=document.querySelector('.action-btn.primary');
-    if(btn)btn.click();
-  }, 'bi-wallet2');
+  addFAB('إضافة معاملة مالية', function(){ openFinModal(); }, 'bi-wallet2');
   const s=getSettings();
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
@@ -53,7 +50,7 @@ function renderFinancePage(s){
 
   const distributionHtml = topCats.length>0 ? renderChartContainer({
     title:'توزيع المصروفات', subtitle:'أعلى الفئات', state:'ready',
-    chartHtml: topCats.map(([cat,amt])=>{const pct=totalEx?Math.round(amt/totalEx*100):0;return`<div class="finance-bar-wrap"><div class="lb"><span class="text-gray">${cat}</span><span class="fw-bold accent-text">${amt.toLocaleString('ar-EG')} ${curr} (${pct}٪)</span></div><div class="finance-bar" role="presentation" aria-hidden="true"><div class="finance-bar-fill" style="width:${pct}%"></div></div></div>`;}).join('')
+    chartHtml: topCats.map(([cat,amt])=>{const pct=totalEx?Math.round(amt/totalEx*100):0;return`<div class="finance-bar-wrap"><div class="lb"><span class="text-gray">${escapeHtml(cat)}</span><span class="fw-bold accent-text">${amt.toLocaleString('ar-EG')} ${curr} (${pct}٪)</span></div><div class="finance-bar" role="presentation" aria-hidden="true"><div class="finance-bar-fill" style="width:${pct}%"></div></div></div>`;}).join('')
   }) : '';
 
   // Monthly Trend / Revenue vs Expense — NEW, was missing. A single grouped-bar
@@ -67,7 +64,7 @@ function renderFinancePage(s){
   const revExpTrendF=[];
   for(let i=5;i>=0;i--){
     const d=new Date(nowF.getFullYear(),nowF.getMonth()-i,1);
-    const mStr=d.toISOString().slice(0,7);
+    const mStr=toLocalMonthKey(d);
     const monthInc=finRecs.filter(r=>r.type==='income'&&(r.date||'').startsWith(mStr)).reduce((t,r)=>t+(+r.amount||0),0);
     const monthExp=finRecs.filter(r=>r.type==='expense'&&(r.date||'').startsWith(mStr)).reduce((t,r)=>t+(+r.amount||0),0);
     revExpTrendF.push({ label: arMonthsF[d.getMonth()].slice(0,3), values:[monthInc,monthExp] });
@@ -88,9 +85,9 @@ function renderFinancePage(s){
     rowsHtml: recs.map(r=>`<tr>
       <td class="text-gray">${r.date||'—'}</td>
       <td><span class="type-badge ${r.type==='income'?'badge-tarbiya':'badge-tasmeen'}">${r.type==='income'?'إيراد':'مصروف'}</span></td>
-      <td>${r.category||'—'}</td>
-      <td>${r.description||'—'}</td>
-      <td class="text-gray">${r.barn||'—'}</td>
+      <td>${escapeHtml(r.category||'—')}</td>
+      <td>${escapeHtml(r.description||'—')}</td>
+      <td class="text-gray">${escapeHtml(r.barn||'—')}</td>
       <td class="fw-bold ${r.type==='income'?'green-text':'accent-text'}">${r.type==='income'?'+':'-'}${(+r.amount||0).toLocaleString('ar-EG')}</td>
       <td><div class="d-flex gap-1">
         <button class="icon-btn edit" onclick="openFinModal('${r._id}')" aria-label="تعديل" title="تعديل"><i class="bi bi-pencil"></i></button>
@@ -150,8 +147,8 @@ window.openFinModal=function(id){
       <div class="col-6"><label>المبلغ (${s.currency}) *</label><input type="number" class="field" id="f-amount" value="${r.amount||''}" min="0" step="0.01"></div>
       <div class="col-6"><label>الجمالون</label><select class="field" id="f-barn">${barns.map(b=>`<option value="${b}" ${r.barn===b?'selected':''}>${b||'— الكل —'}</option>`).join('')}</select></div>
     </div>
-    <label>القائم بالمعاملة</label><input class="field" id="f-by" value="${r.added_by||getUser()?.name||''}" placeholder="اسم الشخص">
-    <label>الوصف</label><input class="field" id="f-desc" value="${r.description||''}" placeholder="تفاصيل المعاملة">
+    <label>القائم بالمعاملة</label><input class="field" id="f-by" value="${escapeHtml(r.added_by||getUser()?.name||'')}" placeholder="اسم الشخص">
+    <label>الوصف</label><input class="field" id="f-desc" value="${escapeHtml(r.description||'')}" placeholder="تفاصيل المعاملة">
     <div class="d-flex gap-2 justify-content-end mt-3">
       <button class="action-btn" onclick="closeModal()">إلغاء</button>
       <button class="action-btn primary" onclick="submitFin()">حفظ</button>

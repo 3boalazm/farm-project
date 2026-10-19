@@ -116,7 +116,7 @@ function renderMedsTable(){
   return renderDataTableWrapper({
     title: 'الصيدلية',
     headers: ['الدواء','الكمية','الوحدة','الحد الأدنى','تاريخ الانتهاء','الغرض','الجمالون',''],
-    rowsHtml: meds.map(m=>{const d=m.expiry?daysLeft(m.expiry):null;const warn=d!==null&&d<=30;const low=+m.quantity<=+m.min_quantity&&+m.min_quantity>0;return`<tr><td class="fw-bold">${m.name}</td><td class="${low?'red-text fw-bold':'fw-bold'}">${m.quantity}${low?` <i class="bi bi-exclamation-triangle-fill red-text"></i>`:''}</td><td class="text-gray">${m.unit||'—'}</td><td class="text-gray">${m.min_quantity||0}</td><td class="${d===null?'text-gray':d<=7?'red-text':d<=30?'accent-text':'green-text'}">${m.expiry||'—'} ${warn?`(${ar(d)} يوم)`:''}</td><td class="text-gray">${m.purpose||'—'}</td><td class="text-gray">${m.barn||'—'}</td><td><div class="d-flex gap-1"><button class="icon-btn edit" onclick="openEditInv('meds','${m._id}')" aria-label="تعديل" title="تعديل"><i class="bi bi-pencil"></i></button><button class="icon-btn" onclick="openUseModal('meds','${m._id}','${m.name}',${m.quantity})" style="color:var(--orange)" aria-label="تسجيل استخدام" title="تسجيل استخدام"><i class="bi bi-dash-circle"></i></button><button class="icon-btn del" onclick="delInv('meds','${m._id}')" aria-label="حذف" title="حذف"><i class="bi bi-trash"></i></button></div></td></tr>`;}).join('')
+    rowsHtml: meds.map(m=>{const d=m.expiry?daysLeft(m.expiry):null;const warn=d!==null&&d<=30;const low=+m.quantity<=+m.min_quantity&&+m.min_quantity>0;return`<tr><td class="fw-bold">${escapeHtml(m.name||'—')}</td><td class="${low?'red-text fw-bold':'fw-bold'}">${m.quantity}${low?` <i class="bi bi-exclamation-triangle-fill red-text"></i>`:''}</td><td class="text-gray">${escapeHtml(m.unit||'—')}</td><td class="text-gray">${m.min_quantity||0}</td><td class="${d===null?'text-gray':d<=7?'red-text':d<=30?'accent-text':'green-text'}">${m.expiry||'—'} ${warn?`(${ar(d)} يوم)`:''}</td><td class="text-gray">${escapeHtml(m.purpose||'—')}</td><td class="text-gray">${escapeHtml(m.barn||'—')}</td><td><div class="d-flex gap-1"><button class="icon-btn edit" onclick="openEditInv('meds','${m._id}')" aria-label="تعديل" title="تعديل"><i class="bi bi-pencil"></i></button><button class="icon-btn" onclick="openUseModal('meds','${m._id}','${escapeJsAttr(m.name||'')}',${m.quantity})" style="color:var(--orange)" aria-label="تسجيل استخدام" title="تسجيل استخدام"><i class="bi bi-dash-circle"></i></button><button class="icon-btn del" onclick="delInv('meds','${m._id}')" aria-label="حذف" title="حذف"><i class="bi bi-trash"></i></button></div></td></tr>`;}).join('')
   });
 }
 
@@ -127,7 +127,7 @@ function renderFeedsTable(s){
   renderDataTableWrapper({
     title: 'الأعلاف',
     headers: ['العلف','الكمية','الوحدة','الحد الأدنى','التكلفة/وحدة','الإجمالي','الجمالون',''],
-    rowsHtml: feeds.map(f=>{const low=+f.quantity<=+f.min_quantity&&+f.min_quantity>0;return`<tr><td class="fw-bold">${f.name}</td><td class="${low?'red-text fw-bold':'fw-bold'}">${f.quantity}${low?` <i class="bi bi-exclamation-triangle-fill red-text"></i>`:''}</td><td class="text-gray">${f.unit||'—'}</td><td class="text-gray">${f.min_quantity||0}</td><td class="text-gray">${f.cost_per_unit?f.cost_per_unit+' '+s.currency:'—'}</td><td class="accent-text fw-bold">${f.cost_per_unit&&f.quantity?(+f.cost_per_unit*(+f.quantity)).toLocaleString('ar-EG')+' '+s.currency:'—'}</td><td class="text-gray">${f.barn||'—'}</td><td><div class="d-flex gap-1"><button class="icon-btn edit" onclick="openEditInv('feeds','${f._id}')" aria-label="تعديل" title="تعديل"><i class="bi bi-pencil"></i></button><button class="icon-btn" onclick="openUseModal('feeds','${f._id}','${f.name}',${f.quantity})" style="color:var(--orange)" aria-label="تسجيل استخدام" title="تسجيل استخدام"><i class="bi bi-dash-circle"></i></button><button class="icon-btn del" onclick="delInv('feeds','${f._id}')" aria-label="حذف" title="حذف"><i class="bi bi-trash"></i></button></div></td></tr>`;}).join('')
+    rowsHtml: feeds.map(f=>{const low=+f.quantity<=+f.min_quantity&&+f.min_quantity>0;return`<tr><td class="fw-bold">${escapeHtml(f.name||'—')}</td><td class="${low?'red-text fw-bold':'fw-bold'}">${f.quantity}${low?` <i class="bi bi-exclamation-triangle-fill red-text"></i>`:''}</td><td class="text-gray">${escapeHtml(f.unit||'—')}</td><td class="text-gray">${f.min_quantity||0}</td><td class="text-gray">${f.cost_per_unit?f.cost_per_unit+' '+s.currency:'—'}</td><td class="accent-text fw-bold">${f.cost_per_unit&&f.quantity?(+f.cost_per_unit*(+f.quantity)).toLocaleString('ar-EG')+' '+s.currency:'—'}</td><td class="text-gray">${escapeHtml(f.barn||'—')}</td><td><div class="d-flex gap-1"><button class="icon-btn edit" onclick="openEditInv('feeds','${f._id}')" aria-label="تعديل" title="تعديل"><i class="bi bi-pencil"></i></button><button class="icon-btn" onclick="openUseModal('feeds','${f._id}','${escapeJsAttr(f.name||'')}',${f.quantity})" style="color:var(--orange)" aria-label="تسجيل استخدام" title="تسجيل استخدام"><i class="bi bi-dash-circle"></i></button><button class="icon-btn del" onclick="delInv('feeds','${f._id}')" aria-label="حذف" title="حذف"><i class="bi bi-trash"></i></button></div></td></tr>`;}).join('')
   });
 }
 
@@ -136,7 +136,7 @@ function renderEquipTable(){
   return renderDataTableWrapper({
     title: 'المعدات',
     headers: ['المعدة','النوع','الحالة','صيانة قادمة','ملاحظات',''],
-    rowsHtml: equipment.map(e=>{const d=e.next_maintenance?daysLeft(e.next_maintenance):null;return`<tr><td class="fw-bold">${e.name}</td><td class="text-gray">${e.type||'—'}</td><td><span class="type-badge ${e.status==='working'?'badge-tarbiya':e.status==='broken'?'badge-danger':'badge-yellow'}">${{working:'يعمل',broken:'معطل',maintenance:'صيانة'}[e.status]||e.status}</span></td><td class="${d!==null&&d<=30?'red-text':'text-gray'}">${e.next_maintenance||'—'} ${d!==null&&d<=30?`(${ar(d)} يوم)`:''}</td><td class="text-gray">${e.notes||'—'}</td><td><div class="d-flex gap-1"><button class="icon-btn edit" onclick="openEditInv('equip','${e._id}')" aria-label="تعديل" title="تعديل"><i class="bi bi-pencil"></i></button><button class="icon-btn del" onclick="delInv('equip','${e._id}')" aria-label="حذف" title="حذف"><i class="bi bi-trash"></i></button></div></td></tr>`;}).join('')
+    rowsHtml: equipment.map(e=>{const d=e.next_maintenance?daysLeft(e.next_maintenance):null;return`<tr><td class="fw-bold">${escapeHtml(e.name||'—')}</td><td class="text-gray">${escapeHtml(e.type||'—')}</td><td><span class="type-badge ${e.status==='working'?'badge-tarbiya':e.status==='broken'?'badge-danger':'badge-yellow'}">${{working:'يعمل',broken:'معطل',maintenance:'صيانة'}[e.status]||escapeHtml(e.status||'')}</span></td><td class="${d!==null&&d<=30?'red-text':'text-gray'}">${e.next_maintenance||'—'} ${d!==null&&d<=30?`(${ar(d)} يوم)`:''}</td><td class="text-gray">${escapeHtml(e.notes||'—')}</td><td><div class="d-flex gap-1"><button class="icon-btn edit" onclick="openEditInv('equip','${e._id}')" aria-label="تعديل" title="تعديل"><i class="bi bi-pencil"></i></button><button class="icon-btn del" onclick="delInv('equip','${e._id}')" aria-label="حذف" title="حذف"><i class="bi bi-trash"></i></button></div></td></tr>`;}).join('')
   });
 }
 
@@ -269,11 +269,11 @@ window.openEditInv=function(type,id){
 };
 
 window.openUseModal=function(type,id,name,current){
-  showModal(`<div class="farm-modal narrow" onclick="event.stopPropagation()"><h4><i class="bi bi-dash-circle accent-text"></i> تسجيل استخدام: ${name}</h4>
+  showModal(`<div class="farm-modal narrow" onclick="event.stopPropagation()"><h4><i class="bi bi-dash-circle accent-text"></i> تسجيل استخدام: ${escapeHtml(name)}</h4>
     <p class="text-gray" style="font-size:.85rem">المتاح: <strong>${current}</strong></p>
     <label>الكمية المستخدمة *</label><input type="number" class="field" id="use-qty" step="0.5" min="0.5" max="${current}" placeholder="الكمية">
     <label>السبب</label><input class="field" id="use-reason" placeholder="علاج، تطعيم، تغذية...">
-    <div class="d-flex gap-2 justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إلغاء</button><button class="action-btn danger" onclick="submitUse('${type}','${id}','${name}',${current})">تسجيل الاستخدام</button></div>
+    <div class="d-flex gap-2 justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إلغاء</button><button class="action-btn danger" onclick="submitUse('${type}','${id}','${escapeJsAttr(name)}',${current})">تسجيل الاستخدام</button></div>
   </div>`);
 };
 window.submitUse=async function(type,id,name,current){
@@ -378,8 +378,8 @@ window.loadConsumptionRecords = async function() {
     }
 
     // Summary by barn (last 7 days)
-    var d7ago = new Date(); d7ago.setDate(d7ago.getDate()-7);
-    var recent = _consumption.filter(function(r){ return r.date >= d7ago.toISOString().slice(0,10); });
+    var d7agoStr = shiftDateLocal(new Date(), -7);
+    var recent = _consumption.filter(function(r){ return r.date >= d7agoStr; });
     var barnTotals = {};
     recent.forEach(function(r){
       if(!barnTotals[r.barn]) barnTotals[r.barn] = 0;
@@ -408,11 +408,11 @@ window.loadConsumptionRecords = async function() {
         rowsHtml: _consumption.slice(0,30).map(function(r){
           return '<tr>'+
             '<td class="text-gray">'+( r.date||'—')+'</td>'+
-            '<td><span class="type-badge badge-gray">'+( r.barn||'—')+'</span></td>'+
-            '<td class="fw-bold">'+( r.feed_name||'—')+'</td>'+
+            '<td><span class="type-badge badge-gray">'+escapeHtml( r.barn||'—')+'</span></td>'+
+            '<td class="fw-bold">'+escapeHtml( r.feed_name||'—')+'</td>'+
             '<td class="fw-bold green-text">'+ar(+(+r.quantity_kg||0).toFixed(1))+' كجم</td>'+
-            '<td class="text-gray">'+( r.recorded_by||'—')+'</td>'+
-            '<td class="text-gray" style="font-size:.75rem">'+( r.notes||'')+'</td>'+
+            '<td class="text-gray">'+escapeHtml( r.recorded_by||'—')+'</td>'+
+            '<td class="text-gray" style="font-size:.75rem">'+escapeHtml( r.notes||'')+'</td>'+
             '<td><button class="action-btn sm danger" onclick="delConsumption(\'' + r._id + '\')" aria-label="حذف" title="حذف"><i class="bi bi-trash"></i></button></td>'+
           '</tr>';
         }).join('')
@@ -458,12 +458,12 @@ window.openLogConsumption = function() {
     '<label>نوع العلف *</label>'+
     '<select class="field" id="fc-feed">'+
       (feedNames.length
-        ? feedNames.map(function(f){return '<option>'+f+'</option>';}).join('')
+        ? feedNames.map(function(f){return '<option>'+escapeHtml(f)+'</option>';}).join('')
         : '<option value="">أضف أعلافاً في تبويب الأعلاف أولاً</option>')+
     '</select>'+
     '<div class="row g-2">'+
       '<div class="col-6"><label>الكمية (كجم) *</label><input type="number" class="field" id="fc-qty" step="0.5" min="0" placeholder="50"></div>'+
-      '<div class="col-6"><label>مسجّل بواسطة</label><input class="field" id="fc-by" value="'+(user?.name||'')+'"></div>'+
+      '<div class="col-6"><label>مسجّل بواسطة</label><input class="field" id="fc-by" value="'+escapeHtml(user?.name||'')+'"></div>'+
     '</div>'+
     '<label>ملاحظات</label><input class="field" id="fc-notes" placeholder="اختياري">'+
     '<div class="d-flex gap-2 justify-content-end mt-3">'+

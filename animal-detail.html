@@ -417,7 +417,7 @@ window.renderAnimalConsumption=async function(animal){
     var myTreatments = health.filter(function(h){return h.animal_tag===animal.tag;})
       .sort(function(a,b){return (b.date||'').localeCompare(a.date||'');}).slice(0,5);
     var barnConsumption = animal.barn ? consumption.filter(function(c){return c.barn===animal.barn;}) : [];
-    var thisMonth = new Date().toISOString().slice(0,7);
+    var thisMonth = toLocalMonthKey(new Date()); // local calendar month, not UTC (2026-10 audit fix)
     var barnMonthKg = barnConsumption.filter(function(c){return (c.date||'').startsWith(thisMonth);}).reduce(function(s,c){return s+(+c.quantity_kg||0);},0);
     if(!myTreatments.length && !barnMonthKg) { container.innerHTML=''; return; }
     var html='<div class="wonder-card p-3 mb-3"><h6 class="fw-bold mb-2"><i class="bi bi-clipboard2-pulse me-2" style="color:var(--orange)"></i>استهلاك العلف والعلاج</h6>';
@@ -878,7 +878,7 @@ window.submitAddWeight=async function(){
   if(!r.ok){toast('فشل: '+r.error,'error');return;}
   toast('تم تسجيل الوزن');
   weights=await fbGet('animals/'+animalId+'/weights')||[];
-  weights.sort(function(a,b){return b.date.localeCompare(a.date);});
+  weights.sort(function(a,b){return ((b&&b.date)||'').localeCompare((a&&a.date)||'');}); // null-safe (2026-10 audit)
   renderDetail(getSettings());
 };
 window.delWeightByIdx=async function(idx){
@@ -887,7 +887,7 @@ window.delWeightByIdx=async function(idx){
   if(!r.ok){toast('فشل: '+r.error,'error');return;}
   toast('تم الحذف');
   weights=weights.filter(function(_,i){return i!==idx;});
-  weights.sort(function(a,b){return b.date.localeCompare(a.date);});
+  weights.sort(function(a,b){return ((b&&b.date)||'').localeCompare((a&&a.date)||'');}); // null-safe (2026-10 audit)
   renderDetail(getSettings());
 };
 window.delWeight=async function(id){
@@ -895,7 +895,7 @@ window.delWeight=async function(id){
   if(!r.ok){toast('فشل: '+r.error,'error');return;}
   toast('تم الحذف');
   weights=weights.filter(function(w){return w._id!==id;});
-  weights.sort(function(a,b){return b.date.localeCompare(a.date);});
+  weights.sort(function(a,b){return ((b&&b.date)||'').localeCompare((a&&a.date)||'');}); // null-safe (2026-10 audit)
   renderDetail(getSettings());
 };
 
@@ -1016,7 +1016,7 @@ window.openAddHealthFromDetail=function(){
 window.adhCalc=function(){
   var tend=document.getElementById('adh-tend').value;
   var wdays=+document.getElementById('adh-wdays').value||0;
-  if(tend&&wdays>0){var dt=new Date(tend);dt.setDate(dt.getDate()+wdays);document.getElementById('adh-wdate').textContent=dt.toISOString().slice(0,10);document.getElementById('adh-wshow').style.display='block';}
+  if(tend&&wdays>0){document.getElementById('adh-wdate').textContent=shiftDateLocal(tend,wdays);document.getElementById('adh-wshow').style.display='block';}
   else document.getElementById('adh-wshow').style.display='none';
 };
 
@@ -1027,7 +1027,7 @@ window.submitHealthFromDetail=async function(){
   var tend=document.getElementById('adh-tend').value;
   var wdays=+document.getElementById('adh-wdays').value||0;
   var withdrawal_end='';
-  if(tend&&wdays>0){var dt=new Date(tend);dt.setDate(dt.getDate()+wdays);withdrawal_end=dt.toISOString().slice(0,10);}
+  if(tend&&wdays>0){withdrawal_end=shiftDateLocal(tend,wdays);}
   var data={
     animal_id:animalId,animal_tag:animal.tag||'',animal_breed:animal.breed||'',animal_species:animal.species||'goat',
     barn:document.getElementById('adh-barn').value,date:document.getElementById('adh-date').value,

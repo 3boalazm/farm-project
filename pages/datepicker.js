@@ -94,7 +94,7 @@ var FarmDatePicker = (function() {
     var presetHTML = presets.map(function(p) {
       var d = new Date(today);
       d.setDate(d.getDate() + p.offset);
-      var ds = d.toISOString().slice(0,10);
+      var ds = toLocalDateStr(d);
       var disabled = isDisabled(d) ? ' disabled style="opacity:.4"' : '';
       return '<button class="dp-preset" data-date="' + ds + '"' + disabled + '>' + p.label + '</button>';
     }).join('');
@@ -114,7 +114,7 @@ var FarmDatePicker = (function() {
     var col = startPad;
     for (var day = 1; day <= lastDay.getDate(); day++) {
       var dt      = new Date(_viewYear, _viewMonth, day);
-      var ds      = dt.toISOString().slice(0,10);
+      var ds      = toLocalDateStr(dt);
       var isToday = sameDay(dt, today);
       var isSel   = _selected && sameDay(dt, _selected);
       var isHigh  = isHighlighted(dt);

@@ -581,7 +581,7 @@ window.sendMessage = async function() {
 
     if (!parsed) { addMsg('bot', raw || 'عذراً، لم أفهم الطلب. حاول مجدداً.'); return; }
 
-    if (parsed.action === 'info')    addMsg('bot', (parsed.answer || parsed.summary || '—').replace(/\n/g,'<br>'));
+    if (parsed.action === 'info')    addMsg('bot', parsed.answer || parsed.summary || '—');
     else if (parsed.action === 'clarify') addMsg('bot', parsed.question || parsed.summary || '—');
     else showConfirmation(parsed);
 
@@ -614,16 +614,22 @@ function showConfirmation(parsed) {
   var fieldLabels  = { species:'النوع', breed:'السلالة', gender:'الجنس', purpose:'الغرض', count:'العدد', birth_date:'تاريخ الميلاد', barn:'الجمالون', tag:'رقم الترقيم', notes:'ملاحظات', mother_tag:'رقم الأم', mother_breed:'سلالة الأم', birth_weight:'وزن الميلاد', animal_tag:'رقم الحيوان', animal_breed:'السلالة', died_at:'تاريخ النفوق', death_reason:'سبب النفوق', diagnosis:'التشخيص', medication:'الدواء', dosage:'الجرعة', withdrawal_days:'أيام التأثير', vet_name:'الطبيب', vaccine_name:'اللقاح', target_section:'القسم', name:'الاسم', scheduled_date:'الموعد', weight:'الوزن (كجم)', female_tag:'ترقيم الأنثى', female_breed:'سلالة الأنثى', male_tag:'ترقيم الذكر', mating_date:'تاريخ التقريع', expected_birth:'الولادة المتوقعة', type:'النوع', category:'الفئة', description:'الوصف', amount:'المبلغ', date:'التاريخ' };
   var valueLabels  = { goat:'ماعز', sheep:'أغنام', male:'ذكر', female:'أنثى', tarbiya:'تربية', tasmeen:'تسمين', birth:'مواليد', income:'إيراد', expense:'مصروف' };
 
+  // XSS fix (2026-08-24): k/v here are LLM-extracted JSON keys/values --
+  // untrusted, whether from a tainted farm-data field riding along in the
+  // model's context or a directly jailbroken/malformed response. fieldLabels
+  // /valueLabels/actionLabels lookups already neutralize the *known* values
+  // (their fallback is only used for a value the model invented), so only
+  // the fallback branches need escaping.
   var rows = Object.keys(data).map(function(k) {
     var v = data[k];
     if (v === null || v === undefined || v === '') return '';
-    return '<div class="confirm-row"><span class="text-gray">' + (fieldLabels[k]||k) + '</span><span class="fw-bold">' + (valueLabels[v]||v) + '</span></div>';
+    return '<div class="confirm-row"><span class="text-gray">' + escapeHtml(fieldLabels[k]||k) + '</span><span class="fw-bold">' + escapeHtml(valueLabels[v]||v) + '</span></div>';
   }).join('');
 
   _pendingAction = parsed;
   var html = '<div class="msg msg-bot" style="max-width:90%">' +
-    '<div class="fw-bold mb-2 blue-text"><i class="bi bi-question-circle-fill me-2"></i>' + (actionLabels[parsed.action]||'عملية') + '</div>' +
-    '<div class="text-gray mb-3" style="font-size:.82rem">' + (parsed.summary||'') + '</div>' +
+    '<div class="fw-bold mb-2 blue-text"><i class="bi bi-question-circle-fill me-2"></i>' + escapeHtml(actionLabels[parsed.action]||'عملية') + '</div>' +
+    '<div class="text-gray mb-3" style="font-size:.82rem">' + escapeHtml(parsed.summary||'') + '</div>' +
     '<div class="confirm-card"><div class="fw-bold mb-2 green-text" style="font-size:.8rem"><i class="bi bi-check2-square me-1"></i>البيانات المستخلصة:</div>' + rows + '</div>' +
     '<div class="d-flex gap-2 mt-3 flex-wrap">' +
       '<button class="action-btn primary" onclick="executeAction()"><i class="bi bi-check-lg"></i> تأكيد وحفظ</button>' +
@@ -717,7 +723,7 @@ window.executeAction = async function() {
     }
     else if (parsed.action === 'add_breeding') {
       var expBirth = null;
-      if (d.mating_date) { var bd = new Date(d.mating_date); bd.setDate(bd.getDate() + (getSettings().pregnancyDays||150)); expBirth = bd.toISOString().slice(0,10); }
+      if (d.mating_date) { expBirth = shiftDateLocal(d.mating_date, getSettings().pregnancyDays||150); }
       await fbPost('breeding', { female_tag:d.female_tag||null, female_breed:d.female_breed||null, female_species:d.female_species||'goat', male_tag:d.male_tag||null, male_breed:d.male_breed||null, mating_date:d.mating_date||todayStr(), expected_birth:d.expected_birth||expBirth, status:'pregnant', notes:'سُجِّل عبر المساعد الذكي' });
       await logActivity('add','breeding','تسجيل تقريع: '+(d.female_tag||d.female_breed||'—'));
       addMsg('system','✅ تم تسجيل التقريع' + (expBirth ? ' — الولادة المتوقعة: '+expBirth : ''));
@@ -748,15 +754,15 @@ window.editAndConfirm = function() {
     '<h4><i class="bi bi-pencil-square accent-text"></i> تعديل البيانات</h4>' +
     '<div class="row g-2">' +
       '<div class="col-6"><label>النوع</label><select class="field" id="ea-sp"><option value="goat" '+(d.species==='goat'?'selected':'')+'>ماعز</option><option value="sheep" '+(d.species==='sheep'?'selected':'')+'>أغنام</option></select></div>' +
-      '<div class="col-6"><label>السلالة</label><select class="field" id="ea-breed">'+allBreeds.map(function(b){return'<option '+(d.breed===b?'selected':'')+'>'+b+'</option>';}).join('')+'<option value="مواليد" '+(d.breed==='مواليد'?'selected':'')+'>مواليد</option></select></div>' +
+      '<div class="col-6"><label>السلالة</label><select class="field" id="ea-breed">'+allBreeds.map(function(b){return'<option '+(d.breed===b?'selected':'')+'>'+escapeHtml(b)+'</option>';}).join('')+'<option value="مواليد" '+(d.breed==='مواليد'?'selected':'')+'>مواليد</option></select></div>' +
     '</div><div class="row g-2">' +
       '<div class="col-6"><label>الجنس</label><select class="field" id="ea-gen"><option value="male" '+(d.gender==='male'?'selected':'')+'>ذكر ♂</option><option value="female" '+(d.gender==='female'?'selected':'')+'>أنثى ♀</option></select></div>' +
       '<div class="col-6"><label>الغرض</label><select class="field" id="ea-pur"><option value="tarbiya" '+(d.purpose==='tarbiya'?'selected':'')+'>تربية</option><option value="tasmeen" '+(d.purpose==='tasmeen'?'selected':'')+'>تسمين</option><option value="birth" '+(d.purpose==='birth'?'selected':'')+'>مواليد</option></select></div>' +
     '</div>' +
-    (d.count!==undefined?'<label>العدد</label><input type="number" class="field" id="ea-count" value="'+(d.count||1)+'" min="1">':'') +
-    (d.mother_tag!==undefined?'<label>رقم الأم</label><input class="field" id="ea-mtag" value="'+(d.mother_tag||'')+'">':'') +
-    '<label>تاريخ</label><input type="date" class="field" id="ea-date" value="'+(d.birth_date||d.date||todayStr())+'">' +
-    '<label>ملاحظات</label><input class="field" id="ea-notes" value="'+(d.notes||'')+'">' +
+    (d.count!==undefined?'<label>العدد</label><input type="number" class="field" id="ea-count" value="'+escapeHtml(d.count||1)+'" min="1">':'') +
+    (d.mother_tag!==undefined?'<label>رقم الأم</label><input class="field" id="ea-mtag" value="'+escapeHtml(d.mother_tag||'')+'">':'') +
+    '<label>تاريخ</label><input type="date" class="field" id="ea-date" value="'+escapeHtml(d.birth_date||d.date||todayStr())+'">' +
+    '<label>ملاحظات</label><input class="field" id="ea-notes" value="'+escapeHtml(d.notes||'')+'">' +
     '<div class="d-flex gap-2 justify-content-end mt-3">' +
       '<button class="action-btn" onclick="closeModal()">إلغاء</button>' +
       '<button class="action-btn primary" onclick="_applyEdit()"><i class="bi bi-check-lg"></i> تأكيد وحفظ</button>' +
@@ -781,7 +787,14 @@ window._applyEdit = function() {
 function addMsg(type, text) {
   var div = document.createElement('div');
   div.className = 'msg msg-' + type;
-  div.innerHTML = String(text).replace(/\n/g,'<br>');
+  // XSS fix (2026-08-24): text here can be the user's own raw input, the
+  // Groq/LLM response text, or an LLM-extracted field -- all untrusted.
+  // No Markdown/rich-text is intentionally supported (the only formatting
+  // this app ever produced was \n -> <br>), so escape first (neutralizes
+  // any real HTML/script the text contains) and only then convert literal
+  // newlines to real, intentionally-inserted <br> tags -- doing it in the
+  // other order would double-escape/break those <br>s.
+  div.innerHTML = escapeHtml(String(text)).replace(/\n/g,'<br>');
   var wrap = document.createElement('div');
   wrap.style.cssText = 'display:flex;justify-content:' + (type==='user'?'flex-start':'flex-end');
   wrap.appendChild(div);
@@ -804,9 +817,13 @@ window.clearChat = function() {
 };
 
 window.showFarmContext = function() {
+  // XSS fix (2026-08-24): escaped here at the HTML sink only -- _farmContext
+  // itself stays raw for its real use (concatenated into the plain-text LLM
+  // system prompt above), where escaping would corrupt the data the model
+  // actually needs to see.
   showModal('<div class="farm-modal" onclick="event.stopPropagation()" style="max-width:500px;max-height:85vh;overflow-y:auto">' +
     '<h4><i class="bi bi-bar-chart-fill accent-text"></i> بيانات المزرعة المُرسَلة للـ AI</h4>' +
-    '<pre style="font-size:.72rem;color:var(--text-gray);white-space:pre-wrap;line-height:1.7;font-family:monospace">' + _farmContext + '</pre>' +
+    '<pre style="font-size:.72rem;color:var(--text-gray);white-space:pre-wrap;line-height:1.7;font-family:monospace">' + escapeHtml(_farmContext) + '</pre>' +
     '<button class="action-btn mt-3" onclick="closeModal()">إغلاق</button>' +
   '</div>');
 };
@@ -825,9 +842,9 @@ window.openApiSettings = function() {
       '</ol>' +
     '</div>' +
     '<label>مفتاح Groq API</label>' +
-    '<input class="field" id="groq-key-input" type="password" value="' + current + '" placeholder="gsk_...">' +
+    '<input class="field" id="groq-key-input" type="password" value="' + escapeHtml(current) + '" placeholder="gsk_...">' +
     '<label class="mt-3">اسم الموديل</label>' +
-    '<input class="field" id="groq-model-input" type="text" value="' + model + '" placeholder="' + GROQ_DEFAULT_MODEL + '">' +
+    '<input class="field" id="groq-model-input" type="text" value="' + escapeHtml(model) + '" placeholder="' + GROQ_DEFAULT_MODEL + '">' +
     '<div style="font-size:.75rem;color:var(--text-muted);margin-top:6px;line-height:1.6">' +
       'الافتراضي <strong>llama-3.3-70b-versatile</strong> — أفضل موديل إنتاجي على Groq للعربي. ' +
       'بدائل: <strong>openai/gpt-oss-120b</strong> (أسرع وأرخص) أو <strong>llama-3.1-8b-instant</strong> (الأسرع، أقل دقة). ' +

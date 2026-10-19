@@ -182,7 +182,7 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
   const herdTrend = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now3.getFullYear(), now3.getMonth()-i, 1);
-    const monthEnd = new Date(d.getFullYear(), d.getMonth()+1, 0).toISOString().slice(0,10);
+    const monthEnd = monthEndLocal(d); // last LOCAL day of the month, not the UTC-shifted one
     const count = animals.filter(a => {
       if (!a.birth_date || a.birth_date > monthEnd) return false;
       if (a.status === 'dead' && a.died_at && a.died_at <= monthEnd) return false;
@@ -206,7 +206,7 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
   const prodTrend = [];
   for (let i = 13; i >= 0; i--) {
     const d = new Date(); d.setDate(d.getDate()-i);
-    const dStr = d.toISOString().slice(0,10);
+    const dStr = toLocalDateStr(d);
     const dayTotal = milkLog.filter(p => p.date === dStr).reduce((t,p)=>t+(+p.quantity||0),0);
     prodTrend.push({ label: String(d.getDate()), value: dayTotal });
   }
@@ -215,7 +215,7 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
   const revExpTrend = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now3.getFullYear(), now3.getMonth()-i, 1);
-    const mStr = d.toISOString().slice(0,7);
+    const mStr = toLocalMonthKey(d);
     const monthInc = finance.filter(r => r.type==='income' && (r.date||'').startsWith(mStr)).reduce((t,r)=>t+(+r.amount||0),0);
     const monthExp = finance.filter(r => r.type==='expense' && (r.date||'').startsWith(mStr)).reduce((t,r)=>t+(+r.amount||0),0);
     revExpTrend.push({ label: arMonths[d.getMonth()].slice(0,3), values: [monthInc, monthExp] });
@@ -714,7 +714,7 @@ window.renderInventoryExecCard = async function() {
                  + feeds.filter(function(f){return +f.quantity<=+f.min_quantity && +f.min_quantity>0;}).length;
     var outOfStock = meds.filter(function(m){return +m.quantity<=0;}).length + feeds.filter(function(f){return +f.quantity<=0;}).length;
     var feedRemaining = feeds.reduce(function(s,f){return s+((+f.quantity||0)*(+f.unit_weight||50));},0);
-    var thisMonth = new Date().toISOString().slice(0,7);
+    var thisMonth = toLocalMonthKey(new Date());
     var monthlyConsumptionKg = consumption.filter(function(c){return (c.date||'').startsWith(thisMonth);}).reduce(function(s,c){return s+(+c.quantity_kg||0);},0);
     if (lowStock===0 && outOfStock===0 && feedRemaining===0 && monthlyConsumptionKg===0) { container.innerHTML=''; return; }
     container.innerHTML = '<div class="wonder-card p-3" style="border-inline-start:3px solid '+(outOfStock>0?'var(--red)':lowStock>0?'var(--yellow)':'var(--green)')+'">'+

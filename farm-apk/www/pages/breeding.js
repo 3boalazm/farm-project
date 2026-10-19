@@ -15,10 +15,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   renderNavbarV2('breeding.html');
 
   // FAB for mobile
-  addFAB('تسجيل تقريع جديد', function(){
-    var btn=document.querySelector('.action-btn.primary[onclick*="Breed"],button[onclick*="breed"]');
-    if(btn)btn.click(); else toast('افتح نموذج التقريع من الأزرار', 'info');
-  }, 'bi-diagram-2-fill');
+  addFAB('تسجيل تقريع جديد', function(){ openBModal(); }, 'bi-diagram-2-fill');
   renderLoading(document.getElementById('content'));
   try{ breedingRecs=await fbGet('breeding'); }catch(e){ toast('خطأ: '+e.message,'error'); }
   renderBreedingPage(s);
@@ -61,8 +58,8 @@ function renderBreedingPage(s){
   if(upcoming.length){
     upcomingHtml='<div class="births-section mb-4"><div class="fw-bold mb-2" style="color:var(--yellow)"><i class="bi bi-alarm-fill me-2"></i>ولادات متوقعة خلال ١٥ يوم — '+ar(upcoming.length)+' إناث</div>'+
       upcoming.map(r=>{var d=daysUntil(r.expected_birth);return'<div class="d-flex align-items-center gap-2 mt-2 flex-wrap">'+
-        '<span class="type-badge badge-yellow">'+(r.female_tag||r.female_breed||'—')+'</span>'+
-        '<small class="text-gray">'+r.female_breed+' • '+r.expected_birth+' <span style="color:'+(d<=3?'var(--red)':'var(--orange)')+'">('+(d===0?'اليوم!':d<0?'تأخرت!':'بعد '+ar(d)+' يوم')+')</span></small>'+
+        '<span class="type-badge badge-yellow">'+escapeHtml(r.female_tag||r.female_breed||'—')+'</span>'+
+        '<small class="text-gray">'+escapeHtml(r.female_breed||'')+' • '+r.expected_birth+' <span style="color:'+(d<=3?'var(--red)':'var(--orange)')+'">('+(d===0?'اليوم!':d<0?'تأخرت!':'بعد '+ar(d)+' يوم')+')</span></small>'+
         '<button class="action-btn primary sm" onclick="markBorn(\''+r._id+'\')"><i class="bi bi-stars"></i> تسجيل الولادة</button>'+
       '</div>';}).join('')+
     '</div>';
@@ -72,7 +69,7 @@ function renderBreedingPage(s){
   if(returnHeat.length){
     returnHeatHtml='<div style="background:rgba(244,67,54,.06);border:1px solid rgba(244,67,54,.25);border-radius:14px;padding:14px 18px;margin-bottom:16px">'+
       '<div class="fw-bold mb-2 red-text"><i class="bi bi-arrow-repeat me-2"></i>إناث يحتجن إعادة تقريع — '+ar(returnHeat.length)+'</div>'+
-      returnHeat.map(r=>'<div class="d-flex gap-2 mt-1 flex-wrap"><span class="type-badge badge-danger">'+(r.female_tag||r.female_breed)+'</span><small class="text-gray">آخر تقريع: '+r.mating_date+' (منذ '+ar(daysSince(r.mating_date))+' يوم)</small><button class="action-btn primary sm" onclick="openBModal(null,\''+encodeURIComponent(r.female_tag||'')+'\',\''+encodeURIComponent(r.female_breed||'')+'\',\''+encodeURIComponent(r.female_species||'goat')+'\')"><i class="bi bi-plus-lg"></i> إعادة تقريع</button></div>').join('')+
+      returnHeat.map(r=>'<div class="d-flex gap-2 mt-1 flex-wrap"><span class="type-badge badge-danger">'+escapeHtml(r.female_tag||r.female_breed||'')+'</span><small class="text-gray">آخر تقريع: '+r.mating_date+' (منذ '+ar(daysSince(r.mating_date))+' يوم)</small><button class="action-btn primary sm" onclick="openBModal(null,\''+encodeURIComponent(r.female_tag||'')+'\',\''+encodeURIComponent(r.female_breed||'')+'\',\''+encodeURIComponent(r.female_species||'goat')+'\')"><i class="bi bi-plus-lg"></i> إعادة تقريع</button></div>').join('')+
     '</div>';
   }
 
@@ -96,15 +93,15 @@ function renderBreedingPage(s){
               (r.offspring_count>=2?'<span class="type-badge badge-purple">توائم</span>':'')+
               (r.birth_amount?'<span class="type-badge badge-gray">💰 '+ar(r.birth_amount)+' '+getSettings().currency+'</span>':'')+
             '</div>'+
-            '<div style="font-size:.85rem"><span class="text-gray">الأنثى: </span><strong>'+(r.female_tag||r.mother_tag||'—')+' ('+(r.female_breed||'—')+')</strong>'+
-            ' <span class="text-gray mx-2">|</span><span class="text-gray">الفحل: </span><strong>'+(r.male_tag||'—')+' ('+(r.male_breed||'—')+')</strong></div>'+
+            '<div style="font-size:.85rem"><span class="text-gray">الأنثى: </span><strong>'+escapeHtml(r.female_tag||r.mother_tag||'—')+' ('+escapeHtml(r.female_breed||'—')+')</strong>'+
+            ' <span class="text-gray mx-2">|</span><span class="text-gray">الفحل: </span><strong>'+escapeHtml(r.male_tag||'—')+' ('+escapeHtml(r.male_breed||'—')+')</strong></div>'+
             '<small class="text-gray">التقريع: '+(r.mating_date||'—')+
             (r.expected_birth?' | الولادة المتوقعة: '+r.expected_birth+(r.status==='pregnant'&&d!==null?' <span style="color:'+(d<=0?'var(--red)':d<=7?'var(--orange)':'var(--gray)')+'">('+(d===0?'اليوم!':d<0?'تأخرت!':'بعد '+ar(d)+' يوم')+')</span>':''):'')+
             (r.status==='born'&&r.offspring_count?' | المواليد: '+ar(r.offspring_count)+' ('+ar(r.male_offspring||0)+' ذكور / '+ar(r.female_offspring||0)+' إناث)':'')+
-            (r.added_by?' | بقلم: '+r.added_by:'')+
-            (r.barn?' | '+r.barn:'')+
+            (r.added_by?' | بقلم: '+escapeHtml(r.added_by):'')+
+            (r.barn?' | '+escapeHtml(r.barn):'')+
             '</small>'+
-            (r.notes?'<div class="text-gray mt-1" style="font-size:.78rem">'+r.notes+'</div>':'')+
+            (r.notes?'<div class="text-gray mt-1" style="font-size:.78rem">'+escapeHtml(r.notes)+'</div>':'')+
           '</div>'+
           '<div class="d-flex gap-2 flex-shrink-0">'+
             (r.status==='pregnant'?'<button class="action-btn primary sm" onclick="markBorn(\''+r._id+'\')"><i class="bi bi-stars"></i> ولادة</button>':'')+
@@ -145,7 +142,7 @@ window.openBirthModal=function(){
     '<h4><i class="bi bi-stars" style="color:var(--yellow)"></i> تسجيل مواليد جديدة</h4>'+
     '<div class="row g-2">'+
       '<div class="col-6"><label>نوع المولود</label><select class="field" id="nb-sp"><option value="goat">ماعز</option><option value="sheep">أغنام</option></select></div>'+
-      '<div class="col-6"><label>سلالة المولود</label><select class="field" id="nb-breed">'+allBreeds.map(b=>'<option value="'+b+'">'+b+'</option>').join('')+'</select></div>'+
+      '<div class="col-6"><label>سلالة المولود</label><select class="field" id="nb-breed">'+allBreeds.map(b=>'<option value="'+escapeHtml(b)+'">'+escapeHtml(b)+'</option>').join('')+'</select></div>'+
     '</div>'+
     '<div class="row g-2">'+
       '<div class="col-6"><label>الغرض</label><select class="field" id="nb-pur"><option value="birth">مواليد</option><option value="tarbiya">تربية</option><option value="tasmeen">تسمين</option></select></div>'+
@@ -157,7 +154,7 @@ window.openBirthModal=function(){
     '</div>'+
     '<div class="row g-2">'+
       '<div class="col-6"><label>رقم الأم *</label><input class="field" id="nb-mother-tag" placeholder="F-101" required></div>'+
-      '<div class="col-6"><label>سلالة الأم *</label><select class="field" id="nb-mother-breed">'+allBreeds.map(b=>'<option value="'+b+'">'+b+'</option>').join('')+'</select></div>'+
+      '<div class="col-6"><label>سلالة الأم *</label><select class="field" id="nb-mother-breed">'+allBreeds.map(b=>'<option value="'+escapeHtml(b)+'">'+escapeHtml(b)+'</option>').join('')+'</select></div>'+
     '</div>'+
     '<div class="row g-2">'+
       '<div class="col-6"><label>رقم الأب</label><input class="field" id="nb-father-tag" placeholder="M-001"></div>'+
@@ -171,7 +168,7 @@ window.openBirthModal=function(){
         '<input type="number" class="field" id="nb-amount" placeholder="0" min="0">'+
       '</div>'+
     '</div>'+
-    '<label>سُجِّل بواسطة</label><input class="field" id="nb-addedby" value="'+(u?.name||'')+'" readonly>'+
+    '<label>سُجِّل بواسطة</label><input class="field" id="nb-addedby" value="'+escapeHtml(u?.name||'')+'" readonly>'+
     '<label>ملاحظات</label><textarea class="field" id="nb-notes" rows="2"></textarea>'+
     '<div class="d-flex gap-2 justify-content-end mt-3">'+
       '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
@@ -181,10 +178,23 @@ window.openBirthModal=function(){
 };
 
 window.submitBirthDirect=async function(){
+  // FIX (2026-10 audit): same two holes the certified _ubSubmit() in
+  // shared.js had — (1) no write-permission check, so the read-only visitor
+  // role (which legitimately holds can('animals') for VIEWING the herd) could
+  // create animals through this modal, and (2) qty read straight from the
+  // field with no bounds, so a typed -5 wrote offspring_count:-5 while the
+  // animals loop never ran, and a typed 50000 started an unbounded write
+  // loop. This is the deliberately-deferred fourth birth implementation
+  // (docs/certification/BIRTH.md); these guards are additive and change
+  // nothing about the record shape it writes.
+  if(!canWrite('animals')){toast('ليس لديك صلاحية لتسجيل المواليد','error');return;}
   const motherTag=document.getElementById('nb-mother-tag').value.trim();
   const motherBreed=document.getElementById('nb-mother-breed').value;
   if(!motherTag){toast('رقم الأم مطلوب','error');return;}
-  const s=getSettings();const qty=+document.getElementById('nb-qty').value||1;
+  const s=getSettings();
+  const qtyRaw=+document.getElementById('nb-qty').value;
+  if(!isFinite(qtyRaw)||qtyRaw<1||qtyRaw>10){toast('عدد المواليد يجب أن يكون بين ١ و ١٠','error');return;}
+  const qty=qtyRaw;
   const rec={
     female_tag:motherTag, mother_tag:motherTag,
     female_breed:motherBreed, mother_breed:motherBreed,
@@ -217,6 +227,8 @@ window.submitBirthDirect=async function(){
   // same fix pattern, now captured here alongside rec's own identical
   // read of the same field (rec.male_tag uses this exact expression).
   const fatherTag=rec.male_tag;
+  // D-07: read alongside the other pre-closeModal fields above, same rule.
+  const weightNum=parseFloat(document.getElementById('nb-weight').value)||null;
   // Also add animal records
   closeModal();toast('جاري الحفظ...','info');
   try{
@@ -225,7 +237,17 @@ window.submitBirthDirect=async function(){
     const bdate=rec.actual_birth;
     const barn=rec.barn;
     for(let i=0;i<qty;i++){
-      await fbPost('animals',{species:sp,breed,gender,purpose:pur,status:'alive',birth_date:bdate,tag:tag?(qty===1?tag:tag+'-'+ar(i+1)):await generateAnimalTag(sp),barn,mother_tag:motherTag,mother_breed:motherBreed,father_tag:fatherTag});
+      // D-07: converged onto the canonical Birth helper -- was a raw
+      // fbPost('animals',...) missing mother_id/father_id resolution,
+      // birth_weight, weight-history, and notes. See docs/decisions/D-07.md.
+      // Tag suffix intentionally left as ar(i+1) (Arabic-Indic digit),
+      // matching this function's pre-existing behavior -- not part of
+      // this decision.
+      await window.createOffspringAnimal({
+        species:sp,breed,gender,purpose:pur,birthDate:bdate,
+        tag:tag?(qty===1?tag:tag+'-'+ar(i+1)):null,
+        motherTag,motherBreed,fatherTag,weight:weightNum,barn,notes:rec.notes
+      });
     }
     await logActivity('add','breeding','تسجيل ولادة: '+motherTag+' — '+ar(qty)+' مواليد');
     toast('✅ تمت إضافة '+ar(qty)+' مواليد في القطيع');
@@ -248,14 +270,14 @@ window.openBModal=function(id, prefTag, prefBreed, prefSpecies, jumpToBorn){
     '<h4><i class="bi bi-diagram-2-fill accent-text"></i> '+(id?'تعديل':'تسجيل')+' تقريع</h4>'+
     '<div class="row g-2">'+
       '<div class="col-6"><label>نوع الأنثى</label><select class="field" id="b-sp" onchange="window._updateBBreeds()"><option value="goat" '+(sp==='goat'?'selected':'')+'>ماعز</option><option value="sheep" '+(sp==='sheep'?'selected':'')+'>أغنام</option></select></div>'+
-      '<div class="col-6"><label>سلالة الأنثى</label><select class="field" id="b-fb">'+((sp==='sheep'?s.sheepBreeds:s.goatBreeds).map(b=>'<option value="'+b+'" '+((r.female_breed||decodeURIComponent(prefBreed||''))===b?'selected':'')+'>'+b+'</option>')).join('')+'</select></div>'+
+      '<div class="col-6"><label>سلالة الأنثى</label><select class="field" id="b-fb">'+((sp==='sheep'?s.sheepBreeds:s.goatBreeds).map(b=>'<option value="'+escapeHtml(b)+'" '+((r.female_breed||decodeURIComponent(prefBreed||''))===b?'selected':'')+'>'+escapeHtml(b)+'</option>')).join('')+'</select></div>'+
     '</div>'+
     '<div class="row g-2">'+
-      '<div class="col-6"><label>ترقيم الأنثى (الأم) *</label><input class="field" id="b-ft" value="'+(r.female_tag||decodeURIComponent(prefTag||''))+'" placeholder="F-101"></div>'+
-      '<div class="col-6"><label>ترقيم الفحل</label><input class="field" id="b-mt" value="'+(r.male_tag||'')+'" placeholder="M-001"></div>'+
+      '<div class="col-6"><label>ترقيم الأنثى (الأم) *</label><input class="field" id="b-ft" value="'+escapeHtml(r.female_tag||decodeURIComponent(prefTag||''))+'" placeholder="F-101"></div>'+
+      '<div class="col-6"><label>ترقيم الفحل</label><input class="field" id="b-mt" value="'+escapeHtml(r.male_tag||'')+'" placeholder="M-001"></div>'+
     '</div>'+
     '<div class="row g-2">'+
-      '<div class="col-6"><label>سلالة الفحل</label><select class="field" id="b-mb">'+allBreeds.map(b=>'<option value="'+b+'" '+(r.male_breed===b?'selected':'')+'>'+b+'</option>').join('')+'</select></div>'+
+      '<div class="col-6"><label>سلالة الفحل</label><select class="field" id="b-mb">'+allBreeds.map(b=>'<option value="'+escapeHtml(b)+'" '+(r.male_breed===b?'selected':'')+'>'+escapeHtml(b)+'</option>').join('')+'</select></div>'+
       '<div class="col-6"><label>الجمالون/العنبر</label><select class="field" id="b-barn">'+barns.map(b=>'<option value="'+b+'" '+(r.barn===b?'selected':'')+'>'+( b||'— غير محدد —')+'</option>').join('')+'</select></div>'+
     '</div>'+
     '<div class="row g-2">'+
@@ -273,21 +295,21 @@ window.openBModal=function(id, prefTag, prefBreed, prefSpecies, jumpToBorn){
         '<div class="col-4"><label>إناث</label><input type="number" class="field" min="0" id="b-fem" value="'+(r.female_offspring||'')+'"></div>'+
       '</div>'+
       '<div class="row g-2">'+
-        '<div class="col-6"><label>أوزان المواليد (كجم)</label><input class="field" id="b-weights" value="'+(r.birth_weights||'')+'" placeholder="4.5, 3.8"></div>'+
+        '<div class="col-6"><label>أوزان المواليد (كجم)</label><input class="field" id="b-weights" value="'+escapeHtml(r.birth_weights||'')+'" placeholder="4.5, 3.8"></div>'+
         '<div class="col-6"><label data-hint="المبلغ المدفوع أو القيمة عند الولادة">المبلغ عند الولادة ('+s.currency+') <span class="info-tooltip" onclick="event.stopPropagation();showInfoModal(this)" data-tip="قيمة الولادة: تكلفة بيطري، ثمن الأم، أو قيمة المولود">!</span></label>'+
           '<input type="number" class="field" id="b-amount" value="'+(r.birth_amount||'')+'" placeholder="0"></div>'+
       '</div>'+
     '</div>'+
-    '<label>سُجِّل بواسطة</label><input class="field" id="b-addedby" value="'+(r.added_by||u?.name||'')+'">'+
-    '<label>ملاحظات</label><textarea class="field" id="b-notes" rows="2">'+(r.notes||'')+'</textarea>'+
+    '<label>سُجِّل بواسطة</label><input class="field" id="b-addedby" value="'+escapeHtml(r.added_by||u?.name||'')+'">'+
+    '<label>ملاحظات</label><textarea class="field" id="b-notes" rows="2">'+escapeHtml(r.notes||'')+'</textarea>'+
     '<div class="d-flex gap-2 justify-content-end mt-3">'+
       '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
       '<button class="action-btn primary" onclick="submitBreeding()">حفظ</button>'+
     '</div>'+
   '</div>');
 };
-window._updateBBreeds=function(){const s=getSettings();const sp=document.getElementById('b-sp')?.value;document.getElementById('b-fb').innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(b=>'<option>'+b+'</option>').join('');};
-window._calcExpBirth=function(){const d=document.getElementById('b-md')?.value;if(d){const dt=new Date(d);dt.setDate(dt.getDate()+(getSettings().pregnancyDays||150));document.getElementById('b-ed').value=dt.toISOString().slice(0,10);}};
+window._updateBBreeds=function(){const s=getSettings();const sp=document.getElementById('b-sp')?.value;document.getElementById('b-fb').innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(b=>'<option>'+escapeHtml(b)+'</option>').join('');};
+window._calcExpBirth=function(){const d=document.getElementById('b-md')?.value;if(d){document.getElementById('b-ed').value=shiftDateLocal(d,getSettings().pregnancyDays||150);}};
 window._toggleBornFields=function(){const s=document.getElementById('b-st')?.value;if(document.getElementById('b-born-fields'))document.getElementById('b-born-fields').style.display=s==='born'?'block':'none';};
 
 window.submitBreeding=async function(){
@@ -372,7 +394,7 @@ window.showFertilityReport=function(){
       '<div class="col-4"><div class="stat-mini"><div class="num yellow-text">'+ar(born.reduce((t,r)=>t+(+r.offspring_count||0),0))+'</div><div class="lbl">إجمالي المواليد</div></div></div>'+
     '</div>'+
     (totalMoney>0?'<div class="detail-row"><span class="detail-key">إجمالي مبالغ الولادات</span><span class="detail-val green-text">'+totalMoney.toLocaleString('ar-EG')+' '+getSettings().currency+'</span></div>':'')+
-    (topFemales.length?'<h6 class="fw-bold mt-3 mb-2">الإناث الأعلى إنتاجاً</h6><table class="tbl w-100"><thead><tr><th>الترقيم</th><th>السلالة</th><th>ولادات</th><th>مواليد</th></tr></thead><tbody>'+topFemales.map(f=>'<tr><td class="fw-bold">'+f.tag+'</td><td class="text-gray">'+f.breed+'</td><td>'+ar(f.count)+'</td><td class="green-text fw-bold">'+ar(f.offspring)+'</td></tr>').join('')+'</tbody></table>':'')+
+    (topFemales.length?'<h6 class="fw-bold mt-3 mb-2">الإناث الأعلى إنتاجاً</h6><table class="tbl w-100"><thead><tr><th>الترقيم</th><th>السلالة</th><th>ولادات</th><th>مواليد</th></tr></thead><tbody>'+topFemales.map(f=>'<tr><td class="fw-bold">'+escapeHtml(f.tag||'')+'</td><td class="text-gray">'+escapeHtml(f.breed||'')+'</td><td>'+ar(f.count)+'</td><td class="green-text fw-bold">'+ar(f.offspring)+'</td></tr>').join('')+'</tbody></table>':'')+
     '<div class="d-flex justify-content-end mt-3"><button class="action-btn" onclick="closeModal()">إغلاق</button></div>'+
   '</div>');
 };

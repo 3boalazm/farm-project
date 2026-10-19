@@ -45,36 +45,24 @@ const NS = {
   },
 
   // ── Weather alert for animals ─────────────────────
-  async checkWeather(){
-    try{
-      const w=await getWeather();
-      if(!w||!w.main)return;
-      const temp=Math.round(w.main.temp);
-      const humidity=w.main.humidity||0;
-      const lastAlert=localStorage.getItem('_lastWeatherAlert');
-      const todayKey='weather_'+todayStr();
-      if(lastAlert===todayKey)return; // only once per day
-
-      let severity=null,msg='',icon='🌤';
-      if(temp>=40){severity='danger';msg='حر شديد جداً ('+temp+'°م) — خطر على الحيوانات. وفّر مياه وتظليل فوري وراقب علامات الإجهاد الحراري.';icon='🔥';}
-      else if(temp>=35){severity='warning';msg='جو حار ('+temp+'°م) — تأكد من توافر المياه والتهوية الجيدة في الحظائر.';icon='☀️';}
-      else if(temp<=5){severity='danger';msg='برد شديد ('+temp+'°م) — احمِ الحيوانات من التعرض للبرد، خاصة المواليد والحوامل.';icon='❄️';}
-      else if(temp<=12){severity='warning';msg='جو بارد ('+temp+'°م) — راقب المواليد الصغيرة وتأكد من دفء الحظائر.';icon='🌨️';}
-      else if(humidity>85){severity='info';msg='رطوبة عالية ('+humidity+'٪) — راقب أمراض الجهاز التنفسي وتأكد من التهوية.';icon='💧';}
-      else{msg='الطقس مناسب ('+temp+'°م، رطوبة '+humidity+'٪) — حالة المزرعة جيدة.';icon='✅';}
-
-      if(msg){
-        const notif={
-          type:severity||'info',cat:'طقس',icon:'bi-cloud-sun-fill',
-          title:icon+' حالة الطقس اليومية',msg:msg,href:'dashboard.html',
-          id:'weather_'+todayStr(),date:todayStr()
-        };
-        NS.save(notif);
-        if(severity){NS.push(icon+' الطقس: '+msg.slice(0,40)+'...', msg, icon, notif.id,'dashboard.html',severity);}
-        localStorage.setItem('_lastWeatherAlert',todayKey);
-      }
-    }catch(e){console.warn('Weather check:',e);}
-  },
+  // BUG FIX (2026-10 audit) — DEAD CODE FROM A DUPLICATE OBJECT KEY.
+  // This object literal defined `checkWeather` TWICE (here, and again below
+  // next to checkAll/updateBadge). In JavaScript the LAST duplicate key wins
+  // and the earlier one is discarded at parse time, so the 33-line
+  // implementation that used to sit here NEVER RAN — not once, in any
+  // browser, on any page. What was silently unreachable:
+  //   • the once-per-day throttle (localStorage['_lastWeatherAlert']),
+  //   • the 40/35/5/12 °C severity bands and the humidity>85 respiratory
+  //     warning,
+  //   • the "الطقس مناسب" all-clear notification.
+  // The implementation that actually runs is the one further down (≥38 °C
+  // heat stress, ≤8 °C cold, and a ≥8 °C sudden-change detector). It is
+  // deliberately left as the single source of truth: deleting the dead twin
+  // changes no runtime behaviour at all, whereas merging the two would start
+  // emitting notifications nobody has seen in production — that is a product
+  // decision, recorded as an open item in
+  // docs/audit/FULL-AUDIT-2026-10.md rather than made silently here.
+  // The removed implementation is preserved verbatim in git history.
 
   async init(){
     if(!initFirebase())return;
@@ -101,6 +89,14 @@ const NS = {
   // ── Send browser push notification ────────────────
   push(title, body, icon='🐐', tag, url, soundType='info'){
     NS.playAlert(soundType);
+    // FIX (2026-10 audit): reading Notification.permission without first
+    // checking that the API exists threw a ReferenceError in any browser
+    // without the Notification API (older Android WebView — i.e. the
+    // Capacitor APK shell this app is also shipped in). requestPermission()
+    // right above already guards with `'Notification' in window`; this one
+    // did not, so the throw aborted the whole calling check (weather alert,
+    // stock alert, ...) before NS.save() had run on some paths.
+    if(!('Notification' in window))return;
     if(Notification.permission!=='granted')return;
     const opts={body, icon:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"/>',tag:tag||title, requireInteraction:false};
     const n=new Notification('🐐 '+title, opts);
@@ -385,8 +381,7 @@ const NS = {
   async expireOld(){
     try{
       const notifs=await fbGet('notifications');
-      const cutoff=new Date(); cutoff.setDate(cutoff.getDate()-NS.EXPIRE_DAYS);
-      const cutoffStr=cutoff.toISOString().slice(0,10);
+      const cutoffStr=shiftDateLocal(new Date(), -NS.EXPIRE_DAYS); // local calendar cutoff, not UTC
       const toExpire=notifs.filter(n=>n.read&&n.date&&n.date<cutoffStr);
       for(const n of toExpire){ await fbDelete('notifications',n._id); }
       return toExpire.length;
