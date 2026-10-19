@@ -13,13 +13,37 @@ const { suite, assert, ROOT } = require('./harness');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const exists = (rel) => fs.existsSync(path.join(ROOT, rel));
 
+// Directories that never contain application source: the APK copy, docs,
+// tests, tooling — plus everything the repo itself declares to be generated
+// output. The second half matters: `npx playwright test --list` makes the html
+// reporter write playwright-report/index.html (that reporter was added by this
+// audit so CI's failure-artifact step uploads something real), and a generated
+// index.html scanned as an application page turns this suite red on a stray
+// local run. Deriving the list from .gitignore keeps it in sync with the repo's
+// own notion of "not source" instead of hardcoding one output dir at a time.
+const NON_APP_DIRS = (() => {
+  const set = new Set([
+    '.git', '.github', 'tests', 'scripts', 'docs', 'farm-apk', 'media', '.claude',
+    'dist', 'build', 'coverage', '.vercel', '.next',
+  ]);
+  let ignore = '';
+  try { ignore = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8'); } catch (_) { /* none */ }
+  for (const line of ignore.split('\n')) {
+    const t = line.trim();
+    if (!t || t.startsWith('#') || t.includes('*')) continue;
+    const name = t.replace(/^\/+|\/+$/g, '');
+    if (name && !name.includes('/')) set.add(name);
+  }
+  return set;
+})();
+
 // Every .html/.js the deployed app consists of (excludes the APK copy, docs,
-// tests, tooling and node_modules).
+// tests, tooling and generated output).
 function appFiles() {
   const out = [];
   const walk = (dir) => {
     for (const e of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
-      if (['node_modules', '.git', '.github', 'tests', 'scripts', 'docs', 'farm-apk', 'media', 'release', '.claude'].includes(e.name)) continue;
+      if (NON_APP_DIRS.has(e.name)) continue;
       const rel = path.join(dir, e.name);
       if (e.isDirectory()) walk(rel);
       else if (/\.(html|js)$/.test(e.name)) out.push(rel);
