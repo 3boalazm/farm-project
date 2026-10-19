@@ -10,12 +10,14 @@
 
 - **٢٧ باج حقيقي** اتلقوا واتصلحوا، منهم **٣ حرجين** (أمن/بيانات) و **٦ عاليين**.
 - أخطر حاجة: **أي انقطاع شبكة كان بيرجّع باسورد المدير الافتراضي ١٢٣٤** على قاعدة بيانات شغالة، و**صفحة الدخول كانت بتقبل admin/1234 وقت انقطاع الشبكة**.
-- تاني أخطر حاجة: **كل الأزرار "للمدير فقط" (٢٠ مكان) كانت مفتوحة لدور المشرف**، و**دور الزائر (للقراءة فقط) كان يقدر ي记录 وزن، ينفّق حيوان، يبيعه، ويسجل مواليد**.
+- تاني أخطر حاجة: **كل الأزرار "للمدير فقط" (٢٠ مكان) كانت مفتوحة لدور المشرف**، و**دور الزائر (للقراءة فقط) كان يقدر يسجّل وزن، ينفّق حيوان، يبيعه، ويسجل مواليد**.
 - **٣٦ مكان في الكود كانوا بيحسبوا التاريخ بتوقيت UTC بدل المحلي** → كل الرسوم البيانية الشهرية (المالية/الإنتاج/الصحة/التقارير) كانت بتعرض **بيانات الشهر اللي فات تحت اسم الشهر الحالي**، والشهر الحالي كان بيضيع خالص.
 - **زر "تراجع" كان ميت من الأساس** — الدالة `_pushUndo` كانت معرّفة بس **محدش بيناديها في المشروع كله**.
 - **الـ CI Quality Gate كان فايل في كل مرة (٨/٨) وبيشغّل صفر تيستات**.
 - **ذمم الموردين والعملاء كانت مش مطابقة للأستاذ العام**: أي شراء آجل (علف/حيوانات/معدات) كان بيظهر في الميزانية لكن **مش بيظهر في صفحة العملاء والموردين ولا في تقرير الأعمار**.
-- اتبنى **طبقة تيستات جديدة: ٣٦٠ تيست على ٢٢ موديول** (`npm run test:unit`) — بتشتغل من غير متصفح، وبتشتغل بتوقيت المزرعة الحقيقي (Africa/Cairo).
+- اتبنى **طبقة تيستات جديدة: ٣٦١ تيست على ٢٢ موديول** (`npm run test:unit`) — بتشتغل من غير متصفح، وبتشتغل بتوقيت المزرعة الحقيقي (Africa/Cairo).
+- **حالة الـ CI بعد الإصلاح (تشغيل رقم 39336169004 على البرانش ده):** أول مرة البوابة تشتغل فيها أصلًا — الفحص اللغوي ✓، الفحص الأمني ✓، **طبقة التيستات الجديدة ✓ (٣٦١/٣٦١)**، تثبيت المتصفح ✓، و**طبقة تيستات المتصفح ✗** (٤٢٥ تيست عمّالين يشتغلوا لأول مرة في تاريخ المشروع — كانوا قبل كده بيموتوا في مرحلة الجمع). تفاصيل سبب الاحمرار في O-19، وما ادّعيناش إنها اتحلّت.
+- ⛔ **بند حرج لسه مفتوح ومحتاج قرار منك — O-18:** `config.js` مربوط بمشروع Firebase **حقيقي** (`farm-mz99`) والريبو **public**، وقواعد البيانات بتدي `.read: "auth != null"` لجدول `users` (و٢٥ جدول تاني) — و`firebase.js` بيعمل جلسة **Anonymous Auth** تلقائيًا لأي زائر، يعني أي حد في العالم يقدر **يحمّل جدول المستخدمين بالكامل** وفيه `pin_hash`. والـ`pin_hash` هو `SHA-256('bayan-farm-pin-salt:' + userId + ':' + pin)` — الـsalt **مكتوب حرفيًا في الريبو العام** والـPIN **٤ أرقام (١٠٠٠٠ احتمال)** → فك كل الباسوردات (بما فيها باسورد المدير) بيتعمل **أوفلاين في أجزاء من الثانية** من غير أي طلب للسيرفر ومن غير ما أي rate limiting يحس بيه. كمان `login.html` لسه بيقبل حقل `pin` **نص صريح** لأي مستخدم لسه ما اترحش. الإصلاح الصحيح مش تعديل في القواعد (لأن `login.html` **لازم** يقرا `users` قبل ما يتحقق — تقفيل القراءة يكسر الدخول على الكل)، دي نقلة معمارية للتحقق عن طريق Firebase Auth + نشر القواعد بـ`firebase deploy` — ودي محتاجة قرار منك ووصول للـConsole. فيه ٥ تخفيفات مؤقتة مترتبة في O-18.
 
 Everything below is evidence-linked: each finding names the file, the mechanism, the fix, and the test that now proves it.
 
@@ -27,7 +29,7 @@ Everything below is evidence-linked: each finding names the file, the mechanism,
 |---|---|---|
 | Static reading | Every module read end-to-end; greps for bug *classes* (UTC date keys, unguarded sorts, duplicate object keys, empty-collection bootstraps, `can()` vs role names, unescaped sinks) | done |
 | `scripts/safety-scan.js` | The repo's own permission/SSOT/XSS tripwire | **PASS, 0 critical** |
-| **NEW** unit layer `tests/unit/` | 22 suites / **360 assertions-passing tests** that boot `config.js → firebase.js → nav.js → shared.js` (+ `notifications-service.js`) inside jsdom, with an in-memory Firebase that implements the real REST contract incl. `orderBy`/`equalTo`/`limitToLast` queries and injectable failure modes (offline, 401, 403, 500) | **360 passed, 0 failed** |
+| **NEW** unit layer `tests/unit/` | 22 suites / **361 assertions-passing tests** that boot `config.js → firebase.js → nav.js → shared.js` (+ `notifications-service.js`) inside jsdom, with an in-memory Firebase that implements the real REST contract incl. `orderBy`/`equalTo`/`limitToLast` queries and injectable failure modes (offline, 401, 403, 500) | **361 passed, 0 failed** |
 | Playwright browser suites | `tests/smoke`, `tests/ssot`, `tests/permissions`, `tests/data-integrity`, `tests/regression`, `tests/security` | **collection fixed: 425 tests in 55 files** (was: collection crash, 0 tests). Not executed here — this sandbox cannot download browser binaries. |
 | `tests/rules/*.test.js` | Emulator-only rules tests | still never executed (needs Java + Firebase CLI) — see O-12 |
 
@@ -136,7 +138,9 @@ So feed, livestock and equipment bought on credit — the ordinary case on a rea
 `gh run list` on `main`: **8 / 8 recent Quality Gate runs = `failure`** (going back to 2026-08-23). Cause, reproduced locally: Playwright's default `testMatch` includes `**/*.test.js`, which collected `tests/rules/accounting-rules.test.js` — a Node script for the Firebase **RTDB emulator** whose `@firebase/rules-unit-testing` dependency is not in `package.json` and is not installed by the workflow. Collection died with `Cannot find module '@firebase/rules-unit-testing'` and reported `Total: 0 tests in 0 files`, so the gate failed having proven nothing — while the file's own header already says it must be run via `firebase emulators:exec`, never through Playwright.
 
 **Fix:** `playwright.config.js` gains `testIgnore: ['**/rules/**','**/unit/**']`; the workflow drops the hand-rolled `python3 -m http.server &` + `npx wait-on` pair (the config's own `webServer` block already does both, and `wait-on` was being fetched on the fly), and gains the unit layer **before** the browser layer (4 s, no browser download).
-**Proof:** `npx playwright test --list` → **425 tests in 55 files** (was 0); `npm run test:unit` → 360/360; `tests/unit/22` asserts both the npm script and the CI wiring exist.
+**Proof:** `npx playwright test --list` → **425 tests in 55 files** (was 0); `npm run test:unit` → 361/361; `tests/unit/22` asserts both the npm script and the CI wiring exist.
+
+**CI evidence — run [39336169004](https://github.com/3boalazm/farm-project/actions/runs/39336169004) on this branch:** `Set up Node ✓ · Install test dependencies ✓ · Syntax check (all JS) ✓ · Static safety scan ✓ · **Unit layer ✓ (360 passed / 0 failed)** · Install Playwright browser ✓ · Run browser regression suite ✗`. That is the first Quality Gate run in the repository's recent history to execute *anything*: before this fix every run died during collection. The browser layer is now visibly red for the first time — 425 tests that have never run in CI, and whose per-test output could not be retrieved from the audit sandbox (`results-receiver.actions.githubusercontent.com` is unreachable there) nor from an artifact, because the report folder the workflow uploads was never written (O-20, fixed here). Why the suite is not hermetic: O-19. Closing the browser layer is its own piece of work and is deliberately **not** claimed as done by this pass.
 
 #### F-09 · A birth weight broke the certified Weight-SSOT invariant
 `createOffspringAnimal()` posted `animals/{newId}/weights/{…}` directly and never touched `current_weight` — so every newborn registered with a birth weight had a weight history and a **blank** `current_weight`, violating the exact invariant `docs/certification/WEIGHT.md` exists for (`current_weight == newest weight record`) and showing `—` on the dashboard, reports and detail page for an animal that demonstrably has a weight. It also wrote `p.weight` with **no validation**, so a mistyped `-5` or `9999` landed in the SSOT even though `recordAnimalWeight()` rejects both.
@@ -237,6 +241,30 @@ Two `async checkWeather(){…}` keys in the same `NS` object literal (lines 48 a
 
 ## 4. Open items — found, documented, deliberately **not** silently changed
 
+### ⛔ O-18 · CRITICAL, and it cannot be fixed from inside this repository
+
+**The `users` collection is readable by any anonymous session, and `pin_hash` is offline-crackable in milliseconds — i.e. every PIN, including the administrator's, is recoverable without sending a single request to Firebase.**
+
+Four links, each verified in this repository:
+
+1. **`config.js` binds a live project and the repository is public.** `projectId: "farm-mz99"`, `databaseURL: "https://farm-mz99-default-rtdb.europe-west1.firebasedatabase.app"`, plus the Firebase web `apiKey` (`AIzaSy…`). A Firebase *web config* is public by design — it ships to every browser — so the whole security model rests on the Realtime Database rules. (This report's first draft wrongly stated "no project is bound anywhere in this repo"; corrected here and in O-11.)
+2. **`database.rules.json` gates `users` *writes* behind `role === 'admin'` but leaves its `.read` a bare `auth != null`** — as it does for 25 other collections (`animals`, `health`, `breeding`, `production_log`, `inventory_*`, `activity_log`, `settings`, …). The file's own header already acknowledges this: *"most pre-existing collections still use bare `auth != null` for read, which is a known, separate, PRE-EXISTING characteristic of this app's security model."* The hardened `uid_lookup → users → role` chain protects the 17 accounting collections only.
+3. **`auth != null` is satisfied by every visitor, automatically.** `firebase.js:_getValidAuthToken()` signs each browser into an Anonymous Auth session on its first request with zero interaction and no PIN — the rules file says so explicitly. An attacker does not even need to load the app: with the public `apiKey` they can mint such a token themselves and call the REST API directly.
+4. **The verifier itself is reproducible offline.** `hashPin(pin, userId)` is `SHA-256('bayan-farm-pin-salt:' + userId + ':' + pin)` — the salt is a **hardcoded literal in the public repo**, `userId` is the record's own id (present in the same download, e.g. `admin1`), and the PIN space is **4 digits = 10 000 candidates**. One `GET /users.json` therefore yields every PIN in milliseconds, locally, with no failed-login traffic for Firebase's rate limiting to see. `login.html` additionally still accepts a **plaintext `pin`** field for any not-yet-migrated user — no cracking needed at all for those.
+
+*Consequence:* full administrator access to the live herd and finance data, from a public repo, with no brute-force loop and no server-visible signal. Note this is a **different hole** from F-01/F-02/F-03 (those were logic bugs inside the app; this one is the data exposure that makes any PIN guessable) and it survives all 27 fixes in this pass.
+
+**Why it stays open:** the fix is not a rules edit. `login.html` must read `users` *before* it can authenticate (it downloads candidates and compares hashes), so tightening `.read` to a real-user chain breaks login for every user — which is exactly the kind of silent, app-wide breakage this audit refuses to ship. Closing it properly means moving verification server-side: the Firebase Auth email/password bridge already present in `firebase.js` (`signInWithFirebaseAuth`, synthetic `u_{appUserId}@bayan-farm.internal` addresses) is the intended path — authenticate against Firebase Auth, then read only `users/{appUserId}` through `uid_lookup`. That is an architecture change with a migration plan, and it only takes effect once the rules are **deployed** (`firebase deploy --only database`), which no code change in this repository can do. Owner decision + Firebase Console access required.
+
+**Interim mitigations, highest value first (none require the architecture change):**
+1. Check the **deployed** rules in the Firebase Console and, if login must keep reading `users`, set `users/$uid/pin_hash` (and `users/$uid/pin`) `.read: false` — the login flow compares hashes *client-side*, so this specific mitigation needs a verification redesign too; the immediately safe step is (2).
+2. **Lengthen the PIN** (4 → 6+ digits): 10 000 candidates becomes 10⁶+, which turns offline cracking from milliseconds into impractical even if the collection leaks. Requires a user-facing migration.
+3. **Drop the plaintext `pin` fallback** in `login.html` once every record carries a `pin_hash`.
+4. **Restrict the Firebase API key by HTTP referrer** in Google Cloud Console (drive-by abuse only; a determined attacker can still call the REST API, so this is hygiene, not a fix).
+5. **Rotate `weatherApiKey`** (`2b08987a…`, `config.js:52`): a paid third-party secret committed to a public repo. Already a *known* state — `docs/security/CONFIGURATION-SECURITY-REVIEW.md` records moving it out of `firebase.js` into `config.js` as the "quick win", with the server-side proxy still listed as future work. `api/groq.js` by contrast accepts a client-supplied `x-user-key` (documented BYO-key model) and `api/claude.js` correctly uses `process.env` only.
+
+**Caveat on evidence:** the audit sandbox has no network path to `firebasedatabase.app`, so the *deployed* rules could not be queried; every statement above is read from committed sources, and step 2 must be confirmed against the Firebase Console. That the production login flow works at all is strong indirect evidence that `users` really is readable pre-authentication.
+
 | # | Item | Why it stays open |
 |---|---|---|
 | O-01 | Permissions are client-trusted (`localStorage['farm_user']`); anyone with DevTools can claim any role | Structural, documented since `THREAT-MODEL.md`. Fixing it means a real server-side auth layer — an architecture change, not an audit fix. `canWrite()`/`can('admin')` close the *authorisation logic* holes; they cannot close client-side trust. |
@@ -249,13 +277,16 @@ Two `async checkWeather(){…}` keys in the same `NS` object literal (lines 48 a
 | O-08 | `pages/breeding.js:submitBreeding()` (mating records) has no write guard | Same reasoning: `breeding` is not granted to the read-only role. |
 | O-09 | `sw-register.js` is still not loaded by any page — the entire service-worker/PWA layer (`sw.js`, correct and complete) remains dormant | Documented as a deliberate state in `SYSTEM-MODEL.md`; activating it is its own risk decision (stale-cache recovery tools exist but are unexercised in production). |
 | O-10 | `renderProductionWidget()` has **zero callers** in the app | Kept (it is part of the documented Phase-2 component set in `COMPONENTS.md`) and hardened anyway; flagged rather than deleted. |
-| O-11 | `database.rules.json` changes (F-15's index) only take effect after `firebase deploy --only database` | No project is bound anywhere in this repo, so deployment is a human step by design. |
+| O-11 | `database.rules.json` changes (F-15's index) only take effect after `firebase deploy --only database` | Deployment is a human step by design. **Correction to this report's first draft:** a project *is* bound in this repo — `config.js` carries live credentials for `farm-mz99` (`databaseURL: https://farm-mz99-default-rtdb.europe-west1.firebasedatabase.app`), and the repository is **public**. The committed rules file is therefore describing the production database, and until it is deployed the index in F-15 does not exist server-side. See O-19. |
 | O-12 | `tests/rules/accounting-rules.test.js` has still never been executed (needs Java + the RTDB emulator) | Now correctly excluded from Playwright collection (F-08) instead of silently breaking the gate; its own header documents the command to run it. |
 | O-13 | Weight/missing-weight alert `detail` strings interpolate **ASCII** digits while almost every other user-visible number goes through `ar()` | Cosmetic inconsistency; changing alert text affects tests and user habits, so it is flagged, not touched. |
 | O-14 | No retry logic on any failed write (`fbPost`/`fbPatch`/`fbDelete`) — a failed write simply fails behind a generic toast | Pre-existing, documented in `FAILURE-MODES.md`. `offline-sync.js` queues writes only when it is explicitly used. |
 | O-15 | The `weights` top-level collection in `database.rules.json` is almost certainly always empty (the certified SSOT is the nested `animals/{id}/weights`); `settings.html`'s reset button still targets it | Noted by the rules file's own comment; removing either side is a separate decision. |
 | O-16 | The dead weather implementation removed in F-13 contained behaviour nobody has ever seen in production (daily all-clear, humidity warning, once-per-day throttle). Restoring any of it is a product choice | Recorded here with the exact semantics; the code is in git history. |
 | O-17 | Scalability and observability remain the two weakest dimensions from `PRODUCTION-READINESS-SCORE.md` (5/10 and 4/10): no multi-tenancy, and errors still only reach a developer console | Out of scope for a bug audit; unchanged by this pass. |
+| O-19 | **The browser suite is not hermetic — it runs against the live production database.** All 55 Playwright specs load the real pages, so `initApp()` executes against `farm-mz99` (real Anonymous-Auth minting, real reads of `users`/`settings`) and only *afterwards* do the specs monkey-patch `window.fbGet/fbPost/fbPut/fbPatch` inside `page.evaluate()`. **Zero** specs intercept the network (`page.route`): 0 of 55. | Making it hermetic means either one shared fixture that intercepts `*.firebasedatabase.app` in every spec, or pointing CI at the RTDB emulator (which also needs Java, see O-12). Both are a project of their own. Doing it silently here would also have buried the more important fact — that these 425 tests had never executed at all. Recorded with the CI evidence in F-08. |
+| O-20 | **CI's failure artifact never existed:** `.github/workflows/quality.yml` has always uploaded `playwright-report/` on failure, but the reporter was `list`-only, so every red run logged *"No files were found with the provided path: playwright-report/"* | **Fixed in this pass** — `reporter: [['list'], ['html', { open: 'never' }]]`. Kept in this table because it explains why the browser-layer failures could not be inspected while writing this report; the next red run will produce a downloadable report. |
+| O-21 | `api/groq.js` accepts a client-supplied `x-user-key` header as a fallback when `GROQ_API_KEY` is unset | Deliberate BYO-key model, documented in the file's own header; `api/claude.js` uses `process.env` only. Flagged so the choice stays conscious rather than inherited. |
 
 ---
 
@@ -275,13 +306,16 @@ login.html                 +83   fbGetSafe() gate, single audit write, markup fi
 notifications-service.js   +59   duplicate checkWeather removed, Notification feature check,
                                  local expiry cutoff
 database.rules.json        +14   .indexOn ["tag"] for animals
-playwright.config.js       +16   testIgnore (un-breaks the gate)
+playwright.config.js       +16   testIgnore (un-breaks the gate) + html
+                                 reporter (so the workflow's existing
+                                 failure-artifact upload finally has a
+                                 folder to upload — O-20)
 .github/workflows/quality.yml +40  unit layer, jsdom, simplified server steps
 settings.html, animal-detail.html, animals.html, assistant.html, dashboard.html,
 import.html, pages/{breeding,datepicker,finance,health,inventory,production,reports,
 tasks,vaccine}.js               local-calendar conversions + null-safe sorts
 farm-apk/www/**                 re-synced via scripts/sync-apk-www.js (39 files, +5 pages)
-tests/unit/**  (new)            harness + 22 module suites + runner (360 tests)
+tests/unit/**  (new)            harness + 22 module suites + runner (361 tests)
 package.json / package-lock.json  jsdom devDependency, test:unit / test:all scripts
 ```
 

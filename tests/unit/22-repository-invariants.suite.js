@@ -283,6 +283,34 @@ module.exports = suite('22 · Repository invariants', ({ test }) => {
     }
   });
 
+  // AUDIT O-18 (2026-10) — `config.js` holds a LIVE third-party secret
+  // (weatherApiKey, a paid weatherapi.com key) in a PUBLIC repository. That
+  // state is already documented as a known quick-win in
+  // docs/security/CONFIGURATION-SECURITY-REVIEW.md, and rotating the key or
+  // moving it behind a server-side proxy is an owner decision (see O-18's
+  // mitigation list), not something this suite can enforce.
+  // What this test CAN enforce is that the secret does not SPREAD: it must
+  // stay in exactly one injection point, with `firebase.js` reading it
+  // through FARM_CONFIG. Every extra copy makes a future rotation miss a
+  // file — which is precisely how the inline literal in firebase.js came to
+  // exist before the Phase-2 quick win.
+  test('the weather API key has exactly one injection point (config.js)', () => {
+    const cfg = read('config.js');
+    const m = cfg.match(/weatherApiKey:\s*'([^']+)'/);
+    assert.ok(m, 'config.js must remain the single declared home of weatherApiKey');
+    const key = m[1];
+    const carriers = files.filter((f) => f !== 'config.js' && read(f).includes(key));
+    assert.deepStrictEqual(
+      carriers, [],
+      `weatherApiKey must not be copied into other app files (found in: ${carriers.join(', ')}) — ` +
+      'a rotation would then silently miss them. Read it via FARM_CONFIG.weatherApiKey.'
+    );
+    assert.ok(
+      /WEATHER_API_KEY\s*=\s*FARM_CONFIG\.weatherApiKey/.test(read('firebase.js')),
+      'firebase.js must consume the key through FARM_CONFIG, not through its own literal'
+    );
+  });
+
   test('the unit-test layer is wired into npm scripts and CI', () => {
     const pkg = JSON.parse(read('package.json'));
     assert.ok(pkg.scripts['test:unit'], 'package.json must expose `npm run test:unit`');
