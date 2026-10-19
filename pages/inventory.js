@@ -378,8 +378,8 @@ window.loadConsumptionRecords = async function() {
     }
 
     // Summary by barn (last 7 days)
-    var d7ago = new Date(); d7ago.setDate(d7ago.getDate()-7);
-    var recent = _consumption.filter(function(r){ return r.date >= d7ago.toISOString().slice(0,10); });
+    var d7agoStr = shiftDateLocal(new Date(), -7);
+    var recent = _consumption.filter(function(r){ return r.date >= d7agoStr; });
     var barnTotals = {};
     recent.forEach(function(r){
       if(!barnTotals[r.barn]) barnTotals[r.barn] = 0;

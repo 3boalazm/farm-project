@@ -19,10 +19,10 @@ jobs:
           node-version: '22'
 
       - name: Install test dependencies
-        run: npm install @playwright/test@1.56.0 --no-save
-
-      - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
+        # jsdom powers the unit layer (tests/unit) — it boots the real
+        # application scripts against an in-memory Firebase, so the domain
+        # modules are tested without a browser binary.
+        run: npm install @playwright/test@1.56.0 jsdom@30 --no-save
 
       - name: Syntax check (all JS)
         run: |
@@ -33,13 +33,24 @@ jobs:
       - name: Static safety scan (permission + SSOT regression detection)
         run: node scripts/safety-scan.js
 
-      - name: Start static server
-        run: python3 -m http.server 8080 &
-        
-      - name: Wait for server
-        run: npx wait-on http://localhost:8080 --timeout 10000
+      # Runs BEFORE the browser layer on purpose: it needs no browser download,
+      # takes ~4s, and covers the domain engines module by module (accounting,
+      # weight/birth SSOT, permissions, inventory, alerts, analytics, render
+      # helpers, repository invariants). If this is red, the rest is noise.
+      - name: Unit layer (module-by-module, jsdom + in-memory Firebase)
+        run: npm run test:unit
+        env:
+          FARM_TZ: Africa/Cairo
 
-      - name: Run regression suite
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      # No manual `python3 -m http.server` + `npx wait-on` step any more:
+      # playwright.config.js already declares a webServer that starts the
+      # static server and waits for it. The old pair added two independent
+      # failure points (an uninstalled wait-on fetched on the fly, and a
+      # backgrounded shell process) for something the config already does.
+      - name: Run browser regression suite
         run: npx playwright test
         env:
           BASE_URL: http://localhost:8080
@@ -56,4 +67,11 @@ jobs:
 #   - permission regression (safety-scan.js exits 1)
 #   - SSOT regression (safety-scan.js exits 1, or a tests/ssot/* spec fails)
 #   - syntax errors (node --check)
-#   - any regression suite test failure
+#   - any unit-layer failure (npm run test:unit)
+#   - any browser regression suite failure
+#
+# NOTE (2026-10 audit): this gate was RED on every one of the last 8 runs on
+# main before this commit — Playwright was collecting tests/rules/*.test.js
+# (an emulator-only Node script whose dependency is not installed), dying
+# during collection, and running zero tests. See playwright.config.js's
+# testIgnore and docs/audit/FULL-AUDIT-2026-10.md.

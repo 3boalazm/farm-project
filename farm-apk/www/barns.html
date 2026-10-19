@@ -147,7 +147,7 @@ window.showBarnDetail=function(barnId){
         const breeds=[...new Set(sa.map(a=>a.breed))];
         return`<div class="col-md-6"><div class="wonder-card">
           <div class="fw-bold mb-2">${stall}<span class="type-badge badge-gray ms-2" style="font-size:.7rem">${ar(sa.length)} رأس</span></div>
-          ${breeds.map(b=>{const cnt=sa.filter(a=>a.breed===b).length;return`<div class="d-flex justify-content-between py-1" style="border-bottom:1px solid #1e1e1e;font-size:.83rem"><span class="text-gray">${b}</span><span class="fw-bold">${ar(cnt)}</span></div>`;}).join('')}
+          ${breeds.map(b=>{const cnt=sa.filter(a=>a.breed===b).length;return`<div class="d-flex justify-content-between py-1" style="border-bottom:1px solid #1e1e1e;font-size:.83rem"><span class="text-gray">${escapeHtml(b)}</span><span class="fw-bold">${ar(cnt)}</span></div>`;}).join('')}
           ${sa.length===0?'<div class="text-gray text-center py-2" style="font-size:.82rem">فارغ</div>':''}
           <div class="mt-2 d-flex gap-2"><button class="action-btn sm" onclick="closeModal();showStallDetail('${stall}')"><i class="bi bi-list-ul"></i> عرض القائمة</button></div>
         </div></div>`;
@@ -169,7 +169,7 @@ window.showStallDetail=function(stall){
     <h4><i class="bi bi-grid-1x2-fill accent-text"></i> ${stall} — قائمة الحيوانات (${ar(alive.length)})</h4>
     ${alive.length===0?`<div class="empty-state"><i class="bi bi-box"></i><p>العنبر فارغ</p></div>`:`
     <table class="tbl"><thead><tr><th>السلالة</th><th>الجنس</th><th>الغرض</th><th>الترقيم</th></tr></thead>
-    <tbody>${alive.map(a=>`<tr><td class="fw-bold">${a.breed}</td><td>${a.gender==='male'?'ذكر':'أنثى'}</td><td><span class="type-badge ${a.purpose==='tasmeen'?'badge-tasmeen':a.purpose==='birth'?'badge-blue':'badge-tarbiya'}" style="font-size:.7rem">${{tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[a.purpose]||a.purpose}</span></td><td class="text-gray">${a.tag||'—'}</td></tr>`).join('')}</tbody>
+    <tbody>${alive.map(a=>`<tr><td class="fw-bold">${escapeHtml(a.breed)}</td><td>${a.gender==='male'?'ذكر':'أنثى'}</td><td><span class="type-badge ${a.purpose==='tasmeen'?'badge-tasmeen':a.purpose==='birth'?'badge-blue':'badge-tarbiya'}" style="font-size:.7rem">${{tarbiya:'تربية',tasmeen:'تسمين',birth:'مواليد'}[a.purpose]||escapeHtml(a.purpose||'')}</span></td><td class="text-gray">${escapeHtml(a.tag||'—')}</td></tr>`).join('')}</tbody>
     </table>`}
     <div class="d-flex gap-2 justify-content-end mt-3">
       ${can('animals')?`<button class="action-btn primary" onclick="closeModal();openTransferModal('${stall}')"><i class="bi bi-arrow-left-right"></i> نقل</button>`:''}
@@ -230,9 +230,9 @@ window.updateTransferList=function(){
     optEl.innerHTML=`<label>النوع</label><select class="field" id="tr-val"><option value="goat">ماعز (${ar(alive.filter(a=>a.species==='goat').length)})</option><option value="sheep">أغنام (${ar(alive.filter(a=>a.species==='sheep').length)})</option></select>`;
   } else if(type==='breed'){
     const breeds=[...new Set(alive.map(a=>a.breed))];
-    optEl.innerHTML=`<label>السلالة</label><select class="field" id="tr-val">${breeds.map(b=>`<option value="${b}">${b} (${ar(alive.filter(a=>a.breed===b).length)})</option>`).join('')}</select>`;
+    optEl.innerHTML=`<label>السلالة</label><select class="field" id="tr-val">${breeds.map(b=>`<option value="${escapeHtml(b)}">${escapeHtml(b)} (${ar(alive.filter(a=>a.breed===b).length)})</option>`).join('')}</select>`;
   } else if(type==='select'){
-    optEl.innerHTML=`<label>اختر الحيوانات (${ar(alive.length)} متاح)</label><div style="max-height:200px;overflow-y:auto;border:1px solid #2a2a2a;border-radius:10px;padding:8px">${alive.slice(0,100).map(a=>`<label style="display:flex;align-items:center;gap:8px;padding:4px;cursor:pointer"><input type="checkbox" value="${a._id}" style="accent-color:var(--green)"> <span style="font-size:.83rem">${a.breed} ${a.gender==='male'?'♂':'♀'} ${a.tag?'#'+a.tag:''}</span></label>`).join('')}</div>`;
+    optEl.innerHTML=`<label>اختر الحيوانات (${ar(alive.length)} متاح)</label><div style="max-height:200px;overflow-y:auto;border:1px solid #2a2a2a;border-radius:10px;padding:8px">${alive.slice(0,100).map(a=>`<label style="display:flex;align-items:center;gap:8px;padding:4px;cursor:pointer"><input type="checkbox" value="${a._id}" style="accent-color:var(--green)"> <span style="font-size:.83rem">${escapeHtml(a.breed)} ${a.gender==='male'?'♂':'♀'} ${a.tag?'#'+escapeHtml(a.tag):''}</span></label>`).join('')}</div>`;
   } else {
     optEl.innerHTML=`<div class="p-3 text-center text-gray" style="font-size:.85rem">سيتم نقل جميع الحيوانات (${ar(alive.length)} رأس) من العنبر المحدد</div>`;
   }

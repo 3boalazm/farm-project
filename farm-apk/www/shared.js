@@ -33,7 +33,13 @@ function toast(msg,type='success'){
   if(!wrap){wrap=document.createElement('div');wrap.id='toast-wrap';document.body.appendChild(wrap);}
   const el=document.createElement('div');
   el.className=`farm-toast t-${type}`;
-  el.innerHTML=`<i class="bi bi-${type==='success'?'check-circle-fill':type==='error'?'x-circle-fill':'info-circle-fill'}"></i> ${msg}`;
+  // XSS fix: toast() is called from hundreds of sites across this app,
+  // many with interpolated free-text data (breed names, error messages,
+  // etc.) -- confirmed by search that zero call sites intentionally pass
+  // raw HTML, so escaping here is safe and closes an enormous number of
+  // downstream call sites in one place rather than needing every caller
+  // fixed individually.
+  el.innerHTML=`<i class="bi bi-${type==='success'?'check-circle-fill':type==='error'?'x-circle-fill':'info-circle-fill'}"></i> ${escapeHtml(msg)}`;
   wrap.appendChild(el);
   setTimeout(()=>{el.style.opacity='0';},2700);
   setTimeout(()=>{el.remove();},3200);
@@ -135,77 +141,11 @@ function timeAr(iso){
   return `${ar(d.getFullYear())}/${pad2(d.getMonth()+1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
-// ── NAVBAR ────────────────────────────────────────────────
-// NAV_PAGES & SIDEBAR_EXTRA defined in nav.js (loaded before shared.js)
-
-function renderNavbar(activePage=''){
-  const s=getSettings();const u=getUser();
-  const visibleTabs=NAV_PAGES.filter(p=>!p.perm||can(p.perm)).slice(0,7);
-  const html=`
-  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
-  <aside class="sidebar-menu" id="sidebarMenu">
-    <div class="sidebar-header">
-      <div class="d-flex align-items-center gap-2">
-        <div class="farm-logo-sm">${s.logoUrl==='media/logo-icon.svg'?`<img class="logo-for-light" src="media/logo-icon.svg" alt="">
-<img class="logo-for-dark" src="media/logo-icon-dark.svg" alt="">`:s.logoUrl?`<img src="${s.logoUrl}" alt="">`:'🐐'}</div>
-        <div><div class="fw-bold" style="font-size:1rem">${s.farmName}</div>
-        <small style="color:${ROLES[u?.role||'admin']?.color}">${ROLES[u?.role||'admin']?.label}</small></div>
-      </div>
-      <button class="sidebar-close" onclick="closeSidebar()" aria-label="إغلاق القائمة" title="إغلاق القائمة" data-hint="إغلاق القائمة"><i class="bi bi-x-lg"></i></button>
-    </div>
-    <nav class="sidebar-nav">
-      <div class="sidebar-section-label">التنقل</div>
-      ${NAV_PAGES.filter(p=>!p.perm||can(p.perm)).map(p=>`
-        <a href="${p.href}" class="sidebar-item${activePage===p.href?' active':''}">
-          <i class="bi ${p.icon}"></i> ${p.label}</a>`).join('')}
-      <div class="sidebar-divider"></div>
-      ${SIDEBAR_EXTRA.filter(p=>!p.perm||can(p.perm)).map(p=>`
-        <a href="${p.href}" class="sidebar-item${activePage===p.href?' active':''}" ${p.onclick?'onclick="closeSidebar();'+p.onclick+';return false;"':''}>
-          <i class="bi ${p.icon}"></i> ${p.label}</a>`).join('')}
-      <div class="sidebar-divider"></div>
-      <button class="sidebar-item" onclick="logout()" style="color:var(--red)">
-        <i class="bi bi-box-arrow-left"></i> تسجيل الخروج</button>
-    </nav>
-    <div class="sidebar-footer">
-      <div class="d-flex align-items-center gap-3">
-        <div class="user-avatar">${(u?.name||'م').slice(0,1)}</div>
-        <div><div class="fw-bold">${u?.name||'مدير'}</div>
-        <small class="green-text"><i class="bi bi-circle-fill" style="font-size:7px"></i> متصل</small></div>
-      </div>
-    </div>
-  </aside>
-  <nav class="navbar-wonder">
-    <div class="container d-flex justify-content-between align-items-center">
-      <a href="dashboard.html" class="navbar-brand"><span>${s.logoUrl==='media/logo-icon.svg'?`<img class="logo-for-light" src="media/logo-icon.svg" alt="" style="height:1.2em;width:auto;vertical-align:-.2em"><img class="logo-for-dark" src="media/logo-icon-dark.svg" alt="" style="height:1.2em;width:auto;vertical-align:-.2em">`:s.logoUrl?`<img src="${s.logoUrl}" alt="" style="height:1.2em;width:auto;vertical-align:-.2em">`:'🐐'}</span> ${s.farmName}</a>
-      <div class="d-flex align-items-center gap-2">
-        <span class="date-badge d-none d-sm-flex"><i class="bi bi-calendar3"></i> ${todayAr()}</span>
-        <button class="theme-btn d-none d-md-flex" onclick="toggleTheme()" id="theme-toggle-btn" title="تبديل المظهر" data-hint="تبديل المظهر">
-          <i class="bi bi-circle-half" id="theme-icon"></i>
-        </button>
-        <div style="position:relative">
-          <a href="notifications.html" class="bell-btn" id="bell-btn" style="text-decoration:none" title="الإشعارات" data-hint="الإشعارات">
-            <i class="bi bi-bell-fill"></i><span class="bell-badge" id="bell-badge" style="display:none">0</span>
-          </a>
-        </div>
-        <button id="undo-btn" onclick="undoLast()" title="تراجع عن آخر عملية" data-hint="تراجع عن آخر عملية" style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:20px;color:var(--text-muted);padding:5px 12px;cursor:pointer;font-size:.8rem;display:flex;align-items:center;gap:5px;font-family:Cairo,sans-serif;transition:.2s;white-space:nowrap;opacity:0.5" id="undo-btn">
-          <i class="bi bi-arrow-counterclockwise"></i>
-        </button>
-        <button class="menu-btn" onclick="openSidebar()" aria-label="القائمة" title="القائمة" data-hint="القائمة"><i class="bi bi-list"></i></button>
-      </div>
-    </div>
-  </nav>
-  <div id="toast-wrap"></div>
-  <div id="modal-root"></div>`;
-  document.body.insertAdjacentHTML('afterbegin', html);
-  // Sprint 9: populate the bell badge that's now on every page, not just
-  // notifications.html -- fire-and-forget, never blocks page render.
-  if(window.updateGlobalBellBadge) window.updateGlobalBellBadge();
-}
-
 // ══════════════════════════════════════════════════════
-// NAV RAIL V2 — pilot (dashboard.html only, opt-in). Purely
-// additive: renderNavbar() above is completely untouched, so
-// every other page is at zero risk from this. Reuses the exact
+// NAV RAIL V2 — the only nav renderer in this file. (Dead-code removal,
+// 2026-08-23: renderNavbar(), the .navbar-wonder/.sidebar-menu shell
+// this replaced, had zero remaining callers and was deleted here; see
+// git history for the removed function.) Reuses the exact
 // same FARM_NAV/can() permission filtering and the exact same
 // mobile off-canvas sidebar markup+IDs as the original -- only
 // the desktop-width visual shell (icon rail + right panel)
@@ -218,15 +158,27 @@ var _sectionIconsV2={'القطيع':'bi-list-ul','الصحة والإنتاج':'
 function _railStrokeIcon(icon){ return (icon||'').replace(/-fill$/,''); }
 function renderNavbarV2(activePage=''){
   const s=getSettings();const u=getUser();
-  const logoHtml=s.logoUrl==='media/logo-icon.svg'?`<img class="logo-for-light" src="media/logo-icon.svg" alt=""><img class="logo-for-dark" src="media/logo-icon-dark.svg" alt="">`:s.logoUrl?`<img src="${s.logoUrl}" alt="">`:'🐐';
+  // XSS fix (2026-08-24): logoUrl is a free-text URL field set via
+  // openEditProfile() (pages/farm_profile.js) -- rendered on every page
+  // via this sidebar, so an attribute-breakout here was site-wide.
+  const logoHtml=s.logoUrl==='media/logo-icon.svg'?`<img class="logo-for-light" src="media/logo-icon.svg" alt=""><img class="logo-for-dark" src="media/logo-icon-dark.svg" alt="">`:s.logoUrl?`<img src="${escapeHtml(s.logoUrl)}" alt="">`:'🐐';
 
   const railSections=FARM_NAV.map(function(section,i){
     const visible=section.items.filter(function(p){return !p.perm||can(p.perm);});
     if(!visible.length)return'';
     const hasActive=visible.some(function(p){return p.href===activePage;});
     const sectionIcon=_railStrokeIcon(_sectionIconsV2[section.section]||'bi-circle');
+    // FIX (2026-10 audit) — ACCESSIBILITY: the collapsed icon link and the
+    // expanded tree link below BOTH emitted aria-current="page" for the active
+    // page, so every page rendered two elements claiming to be the current one
+    // inside the same <nav>. ARIA expects a single aria-current within a set of
+    // navigation items; screen readers announced "current page" twice per nav.
+    // The icon link keeps its `active` class and its aria-label/title (so the
+    // visual state and the tooltip are unchanged) and the single aria-current
+    // now lives on the labelled tree link, which is the more useful of the two
+    // for an assistive-technology user.
     const iconLinks=visible.map(function(p){
-      return '<a href="'+p.href+'" class="rail-v2__icon-link'+(activePage===p.href?' active':'')+'" aria-label="'+p.label+'" title="'+p.label+'" data-hint="'+p.label+'"'+(activePage===p.href?' aria-current="page"':'')+'><i class="bi '+_railStrokeIcon(p.icon)+'"></i></a>';
+      return '<a href="'+p.href+'" class="rail-v2__icon-link'+(activePage===p.href?' active':'')+'" aria-label="'+p.label+'" title="'+p.label+'" data-hint="'+p.label+'"><i class="bi '+_railStrokeIcon(p.icon)+'"></i></a>';
     }).join('');
     const childLinks=visible.map(function(p){
       const isActive=activePage===p.href;
@@ -266,7 +218,7 @@ function renderNavbarV2(activePage=''){
   const html=`
   <div class="rail-v2-mobile-bar">
     <button class="menu-btn" onclick="toggleRailDrawerMobile()" aria-label="القائمة" title="القائمة" data-hint="القائمة" id="railV2MobileMenuBtn"><i class="bi bi-list"></i></button>
-    <span class="fw-bold">${s.farmName}</span>
+    <span class="fw-bold">${escapeHtml(s.farmName||'')}</span>
     <button class="menu-btn" onclick="toggleRailPanel()" aria-label="لوحة المستخدم" title="لوحة المستخدم" data-hint="لوحة المستخدم" id="railV2MobilePanelBtn"><i class="bi bi-person-circle"></i></button>
   </div>
 
@@ -274,20 +226,20 @@ function renderNavbarV2(activePage=''){
 
   <aside class="rail-v2" aria-label="التنقل الرئيسي">
     <div class="rail-v2__logo-row">
-      <button type="button" class="rail-v2__logo" onclick="toggleRailExpanded()" aria-label="${s.farmName} — توسيع/طي القائمة" title="توسيع/طي القائمة" data-hint="توسيع/طي القائمة">${logoHtml}</button>
+      <button type="button" class="rail-v2__logo" onclick="toggleRailExpanded()" aria-label="${escapeHtml(s.farmName||'')} — توسيع/طي القائمة" title="توسيع/طي القائمة" data-hint="توسيع/طي القائمة">${logoHtml}</button>
     </div>
     <nav class="rail-v2__nav">${railSections}</nav>
     <div class="rail-v2__bottom">
       <button class="rail-v2__btn" onclick="toggleTheme()" id="theme-toggle-btn" title="تبديل المظهر" data-hint="تبديل المظهر"><i class="bi bi-circle-half" id="theme-icon"></i></button>
-      <button class="rail-v2__avatar" onclick="toggleRailPanel()" aria-label="لوحة المستخدم" title="لوحة المستخدم" data-hint="لوحة المستخدم">${(u?.name||'م').slice(0,1)}</button>
+      <button class="rail-v2__avatar" onclick="toggleRailPanel()" aria-label="لوحة المستخدم" title="لوحة المستخدم" data-hint="لوحة المستخدم">${escapeHtml((u?.name||'م').slice(0,1))}</button>
     </div>
   </aside>
 
   <button class="rail-v2-toggle" id="railV2ToggleBtn" onclick="toggleRailPanel()" aria-label="إخفاء/إظهار اللوحة الجانبية" title="إخفاء/إظهار اللوحة" data-hint="إخفاء/إظهار اللوحة"><i class="bi bi-layout-sidebar-inset"></i></button>
   <aside class="rail-v2-panel" id="railV2Panel" aria-label="لوحة المستخدم">
     <div class="rail-v2-panel__profile">
-      <div class="rail-v2-panel__avatar">${(u?.name||'م').slice(0,1)}</div>
-      <div><div class="fw-bold">${u?.name||'مدير'}</div>
+      <div class="rail-v2-panel__avatar">${escapeHtml((u?.name||'م').slice(0,1))}</div>
+      <div><div class="fw-bold">${escapeHtml(u?.name||'مدير')}</div>
       <small style="color:${ROLES[u?.role||'admin']?.color}">${ROLES[u?.role||'admin']?.label}</small></div>
     </div>
     <div class="rail-v2-panel__actions">
@@ -297,7 +249,7 @@ function renderNavbarV2(activePage=''){
     <a href="assistant.html" class="action-btn primary sm" style="width:100%;justify-content:center;margin-bottom:16px" data-hint="اسأل المساعد الذكي"><i class="bi bi-robot"></i> المساعد الذكي</a>
 
     <div class="rail-v2-panel__info">
-      <div class="rail-v2-panel__info-row"><i class="bi bi-house-door"></i><span>${s.farmName}</span></div>
+      <div class="rail-v2-panel__info-row"><i class="bi bi-house-door"></i><span>${escapeHtml(s.farmName||'')}</span></div>
       <div class="rail-v2-panel__info-row"><i class="bi bi-calendar3"></i><span>${todayAr()}</span></div>
     </div>
 
@@ -427,7 +379,8 @@ async function loadNotifDropdown(){
   if(!dd)return;
   dd.innerHTML='<div class="notif-dropdown-header"><span class="fw-bold"><i class="bi bi-bell-fill accent-text me-2"></i>الإشعارات</span><a href="notifications.html" style="font-size:.78rem;color:var(--gray)">عرض الكل</a></div><div class="notif-dropdown-body"><div class="text-center py-3"><div class="spinner" style="width:22px;height:22px;border-width:2px"></div></div></div>';
   try{
-    const t=new Date();const today=t.toISOString().slice(0,10);
+    const t=new Date();     // still needed for the day-distance math below
+    const today=todayStr(); // local date, not UTC (2026-10 audit fix)
     const [vaccines,breeding,health,meds,feeds,loginN]=await Promise.all([
       fbGet('vaccinations'),fbGet('breeding'),fbGet('health'),
       fbGet('inventory_meds'),fbGet('inventory_feeds'),
@@ -455,7 +408,7 @@ async function loadNotifDropdown(){
       body.innerHTML=notifs.length===0?'<div class="text-center py-4 text-gray" style="font-size:.85rem"><i class="bi bi-check-circle-fill green-text d-block mb-2" style="font-size:1.5rem"></i>لا توجد تنبيهات 🎉</div>':
         notifs.slice(0,8).map(n=>'<div class="notif-item-sm n-'+n.type+'"'+(n.href?' onclick="window.location.href=\''+(n.href||'#')+'\'">':'>') +
           '<div style="width:28px;height:28px;border-radius:50%;background:'+catC[n.type]+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="bi '+n.icon+'" style="font-size:.8rem;color:'+catC[n.type]+'"></i></div>'+
-          '<div><div style="font-size:.82rem;font-weight:700">'+n.title+'</div><div style="font-size:.75rem;color:var(--gray)">'+n.msg+'</div></div>'+
+          '<div><div style="font-size:.82rem;font-weight:700">'+escapeHtml(n.title||'')+'</div><div style="font-size:.75rem;color:var(--gray)">'+escapeHtml(n.msg||'')+'</div></div>'+
         '</div>').join('');
       // Update badge
       const cnt=notifs.filter(n=>n.type==='danger').length;
@@ -508,6 +461,31 @@ function renderErrorState(el, msg='حدث خطأ أثناء التحميل'){
 // Each function below returns/injects markup using the Phase 1
 // token scale — no new raw colors/sizes introduced.
 // ══════════════════════════════════════════════════════
+//
+// ── ESCAPING CONTRACT for every helper in this family ──────────
+// Documented here (2026-10 audit) because it was previously implicit and
+// inconsistently applied, which is how renderGroupedBarSVG/renderLineChartSVG
+// ended up raw while renderDonutSVG escaped, and how renderKPICard's `unit`
+// — which receives getSettings().currency, a field an admin edits as free
+// text in settings.html — was interpolated unescaped.
+//
+//   TRUSTED MARKUP (never escaped, by design — callers deliberately pass
+//   icon/anchor HTML here, e.g. dashboard.html's KPI label
+//   '<a href="animals.html">إجمالي القطيع</a>' and every page header's
+//   '<i class="bi bi-wallet2 accent-text"></i> المالية'):
+//     title, label, headers[], bodyHtml, footerHtml, actionHtml,
+//     primaryAction, secondaryActions, rowsHtml, chartHtml, filterHtml,
+//     paginationHtml, statusBadgeHtml, quickActionsHtml, value, href
+//
+//   DATA (always escaped — these are the slots a record's free text lands in):
+//     unit, comparisonPeriod, message, source, deadline, actionLabel,
+//     eventType, entity, description, tag, breed, barn, name, chart labels,
+//     breadcrumb labels, subtitle text, timeline time
+//
+// Rule for anyone adding a helper or a parameter: if the value can originate
+// from a Firebase record or from Settings, it goes through escapeHtml(); if
+// it is markup the caller assembled itself, it is documented as trusted here.
+// tests/unit/18-render-helpers-xss.suite.js enforces both halves.
 
 // ── 1. Page Header V2 (adds breadcrumb + description + primary/secondary split) ──
 function renderPageHeaderV2({ title, description='', breadcrumb=[], primaryAction='', secondaryActions='' }){
@@ -515,8 +493,8 @@ function renderPageHeaderV2({ title, description='', breadcrumb=[], primaryActio
   if(!el)return;
   const crumbHtml = breadcrumb.length ? `<nav class="page-breadcrumb">${
     breadcrumb.map((b,i)=> i<breadcrumb.length-1
-      ? `<a href="${b.href||'#'}">${b.label}</a><span class="mx-1">/</span>`
-      : `<span>${b.label}</span>`
+      ? `<a href="${b.href||'#'}">${escapeHtml(b.label)}</a><span class="mx-1">/</span>`
+      : `<span>${escapeHtml(b.label)}</span>`
     ).join('')
   }</nav>` : '';
   el.innerHTML = `
@@ -524,7 +502,7 @@ function renderPageHeaderV2({ title, description='', breadcrumb=[], primaryActio
     <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
       <div>
         <h4 class="fw-bold mb-0">${title}</h4>
-        ${description?`<small class="text-gray">${description}</small>`:''}
+        ${description?`<small class="text-gray">${escapeHtml(description)}</small>`:''}
       </div>
       <div class="d-flex gap-2 flex-wrap align-items-center">
         ${secondaryActions}
@@ -542,7 +520,7 @@ function renderSectionContainer({ title, description='', actionHtml='', contentH
       <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
         <div>
           <h6 class="fw-bold mb-0" style="font-size:var(--text-lg)">${title}</h6>
-          ${description?`<small class="text-gray">${description}</small>`:''}
+          ${description?`<small class="text-gray">${escapeHtml(description)}</small>`:''}
         </div>
         ${actionHtml?`<div>${actionHtml}</div>`:''}
       </div>
@@ -551,8 +529,13 @@ function renderSectionContainer({ title, description='', actionHtml='', contentH
 }
 
 // ── 3. KPI Card (states: normal/watch/alert, or loading:true, or empty via value=null) ──
+// FIX (2026-10 audit): with a single data point this divided by
+// (data.length-1) === 0 and emitted points="NaN,14.0" — invalid SVG that
+// renders as nothing (or, in stricter parsers, an error). A sparkline needs
+// at least two points to have a shape, so one point now renders no
+// sparkline at all instead of a broken one.
 function renderMiniSparkline(data, color){
-  if(!data || !data.length) return '';
+  if(!data || data.length<2) return '';
   const w=100,h=28,max=Math.max(...data),min=Math.min(...data),range=(max-min)||1;
   const pts=data.map((v,i)=>`${(i/(data.length-1)*w).toFixed(1)},${(h-((v-min)/range)*h).toFixed(1)}`).join(' ');
   return `<div class="kpi-spark"><svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity=".8"/></svg></div>`;
@@ -572,8 +555,8 @@ function renderKPICard({ label, value=null, unit='', trend=null, trendDir='up', 
       <span class="kpi-label">${label}</span>
       <span class="kpi-status-dot" style="background:${st.c}" title="${st.l}"></span>
     </div>
-    <div class="kpi-value">${value}${unit?`<span class="kpi-unit">${unit}</span>`:''}</div>
-    <div class="kpi-foot">${trendHtml}${comparisonPeriod?`<span class="kpi-period">${comparisonPeriod}</span>`:''}</div>
+    <div class="kpi-value">${value}${unit?`<span class="kpi-unit">${escapeHtml(unit)}</span>`:''}</div>
+    <div class="kpi-foot">${trendHtml}${comparisonPeriod?`<span class="kpi-period">${escapeHtml(comparisonPeriod)}</span>`:''}</div>
     ${renderMiniSparkline(sparklineData, st.c)}
     ${footerHtml}`;
   return href ? `<a href="${href}" class="kpi-card" style="text-decoration:none;color:inherit">${inner}</a>` : `<div class="kpi-card">${inner}</div>`;
@@ -583,6 +566,13 @@ function renderKPICard({ label, value=null, unit='', trend=null, trendDir='up', 
 function renderAlertCard({ severity='info', icon='bi-info-circle', title, message='', source='', deadline='', actionLabel='', actionHref='' }){
   const sevMap = { info:'var(--blue)', watch:'var(--yellow)', critical:'var(--red)' };
   const color = sevMap[severity] || sevMap.info;
+  // XSS fix (2026-08-23): title/message/source/deadline/actionLabel are
+  // plain-text fields by this component's own contract (no *Html-suffixed
+  // param exists for them) but are built by callers across the app from
+  // free-text Firebase fields (medicine/feed names, tags, diagnoses,
+  // barns) with no escaping upstream -- fixing it once here protects
+  // every current and future caller, same pattern already used for toast().
+  title=escapeHtml(title); message=escapeHtml(message); source=escapeHtml(source); deadline=escapeHtml(deadline); actionLabel=escapeHtml(actionLabel);
   return `
     <div class="alert-card-v2" style="border-right:3px solid ${color}">
       <div class="d-flex align-items-start gap-2">
@@ -610,7 +600,7 @@ function renderChartContainer({ title, subtitle='', filterHtml='', chartHtml='',
   return `
     <div class="wonder-card h-100">
       <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-1">
-        <div><h6 class="fw-bold mb-0" style="font-size:var(--text-lg)">${title}</h6>${subtitle?`<small class="text-gray">${subtitle}</small>`:''}</div>
+        <div><h6 class="fw-bold mb-0" style="font-size:var(--text-lg)">${title}</h6>${subtitle?`<small class="text-gray">${escapeHtml(subtitle)}</small>`:''}</div>
         ${filterHtml?`<div>${filterHtml}</div>`:''}
       </div>
       <div class="mt-3">${body}</div>
@@ -638,6 +628,18 @@ function renderDataTableWrapper({ title, filterHtml='', headers=[], rowsHtml='',
 
 // ── 7. Timeline ──
 function renderTimelineItem({ time, eventType='', entity='', description='', statusBadgeHtml='' }){
+  // XSS fix (2026-08-23): eventType/entity/description are plain-text by
+  // contract (statusBadgeHtml is the only param meant to carry markup) but
+  // are built by callers from free-text Firebase fields (tags, breeds,
+  // diagnoses, activity-log descriptions, user names) with no escaping
+  // upstream -- fixing it once here protects every caller, same pattern
+  // already used for toast().
+  eventType=escapeHtml(eventType); entity=escapeHtml(entity); description=escapeHtml(description);
+  // FIX (2026-10 audit): `time` was the one parameter in this helper left
+  // unescaped by the 2026-08 pass, and callers build it from record fields
+  // (r.date, l.timestamp, created_at) that an import can populate with
+  // arbitrary text.
+  time=escapeHtml(time);
   return `
     <div class="timeline-item-v2">
       <div class="timeline-item-v2-dot"></div>
@@ -662,16 +664,26 @@ function renderAnimalCard({ tag, breed, species='goat', status='alive', barn='',
   const speciesIcon = species === 'goat' ? 'bi-tropical-storm' : 'bi-cloud-fill';
   const inner = `
     <div class="d-flex justify-content-between align-items-start mb-2">
-      <div class="d-flex align-items-center gap-2"><i class="bi ${speciesIcon}" style="color:var(--green)"></i><span class="fw-bold" style="font-size:var(--text-sm)">${tag||'—'}</span></div>
+      <div class="d-flex align-items-center gap-2"><i class="bi ${speciesIcon}" style="color:var(--green)"></i><span class="fw-bold" style="font-size:var(--text-sm)">${escapeHtml(tag||'—')}</span></div>
       <span class="type-badge ${st.cls}">${st.label}</span>
     </div>
-    <div class="text-gray mb-2" style="font-size:var(--text-xs)">${breed}${barn?` • ${barn}`:''}</div>
+    <div class="text-gray mb-2" style="font-size:var(--text-xs)">${escapeHtml(breed||'')}${barn?` • ${escapeHtml(barn)}`:''}</div>
     ${quickActionsHtml?`<div class="d-flex gap-1">${quickActionsHtml}</div>`:''}`;
   return href ? `<a href="${href}" class="animal-card-v2" style="text-decoration:none;color:inherit;display:block">${inner}</a>` : `<div class="animal-card-v2">${inner}</div>`;
 }
 
 // ── 9. Production Widget (farm-specific, compact row — smaller than KPI Card) ──
 function renderProductionWidget({ type, value, unit='', trend=null, trendDir='up', period='', status='normal' }){
+  // FIX (2026-10 audit): escaped for consistency with the rest of this
+  // component family (renderAlertCard/renderAnimalCard/renderKPICard all
+  // escape their plain-text slots). type/unit/period are exactly the slots a
+  // caller fills from a production_log type name or a Settings unit string;
+  // `value` stays a trusted slot (callers pass pre-formatted numbers or
+  // markup), matching renderKPICard's contract. NOTE: this helper currently
+  // has no callers anywhere in the app -- kept because it is part of the
+  // documented Phase-2 component set (COMPONENTS.md), flagged as unused in
+  // the audit report rather than deleted.
+  type=escapeHtml(type); unit=escapeHtml(unit); period=escapeHtml(period);
   const statusMap = { normal:'var(--green)', watch:'var(--yellow)', alert:'var(--red)' };
   const color = statusMap[status] || statusMap.normal;
   const trendHtml = trend!==null ? `<span style="color:${trendDir==='up'?'var(--green)':'var(--red)'};font-size:var(--text-2xs);font-weight:700"><i class="bi bi-arrow-${trendDir==='up'?'up':'down'}-short"></i>${trend>0?'+':''}${ar(trend)}%</span>` : '';
@@ -690,6 +702,10 @@ function renderProductionWidget({ type, value, unit='', trend=null, trendDir='up
 
 // ── 10. Inventory Stock Indicator (farm-specific — progress bar, not a chart, per the report) ──
 function renderInventoryStockIndicator({ name, quantity, minQuantity=0, unit='' }){
+  // XSS fix (2026-08-24): name is a free-text inventory item name
+  // (medicine/feed), rendered raw with no escaping upstream. Only real
+  // caller (pages/inventory.js) never escapes it either.
+  name=escapeHtml(name);
   const ratio = minQuantity > 0 ? quantity / (minQuantity * 3) : 1;
   const pct = Math.max(4, Math.min(100, Math.round(ratio * 100)));
   const isLow = minQuantity > 0 && quantity <= minQuantity;
@@ -738,7 +754,7 @@ function renderLineChartSVG(data, opts={}){
     return `<line x1="${padding.left}" y1="${y.toFixed(1)}" x2="${width-padding.right}" y2="${y.toFixed(1)}" stroke="var(--border-3)" stroke-width="1"/><text x="${padding.left-6}" y="${(y+3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--text-muted)">${ar(val)}</text>`;
   }).join('');
   const step = Math.max(1, Math.floor(pts.length/5));
-  const labelEls = pts.map((p,i) => (i%step===0 || i===pts.length-1) ? `<text x="${p.x.toFixed(1)}" y="${height-4}" text-anchor="middle" font-size="9" fill="var(--text-muted)">${labels[i]}</text>` : '').join('');
+  const labelEls = pts.map((p,i) => (i%step===0 || i===pts.length-1) ? `<text x="${p.x.toFixed(1)}" y="${height-4}" text-anchor="middle" font-size="9" fill="var(--text-muted)">${escapeHtml(labels[i])}</text>` : '').join(''); // escaped, same as renderDonutSVG (2026-10 audit)
   return `<svg width="100%" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">
     ${gridLines}
     ${showArea?`<path d="${areaD}" fill="${color}" opacity=".12"/>`:''}
@@ -770,7 +786,12 @@ function renderGroupedBarSVG(data, opts={}){
       const y = padding.top + ch - bh;
       return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(barW*0.8).toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="${colors[vi]||'#9ca3af'}"/>`;
     }).join('');
-    return rects + `<text x="${(groupX+groupW/2).toFixed(1)}" y="${height-4}" text-anchor="middle" font-size="9" fill="var(--text-muted)">${d.label}</text>`;
+    // FIX (2026-10 audit): escaped for consistency with renderDonutSVG(),
+    // which already escaped its own segment labels. Every current caller
+    // passes plain text here (month names, age bands), so this is hardening,
+    // not a behaviour change — but a chart label is exactly the kind of slot
+    // a future caller fills with a breed or barn name from Settings.
+    return rects + `<text x="${(groupX+groupW/2).toFixed(1)}" y="${height-4}" text-anchor="middle" font-size="9" fill="var(--text-muted)">${escapeHtml(d.label)}</text>`;
   }).join('');
   return `<svg width="100%" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">${gridLines}${bars}</svg>`;
 }
@@ -787,7 +808,7 @@ function renderDonutSVG(segments, opts={}){
     offset+=dash;
     return el;
   }).join('');
-  const legend = segments.filter(s=>s.value>0).map(s=>`<span class="d-inline-flex align-items-center gap-1" style="font-size:var(--text-xs);margin:0 6px"><span style="width:8px;height:8px;border-radius:50%;background:${s.color};display:inline-block"></span>${s.label} (${ar(s.value)})</span>`).join('');
+  const legend = segments.filter(s=>s.value>0).map(s=>`<span class="d-inline-flex align-items-center gap-1" style="font-size:var(--text-xs);margin:0 6px"><span style="width:8px;height:8px;border-radius:50%;background:${s.color};display:inline-block"></span>${escapeHtml(s.label||'')} (${ar(s.value)})</span>`).join('');
   return `<div class="text-center"><svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${arcs}<text x="${cx}" y="${cy+6}" text-anchor="middle" font-size="20" font-weight="700" fill="var(--text)" font-family="Lexend">${ar(total)}</text></svg><div class="d-flex flex-wrap justify-content-center mt-2">${legend}</div></div>`;
 }
 
@@ -874,8 +895,8 @@ window.openNotificationsPopup = async function(){
 
   // Load data
   try{
-    const t=new Date();
-    const today=t.toISOString().slice(0,10);
+    const t=new Date();     // still needed for the day-distance math below
+    const today=todayStr(); // local date, not UTC (2026-10 audit fix)
     const u=getUser();
     const isAdmin=u&&u.role==='admin';
     const [animals,vaccines,breeding,health,meds,feeds,loginNotifs]=await Promise.all([
@@ -934,7 +955,7 @@ window.openNotificationsPopup = async function(){
 
     // 0. Login notifications for admin
     if(isAdmin&&loginNotifs.length>0){
-      const today=new Date().toISOString().slice(0,10);
+      const today=todayStr();
       loginNotifs.filter(n=>n.date===today).slice(0,5).forEach(function(n){
         notifs.push({type:'info',cat:'تسجيلات الدخول',icon:'bi-box-arrow-in-right',title:'دخل: '+n.userName,msg:n.roleLabel+' — '+n.timestamp?.slice(11,16)||'',href:'activity.html'});
       });
@@ -974,10 +995,10 @@ window.openNotificationsPopup = async function(){
             '<div style="width:34px;height:34px;border-radius:50%;background:'+cfg.c+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="bi '+n.icon+'" style="color:'+cfg.c+'"></i></div>'+
             '<div style="flex:1;min-width:0">'+
               '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'+
-                '<div class="fw-bold" style="font-size:.85rem;color:'+cfg.c+'">'+n.title+'</div>'+
+                '<div class="fw-bold" style="font-size:.85rem;color:'+cfg.c+'">'+escapeHtml(n.title||'')+'</div>'+
                 '<span class="type-badge" style="background:'+cfg.c+'22;color:'+cfg.c+';border:1px solid '+cfg.c+'44;font-size:.62rem;flex-shrink:0">'+cfg.label+'</span>'+
               '</div>'+
-              '<div class="text-gray" style="font-size:.8rem;margin-top:2px">'+n.msg+'</div>'+
+              '<div class="text-gray" style="font-size:.8rem;margin-top:2px">'+escapeHtml(n.msg||'')+'</div>'+
               (n.href?'<div style="font-size:.72rem;color:'+cfg.c+';margin-top:4px">اضغط للانتقال ←</div>':'')+
             '</div>'+
           '</div>';
@@ -1023,7 +1044,7 @@ window.openUnifiedBirthModal=function(defaultSpecies){
     '<h4><i class="bi bi-stars" style="color:var(--yellow)"></i> تسجيل ولادة جديدة</h4>'+
     '<div class="row g-2">'+
       '<div class="col-6"><label>نوع المولود *</label><select class="field" id="ub-sp" onchange="_ubUpdateBreeds()"><option value="goat" '+(defaultSpecies==='goat'?'selected':'')+'>ماعز</option><option value="sheep" '+(defaultSpecies==='sheep'?'selected':'')+'>أغنام</option></select></div>'+
-      '<div class="col-6"><label>سلالة المولود *</label><select class="field" id="ub-breed">'+s.goatBreeds.map(b=>'<option>'+b+'</option>').join('')+'</select></div>'+
+      '<div class="col-6"><label>سلالة المولود *</label><select class="field" id="ub-breed">'+s.goatBreeds.map(b=>'<option>'+escapeHtml(b)+'</option>').join('')+'</select></div>'+
     '</div>'+
     '<div class="row g-2">'+
       '<div class="col-6"><label>الغرض</label><select class="field" id="ub-purpose"><option value="birth">مواليد</option><option value="tarbiya">تربية</option><option value="tasmeen">تسمين</option></select></div>'+
@@ -1037,7 +1058,7 @@ window.openUnifiedBirthModal=function(defaultSpecies){
       '<div class="fw-bold mb-2" style="font-size:.82rem;color:var(--yellow)"><i class="bi bi-person-heart me-1"></i>بيانات الأم (مطلوب)</div>'+
       '<div class="row g-2">'+
         '<div class="col-6"><label>رقم الأم *</label><input class="field" id="ub-mother-tag" placeholder="F-101"></div>'+
-        '<div class="col-6"><label>سلالة الأم *</label><select class="field" id="ub-mother-breed">'+allBreeds.map(b=>'<option>'+b+'</option>').join('')+'</select></div>'+
+        '<div class="col-6"><label>سلالة الأم *</label><select class="field" id="ub-mother-breed">'+allBreeds.map(b=>'<option>'+escapeHtml(b)+'</option>').join('')+'</select></div>'+
       '</div>'+
       '<div class="col-12"><label>رقم الأب</label><input class="field" id="ub-father-tag" placeholder="M-001"></div>'+
     '</div>'+
@@ -1054,7 +1075,7 @@ window.openUnifiedBirthModal=function(defaultSpecies){
         '<input type="number" class="field" id="ub-amount" placeholder="0" min="0">'+
       '</div>'+
     '</div>'+
-    '<label>سُجِّل بواسطة</label><input class="field" id="ub-addedby" value="'+(u?.name||'')+'">'+
+    '<label>سُجِّل بواسطة</label><input class="field" id="ub-addedby" value="'+escapeHtml(u?.name||'')+'">'+
     '<label>ملاحظات</label><textarea class="field" id="ub-notes" rows="2"></textarea>'+
     '<div class="d-flex gap-2 justify-content-end mt-3">'+
       '<button class="action-btn" onclick="closeModal()">إلغاء</button>'+
@@ -1067,7 +1088,7 @@ window._ubUpdateBreeds=function(){
   const s=getSettings();const sp=document.getElementById('ub-sp')?.value;
   const breeds=sp==='goat'?s.goatBreeds:s.sheepBreeds;
   const sel=document.getElementById('ub-breed');
-  if(sel)sel.innerHTML=breeds.map(b=>'<option>'+b+'</option>').join('');
+  if(sel)sel.innerHTML=breeds.map(b=>'<option>'+escapeHtml(b)+'</option>').join('');
 };
 
 // ── Mortality-statistics correction marker ──────────────
@@ -1248,7 +1269,7 @@ window.recordAnimalWeight=async function(opts){
   var animalId=opts.animalId;
 
   // 1. Permission validation
-  if(!can('animals')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!canWrite('animals')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
 
   // 2. Input validation (structural -- do the required fields even exist)
   if(!animalId) return {ok:false, error:'رقم الحيوان مطلوب'};
@@ -1326,7 +1347,7 @@ window.recordAnimalWeight=async function(opts){
 window.deleteAnimalWeight=async function(opts){
   opts=opts||{};
   var animalId=opts.animalId, weightId=opts.weightId;
-  if(!can('animals')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!canWrite('animals')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
   if(!animalId||!weightId) return {ok:false, error:'بيانات ناقصة'};
   try{
     await fbDelete('animals/'+animalId+'/weights',weightId);
@@ -1403,7 +1424,7 @@ if(typeof window.genDeathId!=='function'){
 // one of them the way three of the weight-subsystem's writers did.
 async function _writeAnimalStatus(opts){
   var animalId=opts.animalId;
-  if(!can('animals')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!canWrite('animals')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
   if(!animalId) return {ok:false, error:'رقم الحيوان مطلوب'};
   if(_statusWriteInFlight[animalId]) return {ok:false, error:'جاري تنفيذ عملية أخرى على هذا الحيوان'};
   _statusWriteInFlight[animalId]=true;
@@ -1921,18 +1942,41 @@ window.createOffspringAnimal=async function(p){
     var fatherAnimal=await window.findByTag(p.fatherTag);
     if(fatherAnimal) fatherId=fatherAnimal._id;
   }
+  // FIX (2026-10 audit) — WEIGHT SSOT INVARIANT: this function wrote a
+  // birth-weight record straight into animals/{newId}/weights and never
+  // touched animals.current_weight, so every newborn registered with a
+  // birth weight had a weight history but a blank current_weight — breaking
+  // the exact invariant the Weight Service was certified on
+  // ("current_weight == newest weight record", docs/certification/WEIGHT.md)
+  // and making the dashboard/reports/detail page show "—" for an animal
+  // that demonstrably has a recorded weight. It also wrote p.weight with no
+  // validation at all, so a mistyped -5 or 9999 landed in the SSOT even
+  // though recordAnimalWeight() rejects both. Now validated against the same
+  // 0<w<=500 bounds and recalculated through _resyncCurrentWeight(), the one
+  // canonical place that invariant is maintained.
+  var birthWeight=parseFloat(p.weight);
+  var validBirthWeight=(isFinite(birthWeight) && birthWeight>0 && birthWeight<=500) ? birthWeight : null;
   const rec={species:p.species,breed:p.breed,gender:p.gender,purpose:p.purpose,status:'alive',birth_date:p.birthDate,
     tag:p.tag||await generateAnimalTag(p.species),
     mother_tag:p.motherTag,mother_breed:p.motherBreed,mother_id:motherId,
     father_tag:p.fatherTag||null,father_id:fatherId,
-    birth_weight:p.weight||null,barn:p.barn||null,notes:p.notes||null};
+    birth_weight:validBirthWeight,barn:p.barn||null,notes:p.notes||null};
   const newAnimalId=await fbPost('animals',rec);
-  if(p.weight){
-    await fbPost('animals/'+newAnimalId+'/weights',{weight:p.weight, date:p.birthDate, notes:'وزن الميلاد'});
+  if(validBirthWeight){
+    await fbPost('animals/'+newAnimalId+'/weights',{weight:validBirthWeight, date:p.birthDate, notes:'وزن الميلاد'});
+    await _resyncCurrentWeight(newAnimalId);
   }
   return newAnimalId;
 };
 window._ubSubmit=async function(){
+  // FIX (2026-10 audit): the unified birth modal is shown to any role that
+  // passes can('animals') -- which includes the read-only visitor role, since
+  // ROLE_PERMS grants 'animals' to visitors so they can VIEW the herd. The
+  // submit path itself never re-checked, so a visitor could register a birth:
+  // one breeding record plus N new animals into the certified Birth SSOT.
+  // Guarded with canWrite() (the write-side companion to can()), matching
+  // every other mutating service in this file.
+  if(!canWrite('animals')){toast('ليس لديك صلاحية لتسجيل المواليد','error');return;}
   const sp=document.getElementById('ub-sp').value;
   const breed=document.getElementById('ub-breed').value;
   const gender=document.getElementById('ub-gender').value;
@@ -1944,12 +1988,24 @@ window._ubSubmit=async function(){
   const fatherTag=document.getElementById('ub-father-tag').value.trim();
   const weight=parseFloat(document.getElementById('ub-weight').value)||null;
   const barn=document.getElementById('ub-barn').value||null;
-  const qty=parseInt(document.getElementById('ub-qty').value)||1;
+  const qtyRaw=parseInt(document.getElementById('ub-qty').value,10);
+  const qty=(isFinite(qtyRaw)&&qtyRaw>0)?qtyRaw:1;
   const amount=parseFloat(document.getElementById('ub-amount').value)||null;
   const addedBy=document.getElementById('ub-addedby').value.trim();
   const notes=document.getElementById('ub-notes').value.trim();
 
   if(!motherTag||!motherBreed){toast('رقم الأم وسلالتها مطلوبان','error');return;}
+  // FIX (2026-10 audit): the qty field's min="1" max="10" attributes are
+  // advisory only — there is no <form> submission here, so nothing enforced
+  // them. A typed -5 wrote a breeding record with offspring_count:-5 and
+  // male_offspring:-5 (the animals loop never ran) and then toasted
+  // "✅ تم تسجيل الولادة و-٥ مولود"; a typed 50000 started an unbounded
+  // 50,000-iteration write loop against Firebase. Validated here, against
+  // the same bounds the input already declares.
+  if(!isFinite(qtyRaw)||qtyRaw<1||qtyRaw>10){
+    toast('عدد المواليد يجب أن يكون بين ١ و ١٠','error');
+    return;
+  }
   closeModal();toast('جاري الحفظ...','info');
   let ok=0;
   try{
@@ -1996,7 +2052,7 @@ function addFAB(label,actionFn,iconClass){
   btn.setAttribute('aria-label',label);
   btn.setAttribute('title',label);
   btn.innerHTML='<i class="bi '+iconClass+'"></i>';
-  btn.style.cssText='position:fixed;bottom:80px;left:20px;width:56px;height:56px;border-radius:50%;background:var(--orange);color:#fff;border:none;box-shadow:0 8px 24px rgba(255,107,53,.5);font-size:1.3rem;cursor:pointer;z-index:1000;display:none;align-items:center;justify-content:center;transition:.2s;font-family:Cairo,sans-serif';
+  btn.style.cssText='position:fixed;bottom:80px;left:20px;width:56px;height:56px;border-radius:50%;background:var(--orange);color:#fff;border:none;box-shadow:0 8px 24px rgba(255,107,53,.5);font-size:1.3rem;cursor:pointer;z-index:var(--z-fab);display:none;align-items:center;justify-content:center;transition:.2s;font-family:Cairo,sans-serif';
   btn.onclick=actionFn;
   btn.onmouseover=function(){this.style.transform='scale(1.08)';};
   btn.onmouseout=function(){this.style.transform='scale(1)';};
@@ -2067,7 +2123,7 @@ window.migrateWeightLogToWeights=async function(){
 // (pre-existing duplication, not introduced here, out of this sprint's
 // scope to consolidate) -- this engine does not add a third page-local
 // copy, it uses its own internal helper instead, scoped to this block.
-function _autoTaskDaysFromToday(n){var d=new Date();d.setDate(d.getDate()+n);return d.toISOString().slice(0,10);}
+function _autoTaskDaysFromToday(n){return shiftDateLocal(new Date(),n);}
 
 var AUTO_TASK_RULES = {
   vaccination_scheduled: {
@@ -2094,21 +2150,21 @@ var AUTO_TASK_RULES = {
   weight_alert: {
     category: 'inspection', priority: 'medium', role: 'supervisor',
     title: function(p){ return (p.alertTitle||'تنبيه وزن')+': '+(p.animal_tag||''); },
-    dueDate: function(p){ return p.todayStr||new Date().toISOString().slice(0,10); },
+    dueDate: function(p){ return p.todayStr||todayStr(); },
     relatedTag: function(p){ return p.animal_tag||null; },
   },
   // Sprint 3, Epic 3: health risk alerts, same reuse pattern again.
   health_risk_alert: {
     category: 'medical', priority: 'high', role: 'vet',
     title: function(p){ return (p.recommendation||'مراجعة صحية')+': '+(p.animal_tag||''); },
-    dueDate: function(p){ return p.todayStr||new Date().toISOString().slice(0,10); },
+    dueDate: function(p){ return p.todayStr||todayStr(); },
     relatedTag: function(p){ return p.animal_tag||null; },
   },
   // Sprint 4, Epic 4: production alerts, same reuse pattern again.
   production_alert: {
     category: 'inspection', priority: 'medium', role: 'supervisor',
     title: function(p){ return (p.alertTitle||'متابعة إنتاج')+': '+(p.animal_tag||''); },
-    dueDate: function(p){ return p.todayStr||new Date().toISOString().slice(0,10); },
+    dueDate: function(p){ return p.todayStr||todayStr(); },
     relatedTag: function(p){ return p.animal_tag||null; },
   },
 };
@@ -2214,7 +2270,14 @@ window.evaluateWeightAlert = async function(animalId, animalTag, barn){
   try{
     if(!animalId) return [];
     var history=await fbGet('animals/'+animalId+'/weights')||[];
-    var sorted=history.slice().sort(function(a,b){return b.date.localeCompare(a.date);});
+    // FIX (2026-10 audit): this sorted on `b.date.localeCompare(a.date)`
+    // with no null guard. A single weight record missing its date (an
+    // imported row, or a partial write) threw a TypeError here, which the
+    // catch below swallowed into `return []` -- silently disabling EVERY
+    // weight alert for that animal forever, with no console trace. The
+    // canonical _resyncCurrentWeight() in this same file already used the
+    // `(x.date||'')` form; this now matches it.
+    var sorted=history.slice().sort(function(a,b){return ((b&&b.date)||'').localeCompare((a&&a.date)||'');});
     var existingAlerts=await fbGet('weight_alerts');
     var results=[];
 
@@ -2364,7 +2427,7 @@ window.evaluateHealthRisk = async function(animalId, animalTag, barn){
     var myWeightAlerts = (allWeightAlerts||[]).filter(function(a){return a.animal_id===animalId&&a.status==='active';});
 
     var allVacc = await fbGet('vaccinations');
-    var today = new Date().toISOString().slice(0,10);
+    var today = todayStr();
     var myVacc = barn ? (allVacc||[]).filter(function(v){
       return v.target_section===barn && (v.status==='overdue' || (v.status==='pending' && v.scheduled_date && v.scheduled_date<today));
     }) : [];
@@ -2699,7 +2762,7 @@ window.forecastWeight = async function(animalId, animalTag){
   try{
     if(!animalId) return null;
     var history = await fbGet('animals/'+animalId+'/weights') || [];
-    var sorted = history.slice().sort(function(a,b){return b.date.localeCompare(a.date);});
+    var sorted = history.slice().sort(function(a,b){return ((b&&b.date)||'').localeCompare((a&&a.date)||'');}); // null-safe, matches evaluateWeightAlert (2026-10 audit)
     if(sorted.length < 2) return { animalId:animalId, animalTag:animalTag, confidence:'low', trend:null, evidence:['بيانات وزن غير كافية للتنبؤ (يلزم سجلان على الأقل)'] };
 
     var latest = sorted[0];
@@ -2754,11 +2817,20 @@ window.forecastHealthRisk = async function(animalId, animalTag, barn, windowDays
     var current = await window.evaluateHealthRisk(animalId, animalTag, barn);
     var baseScore = current ? current.score : 0;
 
-    var today = new Date(); var todayStr = today.toISOString().slice(0,10);
+    // FIX (2026-10 audit): this block declared `var todayStr = <UTC date
+    // string>`, which SHADOWED the global todayStr() function inside the
+    // whole of forecastHealthRisk() -- any future call to todayStr() here
+    // would have thrown "todayStr is not a function" -- and the string it
+    // produced was UTC-derived, so for the first hours of every local day
+    // it compared against yesterday. Renamed to todayKey and taken from the
+    // local-calendar helper; `today` stays the real Date used for the
+    // day-distance math below.
+    var today = new Date();
+    var todayKey = todayStr();
     var vacc = barn ? await fbGet('vaccinations') : [];
     var upcoming = (vacc||[]).filter(function(v){
       if(v.target_section!==barn || v.status!=='pending' || !v.scheduled_date) return false;
-      if(v.scheduled_date < todayStr) return false; // already overdue -- already counted in the CURRENT score
+      if(v.scheduled_date < todayKey) return false; // already overdue -- already counted in the CURRENT score
       var daysUntil = (new Date(v.scheduled_date)-today)/86400000;
       return daysUntil>=0 && daysUntil<=windowDays;
     });
@@ -2789,15 +2861,15 @@ window.forecastHealthRisk = async function(animalId, animalTag, barn, windowDays
 window.forecastTaskWorkload = async function(windowDays){
   try{
     windowDays = windowDays || 7;
-    var today = new Date(); var todayStr = today.toISOString().slice(0,10);
-    var endDate = new Date(today); endDate.setDate(endDate.getDate()+windowDays);
-    var endStr = endDate.toISOString().slice(0,10);
+    // Same shadowing + UTC fix as forecastHealthRisk() above.
+    var todayKey = todayStr();
+    var endStr = shiftDateLocal(new Date(), windowDays);
     var results = await Promise.all([fbGet('daily_tasks'), fbGet('vaccinations'), fbGet('breeding')]);
     var tasks=results[0]||[], vacc=results[1]||[], breeding=results[2]||[];
 
-    var upcomingTasks = tasks.filter(function(t){return t.status!=='done'&&t.date&&t.date>=todayStr&&t.date<=endStr;});
-    var upcomingVacc = vacc.filter(function(v){return v.status==='pending'&&v.scheduled_date&&v.scheduled_date>=todayStr&&v.scheduled_date<=endStr;});
-    var upcomingBirths = breeding.filter(function(b){return b.status==='pregnant'&&b.expected_birth&&b.expected_birth>=todayStr&&b.expected_birth<=endStr;});
+    var upcomingTasks = tasks.filter(function(t){return t.status!=='done'&&t.date&&t.date>=todayKey&&t.date<=endStr;});
+    var upcomingVacc = vacc.filter(function(v){return v.status==='pending'&&v.scheduled_date&&v.scheduled_date>=todayKey&&v.scheduled_date<=endStr;});
+    var upcomingBirths = breeding.filter(function(b){return b.status==='pregnant'&&b.expected_birth&&b.expected_birth>=todayKey&&b.expected_birth<=endStr;});
 
     return {
       windowDays:windowDays, existingTasks:upcomingTasks.length, expectedVaccinations:upcomingVacc.length,
@@ -3268,7 +3340,7 @@ window.predictBreedingWindow = async function(animals, breedingRaw){
       var daysUntil = Math.round((predictedDate-new Date())/86400000);
       var animal = (animalsList||[]).find(function(a){return a.tag===tag;});
       if(animal&&animal.status==='alive'){
-        predictions.push({ animalTag:tag, avgIntervalDays:Math.round(avgInterval), predictedDate:predictedDate.toISOString().slice(0,10), daysUntil:daysUntil, birthCount:dates.length, confidence:dates.length>=3?'medium':'low' });
+        predictions.push({ animalTag:tag, avgIntervalDays:Math.round(avgInterval), predictedDate:toLocalDateStr(predictedDate), daysUntil:daysUntil, birthCount:dates.length, confidence:dates.length>=3?'medium':'low' });
       }
     }
     predictions.sort(function(a,b){return a.daysUntil-b.daysUntil;});
@@ -3545,6 +3617,3223 @@ window.bulkImportInventory=async function(opts){
   return {ok:failed===0, succeeded:ok, failed:failed};
 };
 
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE (Phase 1). Two new collections (accounts,
+//  journal_entries), purely additive -- the existing `finance` collection
+//  and computeFinanceKPIs/computeFinanceTrend are untouched. Journal
+//  lines are embedded in the entry (one atomic write per posting, same
+//  flat-collection/client-filter pattern as everything else here).
+//  A posted entry is never edited or deleted: corrections post a new
+//  reversing entry instead (reversesJournalEntryId), enforced both here
+//  and at the database-rules level. No migration of legacy `finance`
+//  records into journal entries happens in this phase -- see
+//  docs/finance-audit for the Phase 0 baseline this builds on.
+// ══════════════════════════════════════════════════════════════
+
+var ACCOUNT_TYPES=['ASSET','LIABILITY','EQUITY','REVENUE','EXPENSE'];
+var ACCOUNT_TYPE_NORMAL_BALANCE={ASSET:'debit',LIABILITY:'credit',EQUITY:'credit',REVENUE:'credit',EXPENSE:'debit'};
+
+// Suggested starting chart, per docs/finance-audit's Phase 1 design.
+// Round-number entries (x000) are non-postable category headers --
+// journal lines must target a real leaf account. 1690/3200 are contra
+// accounts (accumulated depreciation, owner drawings): their normal
+// balance is the OPPOSITE of their type's default, flagged via `contra`.
+var DEFAULT_CHART_OF_ACCOUNTS=[
+  {code:'1000',name_ar:'الأصول',name_en:'Assets',type:'ASSET',parentId:null,postable:false},
+  {code:'1100',name_ar:'النقدية',name_en:'Cash',type:'ASSET',parentId:'1000',postable:false},
+  {code:'1110',name_ar:'نقدية المزرعة',name_en:'Farm Cash',type:'ASSET',parentId:'1100'},
+  {code:'1120',name_ar:'عهدة نثرية',name_en:'Petty Cash',type:'ASSET',parentId:'1100'},
+  {code:'1200',name_ar:'البنك',name_en:'Bank',type:'ASSET',parentId:'1000'},
+  {code:'1300',name_ar:'ذمم مدينة',name_en:'Accounts Receivable',type:'ASSET',parentId:'1000'},
+  // Added in Phase 19 (Legacy Migration): the OLD `finance` collection
+  // never recorded which cash/bank/AR/AP account a record actually
+  // touched -- only that money moved. Rather than guessing a specific
+  // real account (which would be inventing evidence), every migrated
+  // record's cash-side leg posts here instead, clearly separated from
+  // genuine, evidenced post-migration activity.
+  {code:'1350',name_ar:'حساب ترحيل بيانات قديمة',name_en:'Legacy Migration Clearing Account',type:'ASSET',parentId:'1000'},
+  {code:'1400',name_ar:'المخزون',name_en:'Inventory',type:'ASSET',parentId:'1000',postable:false},
+  {code:'1410',name_ar:'مخزون الأعلاف',name_en:'Feed Inventory',type:'ASSET',parentId:'1400'},
+  {code:'1420',name_ar:'مخزون الأدوية',name_en:'Medicine Inventory',type:'ASSET',parentId:'1400'},
+  {code:'1430',name_ar:'مخزون المعدات',name_en:'Equipment Inventory',type:'ASSET',parentId:'1400'},
+  {code:'1500',name_ar:'الأصول الحيوانية',name_en:'Biological / Livestock Assets',type:'ASSET',parentId:'1000'},
+  {code:'1600',name_ar:'الأصول الثابتة',name_en:'Fixed Assets',type:'ASSET',parentId:'1000'},
+  {code:'1690',name_ar:'مجمّع الإهلاك',name_en:'Accumulated Depreciation',type:'ASSET',parentId:'1000',contra:true},
+
+  {code:'2000',name_ar:'الخصوم',name_en:'Liabilities',type:'LIABILITY',parentId:null,postable:false},
+  {code:'2100',name_ar:'ذمم دائنة',name_en:'Accounts Payable',type:'LIABILITY',parentId:'2000'},
+  {code:'2200',name_ar:'مصروفات مستحقة',name_en:'Accrued Expenses',type:'LIABILITY',parentId:'2000'},
+  // Added in Phase 12 (Labor Costing): a dedicated payable so payroll
+  // accruals are traceable separately from other accrued expenses.
+  {code:'2210',name_ar:'أجور مستحقة',name_en:'Payroll Payable',type:'LIABILITY',parentId:'2200'},
+  {code:'2300',name_ar:'قروض وتمويل',name_en:'Loans / Financing',type:'LIABILITY',parentId:'2000'},
+
+  {code:'3000',name_ar:'حقوق الملكية',name_en:'Equity',type:'EQUITY',parentId:null,postable:false},
+  {code:'3100',name_ar:'رأس مال المالك',name_en:'Owner Capital',type:'EQUITY',parentId:'3000'},
+  {code:'3200',name_ar:'مسحوبات المالك',name_en:'Owner Drawings',type:'EQUITY',parentId:'3000',contra:true},
+  {code:'3300',name_ar:'أرباح مرحّلة',name_en:'Retained Earnings / Opening Equity',type:'EQUITY',parentId:'3000'},
+
+  {code:'4000',name_ar:'الإيرادات',name_en:'Revenue',type:'REVENUE',parentId:null,postable:false},
+  {code:'4100',name_ar:'بيع حيوانات',name_en:'Animal Sales',type:'REVENUE',parentId:'4000'},
+  {code:'4200',name_ar:'بيع ألبان',name_en:'Milk Sales',type:'REVENUE',parentId:'4000'},
+  {code:'4300',name_ar:'بيع صوف',name_en:'Wool Sales',type:'REVENUE',parentId:'4000'},
+  {code:'4400',name_ar:'بيع سماد',name_en:'Manure Sales',type:'REVENUE',parentId:'4000'},
+  {code:'4900',name_ar:'إيرادات أخرى',name_en:'Other Revenue',type:'REVENUE',parentId:'4000'},
+
+  {code:'5000',name_ar:'تكلفة المبيعات',name_en:'Cost of Sales / Direct Costs',type:'EXPENSE',parentId:null,postable:false},
+  {code:'5100',name_ar:'تكلفة بيع الحيوانات',name_en:'Animal Cost of Sales',type:'EXPENSE',parentId:'5000'},
+  {code:'5200',name_ar:'تكاليف الإنتاج',name_en:'Production Costs',type:'EXPENSE',parentId:'5000'},
+
+  {code:'6000',name_ar:'المصروفات التشغيلية',name_en:'Operating Expenses',type:'EXPENSE',parentId:null,postable:false},
+  {code:'6100',name_ar:'مصروف الأعلاف',name_en:'Feed Expense',type:'EXPENSE',parentId:'6000'},
+  {code:'6200',name_ar:'مصروف بيطري ودوائي',name_en:'Veterinary / Medicine Expense',type:'EXPENSE',parentId:'6000'},
+  {code:'6300',name_ar:'مصروف عمالة',name_en:'Labor Expense',type:'EXPENSE',parentId:'6000'},
+  {code:'6400',name_ar:'كهرباء ومياه',name_en:'Utilities',type:'EXPENSE',parentId:'6000'},
+  {code:'6500',name_ar:'صيانة معدات',name_en:'Maintenance',type:'EXPENSE',parentId:'6000'},
+  {code:'6600',name_ar:'نقل وشحن',name_en:'Transport',type:'EXPENSE',parentId:'6000'},
+  {code:'6700',name_ar:'إيجار',name_en:'Rent',type:'EXPENSE',parentId:'6000'},
+  {code:'6800',name_ar:'إهلاك',name_en:'Depreciation',type:'EXPENSE',parentId:'6000'},
+  // Added in Phase 15 (Loans): interest is a real expense, and must
+  // never be mixed with principal repayment (which only ever touches
+  // 2300, a liability -- it is never itself an expense or revenue).
+  {code:'6850',name_ar:'فوائد قروض',name_en:'Loan Interest Expense',type:'EXPENSE',parentId:'6000'},
+  {code:'6900',name_ar:'مصروفات أخرى',name_en:'Other Expenses',type:'EXPENSE',parentId:'6000'},
+  // Added in Phase 6 (Inventory Accounting): a physical-count adjustment
+  // can go either direction (found extra stock vs. shrinkage/loss) --
+  // this ONE account absorbs both rather than inventing a separate
+  // "found inventory" revenue line with no real business meaning here.
+  {code:'6950',name_ar:'فروقات جرد المخزون',name_en:'Inventory Adjustment / Shrinkage',type:'EXPENSE',parentId:'6000'},
+  // Added in Phase 7 (Animal Accounting): writing off a dead animal's
+  // KNOWN cost basis is a real loss, distinct from ordinary operating
+  // expenses -- kept under 5000 (direct/cost-of-sales) alongside 5100
+  // Cost of Animal Sales, since both represent the livestock asset
+  // leaving the books, just via a different exit event.
+  {code:'5150',name_ar:'خسارة نفوق المواشي',name_en:'Loss on Livestock Death',type:'EXPENSE',parentId:'5000'},
+];
+
+function _accountNormalBalance(type,contra){
+  var base=ACCOUNT_TYPE_NORMAL_BALANCE[type];
+  return contra ? (base==='debit'?'credit':'debit') : base;
+}
+
+// One-time, idempotent bootstrap -- mirrors Users.init()'s own pattern
+// (fbGet the collection, only write if empty). Deliberately NOT called
+// from initApp(): seeding a chart of accounts is a real decision a farm
+// should take consciously, not something silently created on every page
+// load the way the first admin user is.
+window.seedDefaultChartOfAccounts=async function(){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  // FIX (2026-10 audit): same empty-check-on-a-possibly-failed-read shape
+  // Users.init() had. fbGet() returns [] for BOTH "no accounts yet" and
+  // "the request failed", so one dropped read would re-PUT all ~40 system
+  // accounts over a live chart of accounts -- silently resurrecting
+  // accounts an admin had deactivated and clobbering any renamed
+  // systemAccount. fbGetSafe() returns null on failure; a failed read now
+  // refuses to seed rather than guessing.
+  var existing=typeof fbGetSafe==='function' ? await fbGetSafe('accounts') : await fbGet('accounts');
+  if(existing===null) return {ok:false, error:'تعذر قراءة دليل الحسابات — لم يتم التهيئة'};
+  if(existing.length) return {ok:true, seeded:0, skipped:true};
+  var count=0;
+  for(var i=0;i<DEFAULT_CHART_OF_ACCOUNTS.length;i++){
+    var a=DEFAULT_CHART_OF_ACCOUNTS[i];
+    await fbPut('accounts',a.code,{
+      code:a.code, name_ar:a.name_ar, name_en:a.name_en, type:a.type,
+      parentId:a.parentId||null, postable:a.postable!==false,
+      normalBalance:_accountNormalBalance(a.type,a.contra),
+      active:true, systemAccount:true, created_at:new Date().toISOString(),
+    });
+    count++;
+  }
+  fbCacheInvalidate('accounts');
+  await logActivity('add','accounts','تهيئة دليل الحسابات الافتراضي ('+count+' حساب)');
+  return {ok:true, seeded:count};
+};
+
+window.createAccount=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.code || !opts.name_ar || !opts.type) return {ok:false, error:'بيانات ناقصة (الكود، الاسم، والنوع مطلوبون)'};
+  if(ACCOUNT_TYPES.indexOf(opts.type)===-1) return {ok:false, error:'نوع حساب غير صالح'};
+  var existing=await fbGet('accounts');
+  if(existing.some(function(a){return a._id===opts.code;})) return {ok:false, error:'الكود مستخدم بالفعل'};
+  try{
+    await fbPut('accounts',opts.code,{
+      code:opts.code, name_ar:opts.name_ar, name_en:opts.name_en||null, type:opts.type,
+      parentId:opts.parentId||null, postable:opts.postable!==false,
+      normalBalance:_accountNormalBalance(opts.type,opts.contra),
+      active:true, systemAccount:false, created_at:new Date().toISOString(),
+    });
+    fbCacheInvalidate('accounts');
+    await logActivity('add','accounts','إضافة حساب: '+opts.code+' — '+opts.name_ar);
+    return {ok:true, code:opts.code};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Every posted entry is validated against this before it's ever written:
+// at least 2 lines, each with EXACTLY ONE of debit/credit set (never
+// both, never neither), nothing negative, and the entry balances to the
+// cent. Never auto-corrected -- an unbalanced entry is rejected outright,
+// per this project's "never invent a number" principle.
+function _validateJournalLines(lines){
+  if(!Array.isArray(lines) || lines.length<2) return {valid:false, error:'يجب أن يحتوي القيد على سطرين على الأقل'};
+  var totalDebit=0, totalCredit=0;
+  for(var i=0;i<lines.length;i++){
+    var l=lines[i]||{};
+    var debit=+l.debit||0, credit=+l.credit||0;
+    if(!l.accountId) return {valid:false, error:'كل سطر يجب أن يحدد حساب'};
+    if(debit<0 || credit<0) return {valid:false, error:'لا يمكن أن تكون قيمة السطر سالبة'};
+    if(debit>0 && credit>0) return {valid:false, error:'السطر لا يمكن أن يحتوي على مدين ودائن معًا'};
+    if(debit===0 && credit===0) return {valid:false, error:'كل سطر يجب أن يحتوي على قيمة مدين أو دائن'};
+    totalDebit+=debit; totalCredit+=credit;
+  }
+  totalDebit=Math.round(totalDebit*100)/100; totalCredit=Math.round(totalCredit*100)/100;
+  if(totalDebit!==totalCredit) return {valid:false, error:'القيد غير متزن: مدين '+totalDebit+' لا يساوي دائن '+totalCredit};
+  return {valid:true, totalDebit:totalDebit, totalCredit:totalCredit};
+}
+
+// The ONLY way a journal entry is ever created. Always posts immediately
+// (status:'POSTED') -- there is no draft workflow in this phase. Once
+// written, the entry is immutable both here (nothing in this engine ever
+// fbPatch's a journal_entries record) and at the database-rules level.
+window.postJournalEntry=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var v=_validateJournalLines(opts.lines);
+  if(!v.valid) return {ok:false, error:v.error};
+  // Phase 17 (Fiscal Periods): every single posting in this whole engine
+  // funnels through this one function (directly, or via
+  // postSourceDocument), which is exactly why the period-lock check
+  // belongs HERE and nowhere else -- one gate protects every phase
+  // already built, none of them needed to be touched individually.
+  var periodCheck=typeof window._checkFiscalPeriodOpen==='function'
+    ? await window._checkFiscalPeriodOpen(opts.date||todayStr())
+    : {ok:true};
+  if(!periodCheck.ok) return periodCheck;
+  var accounts=await fbGet('accounts');
+  for(var i=0;i<opts.lines.length;i++){
+    var acc=accounts.find(function(a){return a._id===opts.lines[i].accountId;});
+    if(!acc) return {ok:false, error:'حساب غير موجود: '+opts.lines[i].accountId};
+    if(acc.active===false) return {ok:false, error:'الحساب غير نشط: '+acc.name_ar};
+    if(acc.postable===false) return {ok:false, error:'لا يمكن الترحيل مباشرة إلى حساب رئيسي: '+acc.name_ar};
+  }
+  var entry={
+    date:opts.date||todayStr(), description:opts.description||null,
+    sourceType:opts.sourceType||'manual', sourceId:opts.sourceId||null,
+    status:'POSTED', lines:opts.lines,
+    totalDebit:v.totalDebit, totalCredit:v.totalCredit,
+    reversesJournalEntryId:opts.reversesJournalEntryId||null,
+    createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+    postedBy:(getUser()&&getUser().name)||null, postedAt:new Date().toISOString(),
+  };
+  try{
+    var id=await fbPost('journal_entries',entry);
+    fbCacheInvalidate('journal_entries');
+    await logActivity('add','journal_entries','قيد محاسبي: '+(entry.description||entry.sourceType)+' — '+ar(v.totalDebit)+' '+getSettings().currency);
+    _recordFinancialAudit('POST','journal_entry',id,{totalDebit:v.totalDebit, totalCredit:v.totalCredit, sourceType:entry.sourceType});
+    return {ok:true, id:id, entry:entry};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Corrections never touch the original entry -- they post a NEW entry
+// with every line's debit/credit swapped (a balanced set stays balanced
+// once swapped, so this always passes _validateJournalLines on its own),
+// linked back via reversesJournalEntryId. Refuses to reverse a
+// non-posted or already-reversed entry.
+window.reverseJournalEntry=async function(originalId,opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var entries=await fbGet('journal_entries');
+  var original=entries.find(function(e){return e._id===originalId;});
+  if(!original) return {ok:false, error:'القيد الأصلي غير موجود'};
+  if(original.status!=='POSTED') return {ok:false, error:'لا يمكن عكس قيد غير مُرحّل'};
+  var alreadyReversed=entries.some(function(e){return e.reversesJournalEntryId===originalId;});
+  if(alreadyReversed) return {ok:false, error:'تم عكس هذا القيد بالفعل'};
+  var swappedLines=(original.lines||[]).map(function(l){
+    return Object.assign({},l,{debit:l.credit||0, credit:l.debit||0});
+  });
+  _recordFinancialAudit('REVERSE','journal_entry',originalId,{});
+  return await window.postJournalEntry({
+    date:opts.date||todayStr(),
+    description:'عكس قيد: '+(original.description||original._id),
+    sourceType:'reversal', sourceId:originalId,
+    lines:swappedLines, reversesJournalEntryId:originalId,
+  });
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — SOURCE DOCUMENTS (Phase 2). One new collection
+//  (source_documents), purely additive on top of Phase 1's journal
+//  engine. A document is a business-level record (invoice, receipt,
+//  payment...) that MAY post exactly one journal entry via the existing
+//  postJournalEntry() -- this layer never builds journal lines itself
+//  beyond simple caller-supplied debit/credit shorthand, so it never
+//  invents which accounts a specific business event touches (that's
+//  each later phase's -- AR, AP, animal accounting, etc. -- own job).
+//
+//  Idempotency: every create/payment call takes a caller-supplied
+//  operationId. A repeated operationId returns the ALREADY-recorded
+//  result instead of creating a duplicate -- this is what "a replay must
+//  never create a duplicate accounting result" actually means in code.
+//
+//  Immutability: once a document leaves DRAFT, its type/date/total can
+//  never change again (enforced both here and at the database-rules
+//  level). Only payment application (paidAmount/remainingAmount/status)
+//  may still move, and only through recordPaymentAgainstDocument() --
+//  never a raw fbPatch. Cancelling a POSTED document reverses its linked
+//  journal entry (reuses Phase 1's reverseJournalEntry) rather than
+//  editing or deleting anything.
+// ══════════════════════════════════════════════════════════════
+
+var SOURCE_DOCUMENT_TYPES=['sales_invoice','purchase_invoice','receipt','payment','expense_voucher',
+  'transfer','animal_sale','animal_purchase','inventory_purchase','inventory_consumption','labor_payment',
+  'asset_purchase','loan','owner_capital','owner_withdrawal'];
+var SOURCE_DOCUMENT_STATUSES=['DRAFT','POSTED','PARTIALLY_PAID','PAID','OVERDUE','VOID','CANCELLED'];
+var SOURCE_DOCUMENT_OPEN_STATUSES=['POSTED','PARTIALLY_PAID','OVERDUE']; // eligible for a new payment
+
+function _genDocumentNumber(type){
+  return 'SD-'+(type||'doc').slice(0,4).toUpperCase()+'-'+genId().toUpperCase();
+}
+
+// Create-or-return-existing, keyed on opts.operationId -- the caller
+// decides that key (e.g. a UI click-token, or a deterministic id built
+// from the triggering event), this engine only ever reads it back.
+window.createSourceDocument=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  if(SOURCE_DOCUMENT_TYPES.indexOf(opts.type)===-1) return {ok:false, error:'نوع مستند غير صالح'};
+  var amount=+opts.total;
+  if(!amount || isNaN(amount) || amount<=0) return {ok:false, error:'يرجى إدخال إجمالي صحيح'};
+  var docs=await fbGet('source_documents');
+  var dupe=docs.find(function(d){return d.operationId===opts.operationId;});
+  if(dupe) return {ok:true, id:dupe._id, document:dupe, idempotent:true};
+  var record={
+    documentNumber:_genDocumentNumber(opts.type), type:opts.type, date:opts.date||todayStr(),
+    status:'DRAFT', counterpartyId:opts.counterpartyId||null, counterpartyName:opts.counterpartyName||null,
+    total:Math.round(amount*100)/100, paidAmount:0, remainingAmount:Math.round(amount*100)/100,
+    dueDate:opts.dueDate||null, notes:opts.notes||null,
+    sourceType:opts.sourceType||null, sourceId:opts.sourceId||null, operationId:opts.operationId,
+    journalEntryId:null, appliedPayments:null,
+    createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+    postedAt:null, postedBy:null,
+  };
+  try{
+    var id=await fbPost('source_documents',record);
+    fbCacheInvalidate('source_documents');
+    await logActivity('add','source_documents','مستند '+record.documentNumber+' — '+ar(record.total)+' '+getSettings().currency);
+    return {ok:true, id:id, document:record};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Posts the document's ONE journal entry. Caller supplies either a full
+// `lines` array (for anything non-trivial) or the debitAccountId/
+// creditAccountId shorthand for a plain two-line posting of the
+// document's own total. Only a DRAFT document can be posted; nothing
+// about the document is touched if the underlying journal entry fails
+// validation (unbalanced, bad account, etc. -- see Phase 1).
+window.postSourceDocument=async function(documentId,opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var docs=await fbGet('source_documents');
+  var doc=docs.find(function(d){return d._id===documentId;});
+  if(!doc) return {ok:false, error:'المستند غير موجود'};
+  if(doc.status!=='DRAFT') return {ok:false, error:'المستند مُرحّل بالفعل أو ملغى'};
+  var lines=opts.lines;
+  if(!lines && opts.debitAccountId && opts.creditAccountId){
+    lines=[{accountId:opts.debitAccountId, debit:doc.total, description:doc.documentNumber},
+           {accountId:opts.creditAccountId, credit:doc.total, description:doc.documentNumber}];
+  }
+  var posted=await window.postJournalEntry({
+    date:doc.date, description:'ترحيل مستند: '+doc.documentNumber+(doc.notes?(' — '+doc.notes):''),
+    sourceType:'source_document', sourceId:documentId, lines:lines,
+  });
+  if(!posted.ok) return posted;
+  // opts.paidAmount (Phase 6 addition, backward-compatible: every prior
+  // caller omits it, so this is exactly the old `(+doc.paidAmount||0)`
+  // behavior -- 0 -- unchanged): lets a caller whose OWN posted lines
+  // already fully settle the document in cash (e.g. a straight cash
+  // inventory purchase, Debit Inventory / Credit Cash with no AP leg at
+  // all) declare that settlement as part of THIS SAME posting, instead
+  // of it looking like an unpaid bill that then needs a separate,
+  // second, redundant payment posting.
+  var settledNow=opts.paidAmount!=null ? Math.round((+opts.paidAmount)*100)/100 : (+doc.paidAmount||0);
+  var newStatus=settledNow>=doc.total ? 'PAID' : (settledNow>0 ? 'PARTIALLY_PAID' : 'POSTED');
+  try{
+    await fbPatch('source_documents',documentId,{
+      status:newStatus, journalEntryId:posted.id, paidAmount:settledNow,
+      remainingAmount:Math.round((doc.total-settledNow)*100)/100,
+      postedAt:new Date().toISOString(), postedBy:(getUser()&&getUser().name)||null,
+    });
+    fbCacheInvalidate('source_documents');
+    await logActivity('post','source_documents','ترحيل '+doc.documentNumber);
+    _recordFinancialAudit('POST','source_document',documentId,{type:doc.type, total:doc.total, status:newStatus});
+    return {ok:true, id:documentId, journalEntryId:posted.id, status:newStatus};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Applies one payment to an already-posted document. Idempotent on
+// opts.operationId: replaying the same operationId returns the
+// already-applied result instead of double-subtracting the balance.
+// The caller states BOTH sides explicitly (cashAccountId +
+// counterAccountId + direction) -- this engine never guesses which
+// account a payment clears, since that's specific to what kind of
+// document it is (a job for AR/AP in later phases, not this primitive).
+window.recordPaymentAgainstDocument=async function(documentId,opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var docs=await fbGet('source_documents');
+  var doc=docs.find(function(d){return d._id===documentId;});
+  if(!doc) return {ok:false, error:'المستند غير موجود'};
+  if(doc.appliedPayments && doc.appliedPayments[opts.operationId]){
+    return {ok:true, idempotent:true, applied:doc.appliedPayments[opts.operationId]};
+  }
+  if(SOURCE_DOCUMENT_OPEN_STATUSES.indexOf(doc.status)===-1) return {ok:false, error:'المستند غير قابل للسداد في حالته الحالية'};
+  var amount=+opts.amount;
+  if(!amount || isNaN(amount) || amount<=0) return {ok:false, error:'يرجى إدخال مبلغ سداد صحيح'};
+  if(amount>doc.remainingAmount+0.001) return {ok:false, error:'المبلغ أكبر من المتبقي على المستند'};
+  if(!opts.cashAccountId || !opts.counterAccountId || (opts.direction!=='receive' && opts.direction!=='pay')){
+    return {ok:false, error:'بيانات السداد ناقصة (الحساب النقدي، الحساب المقابل، والاتجاه مطلوبون)'};
+  }
+  var lines=opts.direction==='receive'
+    ? [{accountId:opts.cashAccountId, debit:amount},{accountId:opts.counterAccountId, credit:amount}]
+    : [{accountId:opts.counterAccountId, debit:amount},{accountId:opts.cashAccountId, credit:amount}];
+  var posted=await window.postJournalEntry({
+    date:opts.date||todayStr(), description:'سداد على مستند '+doc.documentNumber,
+    sourceType:'document_payment', sourceId:documentId, lines:lines,
+  });
+  if(!posted.ok) return posted;
+  var newPaid=Math.round(((+doc.paidAmount||0)+amount)*100)/100;
+  var newRemaining=Math.round((doc.total-newPaid)*100)/100;
+  var newStatus=newRemaining<=0 ? 'PAID' : 'PARTIALLY_PAID';
+  var appliedRecord={amount:amount, date:opts.date||todayStr(), journalEntryId:posted.id};
+  try{
+    await fbPatch('source_documents',documentId,{
+      paidAmount:newPaid, remainingAmount:newRemaining, status:newStatus,
+      appliedPayments:Object.assign({},doc.appliedPayments||{}, (function(){var o={};o[opts.operationId]=appliedRecord;return o;})()),
+    });
+    fbCacheInvalidate('source_documents');
+    await logActivity('pay','source_documents','سداد '+ar(amount)+' '+getSettings().currency+' على '+doc.documentNumber);
+    _recordFinancialAudit('PAY','source_document',documentId,{amount:amount, newStatus:newStatus});
+    return {ok:true, journalEntryId:posted.id, paidAmount:newPaid, remainingAmount:newRemaining, status:newStatus};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// A never-posted (still DRAFT) document can simply be voided -- nothing
+// in the ledger references it yet. A POSTED document must go through
+// cancelPostedSourceDocument() instead, since a real journal entry
+// exists and needs a real reversal, not a silent status flip.
+window.voidSourceDocument=async function(documentId){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var docs=await fbGet('source_documents');
+  var doc=docs.find(function(d){return d._id===documentId;});
+  if(!doc) return {ok:false, error:'المستند غير موجود'};
+  if(doc.status!=='DRAFT') return {ok:false, error:'المستند مُرحّل بالفعل — استخدم إلغاء المستند المُرحّل بدلاً من ذلك'};
+  try{
+    await fbPatch('source_documents',documentId,{status:'VOID'});
+    fbCacheInvalidate('source_documents');
+    await logActivity('void','source_documents','إلغاء مسودة '+doc.documentNumber);
+    _recordFinancialAudit('VOID','source_document',documentId,{});
+    return {ok:true};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Cancels a POSTED document by reversing its linked journal entry
+// (Phase 1's reverseJournalEntry -- never edits/deletes the original).
+// Refuses if any payment has already been applied: unwinding real cash
+// movement isn't something this function decides on its own, it must be
+// reconciled first, one payment at a time.
+window.cancelPostedSourceDocument=async function(documentId){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var docs=await fbGet('source_documents');
+  var doc=docs.find(function(d){return d._id===documentId;});
+  if(!doc) return {ok:false, error:'المستند غير موجود'};
+  if(!doc.journalEntryId) return {ok:false, error:'المستند غير مُرحّل، لا يوجد قيد لعكسه'};
+  if(doc.status==='CANCELLED'||doc.status==='VOID') return {ok:false, error:'المستند ملغى بالفعل'};
+  if((+doc.paidAmount||0)>0) return {ok:false, error:'لا يمكن الإلغاء التلقائي بعد تسجيل سداد — سوّي المدفوعات أولاً'};
+  var rev=await window.reverseJournalEntry(doc.journalEntryId);
+  if(!rev.ok) return rev;
+  try{
+    await fbPatch('source_documents',documentId,{status:'CANCELLED'});
+    fbCacheInvalidate('source_documents');
+    await logActivity('cancel','source_documents','إلغاء '+doc.documentNumber);
+    _recordFinancialAudit('VOID','source_document',documentId,{reversalEntryId:rev.id});
+    return {ok:true, reversalEntryId:rev.id};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — CASH & BANK (Phase 3). One new collection
+//  (cash_bank_accounts) -- a lightweight registry of the farm's actual
+//  cash boxes / bank accounts, each POINTING AT one leaf account in the
+//  Chart of Accounts it posts to (so a farm can have two real bank
+//  accounts that both post under GL account 1200, for example). Balance
+//  is never stored as a mutable number: it's always computed from the
+//  account's opening balance plus every journal_entries line that
+//  touches its linkedAccountId, the same flat-collection-scan pattern
+//  used everywhere else in this file. Even the OPENING balance is a real
+//  journal entry (against 3300, opening equity), never a bare field
+//  nobody can trace in the ledger.
+//
+//  Transfers/receipts/payments are thin wrappers over Phase 2's source
+//  documents (type 'transfer'/'receipt'/'payment') rather than a
+//  parallel posting path -- this is what "do not leave two competing
+//  financial truth sources" means in code. Full statement-matching bank
+//  reconciliation is its own later phase; this phase only adds the
+//  structural "last reconciled" marker.
+// ══════════════════════════════════════════════════════════════
+
+var CASH_BANK_TYPES=['cash','bank'];
+
+window.createCashBankAccount=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.name || CASH_BANK_TYPES.indexOf(opts.type)===-1 || !opts.linkedAccountId){
+    return {ok:false, error:'بيانات ناقصة (الاسم، النوع، والحساب المرتبط مطلوبون)'};
+  }
+  var accounts=await fbGet('accounts');
+  var linked=accounts.find(function(a){return a._id===opts.linkedAccountId;});
+  if(!linked) return {ok:false, error:'الحساب المرتبط غير موجود'};
+  if(linked.postable===false) return {ok:false, error:'لا يمكن الربط بحساب رئيسي غير قابل للترحيل'};
+  var opening=Math.round((+opts.openingBalance||0)*100)/100;
+  var record={
+    name:opts.name, type:opts.type, linkedAccountId:opts.linkedAccountId,
+    openingBalance:opening, openingDate:opts.openingDate||todayStr(),
+    currency:opts.currency||(getSettings().currency), active:true,
+    lastReconciledDate:null, lastReconciledAt:null, lastReconciledBy:null,
+    createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+  };
+  try{
+    var id=await fbPost('cash_bank_accounts',record);
+    fbCacheInvalidate('cash_bank_accounts');
+    if(opening>0){
+      // Real opening-balance entry, not a bare number: debits the linked
+      // asset account, credits opening equity -- traceable in the ledger
+      // from day one. A negative opening balance (overdraft) is refused
+      // rather than silently flipped, since that's a real business
+      // decision this pass shouldn't make on its own.
+      await window.postJournalEntry({
+        date:record.openingDate, description:'رصيد افتتاحي: '+record.name,
+        sourceType:'cash_bank_opening', sourceId:id,
+        lines:[{accountId:opts.linkedAccountId, debit:opening},{accountId:'3300', credit:opening}],
+      });
+    }
+    await logActivity('add','cash_bank_accounts','إضافة حساب نقدي/بنكي: '+record.name);
+    return {ok:true, id:id};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Never a stored number: purely the sum of every journal line that ever
+// touched this account's linkedAccountId, signed by debit-increases-an-
+// ASSET (how cash/bank accounts are always modeled here). The record's
+// own `openingBalance` field is NOT re-added here -- createCashBankAccount
+// already posts a real journal entry for it when non-zero (see above), so
+// summing from journal_entries alone already includes it exactly once;
+// adding the stored field on top would double-count every opening balance.
+window.getCashBankBalance=async function(cashBankAccountId){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var accounts=await fbGet('cash_bank_accounts');
+  var cba=accounts.find(function(a){return a._id===cashBankAccountId;});
+  if(!cba) return {ok:false, error:'الحساب غير موجود'};
+  var entries=await fbGet('journal_entries');
+  var balance=0;
+  entries.forEach(function(e){
+    (e.lines||[]).forEach(function(l){
+      if(l.accountId===cba.linkedAccountId) balance+=(+l.debit||0)-(+l.credit||0);
+    });
+  });
+  return {ok:true, balance:Math.round(balance*100)/100, asOf:new Date().toISOString()};
+};
+
+// Every journal line touching this account, newest first, with the
+// counterparty side of its own entry attached for display (the other
+// line(s) in the same posting) -- date-range filterable per Phase 3's
+// own requirement.
+window.getCashBankTransactionHistory=async function(cashBankAccountId,startDate,endDate){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var accounts=await fbGet('cash_bank_accounts');
+  var cba=accounts.find(function(a){return a._id===cashBankAccountId;});
+  if(!cba) return {ok:false, error:'الحساب غير موجود'};
+  var entries=await fbGet('journal_entries');
+  var rows=[];
+  entries.forEach(function(e){
+    if(startDate && e.date<startDate) return;
+    if(endDate && e.date>endDate) return;
+    (e.lines||[]).forEach(function(l){
+      if(l.accountId!==cba.linkedAccountId) return;
+      rows.push({
+        journalEntryId:e._id, date:e.date, description:e.description,
+        debit:+l.debit||0, credit:+l.credit||0,
+        otherLines:(e.lines||[]).filter(function(x){return x!==l;}),
+        sourceType:e.sourceType, sourceId:e.sourceId,
+      });
+    });
+  });
+  rows.sort(function(a,b){return (b.date||'').localeCompare(a.date||'');});
+  return {ok:true, rows:rows};
+};
+
+// Cash → Bank (or any cash_bank_account → another): a pure balance-sheet
+// movement, never income or expense, because both sides are always
+// ASSET accounts -- structurally guaranteed by construction, not by a
+// special-case check. Routed entirely through Phase 2's source-document
+// primitives (type 'transfer'), so idempotency/immutability come for
+// free instead of being reimplemented here.
+window.recordCashTransfer=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var accounts=await fbGet('cash_bank_accounts');
+  var from=accounts.find(function(a){return a._id===opts.fromAccountId;});
+  var to=accounts.find(function(a){return a._id===opts.toAccountId;});
+  if(!from||!to) return {ok:false, error:'حساب المصدر أو الوجهة غير موجود'};
+  if(from._id===to._id) return {ok:false, error:'لا يمكن التحويل لنفس الحساب'};
+  var created=await window.createSourceDocument({
+    type:'transfer', total:opts.amount, date:opts.date, operationId:opts.operationId,
+    notes:'تحويل: '+from.name+' → '+to.name,
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return created;
+  return await window.postSourceDocument(created.id,{
+    lines:[{accountId:to.linkedAccountId, debit:created.document.total},
+           {accountId:from.linkedAccountId, credit:created.document.total}],
+  });
+};
+
+// Thin, explicit wrappers over Phase 2's generic document + posting
+// primitives -- 'receipt' (cash coming IN against any account the caller
+// names, e.g. AR or a revenue account for a walk-in sale) and 'payment'
+// (cash going OUT against any account, e.g. AP or an expense account).
+// Neither guesses the counterAccountId: the caller states it, same
+// reasoning as recordPaymentAgainstDocument in Phase 2.
+window.recordCashReceipt=async function(opts){
+  opts=opts||{};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var accounts=await fbGet('cash_bank_accounts');
+  var cba=accounts.find(function(a){return a._id===opts.cashBankAccountId;});
+  if(!cba) return {ok:false, error:'الحساب النقدي/البنكي غير موجود'};
+  if(!opts.counterAccountId) return {ok:false, error:'الحساب المقابل مطلوب'};
+  var created=await window.createSourceDocument({
+    type:'receipt', total:opts.amount, date:opts.date, operationId:opts.operationId,
+    counterpartyName:opts.counterpartyName||null, notes:opts.notes||null,
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return created;
+  return await window.postSourceDocument(created.id,{
+    lines:[{accountId:cba.linkedAccountId, debit:created.document.total},
+           {accountId:opts.counterAccountId, credit:created.document.total}],
+  });
+};
+
+window.recordCashPayment=async function(opts){
+  opts=opts||{};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var accounts=await fbGet('cash_bank_accounts');
+  var cba=accounts.find(function(a){return a._id===opts.cashBankAccountId;});
+  if(!cba) return {ok:false, error:'الحساب النقدي/البنكي غير موجود'};
+  if(!opts.counterAccountId) return {ok:false, error:'الحساب المقابل مطلوب'};
+  var created=await window.createSourceDocument({
+    type:'payment', total:opts.amount, date:opts.date, operationId:opts.operationId,
+    counterpartyName:opts.counterpartyName||null, notes:opts.notes||null,
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return created;
+  return await window.postSourceDocument(created.id,{
+    lines:[{accountId:opts.counterAccountId, debit:created.document.total},
+           {accountId:cba.linkedAccountId, credit:created.document.total}],
+  });
+};
+
+// Structural marker only (full statement-line matching is its own later
+// phase): records that this account's ledger has been checked against a
+// real bank statement up to a given date.
+window.markCashBankReconciled=async function(cashBankAccountId,throughDate){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var accounts=await fbGet('cash_bank_accounts');
+  var cba=accounts.find(function(a){return a._id===cashBankAccountId;});
+  if(!cba) return {ok:false, error:'الحساب غير موجود'};
+  try{
+    await fbPatch('cash_bank_accounts',cashBankAccountId,{
+      lastReconciledDate:throughDate||todayStr(), lastReconciledAt:new Date().toISOString(),
+      lastReconciledBy:(getUser()&&getUser().name)||null,
+    });
+    fbCacheInvalidate('cash_bank_accounts');
+    return {ok:true};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — ACCOUNTS RECEIVABLE (Phase 4). One new collection
+//  (customers). Sales invoices are NOT a new document engine -- they are
+//  Phase 2 source_documents of type 'sales_invoice', posted Debit AR /
+//  Credit Revenue. Payments are Phase 2's recordPaymentAgainstDocument
+//  with direction 'receive' against the AR account. This phase only adds
+//  what's genuinely new: the customer registry, and AR-specific
+//  read-side reporting (balance, aging, overdue detection, statement)
+//  computed by scanning source_documents -- never a second truth source.
+// ══════════════════════════════════════════════════════════════
+
+var AR_ACCOUNT_ID='1300'; // Accounts Receivable, per the Phase 1 default chart
+
+window.createCustomer=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.name) return {ok:false, error:'اسم العميل مطلوب'};
+  var record={
+    name:opts.name, phone:opts.phone||null, notes:opts.notes||null, active:true,
+    createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+  };
+  try{
+    var id=await fbPost('customers',record);
+    fbCacheInvalidate('customers');
+    await logActivity('add','customers','إضافة عميل: '+record.name);
+    return {ok:true, id:id};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Debit AR, Credit the given revenue account -- the ONE new accounting
+// recipe this phase adds; everything else is Phase 2's generic engine.
+// revenueAccountId is caller-supplied (animal sales vs. milk vs. wool
+// etc. are different revenue accounts -- this function doesn't guess).
+window.createSalesInvoice=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  if(!opts.revenueAccountId) return {ok:false, error:'حساب الإيراد مطلوب'};
+  var created=await window.createSourceDocument({
+    type:'sales_invoice', total:opts.total, date:opts.date, dueDate:opts.dueDate,
+    operationId:opts.operationId, counterpartyId:opts.customerId||null,
+    counterpartyName:opts.customerName||null, notes:opts.notes||null,
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return created;
+  return await window.postSourceDocument(created.id,{
+    debitAccountId:AR_ACCOUNT_ID, creditAccountId:opts.revenueAccountId,
+  });
+};
+
+// Thin wrapper over Phase 2's generic payment primitive: an AR payment
+// is always Debit Cash/Bank, Credit AR -- the direction/counter-account
+// never varies for this specific case, so this saves every caller from
+// repeating that.
+window.recordCustomerPayment=async function(documentId,opts){
+  opts=opts||{};
+  return await window.recordPaymentAgainstDocument(documentId,Object.assign({},opts,{
+    counterAccountId:AR_ACCOUNT_ID, direction:'receive',
+  }));
+};
+
+// ── SUB-LEDGER SCOPE, DERIVED FROM THE LEDGER ITSELF ──────────
+// FIX (2026-10 audit) — REAL BUG, found by unit-testing the AR/AP module
+// against the general ledger.
+//
+// The receivable/payable sub-ledger used to select documents by TYPE:
+//     doc.type==='sales_invoice'   (AR)
+//     doc.type==='purchase_invoice'(AP)
+// But four other document types post against the very same AR/AP accounts
+// whenever they are settled on credit terms:
+//     animal_sale        -> Debit  AR (1300)   [postAnimalSale, credit mode]
+//     inventory_purchase -> Credit AP (2100)   [postInventoryPurchase]
+//     animal_purchase    -> Credit AP (2100)   [postAnimalPurchase]
+//     asset_purchase     -> Credit AP (2100)   [postAssetPurchase]
+// So the general ledger (trial balance, balance sheet) carried those
+// balances while getCustomerBalance/getSupplierBalance/getARAging/
+// getAPAging and both statements reported ZERO for them. Concretely: feed,
+// livestock or equipment bought on credit -- the ordinary case on a real
+// farm -- created a liability that never appeared under "العملاء والموردون",
+// and an animal sold on credit never appeared as a receivable. The two
+// books disagreed with each other, and the sub-ledger was the one that was
+// wrong.
+//
+// Selection is now evidence-based instead of type-based: a document belongs
+// to the sub-ledger when ITS OWN POSTED JOURNAL ENTRY really debited AR /
+// credited AP. That is self-maintaining -- a future document type that posts
+// against AR/AP is picked up automatically, and one that does not (a cash
+// purchase, a loan drawdown against 2300, a payroll accrual against 2210)
+// is correctly excluded. The legacy type check is kept as an OR so an
+// unposted/legacy invoice is still listed rather than silently dropped.
+async function _entryIdsTouching(accountId, side){
+  var entries=await fbGet('journal_entries');
+  var ids={};
+  entries.forEach(function(e){
+    (e.lines||[]).forEach(function(l){
+      if(l.accountId!==accountId) return;
+      var amt=(side==='credit')?(+l.credit||0):(+l.debit||0);
+      if(amt>0) ids[e._id]=true;
+    });
+  });
+  return ids;
+}
+
+// Every document belonging to the AR sub-ledger, open or settled.
+async function _receivableDocs(){
+  var docs=await fbGet('source_documents');
+  var ids=await _entryIdsTouching(AR_ACCOUNT_ID,'debit');
+  return docs.filter(function(d){ return d.type==='sales_invoice' || !!ids[d.journalEntryId]; });
+}
+// The subset still owed (eligible for balance/aging).
+async function _openReceivableDocs(){
+  return (await _receivableDocs()).filter(function(d){ return SOURCE_DOCUMENT_OPEN_STATUSES.indexOf(d.status)!==-1; });
+}
+
+window.getCustomerBalance=async function(customerId){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var all=await _openReceivableDocs();
+  var open=all.filter(function(d){return d.counterpartyId===customerId;});
+  var balance=open.reduce(function(s,d){return s+(+d.remainingAmount||0);},0);
+  return {ok:true, balance:Math.round(balance*100)/100, openInvoiceCount:open.length};
+};
+
+window.getCustomerStatement=async function(customerId){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var mine=(await _receivableDocs()).filter(function(d){return d.counterpartyId===customerId;});
+  mine.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');});
+  return {ok:true, invoices:mine};
+};
+
+// Buckets every OPEN invoice by how many days past its due date `asOfDate`
+// is -- an invoice with no dueDate is never counted as overdue (missing
+// information stays missing, it is not assumed current or overdue).
+window.getARAging=async function(asOfDate){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  asOfDate=asOfDate||todayStr();
+  var docs=await _openReceivableDocs();
+  var buckets={current:[], d1_30:[], d31_60:[], d61_90:[], d90_plus:[], noDueDate:[]};
+  docs.forEach(function(d){
+    if(!d.dueDate){ buckets.noDueDate.push(d); return; }
+    var daysPast=Math.floor((new Date(asOfDate)-new Date(d.dueDate))/86400000);
+    if(daysPast<=0) buckets.current.push(d);
+    else if(daysPast<=30) buckets.d1_30.push(d);
+    else if(daysPast<=60) buckets.d31_60.push(d);
+    else if(daysPast<=90) buckets.d61_90.push(d);
+    else buckets.d90_plus.push(d);
+  });
+  var totals={};
+  Object.keys(buckets).forEach(function(k){
+    totals[k]=Math.round(buckets[k].reduce(function(s,d){return s+(+d.remainingAmount||0);},0)*100)/100;
+  });
+  return {ok:true, asOfDate:asOfDate, buckets:buckets, totals:totals};
+};
+
+// Status-only transition (POSTED/PARTIALLY_PAID -> OVERDUE once past
+// dueDate) -- type/date/total are untouched, so this is a legal write
+// under both the engine's own rules and database.rules.json's
+// source_documents guard. Never invents a dueDate: invoices without one
+// are simply never marked overdue.
+window.refreshOverdueInvoiceStatuses=async function(asOfDate){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  asOfDate=asOfDate||todayStr();
+  // Same scope fix as the sub-ledger above: a credit inventory/animal/asset
+  // purchase and a credit animal sale are real due-date-bearing obligations
+  // too, and used to be skipped by the overdue sweep because of their type.
+  var docs=(await _openReceivableDocs()).concat(await _openPayableDocs());
+  var toFlag=docs.filter(function(d){
+    return (d.status==='POSTED'||d.status==='PARTIALLY_PAID') && d.dueDate && d.dueDate<asOfDate;
+  });
+  var flagged=0;
+  for(var i=0;i<toFlag.length;i++){
+    try{ await fbPatch('source_documents',toFlag[i]._id,{status:'OVERDUE'}); flagged++; }catch(e){ /* best-effort, continue with the rest */ }
+  }
+  if(flagged) fbCacheInvalidate('source_documents');
+  return {ok:true, flagged:flagged};
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — ACCOUNTS PAYABLE (Phase 5). One new collection
+//  (suppliers). Mirrors Phase 4's AR exactly, in the opposite direction:
+//  purchase bills are Phase 2 source_documents (type 'purchase_invoice')
+//  posted Debit [inventory/expense/asset -- caller-specified, since what
+//  a bill is FOR varies] / Credit AP (2100); payments are Phase 2's
+//  recordPaymentAgainstDocument with direction 'pay'. Overdue detection
+//  is already shared with AR -- refreshOverdueInvoiceStatuses (Phase 4)
+//  already covers 'purchase_invoice' too, nothing new needed here.
+// ══════════════════════════════════════════════════════════════
+
+var AP_ACCOUNT_ID='2100'; // Accounts Payable, per the Phase 1 default chart
+
+window.createSupplier=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.name) return {ok:false, error:'اسم المورد مطلوب'};
+  var record={
+    name:opts.name, phone:opts.phone||null, notes:opts.notes||null, active:true,
+    createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+  };
+  try{
+    var id=await fbPost('suppliers',record);
+    fbCacheInvalidate('suppliers');
+    await logActivity('add','suppliers','إضافة مورد: '+record.name);
+    return {ok:true, id:id};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Debit the given debit account (inventory/expense/asset -- whatever
+// this bill is actually for, caller-supplied, never guessed), Credit AP.
+window.createPurchaseBill=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  if(!opts.debitAccountId) return {ok:false, error:'حساب المدين (المخزون/المصروف/الأصل) مطلوب'};
+  var created=await window.createSourceDocument({
+    type:'purchase_invoice', total:opts.total, date:opts.date, dueDate:opts.dueDate,
+    operationId:opts.operationId, counterpartyId:opts.supplierId||null,
+    counterpartyName:opts.supplierName||null, notes:opts.notes||null,
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return created;
+  return await window.postSourceDocument(created.id,{
+    debitAccountId:opts.debitAccountId, creditAccountId:AP_ACCOUNT_ID,
+  });
+};
+
+window.recordSupplierPayment=async function(documentId,opts){
+  opts=opts||{};
+  return await window.recordPaymentAgainstDocument(documentId,Object.assign({},opts,{
+    counterAccountId:AP_ACCOUNT_ID, direction:'pay',
+  }));
+};
+
+// AP mirror of _receivableDocs() above -- see the comment there for why
+// selection is derived from the ledger rather than from doc.type.
+async function _payableDocs(){
+  var docs=await fbGet('source_documents');
+  var ids=await _entryIdsTouching(AP_ACCOUNT_ID,'credit');
+  return docs.filter(function(d){ return d.type==='purchase_invoice' || !!ids[d.journalEntryId]; });
+}
+async function _openPayableDocs(){
+  return (await _payableDocs()).filter(function(d){ return SOURCE_DOCUMENT_OPEN_STATUSES.indexOf(d.status)!==-1; });
+}
+
+window.getSupplierBalance=async function(supplierId){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var all=await _openPayableDocs();
+  var open=all.filter(function(d){return d.counterpartyId===supplierId;});
+  var balance=open.reduce(function(s,d){return s+(+d.remainingAmount||0);},0);
+  return {ok:true, balance:Math.round(balance*100)/100, openBillCount:open.length};
+};
+
+window.getSupplierStatement=async function(supplierId){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var mine=(await _payableDocs()).filter(function(d){return d.counterpartyId===supplierId;});
+  mine.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');});
+  return {ok:true, bills:mine};
+};
+
+window.getAPAging=async function(asOfDate){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  asOfDate=asOfDate||todayStr();
+  var docs=await _openPayableDocs();
+  var buckets={current:[], d1_30:[], d31_60:[], d61_90:[], d90_plus:[], noDueDate:[]};
+  docs.forEach(function(d){
+    if(!d.dueDate){ buckets.noDueDate.push(d); return; }
+    var daysPast=Math.floor((new Date(asOfDate)-new Date(d.dueDate))/86400000);
+    if(daysPast<=0) buckets.current.push(d);
+    else if(daysPast<=30) buckets.d1_30.push(d);
+    else if(daysPast<=60) buckets.d31_60.push(d);
+    else if(daysPast<=90) buckets.d61_90.push(d);
+    else buckets.d90_plus.push(d);
+  });
+  var totals={};
+  Object.keys(buckets).forEach(function(k){
+    totals[k]=Math.round(buckets[k].reduce(function(s,d){return s+(+d.remainingAmount||0);},0)*100)/100;
+  });
+  return {ok:true, asOfDate:asOfDate, buckets:buckets, totals:totals};
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — INVENTORY ACCOUNTING (Phase 6). No new
+//  collection. Wraps the EXISTING, proven inventory ledger
+//  (recordInventoryTransaction, from the original Inventory Transaction
+//  Engine v1.7) rather than replacing it -- stock quantity always moves
+//  through that one function, exactly as before. This phase only adds
+//  the financial side that Phase 0's audit found was built once but
+//  never actually wired into the live app (purchaseFeed/purchaseMedicine
+//  were orphaned): a real, traceable journal entry alongside every
+//  costed inventory movement, using a genuine weighted-average cost
+//  maintained on the item record itself.
+//
+//  Scope, stated honestly: PURCHASE and CONSUMPTION are fully costed and
+//  posted here. ADJUSTMENT (a physical-count correction, either
+//  direction) posts against the new 6950 account. RETURN-to-supplier and
+//  formal WRITE_OFF are NOT implemented in this pass -- they need their
+//  own AP-reversal / cost-basis handling this phase doesn't have evidence
+//  to invent safely yet; calling recordInventoryTransaction directly for
+//  those reasons still moves stock exactly as it always has, it just
+//  won't (yet) post an accompanying journal entry.
+// ══════════════════════════════════════════════════════════════
+
+var INVENTORY_ASSET_ACCOUNT={feeds:'1410', meds:'1420'};
+var INVENTORY_EXPENSE_ACCOUNT={feeds:'6100', meds:'6200'};
+var INVENTORY_ADJUSTMENT_ACCOUNT='6950';
+
+function _weightedAverageCost(oldQty,oldAvgCost,addedQty,addedUnitCost){
+  var totalQty=oldQty+addedQty;
+  if(totalQty<=0) return addedUnitCost; // stock started at/below zero -- the new cost is the only real evidence
+  return Math.round(((oldQty*oldAvgCost+addedQty*addedUnitCost)/totalQty)*10000)/10000;
+}
+
+// Used by postInventoryConsumption/postInventoryAdjustment below, which
+// (unlike postInventoryPurchase) post a plain journal entry rather than
+// going through a source_document -- so they need their OWN idempotency
+// check, done here BEFORE any stock is touched, not after.
+async function _findExistingJournalBySource(sourceType,sourceId){
+  var entries=await fbGet('journal_entries');
+  return entries.find(function(e){return e.sourceType===sourceType && e.sourceId===sourceId;})||null;
+}
+
+// Debit Inventory (asset) at actual unit cost, Credit AP or Cash.
+// IDEMPOTENCY ORDER MATTERS: createSourceDocument's operationId check is
+// resolved FIRST, before recordInventoryTransaction ever touches real
+// stock -- a replay that hits the idempotent branch returns immediately
+// having moved nothing a second time. Only a genuinely new operationId
+// reaches the stock-quantity move (reason:'purchase', the exact same
+// mechanism this app used before this phase existed), the weighted-
+// average cost update, and finally the financial posting through the
+// same source-document primitives AR/AP use -- 'credit' leaves a real
+// open payable against the named supplier; 'cash' settles in the same
+// posting via postSourceDocument's paidAmount option, never a second,
+// fabricated entry.
+window.postInventoryPurchase=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var invAccountId=INVENTORY_ASSET_ACCOUNT[opts.itemType];
+  if(!invAccountId) return {ok:false, error:'نوع صنف غير صالح'};
+  var quantity=+opts.quantity, unitCost=+opts.unitCost;
+  if(!quantity||quantity<=0) return {ok:false, error:'الكمية يجب أن تكون صحيحة'};
+  if(unitCost==null||isNaN(unitCost)||unitCost<0) return {ok:false, error:'تكلفة الوحدة يجب أن تكون صحيحة'};
+  if(opts.paymentMode!=='cash' && opts.paymentMode!=='credit') return {ok:false, error:'طريقة الدفع يجب أن تكون cash أو credit'};
+  if(opts.paymentMode==='cash' && !opts.cashAccountId) return {ok:false, error:'الحساب النقدي مطلوب للشراء الكاش'};
+  var total=Math.round(quantity*unitCost*100)/100;
+
+  var created=await window.createSourceDocument({
+    type:'inventory_purchase', total:total, date:opts.date,
+    dueDate:opts.paymentMode==='credit'?opts.dueDate:null, operationId:opts.operationId,
+    counterpartyId:opts.supplierId||null, counterpartyName:opts.supplierName||null,
+    notes:'شراء '+ar(quantity)+' '+(opts.itemName||''),
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return {ok:true, id:created.id, document:created.document, idempotent:true};
+
+  var stockResult=await window.recordInventoryTransaction(opts.itemType,opts.itemName,quantity,'purchase',opts.operationId);
+  if(!stockResult||!stockResult.matched){
+    // The financial document already exists in DRAFT with nothing posted
+    // against it -- void it so it doesn't sit around looking like a real,
+    // pending purchase that never actually happened.
+    await window.voidSourceDocument(created.id).catch(function(){});
+    return {ok:false, error:stockResult?'الصنف غير موجود في المخزون':'خطأ في تسجيل حركة المخزون'};
+  }
+
+  var newAvgCost=_weightedAverageCost(stockResult.before,+stockResult.item.cost_per_unit||0,quantity,unitCost);
+  var table=INVENTORY_COLLECTION[opts.itemType];
+  try{ await fbPatch(table,stockResult.item._id,{cost_per_unit:newAvgCost}); fbCacheInvalidate(table); }
+  catch(e){ /* stock quantity already moved -- a failed cost update doesn't roll that back, matching this app's existing best-effort inventory precedent (recordInventoryTransaction never blocks the underlying action either) */ }
+
+  var posted=await window.postSourceDocument(created.id,{
+    debitAccountId:invAccountId,
+    creditAccountId:opts.paymentMode==='cash'?opts.cashAccountId:AP_ACCOUNT_ID,
+    paidAmount:opts.paymentMode==='cash'?total:0,
+  });
+  if(!posted.ok) return posted;
+  return {ok:true, id:created.id, journalEntryId:posted.journalEntryId, status:posted.status, newAvgCost:newAvgCost};
+};
+
+// Debit the item type's expense account at the item's CURRENT weighted-
+// average cost, Credit Inventory. IDEMPOTENCY ORDER MATTERS here too:
+// _findExistingJournalBySource is checked BEFORE recordInventoryTransaction
+// touches real stock. Reuses recordInventoryTransaction for the actual
+// stock decrease (reason caller-supplied, e.g. 'feeding' / 'treatment' --
+// unchanged from before this phase). This is an explicit, opt-in costed-
+// consumption call: it does NOT retrofit the existing consumeFeed/
+// consumeMedicine call sites used elsewhere in the live app (health.js
+// treatments, etc.) -- wiring THOSE into accounting is a UI/integration
+// decision, not something this engine-only pass makes unilaterally for
+// flows it hasn't verified end-to-end this session.
+window.postInventoryConsumption=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var invAccountId=INVENTORY_ASSET_ACCOUNT[opts.itemType];
+  var expAccountId=INVENTORY_EXPENSE_ACCOUNT[opts.itemType];
+  if(!invAccountId||!expAccountId) return {ok:false, error:'نوع صنف غير صالح'};
+  var quantity=+opts.quantity;
+  if(!quantity||quantity<=0) return {ok:false, error:'الكمية يجب أن تكون صحيحة'};
+
+  var existing=await _findExistingJournalBySource('inventory_consumption',opts.operationId);
+  if(existing) return {ok:true, journalEntryId:existing._id, idempotent:true};
+
+  var stockResult=await window.recordInventoryTransaction(opts.itemType,opts.itemName,-Math.abs(quantity),opts.reason||'consumption',opts.operationId);
+  if(!stockResult||!stockResult.matched) return {ok:false, error:stockResult?'الصنف غير موجود في المخزون':'خطأ في تسجيل حركة المخزون'};
+
+  var unitCost=+stockResult.item.cost_per_unit||0;
+  var total=Math.round(Math.abs(stockResult.actualDelta)*unitCost*100)/100;
+  if(total<=0){
+    // Zero-cost item (never purchased with a recorded cost): the stock
+    // movement above is real and already happened; there's simply
+    // nothing to post financially, not an error.
+    return {ok:true, id:null, journalEntryId:null, posted:false, reason:'لا توجد تكلفة مسجّلة لهذا الصنف'};
+  }
+  var posted=await window.postJournalEntry({
+    date:opts.date||todayStr(), description:'استهلاك '+ar(Math.abs(stockResult.actualDelta))+' '+(opts.itemName||'')+(opts.reason?(' — '+opts.reason):''),
+    sourceType:'inventory_consumption', sourceId:opts.operationId,
+    lines:[{accountId:expAccountId, debit:total, relatedAnimalId:opts.relatedAnimalId||null},
+           {accountId:invAccountId, credit:total}],
+  });
+  if(!posted.ok) return posted;
+  return {ok:true, journalEntryId:posted.id, amount:total};
+};
+
+// A physical-count correction, either direction, against 6950 (see
+// header comment for why one account absorbs both). Same idempotency
+// ordering as consumption above: checked before inventoryCorrection ever
+// touches real stock. Reuses inventoryCorrection() for the actual
+// stock-quantity fix -- the SAME mechanism the live inventory.html page
+// already uses for this exact purpose -- then posts the financial side
+// at the item's current cost.
+window.postInventoryAdjustment=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var invAccountId=INVENTORY_ASSET_ACCOUNT[opts.itemType];
+  if(!invAccountId) return {ok:false, error:'نوع صنف غير صالح'};
+
+  var existing=await _findExistingJournalBySource('inventory_adjustment',opts.operationId);
+  if(existing) return {ok:true, journalEntryId:existing._id, idempotent:true};
+
+  var corrected=await window.inventoryCorrection({itemType:opts.itemType, itemName:opts.itemName, newQuantity:opts.newQuantity, sourceId:opts.operationId});
+  if(!corrected.ok) return corrected;
+  if(corrected.unchanged) return {ok:true, posted:false, reason:'لا يوجد فرق فعلي في الكمية'};
+  var items=await fbGet(INVENTORY_COLLECTION[opts.itemType]);
+  var item=items.find(function(i){return i.name===opts.itemName;});
+  var unitCost=+(item&&item.cost_per_unit)||0;
+  var delta=corrected.after-corrected.before;
+  var total=Math.round(Math.abs(delta)*unitCost*100)/100;
+  if(total<=0) return {ok:true, posted:false, reason:'لا توجد تكلفة مسجّلة لهذا الصنف'};
+  var lines=delta>0
+    ? [{accountId:invAccountId, debit:total},{accountId:INVENTORY_ADJUSTMENT_ACCOUNT, credit:total}]   // found extra stock
+    : [{accountId:INVENTORY_ADJUSTMENT_ACCOUNT, debit:total},{accountId:invAccountId, credit:total}];  // shrinkage/loss
+  var posted=await window.postJournalEntry({
+    date:opts.date||todayStr(), description:'تسوية جرد: '+(opts.itemName||'')+' ('+(delta>0?'+':'')+ar(delta)+')',
+    sourceType:'inventory_adjustment', sourceId:opts.operationId, lines:lines,
+  });
+  if(!posted.ok) return posted;
+  return {ok:true, journalEntryId:posted.id, amount:total, direction:delta>0?'gain':'shrinkage'};
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — ANIMAL ACCOUNTING (Phase 7). One new collection
+//  (animal_cost_ledger -- a pure append log of real, evidenced costs
+//  attributed to one animal; this is a trimmed-forward slice of the full
+//  Phase 9 "Animal Cost Basis" design, pulled in now because Phase 7's
+//  own sale/death recipes genuinely can't be correct without it: you
+//  cannot decide whether to post "Cost of Animal Sales" without first
+//  knowing whether a real cost basis exists).
+//
+//  PURCHASE and SALE are Phase 2 source_documents (types 'animal_purchase'
+//  / 'animal_sale', the latter already existed in the Phase 2 enum).
+//  DEATH is a plain journal entry (like inventory adjustment) since there
+//  is no payment/counterparty lifecycle to a death.
+//
+//  The one rule every function here obeys: a Cost of Animal Sales /
+//  Loss on Livestock leg is posted ONLY when animal_cost_ledger actually
+//  has evidence for that animal. A farm-born animal with no purchase
+//  price and no recorded direct costs sells or dies with its cost side
+//  left unposted, `costBasisKnown:false` returned -- never a guessed
+//  number standing in for missing evidence.
+// ══════════════════════════════════════════════════════════════
+
+var LIVESTOCK_ASSET_ACCOUNT='1500';
+var COST_OF_ANIMAL_SALES_ACCOUNT='5100';
+var LOSS_ON_LIVESTOCK_ACCOUNT='5150';
+
+window.recordAnimalCost=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.animalId||!opts.costType||!opts.operationId) return {ok:false, error:'بيانات ناقصة (الحيوان، نوع التكلفة، وoperationId مطلوبون)'};
+  var amount=+opts.amount;
+  if(!amount||isNaN(amount)||amount<=0) return {ok:false, error:'يرجى إدخال مبلغ صحيح'};
+  var ledger=await fbGet('animal_cost_ledger');
+  var dupe=ledger.find(function(l){return l.operationId===opts.operationId;});
+  if(dupe) return {ok:true, id:dupe._id, idempotent:true};
+  var record={
+    animalId:opts.animalId, date:opts.date||todayStr(), costType:opts.costType,
+    sourceType:opts.sourceType||null, sourceId:opts.sourceId||null, amount:Math.round(amount*100)/100,
+    operationId:opts.operationId, createdAt:new Date().toISOString(),
+  };
+  try{
+    var id=await fbPost('animal_cost_ledger',record);
+    fbCacheInvalidate('animal_cost_ledger');
+    return {ok:true, id:id};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Purely additive: sums whatever evidence exists. Never claims
+// completeness -- a real total of zero (no evidence at all) and a real
+// total of, say, 500 (some evidence, possibly not all of it) are both
+// reported as exactly what they are, nothing more.
+window.getAnimalCostBasis=async function(animalId){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var ledger=await fbGet('animal_cost_ledger');
+  var mine=ledger.filter(function(l){return l.animalId===animalId;});
+  var byType={};
+  mine.forEach(function(l){ byType[l.costType]=(byType[l.costType]||0)+(+l.amount||0); });
+  var knownCost=mine.reduce(function(s,l){return s+(+l.amount||0);},0);
+  return {ok:true, knownCost:Math.round(knownCost*100)/100, hasCostBasis:knownCost>0, byType:byType, entryCount:mine.length};
+};
+
+// Debit Livestock Asset, Credit Cash/AP -- then records the purchase
+// price as this animal's own first cost-ledger entry, so a later sale
+// can post a real Cost of Animal Sales leg against it.
+window.postAnimalPurchase=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.animalId) return {ok:false, error:'معرّف الحيوان مطلوب'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var amount=+opts.amount;
+  if(!amount||isNaN(amount)||amount<=0) return {ok:false, error:'يرجى إدخال مبلغ صحيح'};
+  if(opts.paymentMode!=='cash' && opts.paymentMode!=='credit') return {ok:false, error:'طريقة الدفع يجب أن تكون cash أو credit'};
+  if(opts.paymentMode==='cash' && !opts.cashAccountId) return {ok:false, error:'الحساب النقدي مطلوب للشراء الكاش'};
+
+  var created=await window.createSourceDocument({
+    type:'animal_purchase', total:amount, date:opts.date, operationId:opts.operationId,
+    counterpartyId:opts.supplierId||null, counterpartyName:opts.supplierName||null,
+    // FIX (2026-10 audit): opts.dueDate was accepted by this function's
+    // callers but NEVER forwarded to createSourceDocument() -- unlike
+    // postInventoryPurchase()/createSalesInvoice()/createPurchaseBill(),
+    // which all do. A credit-mode document with no dueDate can never be
+    // flagged OVERDUE by refreshOverdueInvoiceStatuses() and sits in the
+    // aging report's "noDueDate" bucket forever, so money owed on livestock
+    // and equipment silently aged with no due date and no alert.
+    dueDate:opts.paymentMode==='credit'?(opts.dueDate||null):null,
+    sourceType:'animal', sourceId:opts.animalId, notes:opts.animalTag?('شراء حيوان: '+opts.animalTag):null,
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return {ok:true, id:created.id, idempotent:true};
+  var posted=await window.postSourceDocument(created.id,{
+    debitAccountId:LIVESTOCK_ASSET_ACCOUNT,
+    creditAccountId:opts.paymentMode==='cash'?opts.cashAccountId:AP_ACCOUNT_ID,
+    paidAmount:opts.paymentMode==='cash'?amount:0,
+  });
+  if(!posted.ok) return posted;
+  await window.recordAnimalCost({
+    animalId:opts.animalId, costType:'purchase', amount:amount, date:opts.date,
+    sourceType:'source_document', sourceId:created.id, operationId:opts.operationId+'-cost',
+  });
+  return {ok:true, id:created.id, journalEntryId:posted.journalEntryId, status:posted.status};
+};
+
+// Debit Cash/AR, Credit the given revenue account -- always. Then, ONLY
+// if animal_cost_ledger has real evidence for this animal, a SEPARATE
+// journal entry posts Debit Cost of Animal Sales / Credit Livestock
+// Asset for exactly that known amount. If there's no evidence, that
+// second leg is skipped outright and costBasisKnown:false is returned --
+// the sale itself is never blocked or distorted by missing cost data.
+window.postAnimalSale=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.animalId) return {ok:false, error:'معرّف الحيوان مطلوب'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  if(!opts.revenueAccountId) return {ok:false, error:'حساب الإيراد مطلوب'};
+  var amount=+opts.salePrice;
+  if(!amount||isNaN(amount)||amount<=0) return {ok:false, error:'يرجى إدخال سعر بيع صحيح'};
+  if(opts.paymentMode!=='cash' && opts.paymentMode!=='credit') return {ok:false, error:'طريقة الدفع يجب أن تكون cash أو credit'};
+  if(opts.paymentMode==='cash' && !opts.cashAccountId) return {ok:false, error:'الحساب النقدي مطلوب للبيع الكاش'};
+
+  var created=await window.createSourceDocument({
+    type:'animal_sale', total:amount, date:opts.date, operationId:opts.operationId,
+    counterpartyId:opts.customerId||null, counterpartyName:opts.customerName||null,
+    dueDate:opts.paymentMode==='credit'?(opts.dueDate||null):null, // FIX (2026-10 audit): was dropped — see postAnimalPurchase
+    sourceType:'animal', sourceId:opts.animalId, notes:opts.animalTag?('بيع حيوان: '+opts.animalTag):null,
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return {ok:true, id:created.id, idempotent:true};
+  var posted=await window.postSourceDocument(created.id,{
+    debitAccountId:opts.paymentMode==='cash'?opts.cashAccountId:AR_ACCOUNT_ID,
+    creditAccountId:opts.revenueAccountId,
+    paidAmount:opts.paymentMode==='cash'?amount:0,
+  });
+  if(!posted.ok) return posted;
+
+  var costBasis=await window.getAnimalCostBasis(opts.animalId);
+  var cogsResult=null;
+  if(costBasis.knownCost>0){
+    cogsResult=await window.postJournalEntry({
+      date:opts.date||todayStr(), description:'تكلفة بيع حيوان: '+(opts.animalTag||opts.animalId),
+      sourceType:'animal_sale_cogs', sourceId:opts.operationId,
+      lines:[{accountId:COST_OF_ANIMAL_SALES_ACCOUNT, debit:costBasis.knownCost, relatedAnimalId:opts.animalId},
+             {accountId:LIVESTOCK_ASSET_ACCOUNT, credit:costBasis.knownCost, relatedAnimalId:opts.animalId}],
+    });
+  }
+  return {
+    ok:true, id:created.id, journalEntryId:posted.journalEntryId, status:posted.status,
+    costBasisKnown:costBasis.knownCost>0, knownCost:costBasis.knownCost,
+    cogsJournalEntryId:cogsResult&&cogsResult.ok?cogsResult.id:null,
+  };
+};
+
+// If (and only if) this animal has a real, evidenced cost basis, writes
+// it off: Debit Loss on Livestock, Credit Livestock Asset. No cost
+// basis -> no journal entry, costBasisKnown:false -- a farm-born
+// animal's death is a real event even when it has no traceable cost to
+// write off, and this never invents one just to "close the books".
+window.postAnimalDeath=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.animalId) return {ok:false, error:'معرّف الحيوان مطلوب'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+
+  var existing=await _findExistingJournalBySource('animal_death_writeoff',opts.operationId);
+  if(existing) return {ok:true, journalEntryId:existing._id, idempotent:true};
+
+  var costBasis=await window.getAnimalCostBasis(opts.animalId);
+  if(costBasis.knownCost<=0) return {ok:true, posted:false, costBasisKnown:false, reason:'لا توجد تكلفة مسجّلة لهذا الحيوان'};
+
+  var posted=await window.postJournalEntry({
+    date:opts.date||todayStr(), description:'إعدام حيوان نافق: '+(opts.animalTag||opts.animalId),
+    sourceType:'animal_death_writeoff', sourceId:opts.operationId,
+    lines:[{accountId:LOSS_ON_LIVESTOCK_ACCOUNT, debit:costBasis.knownCost, relatedAnimalId:opts.animalId},
+           {accountId:LIVESTOCK_ASSET_ACCOUNT, credit:costBasis.knownCost, relatedAnimalId:opts.animalId}],
+  });
+  if(!posted.ok) return posted;
+  return {ok:true, journalEntryId:posted.id, costBasisKnown:true, amount:costBasis.knownCost};
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — FARM COST ACCOUNTING (Phase 8). Two new
+//  collections (cost_centers, cost_allocations). This is deliberately a
+//  MANAGEMENT-reporting layer, not an accounting-truth one (see Phase
+//  48's own eventual distinction): allocating a cost across cost centers
+//  never touches the original, already-posted, immutable journal entry
+//  -- it's a separate, additive attribution record on top of it. Every
+//  allocation states its own method explicitly; nothing is force-split
+//  when there's no real basis to split it on (a farm with one barn and
+//  one activity has no reason to fabricate a percentage breakdown).
+// ══════════════════════════════════════════════════════════════
+
+var COST_CENTER_TYPES=['farm','barn','animal_group','batch','breeding_group',
+  'milk_production','fattening','nursery','quarantine','maintenance'];
+var ALLOCATION_METHODS=['DIRECT','PER_ANIMAL','BY_QUANTITY','BY_WEIGHT','BY_DAYS','BY_PRODUCTION','BY_PERCENTAGE','MANUAL'];
+
+window.createCostCenter=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.name||COST_CENTER_TYPES.indexOf(opts.type)===-1) return {ok:false, error:'بيانات ناقصة (الاسم والنوع مطلوبان)'};
+  var record={
+    name:opts.name, type:opts.type, parentId:opts.parentId||null, active:true,
+    createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+  };
+  try{
+    var id=await fbPost('cost_centers',record);
+    fbCacheInvalidate('cost_centers');
+    await logActivity('add','cost_centers','إضافة مركز تكلفة: '+record.name);
+    return {ok:true, id:id};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Attributes an amount already posted in a REAL journal entry across one
+// or more cost centers. Never touches the original entry (immutable,
+// per Phase 1). Every allocation line states its own method; the sum of
+// all lines must equal totalAmount EXACTLY -- if it doesn't, this is
+// rejected outright rather than silently absorbing the difference into
+// the last line (that would be inventing evidence for the remainder).
+window.allocateCost=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  if(!opts.sourceJournalEntryId) return {ok:false, error:'معرّف القيد المصدر مطلوب'};
+  var totalAmount=+opts.totalAmount;
+  if(!totalAmount||isNaN(totalAmount)||totalAmount<=0) return {ok:false, error:'إجمالي المبلغ يجب أن يكون صحيحًا'};
+  if(!Array.isArray(opts.allocations)||!opts.allocations.length) return {ok:false, error:'توزيع واحد على الأقل مطلوب'};
+
+  var existingAllocs=await fbGet('cost_allocations');
+  var dupe=existingAllocs.find(function(a){return a.operationId===opts.operationId;});
+  if(dupe) return {ok:true, id:dupe._id, idempotent:true};
+
+  var entries=await fbGet('journal_entries');
+  var source=entries.find(function(e){return e._id===opts.sourceJournalEntryId;});
+  if(!source) return {ok:false, error:'القيد المصدر غير موجود'};
+
+  var centers=await fbGet('cost_centers');
+  var sumAllocated=0;
+  for(var i=0;i<opts.allocations.length;i++){
+    var a=opts.allocations[i];
+    if(ALLOCATION_METHODS.indexOf(a.method)===-1) return {ok:false, error:'طريقة توزيع غير صالحة: '+a.method};
+    if(!centers.some(function(c){return c._id===a.costCenterId;})) return {ok:false, error:'مركز تكلفة غير موجود: '+a.costCenterId};
+    var amt=+a.amount;
+    if(!amt||isNaN(amt)||amt<=0) return {ok:false, error:'كل سطر توزيع يجب أن يحمل مبلغًا صحيحًا'};
+    sumAllocated+=amt;
+  }
+  sumAllocated=Math.round(sumAllocated*100)/100;
+  if(sumAllocated!==Math.round(totalAmount*100)/100){
+    return {ok:false, error:'مجموع التوزيعات ('+sumAllocated+') لا يساوي إجمالي المبلغ ('+totalAmount+')'};
+  }
+
+  var record={
+    sourceJournalEntryId:opts.sourceJournalEntryId, sourceDate:source.date||null,
+    totalAmount:Math.round(totalAmount*100)/100, allocations:opts.allocations,
+    operationId:opts.operationId, createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+  };
+  try{
+    var id=await fbPost('cost_allocations',record);
+    fbCacheInvalidate('cost_allocations');
+    await logActivity('add','cost_allocations','توزيع تكلفة قيد '+opts.sourceJournalEntryId+' على '+opts.allocations.length+' مركز');
+    _recordFinancialAudit('ALLOCATE','cost_allocation',id,{sourceJournalEntryId:opts.sourceJournalEntryId, totalAmount:record.totalAmount});
+    return {ok:true, id:id};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Real allocated cost for one cost center, date-filtered by the SOURCE
+// journal entry's own date (not the allocation record's creation date).
+window.getCostByCenter=async function(costCenterId,startDate,endDate){
+  var allocs=await fbGet('cost_allocations');
+  var total=0; var matches=[];
+  allocs.forEach(function(rec){
+    if(startDate && rec.sourceDate<startDate) return;
+    if(endDate && rec.sourceDate>endDate) return;
+    (rec.allocations||[]).forEach(function(a){
+      if(a.costCenterId!==costCenterId) return;
+      total+=(+a.amount||0);
+      matches.push({sourceJournalEntryId:rec.sourceJournalEntryId, date:rec.sourceDate, amount:+a.amount||0, method:a.method});
+    });
+  });
+  return {ok:true, total:Math.round(total*100)/100, entries:matches};
+};
+
+// Surfaces expense-side journal lines that have never been allocated to
+// any cost center -- visibility into what's real but not yet attributed,
+// rather than hiding the gap (Phase 8's own "Unallocated Costs" ask).
+// An expense line is identified by its account's type, resolved from the
+// Chart of Accounts, not by guessing from the description text.
+window.getUnallocatedCosts=async function(startDate,endDate){
+  var entries=await fbGet('journal_entries');
+  var accounts=await fbGet('accounts');
+  var allocs=await fbGet('cost_allocations');
+  var allocatedEntryIds={};
+  allocs.forEach(function(a){ allocatedEntryIds[a.sourceJournalEntryId]=true; });
+  var expenseAccountIds={};
+  accounts.forEach(function(a){ if(a.type==='EXPENSE') expenseAccountIds[a._id]=true; });
+
+  var unallocated=[];
+  entries.forEach(function(e){
+    if(startDate && e.date<startDate) return;
+    if(endDate && e.date>endDate) return;
+    if(allocatedEntryIds[e._id]) return;
+    var expenseAmount=0;
+    (e.lines||[]).forEach(function(l){ if(expenseAccountIds[l.accountId]) expenseAmount+=(+l.debit||0); });
+    if(expenseAmount>0) unallocated.push({journalEntryId:e._id, date:e.date, description:e.description, amount:Math.round(expenseAmount*100)/100});
+  });
+  var total=Math.round(unallocated.reduce(function(s,u){return s+u.amount;},0)*100)/100;
+  return {ok:true, total:total, entries:unallocated};
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — FEED COSTING (Phase 10). No new collection --
+//  pure reporting over journal_entries lines already posted against the
+//  Feed Expense account (6100) by Phase 6's postInventoryConsumption
+//  (which already accepts relatedAnimalId on its expense line). Note
+//  Phase 9 ("Animal Cost Basis") is not a separate pass here: Phase 7's
+//  animal_cost_ledger/getAnimalCostBasis already deliver exactly that
+//  remit (real evidenced cost per animal, no fabricated completeness) --
+//  duplicating it under a different name would create a second,
+//  competing cost-basis source, which this whole engine exists to avoid.
+//
+//  Deliberately NOT implemented: feed conversion ratio. Per the Phase 0
+//  audit, this app's weight records and feed-consumption records are not
+//  reliably correlated per-animal today, so computing a ratio would mean
+//  guessing which weight change came from which feed -- exactly the kind
+//  of invented number this engine refuses to produce. If/when a real,
+//  evidenced link between the two exists, this is the natural place to
+//  add it.
+// ══════════════════════════════════════════════════════════════
+
+var FEED_EXPENSE_ACCOUNT='6100';
+
+function _feedExpenseLines(entries,startDate,endDate){
+  var rows=[];
+  entries.forEach(function(e){
+    if(startDate && e.date<startDate) return;
+    if(endDate && e.date>endDate) return;
+    (e.lines||[]).forEach(function(l){
+      if(l.accountId===FEED_EXPENSE_ACCOUNT && (+l.debit||0)>0){
+        rows.push({journalEntryId:e._id, date:e.date, amount:+l.debit, relatedAnimalId:l.relatedAnimalId||null, relatedBarnId:l.relatedBarnId||null});
+      }
+    });
+  });
+  return rows;
+}
+
+// Total feed cost in range, split into what CAN be attributed to a
+// specific animal (relatedAnimalId was set when the consumption was
+// posted) vs. what genuinely can't (feeding logged at the barn/group
+// level, no per-animal split ever recorded) -- the unattributed bucket
+// is reported explicitly, never silently folded into "per animal".
+window.getFeedCostSummary=async function(startDate,endDate){
+  var entries=await fbGet('journal_entries');
+  var rows=_feedExpenseLines(entries,startDate,endDate);
+  var total=0, byAnimal={}, unattributed=0;
+  rows.forEach(function(r){
+    total+=r.amount;
+    if(r.relatedAnimalId) byAnimal[r.relatedAnimalId]=(byAnimal[r.relatedAnimalId]||0)+r.amount;
+    else unattributed+=r.amount;
+  });
+  Object.keys(byAnimal).forEach(function(k){ byAnimal[k]=Math.round(byAnimal[k]*100)/100; });
+  return {ok:true, total:Math.round(total*100)/100, byAnimal:byAnimal, unattributed:Math.round(unattributed*100)/100, recordCount:rows.length};
+};
+
+window.getFeedCostPerAnimal=async function(animalId,startDate,endDate){
+  var entries=await fbGet('journal_entries');
+  var rows=_feedExpenseLines(entries,startDate,endDate).filter(function(r){return r.relatedAnimalId===animalId;});
+  var total=rows.reduce(function(s,r){return s+r.amount;},0);
+  return {ok:true, total:Math.round(total*100)/100, entries:rows};
+};
+
+window.getFeedCostPerDay=async function(startDate,endDate){
+  var entries=await fbGet('journal_entries');
+  var rows=_feedExpenseLines(entries,startDate,endDate);
+  var byDate={};
+  rows.forEach(function(r){ byDate[r.date]=(byDate[r.date]||0)+r.amount; });
+  var days=Object.keys(byDate).sort().map(function(d){ return {date:d, total:Math.round(byDate[d]*100)/100}; });
+  return {ok:true, days:days};
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — HEALTH & MEDICINE COSTING (Phase 11). No new
+//  collection -- the exact same reporting pattern as Phase 10 (Feed
+//  Costing), over journal_entries lines posted against the Veterinary/
+//  Medicine Expense account (6200) instead of Feed Expense (6100). Same
+//  attributed-vs-unattributed split, same reasoning for why: a treatment
+//  logged without a specific animal (e.g. a barn-wide vaccination pass)
+//  stays in "unattributed" rather than being guessed onto one animal.
+// ══════════════════════════════════════════════════════════════
+
+var MEDICINE_EXPENSE_ACCOUNT='6200';
+
+function _expenseLinesForAccount(entries,accountId,startDate,endDate){
+  var rows=[];
+  entries.forEach(function(e){
+    if(startDate && e.date<startDate) return;
+    if(endDate && e.date>endDate) return;
+    (e.lines||[]).forEach(function(l){
+      if(l.accountId===accountId && (+l.debit||0)>0){
+        rows.push({journalEntryId:e._id, date:e.date, amount:+l.debit, relatedAnimalId:l.relatedAnimalId||null, relatedBarnId:l.relatedBarnId||null});
+      }
+    });
+  });
+  return rows;
+}
+
+window.getMedicineCostSummary=async function(startDate,endDate){
+  var entries=await fbGet('journal_entries');
+  var rows=_expenseLinesForAccount(entries,MEDICINE_EXPENSE_ACCOUNT,startDate,endDate);
+  var total=0, byAnimal={}, unattributed=0;
+  rows.forEach(function(r){
+    total+=r.amount;
+    if(r.relatedAnimalId) byAnimal[r.relatedAnimalId]=(byAnimal[r.relatedAnimalId]||0)+r.amount;
+    else unattributed+=r.amount;
+  });
+  Object.keys(byAnimal).forEach(function(k){ byAnimal[k]=Math.round(byAnimal[k]*100)/100; });
+  return {ok:true, total:Math.round(total*100)/100, byAnimal:byAnimal, unattributed:Math.round(unattributed*100)/100, recordCount:rows.length};
+};
+
+window.getMedicineCostPerAnimal=async function(animalId,startDate,endDate){
+  var entries=await fbGet('journal_entries');
+  var rows=_expenseLinesForAccount(entries,MEDICINE_EXPENSE_ACCOUNT,startDate,endDate).filter(function(r){return r.relatedAnimalId===animalId;});
+  var total=rows.reduce(function(s,r){return s+r.amount;},0);
+  return {ok:true, total:Math.round(total*100)/100, entries:rows};
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — LABOR COSTING (Phase 12). One new collection
+//  (employees). Mirrors Phase 5's Accounts Payable pattern exactly:
+//  accrual creates a real open payable (Debit Labor Expense 6300 /
+//  Credit Payroll Payable 2210) via a Phase 2 source_document (type
+//  'labor_payment', already in the enum), and the actual payment is
+//  Phase 2's recordPaymentAgainstDocument with direction 'pay' against
+//  2210 -- the exact same expense-recognition-vs-payment separation the
+//  Master Prompt asks for, reusing machinery instead of inventing a
+//  parallel one.
+// ══════════════════════════════════════════════════════════════
+
+var PAYROLL_PAYABLE_ACCOUNT='2210';
+var EMPLOYEE_RATE_TYPES=['daily','hourly','monthly'];
+
+window.createEmployee=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.name) return {ok:false, error:'اسم العامل مطلوب'};
+  if(opts.rateType && EMPLOYEE_RATE_TYPES.indexOf(opts.rateType)===-1) return {ok:false, error:'نوع الأجر غير صالح'};
+  var record={
+    name:opts.name, role:opts.role||null, rateType:opts.rateType||null, rateAmount:+opts.rateAmount||null,
+    active:true, createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+  };
+  try{
+    var id=await fbPost('employees',record);
+    fbCacheInvalidate('employees');
+    await logActivity('add','employees','إضافة عامل: '+record.name);
+    return {ok:true, id:id};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Accrual: Debit Labor Expense, Credit Payroll Payable -- a real open
+// liability, not a payment. costCenterId is optional, caller-supplied
+// (e.g. which barn/activity this work period was for); left unset when
+// there's no real basis to attribute it, never guessed.
+window.postLaborAccrual=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.employeeId) return {ok:false, error:'معرّف العامل مطلوب'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var amount=+opts.amount;
+  if(!amount||isNaN(amount)||amount<=0) return {ok:false, error:'يرجى إدخال مبلغ صحيح'};
+
+  var created=await window.createSourceDocument({
+    type:'labor_payment', total:amount, date:opts.date, operationId:opts.operationId,
+    counterpartyId:opts.employeeId, counterpartyName:opts.employeeName||null,
+    dueDate:opts.dueDate||null, // FIX (2026-10 audit): an accrual with no due date can never age or go overdue
+    notes:opts.workPeriodStart?('فترة عمل: '+opts.workPeriodStart+' — '+(opts.workPeriodEnd||opts.workPeriodStart)):null,
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return {ok:true, id:created.id, idempotent:true};
+  var posted=await window.postSourceDocument(created.id,{
+    lines:[{accountId:'6300', debit:amount, costCenterId:opts.costCenterId||null},
+           {accountId:PAYROLL_PAYABLE_ACCOUNT, credit:amount}],
+  });
+  if(!posted.ok) return posted;
+  return {ok:true, id:created.id, journalEntryId:posted.journalEntryId, status:posted.status};
+};
+
+// Payment: Debit Payroll Payable, Credit Cash/Bank -- thin wrapper over
+// Phase 2's generic payment primitive, same shape as
+// recordSupplierPayment (Phase 5).
+window.postLaborPayment=async function(documentId,opts){
+  opts=opts||{};
+  return await window.recordPaymentAgainstDocument(documentId,Object.assign({},opts,{
+    counterAccountId:PAYROLL_PAYABLE_ACCOUNT, direction:'pay',
+  }));
+};
+
+window.getEmployeeBalance=async function(employeeId){
+  var docs=await fbGet('source_documents');
+  var open=docs.filter(function(d){
+    return d.type==='labor_payment' && d.counterpartyId===employeeId
+      && (d.status==='POSTED'||d.status==='PARTIALLY_PAID'||d.status==='OVERDUE');
+  });
+  var balance=open.reduce(function(s,d){return s+(+d.remainingAmount||0);},0);
+  return {ok:true, balance:Math.round(balance*100)/100, openAccrualCount:open.length};
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — PRODUCTION COSTING (Phase 13). No new collection.
+//  Milk/wool/manure SALES are not a new posting recipe -- they're Phase
+//  4's createSalesInvoice, which already accepts any revenueAccountId
+//  (4200 milk / 4300 wool / 4400 manure), reused as-is rather than
+//  duplicated under a new name. What's genuinely new here is the MARGIN
+//  calculation, which ties three already-real sources together: revenue
+//  from journal_entries (this engine), attributable cost from Phase 8's
+//  cost-center allocations (this engine), and physical quantity from the
+//  pre-existing production_log collection (the app's own long-standing
+//  production records, untouched by this rebuild). Cost/revenue per unit
+//  is only ever computed when quantity > 0 -- never a division by zero
+//  masquerading as a real number.
+// ══════════════════════════════════════════════════════════════
+
+window.getProductionMargin=async function(opts){
+  opts=opts||{};
+  if(!opts.revenueAccountId) return {ok:false, error:'حساب الإيراد مطلوب'};
+  var entries=await fbGet('journal_entries');
+  var revenue=0;
+  entries.forEach(function(e){
+    if(opts.startDate && e.date<opts.startDate) return;
+    if(opts.endDate && e.date>opts.endDate) return;
+    (e.lines||[]).forEach(function(l){ if(l.accountId===opts.revenueAccountId) revenue+=(+l.credit||0); });
+  });
+  revenue=Math.round(revenue*100)/100;
+
+  var cost=0;
+  if(opts.costCenterId){
+    var costResult=await window.getCostByCenter(opts.costCenterId,opts.startDate,opts.endDate);
+    cost=costResult.total;
+  }
+
+  var quantity=0;
+  if(opts.productionLogType){
+    var log=await fbGet('production_log');
+    log.forEach(function(p){
+      if(p.type!==opts.productionLogType) return;
+      if(opts.startDate && p.date<opts.startDate) return;
+      if(opts.endDate && p.date>opts.endDate) return;
+      quantity+=(+p.quantity||0);
+    });
+  }
+
+  var grossMargin=Math.round((revenue-cost)*100)/100;
+  return {
+    ok:true, revenue:revenue, cost:cost, grossMargin:grossMargin, quantity:Math.round(quantity*100)/100,
+    costPerUnit:quantity>0 ? Math.round((cost/quantity)*100)/100 : null,
+    revenuePerUnit:quantity>0 ? Math.round((revenue/quantity)*100)/100 : null,
+  };
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — FIXED ASSETS & DEPRECIATION (Phase 14). One new
+//  collection (fixed_assets). Acquisition is Phase 2's source_documents
+//  (type 'asset_purchase', already in the enum): Debit Fixed Assets
+//  (1600) / Credit Cash or AP. Depreciation is a plain, idempotency-
+//  guarded journal entry (Phase 6's _findExistingJournalBySource
+//  pattern), straight-line only, one period per call.
+//
+//  Accumulated depreciation is NEVER a stored, mutable number on the
+//  asset record -- same principle as Phase 3's cash/bank balances: it's
+//  always the real sum of every depreciation journal entry actually
+//  posted for that asset (sourceType 'asset_depreciation', sourceId the
+//  asset's id), so it can never silently drift from the ledger. Every
+//  depreciation posting is capped so accumulated depreciation can never
+//  exceed the asset's own depreciable value (acquisitionCost -
+//  residualValue) -- if less than a full period remains, only the real
+//  remainder is posted; if nothing remains, nothing is posted.
+// ══════════════════════════════════════════════════════════════
+
+window.postAssetPurchase=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.name) return {ok:false, error:'اسم الأصل مطلوب'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var cost=+opts.acquisitionCost;
+  if(!cost||isNaN(cost)||cost<=0) return {ok:false, error:'تكلفة الاستحواذ يجب أن تكون صحيحة'};
+  var usefulLifeMonths=+opts.usefulLifeMonths;
+  if(!usefulLifeMonths||usefulLifeMonths<=0) return {ok:false, error:'العمر الإنتاجي (بالأشهر) يجب أن يكون صحيحًا'};
+  var residualValue=opts.residualValue!=null ? +opts.residualValue : 0;
+  if(residualValue<0||residualValue>=cost) return {ok:false, error:'القيمة التخريدية يجب أن تكون أقل من تكلفة الاستحواذ'};
+  if(opts.paymentMode!=='cash' && opts.paymentMode!=='credit') return {ok:false, error:'طريقة الدفع يجب أن تكون cash أو credit'};
+  if(opts.paymentMode==='cash' && !opts.cashAccountId) return {ok:false, error:'الحساب النقدي مطلوب للشراء الكاش'};
+
+  var assetId;
+  try{
+    assetId=await fbPost('fixed_assets',{
+      name:opts.name, category:opts.category||null, acquisitionDate:opts.date||todayStr(),
+      acquisitionCost:Math.round(cost*100)/100, usefulLifeMonths:usefulLifeMonths,
+      residualValue:Math.round(residualValue*100)/100, depreciationMethod:'STRAIGHT_LINE',
+      location:opts.location||null, status:'active', createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+    });
+    fbCacheInvalidate('fixed_assets');
+  }catch(e){ return {ok:false, error:e.message}; }
+
+  var created=await window.createSourceDocument({
+    type:'asset_purchase', total:cost, date:opts.date, operationId:opts.operationId,
+    counterpartyId:opts.supplierId||null, counterpartyName:opts.supplierName||null,
+    dueDate:opts.paymentMode==='credit'?(opts.dueDate||null):null, // FIX (2026-10 audit): was dropped — see postAnimalPurchase
+    sourceType:'fixed_asset', sourceId:assetId, notes:'شراء أصل: '+opts.name,
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return {ok:true, assetId:assetId, documentId:created.id, idempotent:true};
+  var posted=await window.postSourceDocument(created.id,{
+    debitAccountId:'1600', creditAccountId:opts.paymentMode==='cash'?opts.cashAccountId:AP_ACCOUNT_ID,
+    paidAmount:opts.paymentMode==='cash'?cost:0,
+  });
+  if(!posted.ok) return posted;
+  return {ok:true, assetId:assetId, documentId:created.id, journalEntryId:posted.journalEntryId, status:posted.status};
+};
+
+// Depreciation entries use a COMPOSITE sourceId ("{assetId}::{periodKey}"),
+// not a separate field on the entry -- journal_entries is immutable the
+// instant it's posted (Phase 1's own rule blocks any later write, on
+// purpose), so there is no legal way to tag an asset id onto an entry
+// AFTER posting it. Encoding both the asset and the period into the one
+// sourceId the engine already carries avoids needing a second field or a
+// third collection.
+function _depreciationSourceId(assetId,periodOperationId){ return assetId+'::'+periodOperationId; }
+
+window.getAssetAccumulatedDepreciation=async function(assetId){
+  var entries=await fbGet('journal_entries');
+  var prefix=assetId+'::';
+  var total=0;
+  entries.forEach(function(e){
+    if(e.sourceType!=='asset_depreciation'||typeof e.sourceId!=='string'||e.sourceId.indexOf(prefix)!==0) return;
+    (e.lines||[]).forEach(function(l){ if(l.accountId==='1690') total+=(+l.credit||0); });
+  });
+  return Math.round(total*100)/100;
+};
+
+window.getAssetBookValue=async function(assetId){
+  var assets=await fbGet('fixed_assets');
+  var asset=assets.find(function(a){return a._id===assetId;});
+  if(!asset) return {ok:false, error:'الأصل غير موجود'};
+  var accumulated=await window.getAssetAccumulatedDepreciation(assetId);
+  var bookValue=Math.round((asset.acquisitionCost-accumulated)*100)/100;
+  return {ok:true, acquisitionCost:asset.acquisitionCost, accumulatedDepreciation:accumulated, bookValue:bookValue};
+};
+
+// One straight-line period. periodOperationId should be unique per
+// asset+period (e.g. "assetId-2026-01") so re-running the same period
+// is a safe no-op rather than double-depreciating.
+window.postDepreciation=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.assetId||!opts.periodOperationId) return {ok:false, error:'معرّف الأصل ومعرّف الفترة مطلوبان'};
+
+  var compositeSourceId=_depreciationSourceId(opts.assetId,opts.periodOperationId);
+  var existing=await _findExistingJournalBySource('asset_depreciation',compositeSourceId);
+  if(existing) return {ok:true, journalEntryId:existing._id, idempotent:true};
+
+  var assets=await fbGet('fixed_assets');
+  var asset=assets.find(function(a){return a._id===opts.assetId;});
+  if(!asset) return {ok:false, error:'الأصل غير موجود'};
+
+  var depreciableValue=Math.round((asset.acquisitionCost-asset.residualValue)*100)/100;
+  var periodAmount=Math.round((depreciableValue/asset.usefulLifeMonths)*100)/100;
+  var accumulated=await window.getAssetAccumulatedDepreciation(opts.assetId);
+  var remaining=Math.round((depreciableValue-accumulated)*100)/100;
+  if(remaining<=0) return {ok:true, posted:false, reason:'الأصل مُهلَك بالكامل بالفعل'};
+  var thisAmount=Math.min(periodAmount,remaining);
+
+  var posted=await window.postJournalEntry({
+    date:opts.date||todayStr(), description:'إهلاك: '+asset.name+(opts.periodLabel?(' — '+opts.periodLabel):''),
+    sourceType:'asset_depreciation', sourceId:compositeSourceId,
+    lines:[{accountId:'6800', debit:thisAmount},{accountId:'1690', credit:thisAmount}],
+  });
+  if(!posted.ok) return posted;
+  return {ok:true, journalEntryId:posted.id, amount:thisAmount, remainingAfter:Math.round((remaining-thisAmount)*100)/100};
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — LOANS (Phase 15). One new collection (loans).
+//  Receipt is a Phase 2 source_document (type 'loan', already in the
+//  enum): Debit Cash / Credit Loans-and-Financing (2300) -- principal
+//  only, NEVER classified as revenue. Principal payments and interest
+//  payments are two structurally separate kinds of journal entry
+//  (composite-sourceId idempotency, same pattern as Phase 14's
+//  depreciation): principal only ever touches 2300 (a liability), never
+//  6850; interest only ever touches 6850 (a real expense), never 2300 --
+//  the Master Prompt's "never mix principal with interest" is enforced
+//  by construction, not by a runtime check, since each function can only
+//  post to its own one account pairing.
+// ══════════════════════════════════════════════════════════════
+
+window.postLoanReceipt=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.lenderName) return {ok:false, error:'اسم الجهة المقرضة مطلوب'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var principal=+opts.principalAmount;
+  if(!principal||isNaN(principal)||principal<=0) return {ok:false, error:'مبلغ القرض يجب أن يكون صحيحًا'};
+  if(!opts.cashAccountId) return {ok:false, error:'الحساب النقدي/البنكي مطلوب'};
+
+  var loanId;
+  try{
+    loanId=await fbPost('loans',{
+      lenderName:opts.lenderName, principalAmount:Math.round(principal*100)/100,
+      interestRate:opts.interestRate!=null?+opts.interestRate:null, startDate:opts.date||todayStr(),
+      status:'active', createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+    });
+    fbCacheInvalidate('loans');
+  }catch(e){ return {ok:false, error:e.message}; }
+
+  var created=await window.createSourceDocument({
+    type:'loan', total:principal, date:opts.date, operationId:opts.operationId,
+    counterpartyName:opts.lenderName, sourceType:'loan', sourceId:loanId, notes:'استلام قرض من: '+opts.lenderName,
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return {ok:true, loanId:loanId, documentId:created.id, idempotent:true};
+  var posted=await window.postSourceDocument(created.id,{
+    debitAccountId:opts.cashAccountId, creditAccountId:'2300', paidAmount:principal,
+  });
+  if(!posted.ok) return posted;
+  return {ok:true, loanId:loanId, documentId:created.id, journalEntryId:posted.journalEntryId};
+};
+
+window.getLoanRemainingPrincipal=async function(loanId){
+  var loans=await fbGet('loans');
+  var loan=loans.find(function(l){return l._id===loanId;});
+  if(!loan) return {ok:false, error:'القرض غير موجود'};
+  var entries=await fbGet('journal_entries');
+  var prefix=loanId+'::';
+  var paid=0;
+  entries.forEach(function(e){
+    if(e.sourceType!=='loan_principal_payment'||typeof e.sourceId!=='string'||e.sourceId.indexOf(prefix)!==0) return;
+    (e.lines||[]).forEach(function(l){ if(l.accountId==='2300') paid+=(+l.debit||0); });
+  });
+  paid=Math.round(paid*100)/100;
+  return {ok:true, principalAmount:loan.principalAmount, principalPaid:paid, remainingPrincipal:Math.round((loan.principalAmount-paid)*100)/100};
+};
+
+// Debit 2300 (reduces the liability), Credit Cash. Refuses to overpay
+// beyond the real remaining principal -- same "never invent/overshoot"
+// discipline as Phase 14's depreciation cap.
+window.postLoanPrincipalPayment=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.loanId||!opts.operationId) return {ok:false, error:'معرّف القرض وoperationId مطلوبان'};
+  var amount=+opts.amount;
+  if(!amount||isNaN(amount)||amount<=0) return {ok:false, error:'يرجى إدخال مبلغ صحيح'};
+  if(!opts.cashAccountId) return {ok:false, error:'الحساب النقدي/البنكي مطلوب'};
+
+  var compositeId=opts.loanId+'::'+opts.operationId;
+  var existing=await _findExistingJournalBySource('loan_principal_payment',compositeId);
+  if(existing) return {ok:true, journalEntryId:existing._id, idempotent:true};
+
+  var balance=await window.getLoanRemainingPrincipal(opts.loanId);
+  if(!balance.ok) return balance;
+  if(amount>balance.remainingPrincipal+0.001) return {ok:false, error:'المبلغ أكبر من أصل القرض المتبقي'};
+
+  var posted=await window.postJournalEntry({
+    date:opts.date||todayStr(), description:'سداد أصل قرض',
+    sourceType:'loan_principal_payment', sourceId:compositeId,
+    lines:[{accountId:'2300', debit:amount},{accountId:opts.cashAccountId, credit:amount}],
+  });
+  if(!posted.ok) return posted;
+  if(Math.round((balance.remainingPrincipal-amount)*100)/100<=0){
+    try{ await fbPatch('loans',opts.loanId,{status:'paid_off'}); fbCacheInvalidate('loans'); }catch(e){/* payment already posted correctly regardless */}
+  }
+  return {ok:true, journalEntryId:posted.id, remainingAfter:Math.round((balance.remainingPrincipal-amount)*100)/100};
+};
+
+// Debit Interest Expense (6850), Credit Cash -- a real, separate expense
+// event. Never touches 2300 or the loan's principal balance at all.
+window.postLoanInterestPayment=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.loanId||!opts.operationId) return {ok:false, error:'معرّف القرض وoperationId مطلوبان'};
+  var amount=+opts.amount;
+  if(!amount||isNaN(amount)||amount<=0) return {ok:false, error:'يرجى إدخال مبلغ صحيح'};
+  if(!opts.cashAccountId) return {ok:false, error:'الحساب النقدي/البنكي مطلوب'};
+
+  var compositeId=opts.loanId+'::'+opts.operationId;
+  var existing=await _findExistingJournalBySource('loan_interest_payment',compositeId);
+  if(existing) return {ok:true, journalEntryId:existing._id, idempotent:true};
+
+  var posted=await window.postJournalEntry({
+    date:opts.date||todayStr(), description:'سداد فائدة قرض',
+    sourceType:'loan_interest_payment', sourceId:compositeId,
+    lines:[{accountId:'6850', debit:amount},{accountId:opts.cashAccountId, credit:amount}],
+  });
+  if(!posted.ok) return posted;
+  return {ok:true, journalEntryId:posted.id, amount:amount};
+};
+
+window.getInterestPaidOnLoan=async function(loanId){
+  var entries=await fbGet('journal_entries');
+  var prefix=loanId+'::';
+  var total=0;
+  entries.forEach(function(e){
+    if(e.sourceType!=='loan_interest_payment'||typeof e.sourceId!=='string'||e.sourceId.indexOf(prefix)!==0) return;
+    (e.lines||[]).forEach(function(l){ if(l.accountId==='6850') total+=(+l.debit||0); });
+  });
+  return {ok:true, totalInterestPaid:Math.round(total*100)/100};
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — OWNER EQUITY (Phase 16). No new collection.
+//  Capital and Drawings are Phase 2 source_documents (types
+//  'owner_capital' / 'owner_withdrawal', already in the enum): Debit
+//  Cash / Credit Owner Capital (3100) and Debit Owner Drawings (3200,
+//  contra-equity) / Credit Cash, respectively. Both post to 3xxx equity
+//  accounts exclusively -- structurally never an operating-expense
+//  account, so "never classify drawings as operating expenses" is
+//  enforced by which account this function is even capable of touching,
+//  not by a runtime check.
+// ══════════════════════════════════════════════════════════════
+
+window.postOwnerCapital=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var amount=+opts.amount;
+  if(!amount||isNaN(amount)||amount<=0) return {ok:false, error:'يرجى إدخال مبلغ صحيح'};
+  if(!opts.cashAccountId) return {ok:false, error:'الحساب النقدي/البنكي مطلوب'};
+
+  var created=await window.createSourceDocument({
+    type:'owner_capital', total:amount, date:opts.date, operationId:opts.operationId, notes:opts.notes||null,
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return {ok:true, id:created.id, idempotent:true};
+  var posted=await window.postSourceDocument(created.id,{
+    debitAccountId:opts.cashAccountId, creditAccountId:'3100', paidAmount:amount,
+  });
+  if(!posted.ok) return posted;
+  return {ok:true, id:created.id, journalEntryId:posted.journalEntryId};
+};
+
+window.postOwnerWithdrawal=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  var amount=+opts.amount;
+  if(!amount||isNaN(amount)||amount<=0) return {ok:false, error:'يرجى إدخال مبلغ صحيح'};
+  if(!opts.cashAccountId) return {ok:false, error:'الحساب النقدي/البنكي مطلوب'};
+
+  var created=await window.createSourceDocument({
+    type:'owner_withdrawal', total:amount, date:opts.date, operationId:opts.operationId, notes:opts.notes||null,
+  });
+  if(!created.ok) return created;
+  if(created.idempotent) return {ok:true, id:created.id, idempotent:true};
+  var posted=await window.postSourceDocument(created.id,{
+    debitAccountId:'3200', creditAccountId:opts.cashAccountId, paidAmount:amount,
+  });
+  if(!posted.ok) return posted;
+  return {ok:true, id:created.id, journalEntryId:posted.journalEntryId};
+};
+
+window.getOwnerEquitySummary=async function(startDate,endDate){
+  var entries=await fbGet('journal_entries');
+  var capital=0, drawings=0;
+  entries.forEach(function(e){
+    if(startDate && e.date<startDate) return;
+    if(endDate && e.date>endDate) return;
+    (e.lines||[]).forEach(function(l){
+      if(l.accountId==='3100') capital+=(+l.credit||0);
+      if(l.accountId==='3200') drawings+=(+l.debit||0);
+    });
+  });
+  capital=Math.round(capital*100)/100; drawings=Math.round(drawings*100)/100;
+  return {ok:true, capitalContributed:capital, drawings:drawings, netEquityMovement:Math.round((capital-drawings)*100)/100};
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — FISCAL PERIODS (Phase 17). One new collection
+//  (fiscal_periods). This is the one phase that reaches BACK into
+//  postJournalEntry (Phase 1) rather than only adding new functions,
+//  because every posting in this entire engine already funnels through
+//  that one function -- that's exactly why the period-lock check was
+//  added there: a single gate protects every phase already built,
+//  automatically, with nothing else to touch.
+//
+//  Honest, stated limitation: this lock is enforced at the ENGINE level
+//  (postJournalEntry itself refuses), not yet at the database-rules
+//  level. A real server-authoritative period lock would need rules that
+//  can resolve "which fiscal period does this date fall in" without
+//  reliable string-slicing support in Firebase's rules language --
+//  attempting that without the ability to test it against a live
+//  Firebase project (per this session's own earlier lesson: an untested
+//  rules change already caused a full production outage once) is a real
+//  risk this pass declines to take blind. Tracked here as a genuine gap
+//  for Phase 31 (Security Hardening) to close properly, not silently
+//  assumed solved. Periods are opt-in: a date with no matching period
+//  record posts exactly as it always has -- nothing already built
+//  becomes MORE restricted than before this phase existed.
+// ══════════════════════════════════════════════════════════════
+
+window.createFiscalPeriod=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.periodKey||!opts.startDate||!opts.endDate) return {ok:false, error:'بيانات ناقصة (المعرّف وتاريخ البداية والنهاية مطلوبون)'};
+  if(opts.endDate<opts.startDate) return {ok:false, error:'تاريخ النهاية يجب أن يكون بعد تاريخ البداية'};
+  var existing=await fbGet('fiscal_periods');
+  if(existing.some(function(p){return p._id===opts.periodKey;})) return {ok:false, error:'الفترة موجودة بالفعل'};
+  try{
+    await fbPut('fiscal_periods',opts.periodKey,{
+      periodKey:opts.periodKey, startDate:opts.startDate, endDate:opts.endDate, status:'OPEN',
+      createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+    });
+    fbCacheInvalidate('fiscal_periods');
+    await logActivity('add','fiscal_periods','فتح فترة مالية: '+opts.periodKey);
+    return {ok:true, periodKey:opts.periodKey};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+function _findFiscalPeriodForDate(periods,date){
+  return periods.find(function(p){return p.startDate<=date && date<=p.endDate;})||null;
+}
+
+// Used by postJournalEntry (Phase 1) for every single posting in this
+// engine. No matching period -> allowed (opt-in control, see header).
+window._checkFiscalPeriodOpen=async function(date){
+  var periods=await fbGet('fiscal_periods');
+  var period=_findFiscalPeriodForDate(periods,date);
+  if(!period) return {ok:true};
+  if(period.status!=='OPEN'){
+    return {ok:false, error:'الفترة المالية '+period.periodKey+' '+(period.status==='LOCKED'?'مقفلة نهائيًا':'مغلقة')+' — لا يمكن الترحيل بتاريخ يقع ضمنها. استخدم قيدًا عكسيًا إذا احتجت لتصحيح شيء مُرحّل بالفعل.'};
+  }
+  return {ok:true};
+};
+
+window.closeFiscalPeriod=async function(periodKey){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var periods=await fbGet('fiscal_periods');
+  var period=periods.find(function(p){return p._id===periodKey;});
+  if(!period) return {ok:false, error:'الفترة غير موجودة'};
+  if(period.status!=='OPEN') return {ok:false, error:'الفترة ليست مفتوحة'};
+  try{
+    await fbPatch('fiscal_periods',periodKey,{status:'CLOSED', closedAt:new Date().toISOString(), closedBy:(getUser()&&getUser().name)||null});
+    fbCacheInvalidate('fiscal_periods');
+    await logActivity('close_period','fiscal_periods','إغلاق فترة مالية: '+periodKey);
+    _recordFinancialAudit('CLOSE_PERIOD','fiscal_period',periodKey,{});
+    return {ok:true};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Locking is a ONE-WAY door: a CLOSED period may be reopened (controlled,
+// logged), but a LOCKED one may not -- "locked periods cannot be
+// modified" applies to the period's own protection state too, not just
+// the entries inside it.
+window.lockFiscalPeriod=async function(periodKey){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var periods=await fbGet('fiscal_periods');
+  var period=periods.find(function(p){return p._id===periodKey;});
+  if(!period) return {ok:false, error:'الفترة غير موجودة'};
+  if(period.status!=='CLOSED') return {ok:false, error:'يجب إغلاق الفترة أولاً قبل قفلها نهائيًا'};
+  try{
+    await fbPatch('fiscal_periods',periodKey,{status:'LOCKED', lockedAt:new Date().toISOString(), lockedBy:(getUser()&&getUser().name)||null});
+    fbCacheInvalidate('fiscal_periods');
+    await logActivity('lock_period','fiscal_periods','قفل نهائي لفترة مالية: '+periodKey);
+    _recordFinancialAudit('LOCK_PERIOD','fiscal_period',periodKey,{});
+    return {ok:true};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+window.reopenFiscalPeriod=async function(periodKey,reason){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!reason) return {ok:false, error:'سبب إعادة الفتح مطلوب'};
+  var periods=await fbGet('fiscal_periods');
+  var period=periods.find(function(p){return p._id===periodKey;});
+  if(!period) return {ok:false, error:'الفترة غير موجودة'};
+  if(period.status==='LOCKED') return {ok:false, error:'لا يمكن إعادة فتح فترة مقفلة نهائيًا'};
+  if(period.status!=='CLOSED') return {ok:false, error:'الفترة ليست مغلقة'};
+  try{
+    await fbPatch('fiscal_periods',periodKey,{status:'OPEN', reopenedAt:new Date().toISOString(), reopenedBy:(getUser()&&getUser().name)||null, reopenReason:reason});
+    fbCacheInvalidate('fiscal_periods');
+    await logActivity('reopen_period','fiscal_periods','إعادة فتح فترة مالية: '+periodKey+' — '+reason);
+    _recordFinancialAudit('REOPEN_PERIOD','fiscal_period',periodKey,{reason:reason});
+    return {ok:true};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — FINANCIAL AUDIT TRAIL (Phase 18). One new
+//  collection (financial_audit_log), write-once like activity_log. This
+//  is deliberately NOT bolted onto all ~30 functions across Phases 2-17
+//  individually -- it's wired into the small set of CHOKEPOINTS every
+//  one of those functions already funnels through (postJournalEntry,
+//  reverseJournalEntry, postSourceDocument, recordPaymentAgainstDocument,
+//  voidSourceDocument, cancelPostedSourceDocument, allocateCost, and the
+//  fiscal-period transitions) -- the exact same "one gate covers
+//  everything already built" reasoning as Phase 17's period-lock check.
+//
+//  Fire-and-forget by design: a failed audit write never blocks or
+//  rolls back the real financial operation that triggered it (matching
+//  this app's existing "best-effort, never block the underlying action"
+//  precedent from the original Inventory Transaction Engine). The
+//  general activity_log is unaffected and keeps logging its own
+//  human-readable Arabic sentences as it always has -- this is a
+//  parallel, STRUCTURED log specifically for financial entities, with
+//  real entity/entityId/action fields a later report can query on,
+//  not prose.
+//
+//  CREATE and EDIT_DRAFT (from the Master Prompt's own action list) are
+//  not used here: this engine has no draft-editing workflow -- every
+//  document is created once and posted, so logging a phantom "EDIT_DRAFT"
+//  action that can never actually happen would be exactly the kind of
+//  fabricated completeness this whole project refuses to produce.
+// ══════════════════════════════════════════════════════════════
+
+function _recordFinancialAudit(action,entity,entityId,details){
+  try{
+    fbPost('financial_audit_log',{
+      actor:(getUser()&&getUser().name)||null, actorRole:(getUser()&&getUser().role)||null,
+      timestamp:new Date().toISOString(), action:action, entity:entity, entityId:entityId||null,
+      details:details||null,
+    }).catch(function(){ /* best-effort -- the real operation already succeeded or failed on its own merits */ });
+  }catch(e){ /* synchronous guard, same reasoning */ }
+}
+
+window.getFinancialAuditTrail=async function(entity,entityId){
+  var log=await fbGet('financial_audit_log');
+  var rows=log.filter(function(r){
+    if(entity && r.entity!==entity) return false;
+    if(entityId && r.entityId!==entityId) return false;
+    return true;
+  });
+  rows.sort(function(a,b){return (a.timestamp||'').localeCompare(b.timestamp||'');});
+  return {ok:true, entries:rows};
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — LEGACY FINANCE MIGRATION (Phase 19). No new
+//  collection for the legacy data itself -- the existing `finance`
+//  collection is NEVER deleted, edited, or written to by anything in
+//  this engine; migration only ever READS it and creates NEW,
+//  traceable journal_entries elsewhere, tagged 'legacy_migration' with
+//  the original record's own Firebase key as sourceId (so it can always
+//  be traced back to exactly the source record it came from, and a
+//  re-run is naturally idempotent via Phase 6's
+//  _findExistingJournalBySource pattern).
+//
+//  Per the Phase 0 baseline audit: the old `finance` collection never
+//  recorded WHICH cash/bank/AR/AP account actually moved -- only that
+//  money did. Rather than inventing a specific account (which would be
+//  fabricating evidence the old record never captured), every migrated
+//  record's cash-side leg posts against 1350 (Legacy Migration Clearing
+//  Account) instead of a real cash/bank account. Also per that same
+//  audit: legacy `type:'loss'` records were never consumed by any
+//  report and have no settled account mapping -- they are surfaced as
+//  AMBIGUOUS here, never silently migrated with a guessed treatment.
+//
+//  IMPORTANT: this file only builds and tests the migration MACHINERY.
+//  Actually running it against this farm's real, live `finance` history
+//  is a deliberate, separate decision for a human to make and review --
+//  nothing in this codebase invokes these functions automatically.
+// ══════════════════════════════════════════════════════════════
+
+var LEGACY_MIGRATION_CLEARING_ACCOUNT='1350';
+
+var LEGACY_CATEGORY_ACCOUNT_MAP={
+  'بيع حيوانات':'4100', 'بيع ألبان':'4200', 'بيع صوف':'4300', 'بيع سماد':'4400', 'إيراد آخر':'4900',
+  'أعلاف ومواد تغذية':'6100',
+  'أدوية وتحصينات':'6200', 'أدوية وعلاجات':'6200', // both map to Medicine Expense -- the second string is the confirmed mismatch found in the Phase 0 audit (medicinePurchase() posted this exact spelling, never actually reachable from the live UI, but present in legacy data if it was ever called)
+  'عمالة':'6300', 'كهرباء ومياه':'6400', 'صيانة معدات':'6500', 'نقل وشحن':'6600', 'إيجار':'6700', 'مصروف آخر':'6900',
+};
+
+function _classifyLegacyRecord(rec){
+  if(rec.type==='loss') return {bucket:'ambiguous', reason:'نوع "loss" لا يوجد له تصنيف محاسبي محسوم بعد -- لم يُقرأ من أي تقرير في النظام القديم'};
+  if(rec.type!=='income' && rec.type!=='expense') return {bucket:'unmapped', reason:'نوع سجل غير معروف: '+rec.type};
+  var accountId=LEGACY_CATEGORY_ACCOUNT_MAP[rec.category];
+  if(!accountId) return {bucket:'unmapped', reason:'فئة غير مُعرَّفة في خريطة الترحيل: '+(rec.category||'—')};
+  if(!(+rec.amount>0)) return {bucket:'unmapped', reason:'مبلغ غير صالح'};
+  if(!rec.date) return {bucket:'unmapped', reason:'لا يوجد تاريخ'};
+  return {bucket:'migratable', accountId:accountId};
+}
+
+// Read-only. Never writes anything -- exactly the Master Prompt's own
+// "DO NOT proceed if unexplained differences are material" spirit,
+// applied before a single write is even attempted.
+window.analyzeLegacyFinanceMigration=async function(){
+  var legacy=await fbGet('finance');
+  var migratedEntries=await fbGet('journal_entries');
+  var alreadyMigratedIds={};
+  migratedEntries.forEach(function(e){ if(e.sourceType==='legacy_migration') alreadyMigratedIds[e.sourceId]=true; });
+
+  var report={recordCount:legacy.length, totalIncome:0, totalExpense:0, byCategory:{},
+    migratable:[], ambiguous:[], unmapped:[], alreadyMigrated:[]};
+  legacy.forEach(function(rec){
+    if(rec.type==='income') report.totalIncome+=(+rec.amount||0);
+    if(rec.type==='expense') report.totalExpense+=(+rec.amount||0);
+    var cat=rec.category||'—';
+    report.byCategory[cat]=(report.byCategory[cat]||0)+(+rec.amount||0);
+
+    if(alreadyMigratedIds[rec._id]){ report.alreadyMigrated.push(rec._id); return; }
+    var cls=_classifyLegacyRecord(rec);
+    if(cls.bucket==='migratable') report.migratable.push({id:rec._id, accountId:cls.accountId, amount:+rec.amount});
+    else report[cls.bucket].push({id:rec._id, reason:cls.reason, record:rec});
+  });
+  report.totalIncome=Math.round(report.totalIncome*100)/100;
+  report.totalExpense=Math.round(report.totalExpense*100)/100;
+  Object.keys(report.byCategory).forEach(function(k){ report.byCategory[k]=Math.round(report.byCategory[k]*100)/100; });
+  return {ok:true, report:report};
+};
+
+// The real executor. dryRun:true (default) simulates and reports without
+// writing -- opts.dryRun must be explicitly set to false to actually
+// post anything. Every migrated entry is dated with the ORIGINAL
+// record's own date (never today's date), preserving real chronology.
+window.migrateLegacyFinanceRecords=async function(opts){
+  opts=opts||{};
+  var dryRun=opts.dryRun!==false;
+  if(!dryRun && !can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+
+  var analysis=await window.analyzeLegacyFinanceMigration();
+  var result={dryRun:dryRun, migrated:0, skipped:analysis.report.ambiguous.length+analysis.report.unmapped.length,
+    alreadyMigrated:analysis.report.alreadyMigrated.length, errors:[]};
+
+  var legacy=await fbGet('finance');
+  var byId={}; legacy.forEach(function(r){ byId[r._id]=r; });
+
+  for(var i=0;i<analysis.report.migratable.length;i++){
+    var m=analysis.report.migratable[i];
+    var rec=byId[m.id];
+    if(!rec) continue;
+    if(dryRun){ result.migrated++; continue; }
+    var lines=rec.type==='income'
+      ? [{accountId:LEGACY_MIGRATION_CLEARING_ACCOUNT, debit:m.amount},{accountId:m.accountId, credit:m.amount}]
+      : [{accountId:m.accountId, debit:m.amount},{accountId:LEGACY_MIGRATION_CLEARING_ACCOUNT, credit:m.amount}];
+    var posted=await window.postJournalEntry({
+      date:rec.date, description:'LEGACY_MIGRATED: '+(rec.description||rec.category||rec._id),
+      sourceType:'legacy_migration', sourceId:rec._id, lines:lines,
+    });
+    if(posted.ok) result.migrated++;
+    else result.errors.push({id:m.id, error:posted.error});
+  }
+  return {ok:true, result:result, skippedDetail:{ambiguous:analysis.report.ambiguous, unmapped:analysis.report.unmapped}};
+};
+
+// Compares legacy `finance` totals against what migration actually
+// posted (summed straight from journal_entries, never trusted from a
+// stored counter) -- any gap must be fully explained by what's
+// documented as skipped, or the migration isn't reconciled.
+window.getLegacyMigrationReconciliation=async function(){
+  var legacy=await fbGet('finance');
+  var entries=await fbGet('journal_entries');
+  var legacyIncome=0, legacyExpense=0;
+  legacy.forEach(function(r){
+    if(r.type==='income') legacyIncome+=(+r.amount||0);
+    if(r.type==='expense') legacyExpense+=(+r.amount||0);
+  });
+  var migratedIncome=0, migratedExpense=0, migratedCount=0;
+  entries.forEach(function(e){
+    if(e.sourceType!=='legacy_migration') return;
+    migratedCount++;
+    (e.lines||[]).forEach(function(l){
+      if(l.accountId===LEGACY_MIGRATION_CLEARING_ACCOUNT){
+        if((+l.debit||0)>0) migratedIncome+=(+l.debit||0); // clearing debited = an income record
+        if((+l.credit||0)>0) migratedExpense+=(+l.credit||0); // clearing credited = an expense record
+      }
+    });
+  });
+  legacyIncome=Math.round(legacyIncome*100)/100; legacyExpense=Math.round(legacyExpense*100)/100;
+  migratedIncome=Math.round(migratedIncome*100)/100; migratedExpense=Math.round(migratedExpense*100)/100;
+  return {
+    ok:true, legacyRecordCount:legacy.length, migratedEntryCount:migratedCount,
+    legacyIncome:legacyIncome, migratedIncome:migratedIncome, incomeGap:Math.round((legacyIncome-migratedIncome)*100)/100,
+    legacyExpense:legacyExpense, migratedExpense:migratedExpense, expenseGap:Math.round((legacyExpense-migratedExpense)*100)/100,
+  };
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — BUDGETING (Phase 20). One new collection
+//  (budgets). Actual figures are NEVER overwritten by a budget --
+//  getBudgetVsActual only ever READS journal_entries for the actual
+//  side, exactly the same real-ledger-scan pattern as every reporting
+//  function in this engine; budget lines live in their own collection,
+//  structurally incapable of touching a posted entry. A budget of
+//  exactly zero returns variancePercent:null (never a fabricated 0% or
+//  an Infinity), matching the Master Prompt's own explicit rule.
+// ══════════════════════════════════════════════════════════════
+
+var BUDGET_STATUSES=['DRAFT','APPROVED','LOCKED'];
+
+window.createBudgetLine=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.periodKey||!opts.accountId) return {ok:false, error:'الفترة والحساب مطلوبان'};
+  var amount=+opts.amount;
+  if(!amount||isNaN(amount)||amount<=0) return {ok:false, error:'يرجى إدخال مبلغ صحيح'};
+  var accounts=await fbGet('accounts');
+  if(!accounts.some(function(a){return a._id===opts.accountId;})) return {ok:false, error:'الحساب غير موجود'};
+  try{
+    var id=await fbPost('budgets',{
+      periodKey:opts.periodKey, accountId:opts.accountId, costCenterId:opts.costCenterId||null,
+      amount:Math.round(amount*100)/100, notes:opts.notes||null, status:'DRAFT',
+      createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+      approvedBy:null, approvedAt:null,
+    });
+    fbCacheInvalidate('budgets');
+    await logActivity('add','budgets','إضافة بند ميزانية: '+opts.periodKey);
+    return {ok:true, id:id};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+window.approveBudgetLine=async function(budgetId){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var budgets=await fbGet('budgets');
+  var b=budgets.find(function(x){return x._id===budgetId;});
+  if(!b) return {ok:false, error:'بند الميزانية غير موجود'};
+  if(b.status!=='DRAFT') return {ok:false, error:'يجب أن يكون البند مسودة ليُعتمد'};
+  try{
+    await fbPatch('budgets',budgetId,{status:'APPROVED', approvedBy:(getUser()&&getUser().name)||null, approvedAt:new Date().toISOString()});
+    fbCacheInvalidate('budgets');
+    _recordFinancialAudit('APPROVE_BUDGET','budget',budgetId,{});
+    return {ok:true};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+window.lockBudgetLine=async function(budgetId){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  var budgets=await fbGet('budgets');
+  var b=budgets.find(function(x){return x._id===budgetId;});
+  if(!b) return {ok:false, error:'بند الميزانية غير موجود'};
+  if(b.status!=='APPROVED') return {ok:false, error:'يجب اعتماد البند أولاً قبل قفله'};
+  try{
+    await fbPatch('budgets',budgetId,{status:'LOCKED'});
+    fbCacheInvalidate('budgets');
+    return {ok:true};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Budget = sum of APPROVED/LOCKED lines for this period+account (a
+// DRAFT line isn't a real commitment yet, so it's excluded). Actual =
+// real journal_entries lines touching this account within the given
+// date range -- never anything else. If accountId's normal balance is
+// 'debit' (an expense/asset), variance is computed as actual-budget
+// (positive = over budget); if 'credit' (revenue/liability/equity),
+// variance is budget-actual (positive = under target) -- either way,
+// this reflects the account's own normal balance, never a guessed sign.
+window.getBudgetVsActual=async function(opts){
+  opts=opts||{};
+  if(!opts.periodKey||!opts.accountId) return {ok:false, error:'الفترة والحساب مطلوبان'};
+  var budgets=await fbGet('budgets');
+  var relevant=budgets.filter(function(b){
+    return b.periodKey===opts.periodKey && b.accountId===opts.accountId
+      && (opts.costCenterId ? b.costCenterId===opts.costCenterId : true)
+      && (b.status==='APPROVED'||b.status==='LOCKED');
+  });
+  var budget=Math.round(relevant.reduce(function(s,b){return s+(+b.amount||0);},0)*100)/100;
+
+  var entries=await fbGet('journal_entries');
+  var actual=0;
+  entries.forEach(function(e){
+    if(opts.startDate && e.date<opts.startDate) return;
+    if(opts.endDate && e.date>opts.endDate) return;
+    (e.lines||[]).forEach(function(l){
+      if(l.accountId!==opts.accountId) return;
+      if(opts.costCenterId && l.costCenterId!==opts.costCenterId) return;
+      actual+=(+l.debit||0)-(+l.credit||0);
+    });
+  });
+  actual=Math.round(Math.abs(actual)*100)/100; // magnitude -- sign convention is handled below via the account's normal balance
+
+  var accounts=await fbGet('accounts');
+  var account=accounts.find(function(a){return a._id===opts.accountId;});
+  var normalBalance=account?account.normalBalance:'debit';
+  var variance=normalBalance==='debit' ? Math.round((actual-budget)*100)/100 : Math.round((budget-actual)*100)/100;
+  var variancePercent=budget!==0 ? Math.round((variance/budget)*10000)/100 : null;
+
+  return {ok:true, periodKey:opts.periodKey, accountId:opts.accountId, budget:budget, actual:actual, variance:variance, variancePercent:variancePercent};
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — FORECASTING (Phase 21). One new collection
+//  (forecasts). Rule-based only -- the single supported method is
+//  AVERAGE_PRIOR_PERIODS (average of N real, already-closed source
+//  periods' actuals), exactly the Master Prompt's own suggested
+//  starting method. No AI, no black-box model: every forecast exposes
+//  its method, its exact source periods, and the real actual figure
+//  each source period contributed, so the number is fully explainable,
+//  not just produced. A forecast NEVER touches journal_entries or any
+//  other accounting record -- it's a read+compute+store-for-later-
+//  comparison operation, structurally incapable of altering the ledger.
+// ══════════════════════════════════════════════════════════════
+
+function _computeAccountActualForRange(entries,accountId,startDate,endDate,costCenterId){
+  var total=0;
+  entries.forEach(function(e){
+    if(startDate && e.date<startDate) return;
+    if(endDate && e.date>endDate) return;
+    (e.lines||[]).forEach(function(l){
+      if(l.accountId!==accountId) return;
+      if(costCenterId && l.costCenterId!==costCenterId) return;
+      total+=(+l.debit||0)-(+l.credit||0);
+    });
+  });
+  return Math.round(Math.abs(total)*100)/100;
+}
+
+// sourcePeriods: [{periodKey, startDate, endDate}, ...] -- each one a
+// REAL, already-elapsed period the caller supplies (this function never
+// guesses date ranges on its own). The forecast is the plain average of
+// each source period's own real actual.
+window.createForecast=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  if(!opts.targetPeriodKey||!opts.accountId) return {ok:false, error:'الفترة المستهدفة والحساب مطلوبان'};
+  if(!Array.isArray(opts.sourcePeriods)||!opts.sourcePeriods.length) return {ok:false, error:'فترة مصدر واحدة على الأقل مطلوبة'};
+
+  // Phase 32 (Idempotency Hardening): createForecast previously had no
+  // dedup guard at all -- unlike almost every other Phase 2+ mutating
+  // function, a retried call (offline retry, double-tap, network blip)
+  // would silently create a second forecast record for the same real
+  // event. Same dedup pattern createSourceDocument already uses.
+  var existingForecasts=await fbGet('forecasts');
+  var forecastDupe=existingForecasts.find(function(f){return f.operationId===opts.operationId;});
+  if(forecastDupe) return {ok:true, id:forecastDupe._id, idempotent:true, forecastValue:forecastDupe.forecastValue, sourcePeriods:forecastDupe.sourcePeriods, method:forecastDupe.method};
+
+  var entries=await fbGet('journal_entries');
+  var sourceActuals=opts.sourcePeriods.map(function(p){
+    return {periodKey:p.periodKey, actual:_computeAccountActualForRange(entries,opts.accountId,p.startDate,p.endDate,opts.costCenterId)};
+  });
+  var forecastValue=Math.round((sourceActuals.reduce(function(s,p){return s+p.actual;},0)/sourceActuals.length)*100)/100;
+
+  try{
+    var id=await fbPost('forecasts',{
+      targetPeriodKey:opts.targetPeriodKey, accountId:opts.accountId, costCenterId:opts.costCenterId||null,
+      method:'AVERAGE_PRIOR_PERIODS', sourcePeriods:sourceActuals, forecastValue:forecastValue,
+      assumptions:opts.assumptions||'متوسط بسيط للفترات المصدر المذكورة -- بدون أي نموذج ذكاء اصطناعي',
+      operationId:opts.operationId,
+      createdBy:(getUser()&&getUser().name)||null, createdAt:new Date().toISOString(),
+    });
+    fbCacheInvalidate('forecasts');
+    await logActivity('add','forecasts','تنبؤ لفترة '+opts.targetPeriodKey);
+    return {ok:true, id:id, forecastValue:forecastValue, sourcePeriods:sourceActuals, method:'AVERAGE_PRIOR_PERIODS'};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+// Compares a stored forecast against the target period's REAL actual --
+// but only once the caller supplies that target period's own date range
+// (this function never assumes "now" means the target period has
+// elapsed). If no actual data exists yet for the target range, actual
+// is returned as null, not zero -- an un-elapsed or data-free period is
+// genuinely unknown, not confirmed at zero.
+window.getForecastVsActual=async function(forecastId,targetStartDate,targetEndDate){
+  var forecasts=await fbGet('forecasts');
+  var f=forecasts.find(function(x){return x._id===forecastId;});
+  if(!f) return {ok:false, error:'التنبؤ غير موجود'};
+  var entries=await fbGet('journal_entries');
+  var matchingEntries=entries.filter(function(e){
+    return (!targetStartDate||e.date>=targetStartDate) && (!targetEndDate||e.date<=targetEndDate)
+      && (e.lines||[]).some(function(l){return l.accountId===f.accountId;});
+  });
+  var actual=matchingEntries.length
+    ? _computeAccountActualForRange(entries,f.accountId,targetStartDate,targetEndDate,f.costCenterId)
+    : null;
+  return {
+    ok:true, targetPeriodKey:f.targetPeriodKey, method:f.method, sourcePeriods:f.sourcePeriods,
+    forecast:f.forecastValue, actual:actual,
+    variance:actual!=null ? Math.round((actual-f.forecastValue)*100)/100 : null,
+  };
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — CASH FLOW STATEMENT (Phase 22). Direct-method,
+//  evidence-only: classifies every REAL cash/bank movement in
+//  journal_entries into Operating / Investing / Financing by looking
+//  at the real counter-account(s) on the other side of each entry --
+//  never a derived/indirect reconciliation from net income. Pure
+//  cash-to-cash transfers (e.g. bank -> petty cash) net to zero within
+//  their own entry and are excluded entirely, since they have no
+//  external effect on total cash. A mixed entry (a cash line offset by
+//  counter-lines in more than one category) is split proportionally by
+//  each category's real weight in that same entry -- never guessed.
+// ══════════════════════════════════════════════════════════════
+
+function _cashFlowCategoryForAccountCode(code){
+  // Fixed/biological assets moving -> investing. Loans and owner
+  // capital/drawings (plus 3300, used for opening-balance capitalization
+  // entries) -> financing. Everything else (revenue, expense, AR, AP,
+  // inventory, accrued/payroll payable, legacy migration clearing) is
+  // ordinary day-to-day farm activity -> operating.
+  if(code==='1500'||code==='1600'||code==='1690') return 'investing';
+  if(code==='2300'||code==='3100'||code==='3200'||code==='3300') return 'financing';
+  return 'operating';
+}
+
+window.getCashFlowStatement=async function(startDate,endDate){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!startDate||!endDate) return {ok:false, error:'التاريخ من وإلى مطلوبان'};
+
+  var cbas=await fbGet('cash_bank_accounts');
+  var cashAccountIds={};
+  cbas.forEach(function(c){ cashAccountIds[c.linkedAccountId]=true; });
+  if(!Object.keys(cashAccountIds).length) return {ok:false, error:'لا توجد حسابات نقدية/بنكية معرّفة'};
+
+  var entries=await fbGet('journal_entries');
+
+  // Opening/closing cash are summed straight from the ledger (same
+  // pattern as getCashBankBalance) -- never a stored, driftable number.
+  var openingCash=0, closingCash=0;
+  entries.forEach(function(e){
+    (e.lines||[]).forEach(function(l){
+      if(!cashAccountIds[l.accountId]) return;
+      var delta=(+l.debit||0)-(+l.credit||0);
+      if(e.date<startDate) openingCash+=delta;
+      if(e.date<=endDate) closingCash+=delta;
+    });
+  });
+  openingCash=Math.round(openingCash*100)/100;
+  closingCash=Math.round(closingCash*100)/100;
+
+  var totals={operating:0,investing:0,financing:0};
+  var movements=[];
+  entries.forEach(function(e){
+    if(e.date<startDate||e.date>endDate) return;
+    var cashLines=(e.lines||[]).filter(function(l){return cashAccountIds[l.accountId];});
+    if(!cashLines.length) return;
+    var netCash=Math.round(cashLines.reduce(function(s,l){return s+(+l.debit||0)-(+l.credit||0);},0)*100)/100;
+    if(netCash===0) return; // pure cash-to-cash transfer -- no external effect
+
+    var otherLines=(e.lines||[]).filter(function(l){return !cashAccountIds[l.accountId];});
+    var weights={}, totalWeight=0;
+    otherLines.forEach(function(l){
+      var cat=_cashFlowCategoryForAccountCode(l.accountId);
+      var w=Math.abs((+l.debit||0)-(+l.credit||0));
+      weights[cat]=(weights[cat]||0)+w; totalWeight+=w;
+    });
+    if(totalWeight===0) weights.operating=1, totalWeight=1; // no real counter-weight to classify by -- default to operating rather than dropping the movement
+
+    var catKeys=Object.keys(weights), allocated=0;
+    catKeys.forEach(function(cat,idx){
+      var share = idx===catKeys.length-1
+        ? Math.round((netCash-allocated)*100)/100
+        : Math.round((netCash*(weights[cat]/totalWeight))*100)/100;
+      if(idx!==catKeys.length-1) allocated=Math.round((allocated+share)*100)/100;
+      totals[cat]=Math.round(((totals[cat]||0)+share)*100)/100;
+      movements.push({journalEntryId:e._id, date:e.date, description:e.description, amount:share, category:cat, sourceType:e.sourceType, sourceId:e.sourceId});
+    });
+  });
+
+  var netCashFlow=Math.round((totals.operating+totals.investing+totals.financing)*100)/100;
+  return {
+    ok:true, startDate:startDate, endDate:endDate,
+    openingCash:openingCash, closingCash:closingCash, netCashFlow:netCashFlow,
+    operating:totals.operating, investing:totals.investing, financing:totals.financing,
+    movements:movements,
+  };
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — BANK RECONCILIATION (Phase 23). One new
+//  collection (bank_reconciliations, write-once -- a reconciliation is
+//  a dated snapshot, never edited after the fact). Compares the real
+//  book balance (summed straight from journal_entries, same evidence
+//  source as getCashBankBalance) as of a statement date against a
+//  bank-supplied statement balance. The caller supplies which journal
+//  entries the bank statement has actually cleared
+//  (clearedJournalEntryIds) -- this function never guesses which
+//  transactions cleared. Everything not marked cleared is reported as
+//  an outstanding item (e.g. a check written but not yet cashed). A
+//  non-zero `difference` is reported plainly, never forced to zero --
+//  a real discrepancy must surface, not be hidden.
+// ══════════════════════════════════════════════════════════════
+
+window.reconcileBankAccount=async function(opts){
+  opts=opts||{};
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!opts.operationId) return {ok:false, error:'operationId مطلوب لضمان عدم التكرار'};
+  if(!opts.cashBankAccountId||!opts.statementDate||opts.statementBalance==null) return {ok:false, error:'الحساب وتاريخ الكشف ورصيد الكشف مطلوبة'};
+
+  // Phase 32 (Idempotency Hardening): reconcileBankAccount previously had
+  // no dedup guard -- a retried call (offline retry, double-tap, network
+  // blip) would silently create a second reconciliation record for the
+  // same real bank statement AND double-patch lastReconciledDate. Same
+  // dedup pattern createSourceDocument already uses.
+  var existingRecons=await fbGet('bank_reconciliations');
+  var reconDupe=existingRecons.find(function(r){return r.operationId===opts.operationId;});
+  if(reconDupe) return {ok:true, id:reconDupe._id, idempotent:true, bookBalance:reconDupe.bookBalance, clearedBalance:reconDupe.clearedBalance, statementBalance:reconDupe.statementBalance, difference:reconDupe.difference, matched:reconDupe.matched, outstandingItems:reconDupe.outstandingItems};
+
+  var cbas=await fbGet('cash_bank_accounts');
+  var cba=cbas.find(function(c){return c._id===opts.cashBankAccountId;});
+  if(!cba) return {ok:false, error:'الحساب غير موجود'};
+
+  var entries=await fbGet('journal_entries');
+  var clearedSet={};
+  (opts.clearedJournalEntryIds||[]).forEach(function(id){ clearedSet[id]=true; });
+
+  var bookBalance=0, clearedBalance=0, outstandingItems=[];
+  entries.forEach(function(e){
+    if(e.date>opts.statementDate) return; // only transactions up to the statement date are in scope
+    (e.lines||[]).forEach(function(l){
+      if(l.accountId!==cba.linkedAccountId) return;
+      var delta=(+l.debit||0)-(+l.credit||0);
+      bookBalance+=delta;
+      if(clearedSet[e._id]) clearedBalance+=delta;
+      else outstandingItems.push({journalEntryId:e._id, date:e.date, description:e.description, amount:Math.round(delta*100)/100});
+    });
+  });
+  bookBalance=Math.round(bookBalance*100)/100;
+  clearedBalance=Math.round(clearedBalance*100)/100;
+  var statementBalance=Math.round((+opts.statementBalance)*100)/100;
+  var difference=Math.round((statementBalance-clearedBalance)*100)/100;
+
+  var record={
+    cashBankAccountId:opts.cashBankAccountId, statementDate:opts.statementDate,
+    statementBalance:statementBalance, bookBalance:bookBalance, clearedBalance:clearedBalance, difference:difference,
+    clearedJournalEntryIds:opts.clearedJournalEntryIds||[], outstandingItems:outstandingItems,
+    matched:difference===0, operationId:opts.operationId,
+    reconciledBy:(getUser()&&getUser().name)||null, reconciledAt:new Date().toISOString(),
+  };
+  try{
+    var id=await fbPost('bank_reconciliations',record);
+    fbCacheInvalidate('bank_reconciliations');
+    await fbPatch('cash_bank_accounts',opts.cashBankAccountId,{lastReconciledDate:opts.statementDate, lastReconciledAt:record.reconciledAt, lastReconciledBy:record.reconciledBy});
+    fbCacheInvalidate('cash_bank_accounts');
+    await logActivity('add','bank_reconciliations','تسوية بنكية: '+cba.name+' بتاريخ '+opts.statementDate);
+    return {ok:true, id:id, bookBalance:bookBalance, clearedBalance:clearedBalance, statementBalance:statementBalance, difference:difference, matched:record.matched, outstandingItems:outstandingItems};
+  }catch(e){ return {ok:false, error:e.message}; }
+};
+
+window.getBankReconciliationHistory=async function(cashBankAccountId){
+  if(!can('finance')) return []; // preserves this function's existing plain-array contract -- callers use .length/.map directly, never {ok,...}
+  var recs=await fbGet('bank_reconciliations');
+  return recs.filter(function(r){return r.cashBankAccountId===cashBankAccountId;})
+    .sort(function(a,b){return (b.statementDate||'').localeCompare(a.statementDate||'');});
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — FINANCIAL STATEMENTS (Phase 24): Income
+//  Statement and Balance Sheet. Purely computed from `accounts` +
+//  `journal_entries` -- no new collection, nothing stored. The Cash
+//  Flow Statement (the third classic financial statement) was already
+//  delivered in Phase 22 (getCashFlowStatement).
+//
+//  No month-end close exists yet (that's Phase 30), so revenue/expense
+//  accounts are never zeroed into retained earnings automatically.
+//  getBalanceSheet therefore computes "current period earnings" itself
+//  (cumulative revenue minus cumulative expense since inception, up to
+//  asOfDate) and folds it into Equity as its own line -- this is what
+//  makes Assets = Liabilities + Equity hold true at any moment, purely
+//  as a consequence of every journal entry already being balanced by
+//  construction (Phase 1's own validation), not a plug or override.
+// ══════════════════════════════════════════════════════════════
+
+window.getIncomeStatement=async function(startDate,endDate){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!startDate||!endDate) return {ok:false, error:'التاريخ من وإلى مطلوبان'};
+
+  var accounts=await fbGet('accounts');
+  var entries=await fbGet('journal_entries');
+  var balances={};
+  entries.forEach(function(e){
+    if(e.date<startDate||e.date>endDate) return;
+    (e.lines||[]).forEach(function(l){ balances[l.accountId]=(balances[l.accountId]||0)+(+l.debit||0)-(+l.credit||0); });
+  });
+
+  var revenue=[], expense=[], totalRevenue=0, totalExpense=0;
+  accounts.forEach(function(a){
+    if(a.postable===false) return;
+    var raw=balances[a._id]||0;
+    if(raw===0) return; // no activity this period -- omit, don't list a fabricated zero line
+    if(a.type==='REVENUE'){
+      var bal=Math.round((-raw)*100)/100; revenue.push({accountId:a._id,name:a.name_ar,amount:bal}); totalRevenue+=bal;
+    }else if(a.type==='EXPENSE'){
+      var bal2=Math.round(raw*100)/100; expense.push({accountId:a._id,name:a.name_ar,amount:bal2}); totalExpense+=bal2;
+    }
+  });
+  totalRevenue=Math.round(totalRevenue*100)/100;
+  totalExpense=Math.round(totalExpense*100)/100;
+  return {
+    ok:true, startDate:startDate, endDate:endDate,
+    revenue:revenue, expense:expense, totalRevenue:totalRevenue, totalExpense:totalExpense,
+    netIncome:Math.round((totalRevenue-totalExpense)*100)/100,
+  };
+};
+
+window.getBalanceSheet=async function(asOfDate){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!asOfDate) return {ok:false, error:'التاريخ مطلوب'};
+
+  var accounts=await fbGet('accounts');
+  var entries=await fbGet('journal_entries');
+  var balances={};
+  entries.forEach(function(e){
+    if(e.date>asOfDate) return; // cumulative since inception, not period-bound
+    (e.lines||[]).forEach(function(l){ balances[l.accountId]=(balances[l.accountId]||0)+(+l.debit||0)-(+l.credit||0); });
+  });
+
+  var assets=[], liabilities=[], equity=[];
+  var totalAssets=0, totalLiabilities=0, totalEquity=0, totalRevenue=0, totalExpense=0;
+  accounts.forEach(function(a){
+    if(a.postable===false) return;
+    var raw=balances[a._id]||0;
+    if(raw===0) return;
+    if(a.type==='ASSET'){
+      var ab=Math.round(raw*100)/100; assets.push({accountId:a._id,name:a.name_ar,balance:ab}); totalAssets+=ab;
+    }else if(a.type==='LIABILITY'){
+      var lb=Math.round((-raw)*100)/100; liabilities.push({accountId:a._id,name:a.name_ar,balance:lb}); totalLiabilities+=lb;
+    }else if(a.type==='EQUITY'){
+      var eb=Math.round((-raw)*100)/100; equity.push({accountId:a._id,name:a.name_ar,balance:eb}); totalEquity+=eb;
+    }else if(a.type==='REVENUE'){ totalRevenue+=(-raw); }
+    else if(a.type==='EXPENSE'){ totalExpense+=raw; }
+  });
+
+  var currentEarnings=Math.round((totalRevenue-totalExpense)*100)/100;
+  if(currentEarnings!==0){
+    equity.push({accountId:null, name:'أرباح الفترة الحالية (غير مرحّلة)', balance:currentEarnings});
+    totalEquity=Math.round((totalEquity+currentEarnings)*100)/100;
+  }
+  totalAssets=Math.round(totalAssets*100)/100;
+  totalLiabilities=Math.round(totalLiabilities*100)/100;
+
+  return {
+    ok:true, asOfDate:asOfDate,
+    assets:assets, liabilities:liabilities, equity:equity,
+    totalAssets:totalAssets, totalLiabilities:totalLiabilities, totalEquity:totalEquity,
+    balanced:Math.round((totalAssets-(totalLiabilities+totalEquity))*100)/100===0,
+  };
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — GENERAL LEDGER (Phase 25). Generalizes the
+//  same evidence-only pattern Phase 3's getCashBankTransactionHistory
+//  already used (opening balance + chronological running balance) to
+//  ANY account, not just cash/bank -- the actual general ledger detail
+//  view every other report (Trial Balance, Financial Statements) is
+//  ultimately drillable down into. Balances are shown signed in the
+//  account's own normal-balance direction (via the existing
+//  _accountNormalBalance helper from Phase 1), so a liability/equity/
+//  revenue account with its normal credit balance displays positive,
+//  matching how getBalanceSheet/getIncomeStatement already present
+//  those types -- never the raw debit-minus-credit sign uniformly.
+// ══════════════════════════════════════════════════════════════
+
+window.getAccountLedger=async function(accountId,startDate,endDate){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!accountId) return {ok:false, error:'الحساب مطلوب'};
+
+  var accounts=await fbGet('accounts');
+  var acc=accounts.find(function(a){return a._id===accountId;});
+  if(!acc) return {ok:false, error:'الحساب غير موجود'};
+
+  var normalBalance=_accountNormalBalance(acc.type,acc.contra);
+  var sign=normalBalance==='credit'?-1:1;
+
+  var entries=(await fbGet('journal_entries')).slice().sort(function(a,b){
+    return (a.date||'').localeCompare(b.date||'') || (a._id||'').localeCompare(b._id||'');
+  });
+
+  var opening=0;
+  entries.forEach(function(e){
+    if(!startDate || e.date>=startDate) return;
+    (e.lines||[]).forEach(function(l){ if(l.accountId===accountId) opening+=sign*((+l.debit||0)-(+l.credit||0)); });
+  });
+  opening=Math.round(opening*100)/100;
+
+  var running=opening, rows=[];
+  entries.forEach(function(e){
+    if(startDate && e.date<startDate) return;
+    if(endDate && e.date>endDate) return;
+    (e.lines||[]).forEach(function(l){
+      if(l.accountId!==accountId) return;
+      running=Math.round((running+sign*((+l.debit||0)-(+l.credit||0)))*100)/100;
+      rows.push({
+        journalEntryId:e._id, date:e.date, description:e.description,
+        debit:+l.debit||0, credit:+l.credit||0, runningBalance:running,
+        sourceType:e.sourceType, sourceId:e.sourceId,
+      });
+    });
+  });
+
+  return {
+    ok:true, accountId:accountId, accountName:acc.name_ar, normalBalance:normalBalance,
+    startDate:startDate||null, endDate:endDate||null,
+    openingBalance:opening, closingBalance:running, rows:rows,
+  };
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — TRIAL BALANCE (Phase 26). The classic proof
+//  that the ledger balances: every postable account's cumulative
+//  balance since inception through asOfDate, shown in the literal
+//  debit/credit-column format (NOT normal-balance-signed like the
+//  General Ledger/Balance Sheet) -- a net debit balance lists under
+//  Debit, a net credit balance lists under Credit, whichever side the
+//  account actually nets to. totalDebit must equal totalCredit by
+//  double-entry construction (Phase 1's own balanced-entry
+//  validation); `balanced` is a live self-check of that invariant, not
+//  an assumption.
+// ══════════════════════════════════════════════════════════════
+
+window.getTrialBalance=async function(asOfDate){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!asOfDate) return {ok:false, error:'التاريخ مطلوب'};
+
+  var accounts=await fbGet('accounts');
+  var entries=await fbGet('journal_entries');
+  var balances={};
+  entries.forEach(function(e){
+    if(e.date>asOfDate) return;
+    (e.lines||[]).forEach(function(l){ balances[l.accountId]=(balances[l.accountId]||0)+(+l.debit||0)-(+l.credit||0); });
+  });
+
+  var rows=[], totalDebit=0, totalCredit=0;
+  accounts.forEach(function(a){
+    if(a.postable===false) return;
+    var raw=Math.round((balances[a._id]||0)*100)/100;
+    if(raw===0) return;
+    var debit=raw>0?raw:0, credit=raw<0?-raw:0;
+    rows.push({accountId:a._id, name:a.name_ar, type:a.type, debit:debit, credit:credit});
+    totalDebit=Math.round((totalDebit+debit)*100)/100;
+    totalCredit=Math.round((totalCredit+credit)*100)/100;
+  });
+
+  return {
+    ok:true, asOfDate:asOfDate, rows:rows,
+    totalDebit:totalDebit, totalCredit:totalCredit,
+    balanced:totalDebit===totalCredit,
+  };
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — FARM PROFITABILITY (Phase 27). Per-animal
+//  realized P&L, built entirely on evidence Phases 2/7 already posted
+//  -- no new collection, nothing stored. Revenue comes from the real
+//  posted 'animal_sale' source_document for this animal; cost of sale
+//  comes from the real 'animal_sale_cogs' journal entry's line tagged
+//  relatedAnimalId (Phase 7); write-off loss comes from the real
+//  'animal_death_writeoff' entry the same way. An animal that hasn't
+//  been sold or hasn't died yet has no realized outcome -- netResult
+//  is null, never a fabricated zero or an unrealized-gain guess.
+// ══════════════════════════════════════════════════════════════
+
+window.getAnimalProfitability=async function(animalId){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!animalId) return {ok:false, error:'معرّف الحيوان مطلوب'};
+
+  var costBasis=await window.getAnimalCostBasis(animalId);
+
+  var docs=await fbGet('source_documents');
+  var saleDoc=docs.find(function(d){return d.type==='animal_sale' && d.sourceType==='animal' && d.sourceId===animalId && d.journalEntryId;});
+  var revenue=saleDoc?saleDoc.total:0;
+
+  var entries=await fbGet('journal_entries');
+  var costOfSale=0, writeOffLoss=0;
+  entries.forEach(function(e){
+    if(e.sourceType==='animal_sale_cogs'){
+      (e.lines||[]).forEach(function(l){ if(l.relatedAnimalId===animalId && l.accountId===COST_OF_ANIMAL_SALES_ACCOUNT) costOfSale+=(+l.debit||0); });
+    }else if(e.sourceType==='animal_death_writeoff'){
+      (e.lines||[]).forEach(function(l){ if(l.relatedAnimalId===animalId && l.accountId===LOSS_ON_LIVESTOCK_ACCOUNT) writeOffLoss+=(+l.debit||0); });
+    }
+  });
+  costOfSale=Math.round(costOfSale*100)/100;
+  writeOffLoss=Math.round(writeOffLoss*100)/100;
+
+  var outcome=saleDoc?'sold':(writeOffLoss>0?'died':'active');
+  var netResult = outcome==='sold' ? Math.round((revenue-costOfSale)*100)/100
+                : outcome==='died' ? -writeOffLoss
+                : null;
+
+  return {
+    ok:true, animalId:animalId, outcome:outcome,
+    revenue:revenue, costOfSale:costOfSale, writeOffLoss:writeOffLoss,
+    netResult:netResult, currentCostBasis:costBasis.knownCost,
+  };
+};
+
+// Ranks several animals by realized profitability. Animals still
+// `active` (no sale or death yet) are separated out, never mixed into
+// the ranking with a guessed netResult.
+//
+// Phase 38 (Performance): deliberately does NOT call getAnimalProfitability
+// in a per-animal loop -- that would rescan the entire journal_entries/
+// source_documents/animal_cost_ledger collections once per animal
+// (O(animals x entries), a real cost once a herd and its ledger both
+// grow into the hundreds/thousands). Instead every collection is
+// fetched exactly once and reduced into per-animal lookup maps in a
+// single pass, then each requested animal is resolved from those maps
+// in O(1) -- same exact logic and results as getAnimalProfitability,
+// restructured for O(entries + docs + ledger + animals) instead.
+window.rankAnimalProfitability=async function(animalIds){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!Array.isArray(animalIds)||!animalIds.length) return {ok:false, error:'قائمة حيوانات واحدة على الأقل مطلوبة'};
+
+  var docs=await fbGet('source_documents');
+  var saleDocByAnimal={};
+  docs.forEach(function(d){
+    if(d.type==='animal_sale' && d.sourceType==='animal' && d.sourceId && d.journalEntryId) saleDocByAnimal[d.sourceId]=d;
+  });
+
+  var entries=await fbGet('journal_entries');
+  var costOfSaleByAnimal={}, writeOffByAnimal={};
+  entries.forEach(function(e){
+    if(e.sourceType==='animal_sale_cogs'){
+      (e.lines||[]).forEach(function(l){
+        if(l.relatedAnimalId && l.accountId===COST_OF_ANIMAL_SALES_ACCOUNT) costOfSaleByAnimal[l.relatedAnimalId]=(costOfSaleByAnimal[l.relatedAnimalId]||0)+(+l.debit||0);
+      });
+    }else if(e.sourceType==='animal_death_writeoff'){
+      (e.lines||[]).forEach(function(l){
+        if(l.relatedAnimalId && l.accountId===LOSS_ON_LIVESTOCK_ACCOUNT) writeOffByAnimal[l.relatedAnimalId]=(writeOffByAnimal[l.relatedAnimalId]||0)+(+l.debit||0);
+      });
+    }
+  });
+
+  var ledger=await fbGet('animal_cost_ledger');
+  var costBasisByAnimal={};
+  ledger.forEach(function(l){ costBasisByAnimal[l.animalId]=(costBasisByAnimal[l.animalId]||0)+(+l.amount||0); });
+
+  var results=animalIds.map(function(animalId){
+    var saleDoc=saleDocByAnimal[animalId];
+    var revenue=saleDoc?saleDoc.total:0;
+    var costOfSale=Math.round((costOfSaleByAnimal[animalId]||0)*100)/100;
+    var writeOffLoss=Math.round((writeOffByAnimal[animalId]||0)*100)/100;
+    var outcome=saleDoc?'sold':(writeOffLoss>0?'died':'active');
+    var netResult = outcome==='sold' ? Math.round((revenue-costOfSale)*100)/100
+                  : outcome==='died' ? -writeOffLoss
+                  : null;
+    return {
+      ok:true, animalId:animalId, outcome:outcome,
+      revenue:revenue, costOfSale:costOfSale, writeOffLoss:writeOffLoss,
+      netResult:netResult, currentCostBasis:Math.round((costBasisByAnimal[animalId]||0)*100)/100,
+    };
+  });
+
+  var realized=results.filter(function(r){return r.netResult!=null;})
+    .sort(function(a,b){return b.netResult-a.netResult;});
+  var stillActive=results.filter(function(r){return r.netResult==null;});
+
+  return {ok:true, realized:realized, stillActive:stillActive};
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — MANAGEMENT DASHBOARD KPIs (Phase 28). A pure
+//  composition layer over Phases 22/24/26 (Cash Flow, Financial
+//  Statements, Trial Balance) -- same discipline shared.js's own
+//  evaluateOperationalPriority already established for the
+//  non-financial engines: never recalculates what those functions
+//  already computed, only combines their outputs and derives a small
+//  set of standard ratios. Every ratio is guarded against a zero
+//  denominator and returned as null, never 0 or Infinity, when it has
+//  no real meaning yet (e.g. no revenue posted this period). No
+//  current/non-current asset classification exists in this chart of
+//  accounts, so a current ratio is deliberately NOT computed here --
+//  that would require inventing a split the data doesn't support.
+// ══════════════════════════════════════════════════════════════
+
+window.getFinancialDashboardKPIs=async function(periodStartDate,periodEndDate){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!periodStartDate||!periodEndDate) return {ok:false, error:'التاريخ من وإلى مطلوبان'};
+
+  // Phase 38 (Performance): these four calls don't depend on each
+  // other's results -- fetched in parallel instead of four sequential
+  // awaits, same error-priority order preserved below.
+  var results=await Promise.all([
+    window.getIncomeStatement(periodStartDate,periodEndDate),
+    window.getBalanceSheet(periodEndDate),
+    window.getTrialBalance(periodEndDate),
+    window.getCashFlowStatement(periodStartDate,periodEndDate), // optional -- no cash/bank accounts yet is not fatal to the rest of the dashboard
+  ]);
+  var incomeStatement=results[0], balanceSheet=results[1], trialBalance=results[2], cashFlow=results[3];
+  if(!incomeStatement.ok) return incomeStatement;
+  if(!balanceSheet.ok) return balanceSheet;
+  if(!trialBalance.ok) return trialBalance;
+
+  var netIncome=incomeStatement.netIncome;
+  var totalRevenue=incomeStatement.totalRevenue;
+  var totalAssets=balanceSheet.totalAssets;
+  var totalLiabilities=balanceSheet.totalLiabilities;
+  var totalEquity=balanceSheet.totalEquity;
+
+  return {
+    ok:true, periodStartDate:periodStartDate, periodEndDate:periodEndDate,
+    revenue:totalRevenue, expense:incomeStatement.totalExpense, netIncome:netIncome,
+    totalAssets:totalAssets, totalLiabilities:totalLiabilities, totalEquity:totalEquity,
+    netCashFlow:cashFlow.ok?cashFlow.netCashFlow:null, closingCash:cashFlow.ok?cashFlow.closingCash:null,
+    netProfitMarginPercent:totalRevenue>0 ? Math.round((netIncome/totalRevenue)*10000)/100 : null,
+    debtToEquityRatio:totalEquity!==0 ? Math.round((totalLiabilities/totalEquity)*100)/100 : null,
+    returnOnAssetsPercent:totalAssets!==0 ? Math.round((netIncome/totalAssets)*10000)/100 : null,
+    ledgerBalanced:balanceSheet.balanced && trialBalance.balanced,
+  };
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — FINANCIAL DATA QUALITY (Phase 29). Read-only
+//  audit scan, same philosophy as the repo's own scripts/safety-scan.js
+//  -- reports real issues found in the data, never auto-fixes anything.
+//  postJournalEntry's own _validateJournalLines (Phase 1) already
+//  guarantees every entry it creates is balanced and every line has SOME
+//  accountId -- but it never checks that accountId actually exists in
+//  `accounts`, and it can't protect data written outside this engine's
+//  own path (a legacy import, a future bug, manual console access).
+//  This scan checks exactly the gaps that write-time validation does
+//  NOT already close, so every finding here is genuinely new evidence,
+//  not a re-check of something already proven impossible.
+// ══════════════════════════════════════════════════════════════
+
+window.runFinancialDataQualityScan=async function(){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+
+  var accounts=await fbGet('accounts');
+  var accountIds={}; accounts.forEach(function(a){ accountIds[a._id]=a; });
+  var entries=await fbGet('journal_entries');
+  var docs=await fbGet('source_documents');
+  var issues=[];
+
+  entries.forEach(function(e){
+    var lines=e.lines||[];
+    var totalDebit=0, totalCredit=0;
+    lines.forEach(function(l){
+      totalDebit+=(+l.debit||0); totalCredit+=(+l.credit||0);
+      if(l.accountId && !accountIds[l.accountId]){
+        issues.push({type:'UNKNOWN_ACCOUNT', journalEntryId:e._id, accountId:l.accountId});
+      }else if(l.accountId && accountIds[l.accountId].postable===false){
+        issues.push({type:'POSTED_TO_NON_POSTABLE_ACCOUNT', journalEntryId:e._id, accountId:l.accountId});
+      }
+    });
+    totalDebit=Math.round(totalDebit*100)/100; totalCredit=Math.round(totalCredit*100)/100;
+    if(totalDebit!==totalCredit){
+      issues.push({type:'UNBALANCED_ENTRY', journalEntryId:e._id, totalDebit:totalDebit, totalCredit:totalCredit});
+    }
+  });
+
+  var seenOperationIds={};
+  docs.forEach(function(d){
+    if(d.status && d.status!=='DRAFT' && !d.journalEntryId){
+      issues.push({type:'POSTED_DOCUMENT_MISSING_JOURNAL_ENTRY', documentId:d._id});
+    }
+    if(d.operationId){
+      if(seenOperationIds[d.operationId]) issues.push({type:'DUPLICATE_OPERATION_ID', documentId:d._id, operationId:d.operationId});
+      else seenOperationIds[d.operationId]=true;
+    }
+  });
+
+  return {ok:true, scannedEntries:entries.length, scannedDocuments:docs.length, issueCount:issues.length, issues:issues};
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — MONTH-END CLOSE (Phase 30). Reaches into the
+//  existing Phase 17 fiscal-period machinery (createFiscalPeriod /
+//  closeFiscalPeriod / _checkFiscalPeriodOpen) rather than replacing
+//  it: this function POSTS the real closing entry (zeroing revenue and
+//  expense accounts into Retained Earnings, 3300) and THEN calls the
+//  existing closeFiscalPeriod to lock the period -- so a period is
+//  never locked without its close actually having been posted first.
+//
+//  Critical correctness point: the closing entry is dated the day
+//  AFTER period.endDate, never ON it. getIncomeStatement (Phase 24) is
+//  a simple date-range filter with no concept of "closing entries" --
+//  if the close posted ON endDate, its own zeroing lines would fall
+//  inside the very range being closed and a later re-run of
+//  getIncomeStatement for that same period would show revenue/expense
+//  netted to zero, corrupting the historical statement it's supposed
+//  to preserve. Dating it the next day keeps the just-closed period's
+//  own Income Statement exactly as it was.
+//
+//  If there was no revenue/expense activity at all, no entry is
+//  posted (nothing to close) but the period is still locked. If
+//  revenue and expense activity exists but happens to net to exactly
+//  zero, the zeroing entry is still posted (accounts must return to
+//  zero for the next period) -- it's simply already balanced without
+//  needing a Retained Earnings plug line.
+// ══════════════════════════════════════════════════════════════
+
+function _dayAfter(dateStr){
+  var d=new Date(dateStr+'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate()+1);
+  return d.toISOString().slice(0,10);
+}
+
+window.runMonthEndClose=async function(periodKey){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!periodKey) return {ok:false, error:'معرّف الفترة مطلوب'};
+
+  var periods=await fbGet('fiscal_periods');
+  var period=periods.find(function(p){return p._id===periodKey;});
+  if(!period) return {ok:false, error:'الفترة غير موجودة'};
+  if(period.status!=='OPEN') return {ok:false, error:'الفترة ليست مفتوحة'};
+
+  var existing=await _findExistingJournalBySource('period_close',periodKey);
+  if(existing) return {ok:true, journalEntryId:existing._id, idempotent:true};
+
+  var incomeStatement=await window.getIncomeStatement(period.startDate,period.endDate);
+  if(!incomeStatement.ok) return incomeStatement;
+
+  var lines=[];
+  incomeStatement.revenue.forEach(function(r){ if(r.amount>0) lines.push({accountId:r.accountId, debit:r.amount}); });
+  incomeStatement.expense.forEach(function(x){ if(x.amount>0) lines.push({accountId:x.accountId, credit:x.amount}); });
+  var netIncome=incomeStatement.netIncome;
+
+  var journalEntryId=null;
+  if(lines.length){
+    if(netIncome>0) lines.push({accountId:'3300', credit:netIncome});
+    else if(netIncome<0) lines.push({accountId:'3300', debit:-netIncome});
+    var posted=await window.postJournalEntry({
+      date:_dayAfter(period.endDate), description:'قيد إقفال نهاية الفترة: '+periodKey,
+      sourceType:'period_close', sourceId:periodKey, lines:lines,
+    });
+    if(!posted.ok) return posted;
+    journalEntryId=posted.id;
+  }
+
+  var lockResult=await window.closeFiscalPeriod(periodKey);
+  if(!lockResult.ok) return lockResult;
+
+  await logActivity('close_period','fiscal_periods','إقفال محاسبي لنهاية الفترة: '+periodKey+' — صافي الدخل '+netIncome);
+  return {ok:true, journalEntryId:journalEntryId, netIncome:netIncome, closed:true};
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — FINANCIAL INTEGRITY ENGINE (Phase 33). One
+//  composed health signal for the whole accounting engine, same
+//  "pure composition, never recalculate" discipline shared.js's own
+//  evaluateOperationalPriority already established (see also Phase 28's
+//  getFinancialDashboardKPIs): combines the real outputs of the Data
+//  Quality Scan (Phase 29), Trial Balance (Phase 26), and Balance Sheet
+//  (Phase 24) into a single `healthy` boolean a dashboard badge/alert
+//  can key off of, without re-deriving any of their logic itself.
+// ══════════════════════════════════════════════════════════════
+
+window.getFinancialIntegrityStatus=async function(){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+
+  var asOf=todayStr();
+  // Phase 38 (Performance): independent calls, fetched in parallel.
+  var results=await Promise.all([
+    window.runFinancialDataQualityScan(),
+    window.getTrialBalance(asOf),
+    window.getBalanceSheet(asOf),
+  ]);
+  var scan=results[0], trialBalance=results[1], balanceSheet=results[2];
+  if(!scan.ok) return scan;
+  if(!trialBalance.ok) return trialBalance;
+  if(!balanceSheet.ok) return balanceSheet;
+
+  return {
+    ok:true, asOf:asOf,
+    healthy:scan.issueCount===0 && trialBalance.balanced && balanceSheet.balanced,
+    dataQualityIssueCount:scan.issueCount, dataQualityIssues:scan.issues,
+    trialBalanceBalanced:trialBalance.balanced, balanceSheetBalanced:balanceSheet.balanced,
+  };
+};
+
+// ══════════════════════════════════════════════════════════════
+//  ACCOUNTING ENGINE — REPORT VALIDATION (Phase 37). Cross-checks
+//  figures that SHOULD agree across genuinely independent computation
+//  paths in this engine -- not the same balanced-check repeated, but a
+//  real cross-validation that would catch one report's logic silently
+//  drifting from another's. getBalanceSheet computes its own
+//  revenue/expense totals internally rather than calling
+//  getIncomeStatement; getTrialBalance and getBalanceSheet each sum
+//  ASSET balances with separate code; getCashFlowStatement's
+//  closingCash is computed from journal_entries directly, not from
+//  getBalanceSheet's asset rows. Since-inception windows use
+//  '1900-01-01' as a start date safely earlier than any realistic farm
+//  record, string-comparable the same way every date filter in this
+//  engine already works.
+// ══════════════════════════════════════════════════════════════
+
+window.validateFinancialReportsCrossConsistency=async function(asOfDate){
+  if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!asOfDate) return {ok:false, error:'التاريخ مطلوب'};
+
+  var checks=[];
+  var SINCE_INCEPTION='1900-01-01';
+
+  // Phase 38 (Performance): balanceSheet, incomeStatement, trialBalance,
+  // accounts, and cash_bank_accounts are all independent fetches --
+  // only the COMPARISONS below need them together, not the fetching
+  // itself -- so all five run in parallel instead of five sequential
+  // awaits.
+  var fetched=await Promise.all([
+    window.getBalanceSheet(asOfDate),
+    window.getIncomeStatement(SINCE_INCEPTION,asOfDate),
+    window.getTrialBalance(asOfDate),
+    fbGet('accounts'),
+    fbGet('cash_bank_accounts'),
+  ]);
+  var balanceSheet=fetched[0], incomeStatement=fetched[1], trialBalance=fetched[2], accounts=fetched[3], cbas=fetched[4];
+  if(!balanceSheet.ok) return balanceSheet;
+  if(!incomeStatement.ok) return incomeStatement;
+  if(!trialBalance.ok) return trialBalance;
+
+  var earningsLine=balanceSheet.equity.find(function(e){return e.accountId===null;});
+  var bsEarnings=earningsLine?earningsLine.balance:0;
+  checks.push({
+    name:'BALANCE_SHEET_EARNINGS_MATCHES_INCOME_STATEMENT',
+    pass:Math.round((bsEarnings-incomeStatement.netIncome)*100)/100===0,
+    balanceSheetValue:bsEarnings, incomeStatementValue:incomeStatement.netIncome,
+  });
+
+  var accountTypeById={}; accounts.forEach(function(a){ accountTypeById[a._id]=a.type; });
+  var tbAssetSum=0;
+  trialBalance.rows.forEach(function(r){ if(accountTypeById[r.accountId]==='ASSET') tbAssetSum+=(r.debit-r.credit); });
+  tbAssetSum=Math.round(tbAssetSum*100)/100;
+  checks.push({
+    name:'TRIAL_BALANCE_ASSETS_MATCH_BALANCE_SHEET_ASSETS',
+    pass:tbAssetSum===balanceSheet.totalAssets,
+    trialBalanceValue:tbAssetSum, balanceSheetValue:balanceSheet.totalAssets,
+  });
+
+  if(cbas.length){
+    var cashFlow=await window.getCashFlowStatement(SINCE_INCEPTION,asOfDate);
+    if(cashFlow.ok){
+      var cashAccountIds={}; cbas.forEach(function(c){ cashAccountIds[c.linkedAccountId]=true; });
+      var bsCashSum=Math.round(balanceSheet.assets.filter(function(a){return cashAccountIds[a.accountId];}).reduce(function(s,a){return s+a.balance;},0)*100)/100;
+      checks.push({
+        name:'CASH_FLOW_CLOSING_CASH_MATCHES_BALANCE_SHEET_CASH_ACCOUNTS',
+        pass:bsCashSum===cashFlow.closingCash,
+        cashFlowValue:cashFlow.closingCash, balanceSheetValue:bsCashSum,
+      });
+    }
+  }
+
+  return {ok:true, asOfDate:asOfDate, allPass:checks.every(function(c){return c.pass;}), checks:checks};
+};
+
 // ══════════════════════════════════════════════════════
 // Animal Identity Service
 // ══════════════════════════════════════════════════════
@@ -3609,7 +6898,7 @@ window.findByTag=async function(tag){
 // here writes to it.
 window.renameTag=async function(opts){
   opts=opts||{};
-  if(!can('animals')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!canWrite('animals')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
   var animalId=opts.animalId, newTag=(opts.newTag||'').trim();
   if(!animalId || !newTag) return {ok:false, error:'بيانات ناقصة'};
   var animal=await fbGetOne('animals', animalId);
@@ -3624,7 +6913,40 @@ window.renameTag=async function(opts){
     await fbPatch('animals', animalId, {tag:newTag, previous_tags:priorTags});
     fbCacheInvalidate('animals');
     await logActivity('edit','animals','تغيير الترقيم: '+(animal.tag||'—')+' → '+newTag);
-    return {ok:true, oldTag:animal.tag, newTag:newTag};
+
+    // FIX (2026-10 audit) — DATA INTEGRITY: mother_tag/father_tag are
+    // documented in this very file as a CACHED PROJECTION of the canonical
+    // mother_id/father_id (see linkParents() above), and eleven call sites
+    // across the app display the parent by tag. Renaming an animal updated
+    // only the animal itself, so every one of its already-recorded offspring
+    // kept pointing at a tag that no longer existed: the pedigree view showed
+    // a phantom mother, repairGenealogy() could no longer resolve those
+    // children (their old mother_tag matched nothing -> "unresolved"), and a
+    // NEW animal could then be given the freed tag, silently re-parenting
+    // the old offspring in every tag-based view. Propagating the rename to
+    // children that reference the old tag keeps the projection in sync with
+    // the identity it mirrors. Best-effort per child: one failed patch never
+    // aborts the rest, and the rename itself is already committed.
+    var oldTag=animal.tag;
+    var propagated=0, failed=[];
+    if(oldTag){
+      var all=await fbGet('animals')||[];
+      for(var i=0;i<all.length;i++){
+        var other=all[i];
+        if(other._id===animalId) continue;
+        var patch={};
+        if(other.mother_tag===oldTag){ patch.mother_tag=newTag; if(animal.breed) patch.mother_breed=animal.breed; }
+        if(other.father_tag===oldTag){ patch.father_tag=newTag; }
+        if(!Object.keys(patch).length) continue;
+        try{ await fbPatch('animals', other._id, patch); propagated++; }
+        catch(e){ failed.push(other._id); }
+      }
+      if(propagated){
+        fbCacheInvalidate('animals');
+        await logActivity('edit','animals','تحديث '+ar(propagated)+' سجل مرتبطة بالترقيم القديم '+(oldTag||'—'));
+      }
+    }
+    return {ok:true, oldTag:oldTag, newTag:newTag, propagated:propagated, propagateFailed:failed};
   }catch(e){ return {ok:false, error:e.message}; }
 };
 
@@ -3634,7 +6956,7 @@ window.renameTag=async function(opts){
 // pattern as current_weight) -- never the tag fields alone.
 window.linkParents=async function(opts){
   opts=opts||{};
-  if(!can('animals')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!canWrite('animals')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
   var animalId=opts.animalId;
   if(!animalId) return {ok:false, error:'بيانات ناقصة'};
   var fields={};

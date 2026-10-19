@@ -31,6 +31,11 @@ var FARM_NAV = [
   {section: 'المالية', items: [
     {href:'finance.html',   icon:'bi-wallet2',             label:'المالية',               perm:'finance'},
     {href:'cost.html',      icon:'bi-calculator-fill',     label:'حاسبة التكاليف',        perm:'finance'},
+    {href:'finance-entry.html', icon:'bi-pencil-square',   label:'إدخال البيانات المالية', perm:'finance'},
+    {href:'finance-ar-ap.html', icon:'bi-people-fill',     label:'العملاء والموردون',      perm:'finance'},
+    {href:'finance-animals.html', icon:'bi-piggy-bank-fill', label:'محاسبة الحيوانات',     perm:'finance'},
+    {href:'finance-periods.html', icon:'bi-calendar2-check-fill', label:'الفترات والتسوية البنكية', perm:'finance'},
+    {href:'finance-reports.html', icon:'bi-graph-up-arrow', label:'التقارير المالية',      perm:'finance'},
     {href:'reports.html',   icon:'bi-graph-up',            label:'التقارير',              perm:'reports'},
     {href:'analytics.html', icon:'bi-bar-chart-line-fill', label:'التحليلات',             perm:'reports'},
   ]},

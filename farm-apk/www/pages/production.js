@@ -57,7 +57,7 @@ function renderMain() {
   const trendMonths=[]; const compareMonths=[];
   for(let i=5;i>=0;i--){
     const d=new Date(nowP.getFullYear(),nowP.getMonth()-i,1);
-    const mStr=d.toISOString().slice(0,7);
+    const mStr=toLocalMonthKey(d);
     const monthTotal=_prodData.filter(p=>(p.date||'').startsWith(mStr)).reduce((t,p)=>t+(+p.quantity||0),0);
     trendMonths.push({ label: arMonthsP[d.getMonth()].slice(0,3), value: monthTotal });
     const milkTotal=_prodData.filter(p=>p.type==='milk'&&(p.date||'').startsWith(mStr)).reduce((t,p)=>t+(+p.quantity||0),0);
@@ -117,7 +117,7 @@ function renderMain() {
   <button class="fab-btn" onclick="openProdEntry()" aria-label="تسجيل إنتاج سريع" title="تسجيل إنتاج"
     style="position:fixed;bottom:80px;left:20px;width:56px;height:56px;border-radius:50%;
       background:var(--orange);color:#fff;border:none;box-shadow:0 8px 24px rgba(16,185,129,.5);
-      font-size:1.4rem;cursor:pointer;z-index:1000;display:none;align-items:center;justify-content:center">
+      font-size:1.4rem;cursor:pointer;z-index:var(--z-fab);display:none;align-items:center;justify-content:center">
     <i class="bi bi-plus-lg"></i>
   </button>
   <style>
@@ -132,8 +132,8 @@ function computeStats() {
   const today = todayStr();
   const monthAgo = new Date(); monthAgo.setMonth(monthAgo.getMonth() - 1);
   const yearAgo  = new Date(); yearAgo.setFullYear(yearAgo.getFullYear() - 1);
-  const monthStr = monthAgo.toISOString().slice(0,10);
-  const yearStr  = yearAgo.toISOString().slice(0,10);
+  const monthStr = toLocalDateStr(monthAgo);
+  const yearStr  = toLocalDateStr(yearAgo);
 
   const milk = _prodData.filter(p => p.type === 'milk');
   const wool = _prodData.filter(p => p.type === 'wool');
@@ -179,7 +179,7 @@ function renderMilkTab(el) {
   const now = new Date();
   for (let i = 13; i >= 0; i--) {
     const d = new Date(now); d.setDate(d.getDate() - i);
-    daily[d.toISOString().slice(0,10)] = 0;
+    daily[toLocalDateStr(d)] = 0;
   }
   milk.forEach(p => { if (daily[p.date] !== undefined) daily[p.date] += +p.quantity || 0; });
 
@@ -199,11 +199,11 @@ function renderMilkTab(el) {
     rowsHtml: milk.slice(0, 50).map(p => `
       <tr>
         <td class="text-gray">${p.date || '—'}</td>
-        <td class="fw-bold">${p.animal_tag || '—'}</td>
-        <td class="text-gray">${p.animal_breed || '—'}</td>
+        <td class="fw-bold">${escapeHtml(p.animal_tag || '—')}</td>
+        <td class="text-gray">${escapeHtml(p.animal_breed || '—')}</td>
         <td class="green-text fw-bold">${ar(+p.quantity || 0)} ل</td>
-        <td class="text-gray">${p.recorded_by || '—'}</td>
-        <td class="text-gray" style="font-size:.75rem">${p.notes || '—'}</td>
+        <td class="text-gray">${escapeHtml(p.recorded_by || '—')}</td>
+        <td class="text-gray" style="font-size:.75rem">${escapeHtml(p.notes || '—')}</td>
         <td><button class="action-btn sm danger" onclick="delProdRec('${p._id}')" aria-label="حذف السجل" style="padding:3px 8px"><i class="bi bi-trash" aria-hidden="true"></i></button></td>
       </tr>`).join('')
   }) : ''}`;
@@ -254,7 +254,7 @@ function renderWoolTab(el) {
   const now = new Date();
   for (let i = 11; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    monthly[d.toISOString().slice(0,7)] = 0;
+    monthly[toLocalMonthKey(d)] = 0;
   }
   wool.forEach(p => {
     const k = (p.date||'').slice(0,7);
@@ -283,11 +283,11 @@ function renderWoolTab(el) {
     rowsHtml: wool.slice(0, 50).map(p => `
       <tr>
         <td class="text-gray">${p.date || '—'}</td>
-        <td class="fw-bold">${p.animal_tag || '—'}</td>
-        <td class="text-gray">${p.animal_breed || '—'}</td>
+        <td class="fw-bold">${escapeHtml(p.animal_tag || '—')}</td>
+        <td class="text-gray">${escapeHtml(p.animal_breed || '—')}</td>
         <td style="color:var(--yellow);font-weight:700">${ar((+p.quantity||0).toFixed(1))} كجم</td>
-        <td class="text-gray">${p.recorded_by || '—'}</td>
-        <td class="text-gray" style="font-size:.75rem">${p.notes || '—'}</td>
+        <td class="text-gray">${escapeHtml(p.recorded_by || '—')}</td>
+        <td class="text-gray" style="font-size:.75rem">${escapeHtml(p.notes || '—')}</td>
         <td><button class="action-btn sm danger" onclick="delProdRec('${p._id}')" aria-label="حذف السجل" style="padding:3px 8px"><i class="bi bi-trash" aria-hidden="true"></i></button></td>
       </tr>`).join('')
   }) : ''}`;
@@ -354,11 +354,11 @@ function renderWeightTab(el) {
     rowsHtml: weight.slice(0, 60).map(p => `
       <tr>
         <td class="text-gray">${p.date || '—'}</td>
-        <td class="fw-bold">${p.animal_tag || '—'}</td>
-        <td class="text-gray">${p.animal_breed || '—'}</td>
+        <td class="fw-bold">${escapeHtml(p.animal_tag || '—')}</td>
+        <td class="text-gray">${escapeHtml(p.animal_breed || '—')}</td>
         <td class="green-text fw-bold">${ar((+p.quantity||0).toFixed(1))} كجم</td>
-        <td class="text-gray">${p.recorded_by || '—'}</td>
-        <td class="text-gray" style="font-size:.75rem">${p.notes || '—'}</td>
+        <td class="text-gray">${escapeHtml(p.recorded_by || '—')}</td>
+        <td class="text-gray" style="font-size:.75rem">${escapeHtml(p.notes || '—')}</td>
         <td><button class="action-btn sm danger" onclick="delProdRec('${p._id}')" aria-label="حذف السجل" style="padding:3px 8px"><i class="bi bi-trash" aria-hidden="true"></i></button></td>
       </tr>`).join('')
   }) : ''}`;
@@ -409,7 +409,7 @@ function renderSummaryTab(el) {
   const now = new Date();
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    monthly[d.toISOString().slice(0,7)] = { milk: 0, wool: 0, weight: 0 };
+    monthly[toLocalMonthKey(d)] = { milk: 0, wool: 0, weight: 0 };
   }
   _prodData.forEach(p => {
     const k = (p.date||'').slice(0,7);
@@ -435,8 +435,8 @@ function renderSummaryTab(el) {
           rowsHtml: topMilk.map((a, i) => `
             <tr>
               <td class="fw-bold accent-text">${ar(i+1)}</td>
-              <td class="fw-bold">${a.tag}</td>
-              <td class="text-gray">${a.breed || '—'}</td>
+              <td class="fw-bold">${escapeHtml(a.tag||'')}</td>
+              <td class="text-gray">${escapeHtml(a.breed || '—')}</td>
               <td class="blue-text fw-bold">${ar(a.total.toFixed(1))} ل</td>
               <td class="text-gray">${ar((a.total/a.count).toFixed(2))} ل</td>
             </tr>`).join('')
@@ -514,7 +514,7 @@ window.openProdEntry = function() {
       '<label>الحيوان *</label>' +
       '<select class="field" id="pr-animal" aria-label="اختيار الحيوان">' +
         '<option value="">— اختر حيواناً —</option>' +
-        tags.map(function(t){ return '<option value="' + t.id + '">' + t.label + '</option>'; }).join('') +
+        tags.map(function(t){ return '<option value="' + t.id + '">' + escapeHtml(t.label) + '</option>'; }).join('') +
       '</select>' +
       '<div class="row g-2">' +
         '<div class="col-6">' +
@@ -523,7 +523,7 @@ window.openProdEntry = function() {
         '</div>' +
         '<div class="col-6">' +
           '<label>مسجّل بواسطة</label>' +
-          '<input class="field" id="pr-by" value="' + (u?.name || '') + '" aria-label="اسم المسجّل">' +
+          '<input class="field" id="pr-by" value="' + escapeHtml(u?.name || '') + '" aria-label="اسم المسجّل">' +
         '</div>' +
       '</div>' +
       '<label>ملاحظات</label>' +

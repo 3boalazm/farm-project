@@ -1,5 +1,7 @@
 # PERMISSION-MATRIX.md
 
+> **UPDATE 2026-10 (see `FULL-AUDIT-2026-10.md`):** two statements below are now out of date. (1) `activity.html` is no longer a 0-byte file — it is a complete, permission-gated admin page. (2) `can('admin')`, used by 20 admin-only guards across the app, returned **true** for the supervisor role until the 2026-10 audit fixed `can()`; and the read-only `visitor` role could write to the herd until `canWrite()` was added. This document is kept as the historical record of its own session.
+
 **Every page with a declared `perm:` in `nav.js`, cross-referenced against actual `can()` enforcement. Built from a direct, complete sweep this session — not inferred.**
 
 | Page | Required Permission | Enforced Before This Session | Enforced Now |

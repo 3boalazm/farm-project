@@ -117,10 +117,10 @@ function renderPage(){
     return '<div class="d-flex align-items-center gap-3 py-2" style="border-bottom:1px solid var(--border-3)">'+
       '<span style="font-size:1.2rem">'+(a.species==='goat'?'🐐':'🐑')+'</span>'+
       '<div class="flex-grow-1">'+
-        '<span class="fw-bold">'+(a.breed||'—')+'</span>'+
-        (a.tag?' <span class="type-badge badge-gray" style="font-size:.68rem">#'+a.tag+'</span>':'')+
+        '<span class="fw-bold">'+escapeHtml(a.breed||'—')+'</span>'+
+        (a.tag?' <span class="type-badge badge-gray" style="font-size:.68rem">#'+escapeHtml(a.tag)+'</span>':'')+
         '<span class="type-badge ms-1 '+(a.gender==='male'?'badge-blue':'badge-tasmeen')+'" style="font-size:.68rem">'+(a.gender==='male'?'ذكر':'أنثى')+'</span>'+
-        '<div class="text-gray" style="font-size:.75rem">'+(a.death_reason||a.removal_reason||'—')+' | '+(a.died_at||a.sold_at||'غير محدد')+'</div>'+
+        '<div class="text-gray" style="font-size:.75rem">'+escapeHtml(a.death_reason||a.removal_reason||'—')+' | '+(a.died_at||a.sold_at||'غير محدد')+'</div>'+
       '</div>'+
     '</div>';
   }).join('');
@@ -161,13 +161,13 @@ function renderDeadSection(sp, icon, title, color, dead, breedList){
     html+='<div class="col-lg-4 col-md-6"><div class="breed-card" style="border-color:rgba(244,67,54,.3)">';
     html+='<div class="breed-header">';
     html+='<div class="breed-icon">'+icon+'</div>';
-    html+='<div><div class="fw-bold">'+breed+'</div><small class="text-gray">'+ar(ba.length)+' نافق</small></div>';
+    html+='<div><div class="fw-bold">'+escapeHtml(breed)+'</div><small class="text-gray">'+ar(ba.length)+' نافق</small></div>';
     html+='</div>';
     html+='<div class="row g-2 mb-3">';
     html+='<div class="col-6"><div class="gender-box"><span class="gender-count" style="color:var(--blue)">'+ar(m)+'</span><small class="text-gray">ذكور</small></div></div>';
     html+='<div class="col-6"><div class="gender-box"><span class="gender-count" style="color:var(--orange)">'+ar(f)+'</span><small class="text-gray">إناث</small></div></div>';
     html+='</div>';
-    html+='<div class="mb-2 text-gray" style="font-size:.78rem"><i class="bi bi-info-circle me-1"></i>أكثر سبب: '+topReason+'</div>';
+    html+='<div class="mb-2 text-gray" style="font-size:.78rem"><i class="bi bi-info-circle me-1"></i>أكثر سبب: '+escapeHtml(topReason)+'</div>';
     html+='<a href="animals.html?species='+sp+'&breed='+encodeURIComponent(breed)+'&status=dead" class="action-btn sm w-100 mt-2" style="justify-content:center"><i class="bi bi-list-ul"></i> عرض القائمة</a>';
     html+='</div></div>';
   });
@@ -240,8 +240,8 @@ window.openMarkDead=async function(){
     '<label>اختر الحيوان * <span class="text-gray" style="font-size:.75rem">('+ar(alive.length)+' حيوان حي)</span></label>'+
     '<select class="field" id="dd-id" size="5" style="height:auto" onchange="onDeadAnimalChange()">'+
       alive.map(function(a){
-        return'<option value="'+a._id+'">'+(a.species==='goat'?'🐐':'🐑')+' '+(a.breed||'—')+
-          (a.tag?' #'+a.tag:'')+' — '+(a.gender==='male'?'ذكر ♂':'أنثى ♀')+
+        return'<option value="'+a._id+'">'+(a.species==='goat'?'🐐':'🐑')+' '+escapeHtml(a.breed||'—')+
+          (a.tag?' #'+escapeHtml(a.tag):'')+' — '+(a.gender==='male'?'ذكر ♂':'أنثى ♀')+
           ' ('+(a.purpose==='tarbiya'?'تربية':a.purpose==='tasmeen'?'تسمين':'مواليد')+')</option>';
       }).join('')+
     '</select>'+

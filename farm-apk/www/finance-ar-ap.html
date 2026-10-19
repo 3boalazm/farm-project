@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <!-- Performance hints -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://farm-mz99-default-rtdb.europe-west1.firebasedatabase.app" crossorigin>
+  <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+  <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
+
+<script>(function(){var t=localStorage.getItem('farm_theme');if(t==='light')document.documentElement.classList.add('light-mode');}());</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>العملاء والموردون — بيان المزرعة</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="media/logo-icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="media/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="media/favicon-16.png">
+<link rel="apple-touch-icon" href="media/apple-touch-icon.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="page-wrap rail-v2-content">
+  <div id="page-header"></div>
+
+  <ul class="nav nav-pills mb-4 gap-2" id="ap-tabs">
+    <li><button class="nav-link active" onclick="switchApTab('customers')"><i class="bi bi-people me-2"></i>العملاء</button></li>
+    <li><button class="nav-link" onclick="switchApTab('suppliers')"><i class="bi bi-truck me-2"></i>الموردون</button></li>
+    <li><button class="nav-link" onclick="switchApTab('sales-inv')"><i class="bi bi-receipt me-2"></i>فاتورة مبيعات</button></li>
+    <li><button class="nav-link" onclick="switchApTab('purchase-inv')"><i class="bi bi-bag me-2"></i>فاتورة مشتريات</button></li>
+    <li><button class="nav-link" onclick="switchApTab('aging')"><i class="bi bi-hourglass-split me-2"></i>أعمار الديون</button></li>
+  </ul>
+
+  <div id="tab-customers"></div>
+  <div id="tab-suppliers" style="display:none"></div>
+  <div id="tab-sales-inv" style="display:none"></div>
+  <div id="tab-purchase-inv" style="display:none"></div>
+  <div id="tab-aging" style="display:none"></div>
+
+  <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
+    © <span id="footer-year"></span> <span id="footer-farm"></span><br>
+    <small style="font-size:.72rem;color:var(--text-muted)">إشراف: لواء أحمد رجب نوح | تطوير: جندي مصطفى محمد إبراهيم</small>
+  </footer>
+</div>
+<script src="config.js"></script>
+<script src="firebase.js"></script>
+<script src="nav.js"></script>
+<script src="shared.js"></script>
+<script src="offline-sync.js" defer></script>
+<script src="pages/datepicker.js" defer></script>
+<script>
+'use strict';
+
+let apCustomers=[], apSuppliers=[], apAccounts=[], apCbas=[];
+const AP_AGING_LABELS = {current:'حالي (غير مستحق)', d1_30:'1-30 يوم', d31_60:'31-60 يوم', d61_90:'61-90 يوم', d90_plus:'أكثر من 90 يومًا', noDueDate:'بلا تاريخ استحقاق'};
+
+document.addEventListener('DOMContentLoaded', async ()=>{
+  if(!requireAuth())return;
+  if(!can('finance')){
+    document.body.innerHTML='<div class="page-wrap"><div class="empty-state" style="padding-top:100px"><i class="bi bi-shield-x" style="font-size:3rem;display:block;margin-bottom:10px;opacity:.4"></i><p>غير مصرح بالوصول</p><a href="dashboard.html" class="action-btn">الرئيسية</a></div></div>';
+    return;
+  }
+  initFirebase();
+  const s=getSettings();
+  document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
+  document.getElementById('footer-farm').textContent=s.farmName;
+  renderNavbarV2('finance-ar-ap.html');
+  renderPageHeader('<i class="bi bi-people-fill accent-text"></i> العملاء والموردون',
+    'فواتير البيع والشراء، تسجيل السداد، وأعمار الديون — من دفتر الأستاذ الفعلي مباشرة','');
+
+  document.querySelectorAll('#ap-tabs .nav-link').forEach(b=>{
+    b.style.cssText='background:var(--bg-3);border:1px solid var(--border);color:var(--text-sub);border-radius:10px;padding:8px 16px;cursor:pointer;font-family:Cairo,sans-serif;font-size:.85rem;transition:.2s';
+  });
+  document.querySelector('#ap-tabs .nav-link.active').style.cssText+=';background:rgba(0,230,118,.1);border-color:rgba(0,230,118,.35);color:var(--green)';
+
+  await apLoadAll();
+  renderCustomersTab();
+  renderSuppliersTab();
+  renderSalesInvTab();
+  renderPurchaseInvTab();
+  renderAgingTab();
+});
+
+window.switchApTab=function(tab){
+  ['customers','suppliers','sales-inv','purchase-inv','aging'].forEach(t=>{
+    document.getElementById('tab-'+t).style.display = t===tab ? 'block' : 'none';
+  });
+  document.querySelectorAll('#ap-tabs .nav-link').forEach(b=>{
+    const isA=b.getAttribute('onclick').includes("'"+tab+"'");
+    b.classList.toggle('active',isA);
+    b.style.background=isA?'rgba(0,230,118,.1)':'var(--bg-3)';
+    b.style.borderColor=isA?'rgba(0,230,118,.35)':'var(--border)';
+    b.style.color=isA?'var(--green)':'var(--text-sub)';
+  });
+  if(tab==='aging') renderAgingTab();
+};
+
+async function apLoadAll(){
+  try{
+    [apCustomers, apSuppliers, apAccounts, apCbas] = await Promise.all([
+      fbGet('customers'), fbGet('suppliers'), fbGet('accounts'), fbGet('cash_bank_accounts'),
+    ]);
+  }catch(e){ toast('خطأ في تحميل البيانات: '+e.message,'error'); }
+}
+
+function apAccountOptions(filterFn){
+  return apAccounts.filter(a=>a.postable!==false && (!filterFn||filterFn(a)))
+    .map(a=>`<option value="${a._id}">${escapeHtml(a.code+' — '+a.name_ar)}</option>`).join('');
+}
+function apCbaOptions(){
+  return apCbas.map(c=>`<option value="${c.linkedAccountId}">${escapeHtml(c.name)}</option>`).join('');
+}
+
+// ══════════════════════════════════════════════════════
+//  TAB — Customers
+// ══════════════════════════════════════════════════════
+function renderCustomersTab(){
+  document.getElementById('tab-customers').innerHTML =
+    renderSectionContainer({
+      title:'عميل جديد', description:'',
+      contentHtml:`
+        <div class="row g-3">
+          <div class="col-12 col-md-4"><label class="form-label small text-gray">الاسم</label><input type="text" id="cust-name" class="form-control form-control-sm"></div>
+          <div class="col-12 col-md-3"><label class="form-label small text-gray">الهاتف (اختياري)</label><input type="text" id="cust-phone" class="form-control form-control-sm"></div>
+          <div class="col-12 col-md-5"><label class="form-label small text-gray">ملاحظات (اختياري)</label><input type="text" id="cust-notes" class="form-control form-control-sm"></div>
+        </div>
+        <button class="action-btn mt-3" id="cust-submit-btn" onclick="apSubmitCustomer()"><i class="bi bi-plus-lg me-1"></i> إضافة عميل</button>
+      `,
+    }) +
+    renderSectionContainer({title:'قائمة العملاء', description:'', contentHtml:'<div id="cust-list">'+apLoadingHtml()+'</div>'});
+  apRefreshCustomerList();
+}
+
+function apLoadingHtml(){ return '<div class="text-center py-3"><div class="spinner"></div></div>'; }
+
+async function apRefreshCustomerList(){
+  const el=document.getElementById('cust-list');
+  if(!apCustomers.length){ el.innerHTML=apEmptyHtml('لا يوجد عملاء بعد'); return; }
+  const balances = await Promise.all(apCustomers.map(c=>getCustomerBalance(c._id)));
+  el.innerHTML=`<div style="overflow-x:auto"><table class="table table-sm"><thead><tr><th>الاسم</th><th>الهاتف</th><th class="text-end">رصيد مستحق</th></tr></thead><tbody>
+    ${apCustomers.map((c,i)=>`<tr><td>${escapeHtml(c.name)}</td><td>${escapeHtml(c.phone||'—')}</td><td class="text-end mono">${balances[i].ok?ar(balances[i].balance)+' '+getSettings().currency:'—'}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+function apEmptyHtml(msg){ return `<div class="empty-state py-4"><i class="bi bi-inbox" style="font-size:2rem;opacity:.4"></i><p class="mt-2">${msg}</p></div>`; }
+
+window.apSubmitCustomer=async function(){
+  const name=document.getElementById('cust-name').value.trim();
+  const phone=document.getElementById('cust-phone').value.trim();
+  const notes=document.getElementById('cust-notes').value.trim();
+  if(!name){ toast('اسم العميل مطلوب','error'); return; }
+  const btn=document.getElementById('cust-submit-btn');
+  btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> جارٍ الإضافة...';
+  const r=await createCustomer({name, phone:phone||null, notes:notes||null});
+  btn.disabled=false; btn.innerHTML='<i class="bi bi-plus-lg me-1"></i> إضافة عميل';
+  if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
+  toast('تمت إضافة العميل بنجاح','success');
+  apCustomers = await fbGet('customers');
+  renderCustomersTab(); renderSalesInvTab();
+};
+
+// ══════════════════════════════════════════════════════
+//  TAB — Suppliers
+// ══════════════════════════════════════════════════════
+function renderSuppliersTab(){
+  document.getElementById('tab-suppliers').innerHTML =
+    renderSectionContainer({
+      title:'مورد جديد', description:'',
+      contentHtml:`
+        <div class="row g-3">
+          <div class="col-12 col-md-4"><label class="form-label small text-gray">الاسم</label><input type="text" id="supp-name" class="form-control form-control-sm"></div>
+          <div class="col-12 col-md-3"><label class="form-label small text-gray">الهاتف (اختياري)</label><input type="text" id="supp-phone" class="form-control form-control-sm"></div>
+          <div class="col-12 col-md-5"><label class="form-label small text-gray">ملاحظات (اختياري)</label><input type="text" id="supp-notes" class="form-control form-control-sm"></div>
+        </div>
+        <button class="action-btn mt-3" id="supp-submit-btn" onclick="apSubmitSupplier()"><i class="bi bi-plus-lg me-1"></i> إضافة مورد</button>
+      `,
+    }) +
+    renderSectionContainer({title:'قائمة الموردين', description:'', contentHtml:'<div id="supp-list">'+apLoadingHtml()+'</div>'});
+  apRefreshSupplierList();
+}
+
+async function apRefreshSupplierList(){
+  const el=document.getElementById('supp-list');
+  if(!apSuppliers.length){ el.innerHTML=apEmptyHtml('لا يوجد موردون بعد'); return; }
+  const balances = await Promise.all(apSuppliers.map(s=>getSupplierBalance(s._id)));
+  el.innerHTML=`<div style="overflow-x:auto"><table class="table table-sm"><thead><tr><th>الاسم</th><th>الهاتف</th><th class="text-end">مستحق للمورد</th></tr></thead><tbody>
+    ${apSuppliers.map((s,i)=>`<tr><td>${escapeHtml(s.name)}</td><td>${escapeHtml(s.phone||'—')}</td><td class="text-end mono">${balances[i].ok?ar(balances[i].balance)+' '+getSettings().currency:'—'}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+window.apSubmitSupplier=async function(){
+  const name=document.getElementById('supp-name').value.trim();
+  const phone=document.getElementById('supp-phone').value.trim();
+  const notes=document.getElementById('supp-notes').value.trim();
+  if(!name){ toast('اسم المورد مطلوب','error'); return; }
+  const btn=document.getElementById('supp-submit-btn');
+  btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> جارٍ الإضافة...';
+  const r=await createSupplier({name, phone:phone||null, notes:notes||null});
+  btn.disabled=false; btn.innerHTML='<i class="bi bi-plus-lg me-1"></i> إضافة مورد';
+  if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
+  toast('تمت إضافة المورد بنجاح','success');
+  apSuppliers = await fbGet('suppliers');
+  renderSuppliersTab(); renderPurchaseInvTab();
+};
+
+// ══════════════════════════════════════════════════════
+//  TAB — Sales Invoice
+// ══════════════════════════════════════════════════════
+function renderSalesInvTab(){
+  document.getElementById('tab-sales-inv').innerHTML = renderSectionContainer({
+    title:'فاتورة مبيعات جديدة', description:'يُقيَّد الطرف المدين تلقائيًا إلى حساب الذمم المدينة (1300)',
+    contentHtml: !apCustomers.length ? apEmptyHtml('أضف عميلاً أولاً من تبويب "العملاء"') : `
+      <div class="row g-3">
+        <div class="col-12 col-md-3"><label class="form-label small text-gray">العميل</label>
+          <select id="si-customer" class="form-select form-select-sm"><option value="">اختر عميلاً...</option>${apCustomers.map(c=>`<option value="${c._id}">${escapeHtml(c.name)}</option>`).join('')}</select>
+        </div>
+        <div class="col-12 col-md-3"><label class="form-label small text-gray">حساب الإيراد</label>
+          <select id="si-revenue" class="form-select form-select-sm"><option value="">اختر حسابًا...</option>${apAccountOptions(a=>a.type==='REVENUE')}</select>
+        </div>
+        <div class="col-12 col-md-2"><label class="form-label small text-gray">الإجمالي</label><input type="number" step="0.01" min="0.01" id="si-total" class="form-control form-control-sm"></div>
+        <div class="col-12 col-md-2"><label class="form-label small text-gray">التاريخ</label><input type="date" id="si-date" class="form-control form-control-sm" value="${todayStr()}"></div>
+        <div class="col-12 col-md-2"><label class="form-label small text-gray">تاريخ الاستحقاق</label><input type="date" id="si-due" class="form-control form-control-sm"></div>
+      </div>
+      <button class="action-btn mt-3" id="si-submit-btn" onclick="apSubmitSalesInvoice()"><i class="bi bi-plus-lg me-1"></i> إنشاء وترحيل الفاتورة</button>
+    `,
+  });
+}
+
+window.apSubmitSalesInvoice=async function(){
+  const customer = apCustomers.find(c=>c._id===document.getElementById('si-customer').value);
+  const revenueAccountId = document.getElementById('si-revenue').value;
+  const total = +document.getElementById('si-total').value || 0;
+  const date = document.getElementById('si-date').value;
+  const dueDate = document.getElementById('si-due').value;
+
+  if(!customer){ toast('يرجى اختيار عميل','error'); return; }
+  if(!revenueAccountId){ toast('يرجى اختيار حساب الإيراد','error'); return; }
+  if(!total||total<=0){ toast('يرجى إدخال إجمالي صحيح','error'); return; }
+
+  const btn=document.getElementById('si-submit-btn');
+  btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> جارٍ الترحيل...';
+  const r = await createSalesInvoice({
+    customerId:customer._id, customerName:customer.name, revenueAccountId,
+    total, date:date||undefined, dueDate:dueDate||undefined, operationId:genId(),
+  });
+  btn.disabled=false; btn.innerHTML='<i class="bi bi-plus-lg me-1"></i> إنشاء وترحيل الفاتورة';
+
+  if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
+  toast('تم إنشاء وترحيل فاتورة المبيعات بنجاح','success');
+  document.getElementById('si-total').value=''; document.getElementById('si-due').value='';
+  apRefreshCustomerList();
+};
+
+// ══════════════════════════════════════════════════════
+//  TAB — Purchase Invoice
+// ══════════════════════════════════════════════════════
+function renderPurchaseInvTab(){
+  document.getElementById('tab-purchase-inv').innerHTML = renderSectionContainer({
+    title:'فاتورة مشتريات جديدة', description:'يُقيَّد الطرف الدائن تلقائيًا إلى حساب الذمم الدائنة (2100)',
+    contentHtml: !apSuppliers.length ? apEmptyHtml('أضف موردًا أولاً من تبويب "الموردون"') : `
+      <div class="row g-3">
+        <div class="col-12 col-md-3"><label class="form-label small text-gray">المورد</label>
+          <select id="pi-supplier" class="form-select form-select-sm"><option value="">اختر موردًا...</option>${apSuppliers.map(s=>`<option value="${s._id}">${escapeHtml(s.name)}</option>`).join('')}</select>
+        </div>
+        <div class="col-12 col-md-3"><label class="form-label small text-gray">حساب المصروف/الأصل</label>
+          <select id="pi-expense" class="form-select form-select-sm"><option value="">اختر حسابًا...</option>${apAccountOptions(a=>a.type==='EXPENSE'||a.type==='ASSET')}</select>
+        </div>
+        <div class="col-12 col-md-2"><label class="form-label small text-gray">الإجمالي</label><input type="number" step="0.01" min="0.01" id="pi-total" class="form-control form-control-sm"></div>
+        <div class="col-12 col-md-2"><label class="form-label small text-gray">التاريخ</label><input type="date" id="pi-date" class="form-control form-control-sm" value="${todayStr()}"></div>
+        <div class="col-12 col-md-2"><label class="form-label small text-gray">تاريخ الاستحقاق</label><input type="date" id="pi-due" class="form-control form-control-sm"></div>
+      </div>
+      <button class="action-btn mt-3" id="pi-submit-btn" onclick="apSubmitPurchaseInvoice()"><i class="bi bi-plus-lg me-1"></i> إنشاء وترحيل الفاتورة</button>
+    `,
+  });
+}
+
+window.apSubmitPurchaseInvoice=async function(){
+  const supplier = apSuppliers.find(s=>s._id===document.getElementById('pi-supplier').value);
+  const expenseAccountId = document.getElementById('pi-expense').value;
+  const total = +document.getElementById('pi-total').value || 0;
+  const date = document.getElementById('pi-date').value;
+  const dueDate = document.getElementById('pi-due').value;
+
+  if(!supplier){ toast('يرجى اختيار مورد','error'); return; }
+  if(!expenseAccountId){ toast('يرجى اختيار حساب المصروف/الأصل','error'); return; }
+  if(!total||total<=0){ toast('يرجى إدخال إجمالي صحيح','error'); return; }
+
+  const btn=document.getElementById('pi-submit-btn');
+  btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> جارٍ الترحيل...';
+  const created = await createSourceDocument({
+    type:'purchase_invoice', total, date:date||undefined, dueDate:dueDate||undefined,
+    operationId:genId(), counterpartyId:supplier._id, counterpartyName:supplier.name,
+  });
+  if(!created.ok){ btn.disabled=false; btn.innerHTML='<i class="bi bi-plus-lg me-1"></i> إنشاء وترحيل الفاتورة'; toast('خطأ: '+created.error,'error'); return; }
+  // AP_ACCOUNT_ID is shared.js's own global (a top-level `var`, which
+  // attaches to window even under 'use strict') -- no local redeclaration.
+  const posted = created.idempotent ? {ok:true} : await postSourceDocument(created.id, {debitAccountId:expenseAccountId, creditAccountId:AP_ACCOUNT_ID});
+  btn.disabled=false; btn.innerHTML='<i class="bi bi-plus-lg me-1"></i> إنشاء وترحيل الفاتورة';
+
+  if(!posted.ok){
+    // The document was already created as a real DRAFT in the step above --
+    // don't leave the user unaware of it. It's visible and completable/
+    // voidable from "إدخال البيانات المالية" -> "مستندات بانتظار الترحيل".
+    toast(`تم إنشاء المستند ${created.document?created.document.documentNumber:''} كمسودة لكن فشل ترحيله: ${posted.error} — يمكنك إكماله من صفحة "إدخال البيانات المالية"`,'error');
+    return;
+  }
+  toast('تم إنشاء وترحيل فاتورة المشتريات بنجاح','success');
+  document.getElementById('pi-total').value=''; document.getElementById('pi-due').value='';
+  apRefreshSupplierList();
+};
+
+// ══════════════════════════════════════════════════════
+//  TAB — Aging (AR + AP) with payment application
+// ══════════════════════════════════════════════════════
+async function renderAgingTab(){
+  const el=document.getElementById('tab-aging');
+  el.innerHTML = apLoadingHtml();
+  const [ar, ap] = await Promise.all([getARAging(todayStr()), getAPAging(todayStr())]);
+  el.innerHTML =
+    renderSectionContainer({title:'أعمار ذمم العملاء (AR)', description:'كما في '+todayStr(), contentHtml: apRenderAgingTable(ar,'receivable')}) +
+    renderSectionContainer({title:'أعمار ذمم الموردين (AP)', description:'كما في '+todayStr(), contentHtml: apRenderAgingTable(ap,'payable')});
+}
+
+function apRenderAgingTable(agingResult, kind){
+  if(!agingResult.ok) return `<div class="text-gray">${agingResult.error}</div>`;
+  const rows=[];
+  Object.keys(AP_AGING_LABELS).forEach(bucket=>{
+    agingResult.buckets[bucket].forEach(doc=>{
+      rows.push({bucket, doc});
+    });
+  });
+  if(!rows.length) return apEmptyHtml('لا توجد فواتير مفتوحة');
+  return `
+    <div class="d-flex gap-3 flex-wrap mb-3" style="font-size:.8rem">
+      ${Object.keys(AP_AGING_LABELS).map(b=>`<span>${AP_AGING_LABELS[b]}: <b class="mono">${ar(agingResult.totals[b])}</b></span>`).join('')}
+    </div>
+    <div style="overflow-x:auto">
+    <table class="table table-sm" style="min-width:640px">
+      <thead><tr><th>المستند</th><th>الطرف</th><th>الاستحقاق</th><th>الفئة</th><th class="text-end">المتبقي</th><th></th></tr></thead>
+      <tbody>
+        ${rows.map(({bucket,doc})=>`<tr>
+          <td>${escapeHtml(doc.documentNumber||'')}</td>
+          <td>${escapeHtml(doc.counterpartyName||'—')}</td>
+          <td>${escapeHtml(doc.dueDate||'—')}</td>
+          <td>${AP_AGING_LABELS[bucket]}</td>
+          <td class="text-end mono">${ar(doc.remainingAmount)} ${getSettings().currency}</td>
+          <td><button class="btn btn-sm btn-outline-success" onclick="apOpenPaymentModal('${doc._id}','${kind}')"><i class="bi bi-cash-coin me-1"></i>سداد</button></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    </div>`;
+}
+
+window.apOpenPaymentModal=function(documentId, kind){
+  const isReceivable = kind==='receivable';
+  showModal(renderFarmModal({
+    icon:'bi-cash-coin', title: isReceivable ? 'تسجيل تحصيل من عميل' : 'تسجيل سداد لمورد',
+    bodyHtml:`
+      <div class="mb-2">
+        <label class="form-label small text-gray">الحساب النقدي/البنكي</label>
+        <select id="pay-cash" class="form-select form-select-sm"><option value="">اختر حسابًا...</option>${apCbaOptions()}</select>
+      </div>
+      <div class="mb-2">
+        <label class="form-label small text-gray">المبلغ</label>
+        <input type="number" step="0.01" min="0.01" id="pay-amount" class="form-control form-control-sm">
+      </div>
+      <div class="mb-2">
+        <label class="form-label small text-gray">التاريخ</label>
+        <input type="date" id="pay-date" class="form-control form-control-sm" value="${todayStr()}">
+      </div>
+    `,
+    footerHtml:`<div class="d-flex gap-2 mt-3">
+      <button class="action-btn flex-grow-1" onclick="apConfirmPayment('${documentId}','${kind}')">تأكيد</button>
+      <button class="btn btn-outline-secondary" onclick="closeModal()">إلغاء</button>
+    </div>`,
+  }));
+};
+
+window.apConfirmPayment=async function(documentId, kind){
+  // Read the modal's own fields BEFORE closeModal(), per this
+  // codebase's certified modal-lifecycle rule.
+  const cashAccountId = document.getElementById('pay-cash').value;
+  const amount = +document.getElementById('pay-amount').value || 0;
+  const date = document.getElementById('pay-date').value;
+  closeModal();
+
+  if(!cashAccountId){ toast('يرجى اختيار الحساب النقدي/البنكي','error'); return; }
+  if(!amount||amount<=0){ toast('يرجى إدخال مبلغ صحيح','error'); return; }
+
+  const fn = kind==='receivable' ? recordCustomerPayment : recordSupplierPayment;
+  const r = await fn(documentId, {cashAccountId, amount, date, operationId:genId()});
+  if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
+  toast('تم تسجيل السداد بنجاح','success');
+  await Promise.all([renderAgingTab(), apRefreshCustomerList(), apRefreshSupplierList()]);
+};
+</script>
+</body>
+</html>

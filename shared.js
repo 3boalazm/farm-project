@@ -168,8 +168,17 @@ function renderNavbarV2(activePage=''){
     if(!visible.length)return'';
     const hasActive=visible.some(function(p){return p.href===activePage;});
     const sectionIcon=_railStrokeIcon(_sectionIconsV2[section.section]||'bi-circle');
+    // FIX (2026-10 audit) — ACCESSIBILITY: the collapsed icon link and the
+    // expanded tree link below BOTH emitted aria-current="page" for the active
+    // page, so every page rendered two elements claiming to be the current one
+    // inside the same <nav>. ARIA expects a single aria-current within a set of
+    // navigation items; screen readers announced "current page" twice per nav.
+    // The icon link keeps its `active` class and its aria-label/title (so the
+    // visual state and the tooltip are unchanged) and the single aria-current
+    // now lives on the labelled tree link, which is the more useful of the two
+    // for an assistive-technology user.
     const iconLinks=visible.map(function(p){
-      return '<a href="'+p.href+'" class="rail-v2__icon-link'+(activePage===p.href?' active':'')+'" aria-label="'+p.label+'" title="'+p.label+'" data-hint="'+p.label+'"'+(activePage===p.href?' aria-current="page"':'')+'><i class="bi '+_railStrokeIcon(p.icon)+'"></i></a>';
+      return '<a href="'+p.href+'" class="rail-v2__icon-link'+(activePage===p.href?' active':'')+'" aria-label="'+p.label+'" title="'+p.label+'" data-hint="'+p.label+'"><i class="bi '+_railStrokeIcon(p.icon)+'"></i></a>';
     }).join('');
     const childLinks=visible.map(function(p){
       const isActive=activePage===p.href;
@@ -370,7 +379,8 @@ async function loadNotifDropdown(){
   if(!dd)return;
   dd.innerHTML='<div class="notif-dropdown-header"><span class="fw-bold"><i class="bi bi-bell-fill accent-text me-2"></i>الإشعارات</span><a href="notifications.html" style="font-size:.78rem;color:var(--gray)">عرض الكل</a></div><div class="notif-dropdown-body"><div class="text-center py-3"><div class="spinner" style="width:22px;height:22px;border-width:2px"></div></div></div>';
   try{
-    const t=new Date();const today=t.toISOString().slice(0,10);
+    const t=new Date();     // still needed for the day-distance math below
+    const today=todayStr(); // local date, not UTC (2026-10 audit fix)
     const [vaccines,breeding,health,meds,feeds,loginN]=await Promise.all([
       fbGet('vaccinations'),fbGet('breeding'),fbGet('health'),
       fbGet('inventory_meds'),fbGet('inventory_feeds'),
@@ -451,6 +461,31 @@ function renderErrorState(el, msg='حدث خطأ أثناء التحميل'){
 // Each function below returns/injects markup using the Phase 1
 // token scale — no new raw colors/sizes introduced.
 // ══════════════════════════════════════════════════════
+//
+// ── ESCAPING CONTRACT for every helper in this family ──────────
+// Documented here (2026-10 audit) because it was previously implicit and
+// inconsistently applied, which is how renderGroupedBarSVG/renderLineChartSVG
+// ended up raw while renderDonutSVG escaped, and how renderKPICard's `unit`
+// — which receives getSettings().currency, a field an admin edits as free
+// text in settings.html — was interpolated unescaped.
+//
+//   TRUSTED MARKUP (never escaped, by design — callers deliberately pass
+//   icon/anchor HTML here, e.g. dashboard.html's KPI label
+//   '<a href="animals.html">إجمالي القطيع</a>' and every page header's
+//   '<i class="bi bi-wallet2 accent-text"></i> المالية'):
+//     title, label, headers[], bodyHtml, footerHtml, actionHtml,
+//     primaryAction, secondaryActions, rowsHtml, chartHtml, filterHtml,
+//     paginationHtml, statusBadgeHtml, quickActionsHtml, value, href
+//
+//   DATA (always escaped — these are the slots a record's free text lands in):
+//     unit, comparisonPeriod, message, source, deadline, actionLabel,
+//     eventType, entity, description, tag, breed, barn, name, chart labels,
+//     breadcrumb labels, subtitle text, timeline time
+//
+// Rule for anyone adding a helper or a parameter: if the value can originate
+// from a Firebase record or from Settings, it goes through escapeHtml(); if
+// it is markup the caller assembled itself, it is documented as trusted here.
+// tests/unit/18-render-helpers-xss.suite.js enforces both halves.
 
 // ── 1. Page Header V2 (adds breadcrumb + description + primary/secondary split) ──
 function renderPageHeaderV2({ title, description='', breadcrumb=[], primaryAction='', secondaryActions='' }){
@@ -458,8 +493,8 @@ function renderPageHeaderV2({ title, description='', breadcrumb=[], primaryActio
   if(!el)return;
   const crumbHtml = breadcrumb.length ? `<nav class="page-breadcrumb">${
     breadcrumb.map((b,i)=> i<breadcrumb.length-1
-      ? `<a href="${b.href||'#'}">${b.label}</a><span class="mx-1">/</span>`
-      : `<span>${b.label}</span>`
+      ? `<a href="${b.href||'#'}">${escapeHtml(b.label)}</a><span class="mx-1">/</span>`
+      : `<span>${escapeHtml(b.label)}</span>`
     ).join('')
   }</nav>` : '';
   el.innerHTML = `
@@ -467,7 +502,7 @@ function renderPageHeaderV2({ title, description='', breadcrumb=[], primaryActio
     <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
       <div>
         <h4 class="fw-bold mb-0">${title}</h4>
-        ${description?`<small class="text-gray">${description}</small>`:''}
+        ${description?`<small class="text-gray">${escapeHtml(description)}</small>`:''}
       </div>
       <div class="d-flex gap-2 flex-wrap align-items-center">
         ${secondaryActions}
@@ -485,7 +520,7 @@ function renderSectionContainer({ title, description='', actionHtml='', contentH
       <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
         <div>
           <h6 class="fw-bold mb-0" style="font-size:var(--text-lg)">${title}</h6>
-          ${description?`<small class="text-gray">${description}</small>`:''}
+          ${description?`<small class="text-gray">${escapeHtml(description)}</small>`:''}
         </div>
         ${actionHtml?`<div>${actionHtml}</div>`:''}
       </div>
@@ -494,8 +529,13 @@ function renderSectionContainer({ title, description='', actionHtml='', contentH
 }
 
 // ── 3. KPI Card (states: normal/watch/alert, or loading:true, or empty via value=null) ──
+// FIX (2026-10 audit): with a single data point this divided by
+// (data.length-1) === 0 and emitted points="NaN,14.0" — invalid SVG that
+// renders as nothing (or, in stricter parsers, an error). A sparkline needs
+// at least two points to have a shape, so one point now renders no
+// sparkline at all instead of a broken one.
 function renderMiniSparkline(data, color){
-  if(!data || !data.length) return '';
+  if(!data || data.length<2) return '';
   const w=100,h=28,max=Math.max(...data),min=Math.min(...data),range=(max-min)||1;
   const pts=data.map((v,i)=>`${(i/(data.length-1)*w).toFixed(1)},${(h-((v-min)/range)*h).toFixed(1)}`).join(' ');
   return `<div class="kpi-spark"><svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity=".8"/></svg></div>`;
@@ -515,8 +555,8 @@ function renderKPICard({ label, value=null, unit='', trend=null, trendDir='up', 
       <span class="kpi-label">${label}</span>
       <span class="kpi-status-dot" style="background:${st.c}" title="${st.l}"></span>
     </div>
-    <div class="kpi-value">${value}${unit?`<span class="kpi-unit">${unit}</span>`:''}</div>
-    <div class="kpi-foot">${trendHtml}${comparisonPeriod?`<span class="kpi-period">${comparisonPeriod}</span>`:''}</div>
+    <div class="kpi-value">${value}${unit?`<span class="kpi-unit">${escapeHtml(unit)}</span>`:''}</div>
+    <div class="kpi-foot">${trendHtml}${comparisonPeriod?`<span class="kpi-period">${escapeHtml(comparisonPeriod)}</span>`:''}</div>
     ${renderMiniSparkline(sparklineData, st.c)}
     ${footerHtml}`;
   return href ? `<a href="${href}" class="kpi-card" style="text-decoration:none;color:inherit">${inner}</a>` : `<div class="kpi-card">${inner}</div>`;
@@ -560,7 +600,7 @@ function renderChartContainer({ title, subtitle='', filterHtml='', chartHtml='',
   return `
     <div class="wonder-card h-100">
       <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-1">
-        <div><h6 class="fw-bold mb-0" style="font-size:var(--text-lg)">${title}</h6>${subtitle?`<small class="text-gray">${subtitle}</small>`:''}</div>
+        <div><h6 class="fw-bold mb-0" style="font-size:var(--text-lg)">${title}</h6>${subtitle?`<small class="text-gray">${escapeHtml(subtitle)}</small>`:''}</div>
         ${filterHtml?`<div>${filterHtml}</div>`:''}
       </div>
       <div class="mt-3">${body}</div>
@@ -595,6 +635,11 @@ function renderTimelineItem({ time, eventType='', entity='', description='', sta
   // upstream -- fixing it once here protects every caller, same pattern
   // already used for toast().
   eventType=escapeHtml(eventType); entity=escapeHtml(entity); description=escapeHtml(description);
+  // FIX (2026-10 audit): `time` was the one parameter in this helper left
+  // unescaped by the 2026-08 pass, and callers build it from record fields
+  // (r.date, l.timestamp, created_at) that an import can populate with
+  // arbitrary text.
+  time=escapeHtml(time);
   return `
     <div class="timeline-item-v2">
       <div class="timeline-item-v2-dot"></div>
@@ -629,6 +674,16 @@ function renderAnimalCard({ tag, breed, species='goat', status='alive', barn='',
 
 // ── 9. Production Widget (farm-specific, compact row — smaller than KPI Card) ──
 function renderProductionWidget({ type, value, unit='', trend=null, trendDir='up', period='', status='normal' }){
+  // FIX (2026-10 audit): escaped for consistency with the rest of this
+  // component family (renderAlertCard/renderAnimalCard/renderKPICard all
+  // escape their plain-text slots). type/unit/period are exactly the slots a
+  // caller fills from a production_log type name or a Settings unit string;
+  // `value` stays a trusted slot (callers pass pre-formatted numbers or
+  // markup), matching renderKPICard's contract. NOTE: this helper currently
+  // has no callers anywhere in the app -- kept because it is part of the
+  // documented Phase-2 component set (COMPONENTS.md), flagged as unused in
+  // the audit report rather than deleted.
+  type=escapeHtml(type); unit=escapeHtml(unit); period=escapeHtml(period);
   const statusMap = { normal:'var(--green)', watch:'var(--yellow)', alert:'var(--red)' };
   const color = statusMap[status] || statusMap.normal;
   const trendHtml = trend!==null ? `<span style="color:${trendDir==='up'?'var(--green)':'var(--red)'};font-size:var(--text-2xs);font-weight:700"><i class="bi bi-arrow-${trendDir==='up'?'up':'down'}-short"></i>${trend>0?'+':''}${ar(trend)}%</span>` : '';
@@ -699,7 +754,7 @@ function renderLineChartSVG(data, opts={}){
     return `<line x1="${padding.left}" y1="${y.toFixed(1)}" x2="${width-padding.right}" y2="${y.toFixed(1)}" stroke="var(--border-3)" stroke-width="1"/><text x="${padding.left-6}" y="${(y+3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--text-muted)">${ar(val)}</text>`;
   }).join('');
   const step = Math.max(1, Math.floor(pts.length/5));
-  const labelEls = pts.map((p,i) => (i%step===0 || i===pts.length-1) ? `<text x="${p.x.toFixed(1)}" y="${height-4}" text-anchor="middle" font-size="9" fill="var(--text-muted)">${labels[i]}</text>` : '').join('');
+  const labelEls = pts.map((p,i) => (i%step===0 || i===pts.length-1) ? `<text x="${p.x.toFixed(1)}" y="${height-4}" text-anchor="middle" font-size="9" fill="var(--text-muted)">${escapeHtml(labels[i])}</text>` : '').join(''); // escaped, same as renderDonutSVG (2026-10 audit)
   return `<svg width="100%" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">
     ${gridLines}
     ${showArea?`<path d="${areaD}" fill="${color}" opacity=".12"/>`:''}
@@ -731,7 +786,12 @@ function renderGroupedBarSVG(data, opts={}){
       const y = padding.top + ch - bh;
       return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(barW*0.8).toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="${colors[vi]||'#9ca3af'}"/>`;
     }).join('');
-    return rects + `<text x="${(groupX+groupW/2).toFixed(1)}" y="${height-4}" text-anchor="middle" font-size="9" fill="var(--text-muted)">${d.label}</text>`;
+    // FIX (2026-10 audit): escaped for consistency with renderDonutSVG(),
+    // which already escaped its own segment labels. Every current caller
+    // passes plain text here (month names, age bands), so this is hardening,
+    // not a behaviour change — but a chart label is exactly the kind of slot
+    // a future caller fills with a breed or barn name from Settings.
+    return rects + `<text x="${(groupX+groupW/2).toFixed(1)}" y="${height-4}" text-anchor="middle" font-size="9" fill="var(--text-muted)">${escapeHtml(d.label)}</text>`;
   }).join('');
   return `<svg width="100%" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">${gridLines}${bars}</svg>`;
 }
@@ -835,8 +895,8 @@ window.openNotificationsPopup = async function(){
 
   // Load data
   try{
-    const t=new Date();
-    const today=t.toISOString().slice(0,10);
+    const t=new Date();     // still needed for the day-distance math below
+    const today=todayStr(); // local date, not UTC (2026-10 audit fix)
     const u=getUser();
     const isAdmin=u&&u.role==='admin';
     const [animals,vaccines,breeding,health,meds,feeds,loginNotifs]=await Promise.all([
@@ -1209,7 +1269,7 @@ window.recordAnimalWeight=async function(opts){
   var animalId=opts.animalId;
 
   // 1. Permission validation
-  if(!can('animals')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!canWrite('animals')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
 
   // 2. Input validation (structural -- do the required fields even exist)
   if(!animalId) return {ok:false, error:'رقم الحيوان مطلوب'};
@@ -1287,7 +1347,7 @@ window.recordAnimalWeight=async function(opts){
 window.deleteAnimalWeight=async function(opts){
   opts=opts||{};
   var animalId=opts.animalId, weightId=opts.weightId;
-  if(!can('animals')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!canWrite('animals')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
   if(!animalId||!weightId) return {ok:false, error:'بيانات ناقصة'};
   try{
     await fbDelete('animals/'+animalId+'/weights',weightId);
@@ -1364,7 +1424,7 @@ if(typeof window.genDeathId!=='function'){
 // one of them the way three of the weight-subsystem's writers did.
 async function _writeAnimalStatus(opts){
   var animalId=opts.animalId;
-  if(!can('animals')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!canWrite('animals')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
   if(!animalId) return {ok:false, error:'رقم الحيوان مطلوب'};
   if(_statusWriteInFlight[animalId]) return {ok:false, error:'جاري تنفيذ عملية أخرى على هذا الحيوان'};
   _statusWriteInFlight[animalId]=true;
@@ -1882,18 +1942,41 @@ window.createOffspringAnimal=async function(p){
     var fatherAnimal=await window.findByTag(p.fatherTag);
     if(fatherAnimal) fatherId=fatherAnimal._id;
   }
+  // FIX (2026-10 audit) — WEIGHT SSOT INVARIANT: this function wrote a
+  // birth-weight record straight into animals/{newId}/weights and never
+  // touched animals.current_weight, so every newborn registered with a
+  // birth weight had a weight history but a blank current_weight — breaking
+  // the exact invariant the Weight Service was certified on
+  // ("current_weight == newest weight record", docs/certification/WEIGHT.md)
+  // and making the dashboard/reports/detail page show "—" for an animal
+  // that demonstrably has a recorded weight. It also wrote p.weight with no
+  // validation at all, so a mistyped -5 or 9999 landed in the SSOT even
+  // though recordAnimalWeight() rejects both. Now validated against the same
+  // 0<w<=500 bounds and recalculated through _resyncCurrentWeight(), the one
+  // canonical place that invariant is maintained.
+  var birthWeight=parseFloat(p.weight);
+  var validBirthWeight=(isFinite(birthWeight) && birthWeight>0 && birthWeight<=500) ? birthWeight : null;
   const rec={species:p.species,breed:p.breed,gender:p.gender,purpose:p.purpose,status:'alive',birth_date:p.birthDate,
     tag:p.tag||await generateAnimalTag(p.species),
     mother_tag:p.motherTag,mother_breed:p.motherBreed,mother_id:motherId,
     father_tag:p.fatherTag||null,father_id:fatherId,
-    birth_weight:p.weight||null,barn:p.barn||null,notes:p.notes||null};
+    birth_weight:validBirthWeight,barn:p.barn||null,notes:p.notes||null};
   const newAnimalId=await fbPost('animals',rec);
-  if(p.weight){
-    await fbPost('animals/'+newAnimalId+'/weights',{weight:p.weight, date:p.birthDate, notes:'وزن الميلاد'});
+  if(validBirthWeight){
+    await fbPost('animals/'+newAnimalId+'/weights',{weight:validBirthWeight, date:p.birthDate, notes:'وزن الميلاد'});
+    await _resyncCurrentWeight(newAnimalId);
   }
   return newAnimalId;
 };
 window._ubSubmit=async function(){
+  // FIX (2026-10 audit): the unified birth modal is shown to any role that
+  // passes can('animals') -- which includes the read-only visitor role, since
+  // ROLE_PERMS grants 'animals' to visitors so they can VIEW the herd. The
+  // submit path itself never re-checked, so a visitor could register a birth:
+  // one breeding record plus N new animals into the certified Birth SSOT.
+  // Guarded with canWrite() (the write-side companion to can()), matching
+  // every other mutating service in this file.
+  if(!canWrite('animals')){toast('ليس لديك صلاحية لتسجيل المواليد','error');return;}
   const sp=document.getElementById('ub-sp').value;
   const breed=document.getElementById('ub-breed').value;
   const gender=document.getElementById('ub-gender').value;
@@ -1905,12 +1988,24 @@ window._ubSubmit=async function(){
   const fatherTag=document.getElementById('ub-father-tag').value.trim();
   const weight=parseFloat(document.getElementById('ub-weight').value)||null;
   const barn=document.getElementById('ub-barn').value||null;
-  const qty=parseInt(document.getElementById('ub-qty').value)||1;
+  const qtyRaw=parseInt(document.getElementById('ub-qty').value,10);
+  const qty=(isFinite(qtyRaw)&&qtyRaw>0)?qtyRaw:1;
   const amount=parseFloat(document.getElementById('ub-amount').value)||null;
   const addedBy=document.getElementById('ub-addedby').value.trim();
   const notes=document.getElementById('ub-notes').value.trim();
 
   if(!motherTag||!motherBreed){toast('رقم الأم وسلالتها مطلوبان','error');return;}
+  // FIX (2026-10 audit): the qty field's min="1" max="10" attributes are
+  // advisory only — there is no <form> submission here, so nothing enforced
+  // them. A typed -5 wrote a breeding record with offspring_count:-5 and
+  // male_offspring:-5 (the animals loop never ran) and then toasted
+  // "✅ تم تسجيل الولادة و-٥ مولود"; a typed 50000 started an unbounded
+  // 50,000-iteration write loop against Firebase. Validated here, against
+  // the same bounds the input already declares.
+  if(!isFinite(qtyRaw)||qtyRaw<1||qtyRaw>10){
+    toast('عدد المواليد يجب أن يكون بين ١ و ١٠','error');
+    return;
+  }
   closeModal();toast('جاري الحفظ...','info');
   let ok=0;
   try{
@@ -2028,7 +2123,7 @@ window.migrateWeightLogToWeights=async function(){
 // (pre-existing duplication, not introduced here, out of this sprint's
 // scope to consolidate) -- this engine does not add a third page-local
 // copy, it uses its own internal helper instead, scoped to this block.
-function _autoTaskDaysFromToday(n){var d=new Date();d.setDate(d.getDate()+n);return d.toISOString().slice(0,10);}
+function _autoTaskDaysFromToday(n){return shiftDateLocal(new Date(),n);}
 
 var AUTO_TASK_RULES = {
   vaccination_scheduled: {
@@ -2175,7 +2270,14 @@ window.evaluateWeightAlert = async function(animalId, animalTag, barn){
   try{
     if(!animalId) return [];
     var history=await fbGet('animals/'+animalId+'/weights')||[];
-    var sorted=history.slice().sort(function(a,b){return b.date.localeCompare(a.date);});
+    // FIX (2026-10 audit): this sorted on `b.date.localeCompare(a.date)`
+    // with no null guard. A single weight record missing its date (an
+    // imported row, or a partial write) threw a TypeError here, which the
+    // catch below swallowed into `return []` -- silently disabling EVERY
+    // weight alert for that animal forever, with no console trace. The
+    // canonical _resyncCurrentWeight() in this same file already used the
+    // `(x.date||'')` form; this now matches it.
+    var sorted=history.slice().sort(function(a,b){return ((b&&b.date)||'').localeCompare((a&&a.date)||'');});
     var existingAlerts=await fbGet('weight_alerts');
     var results=[];
 
@@ -2660,7 +2762,7 @@ window.forecastWeight = async function(animalId, animalTag){
   try{
     if(!animalId) return null;
     var history = await fbGet('animals/'+animalId+'/weights') || [];
-    var sorted = history.slice().sort(function(a,b){return b.date.localeCompare(a.date);});
+    var sorted = history.slice().sort(function(a,b){return ((b&&b.date)||'').localeCompare((a&&a.date)||'');}); // null-safe, matches evaluateWeightAlert (2026-10 audit)
     if(sorted.length < 2) return { animalId:animalId, animalTag:animalTag, confidence:'low', trend:null, evidence:['بيانات وزن غير كافية للتنبؤ (يلزم سجلان على الأقل)'] };
 
     var latest = sorted[0];
@@ -2715,11 +2817,20 @@ window.forecastHealthRisk = async function(animalId, animalTag, barn, windowDays
     var current = await window.evaluateHealthRisk(animalId, animalTag, barn);
     var baseScore = current ? current.score : 0;
 
-    var today = new Date(); var todayStr = today.toISOString().slice(0,10);
+    // FIX (2026-10 audit): this block declared `var todayStr = <UTC date
+    // string>`, which SHADOWED the global todayStr() function inside the
+    // whole of forecastHealthRisk() -- any future call to todayStr() here
+    // would have thrown "todayStr is not a function" -- and the string it
+    // produced was UTC-derived, so for the first hours of every local day
+    // it compared against yesterday. Renamed to todayKey and taken from the
+    // local-calendar helper; `today` stays the real Date used for the
+    // day-distance math below.
+    var today = new Date();
+    var todayKey = todayStr();
     var vacc = barn ? await fbGet('vaccinations') : [];
     var upcoming = (vacc||[]).filter(function(v){
       if(v.target_section!==barn || v.status!=='pending' || !v.scheduled_date) return false;
-      if(v.scheduled_date < todayStr) return false; // already overdue -- already counted in the CURRENT score
+      if(v.scheduled_date < todayKey) return false; // already overdue -- already counted in the CURRENT score
       var daysUntil = (new Date(v.scheduled_date)-today)/86400000;
       return daysUntil>=0 && daysUntil<=windowDays;
     });
@@ -2750,15 +2861,15 @@ window.forecastHealthRisk = async function(animalId, animalTag, barn, windowDays
 window.forecastTaskWorkload = async function(windowDays){
   try{
     windowDays = windowDays || 7;
-    var today = new Date(); var todayStr = today.toISOString().slice(0,10);
-    var endDate = new Date(today); endDate.setDate(endDate.getDate()+windowDays);
-    var endStr = endDate.toISOString().slice(0,10);
+    // Same shadowing + UTC fix as forecastHealthRisk() above.
+    var todayKey = todayStr();
+    var endStr = shiftDateLocal(new Date(), windowDays);
     var results = await Promise.all([fbGet('daily_tasks'), fbGet('vaccinations'), fbGet('breeding')]);
     var tasks=results[0]||[], vacc=results[1]||[], breeding=results[2]||[];
 
-    var upcomingTasks = tasks.filter(function(t){return t.status!=='done'&&t.date&&t.date>=todayStr&&t.date<=endStr;});
-    var upcomingVacc = vacc.filter(function(v){return v.status==='pending'&&v.scheduled_date&&v.scheduled_date>=todayStr&&v.scheduled_date<=endStr;});
-    var upcomingBirths = breeding.filter(function(b){return b.status==='pregnant'&&b.expected_birth&&b.expected_birth>=todayStr&&b.expected_birth<=endStr;});
+    var upcomingTasks = tasks.filter(function(t){return t.status!=='done'&&t.date&&t.date>=todayKey&&t.date<=endStr;});
+    var upcomingVacc = vacc.filter(function(v){return v.status==='pending'&&v.scheduled_date&&v.scheduled_date>=todayKey&&v.scheduled_date<=endStr;});
+    var upcomingBirths = breeding.filter(function(b){return b.status==='pregnant'&&b.expected_birth&&b.expected_birth>=todayKey&&b.expected_birth<=endStr;});
 
     return {
       windowDays:windowDays, existingTasks:upcomingTasks.length, expectedVaccinations:upcomingVacc.length,
@@ -3229,7 +3340,7 @@ window.predictBreedingWindow = async function(animals, breedingRaw){
       var daysUntil = Math.round((predictedDate-new Date())/86400000);
       var animal = (animalsList||[]).find(function(a){return a.tag===tag;});
       if(animal&&animal.status==='alive'){
-        predictions.push({ animalTag:tag, avgIntervalDays:Math.round(avgInterval), predictedDate:predictedDate.toISOString().slice(0,10), daysUntil:daysUntil, birthCount:dates.length, confidence:dates.length>=3?'medium':'low' });
+        predictions.push({ animalTag:tag, avgIntervalDays:Math.round(avgInterval), predictedDate:toLocalDateStr(predictedDate), daysUntil:daysUntil, birthCount:dates.length, confidence:dates.length>=3?'medium':'low' });
       }
     }
     predictions.sort(function(a,b){return a.daysUntil-b.daysUntil;});
@@ -3612,7 +3723,15 @@ function _accountNormalBalance(type,contra){
 // load the way the first admin user is.
 window.seedDefaultChartOfAccounts=async function(){
   if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
-  var existing=await fbGet('accounts');
+  // FIX (2026-10 audit): same empty-check-on-a-possibly-failed-read shape
+  // Users.init() had. fbGet() returns [] for BOTH "no accounts yet" and
+  // "the request failed", so one dropped read would re-PUT all ~40 system
+  // accounts over a live chart of accounts -- silently resurrecting
+  // accounts an admin had deactivated and clobbering any renamed
+  // systemAccount. fbGetSafe() returns null on failure; a failed read now
+  // refuses to seed rather than guessing.
+  var existing=typeof fbGetSafe==='function' ? await fbGetSafe('accounts') : await fbGet('accounts');
+  if(existing===null) return {ok:false, error:'تعذر قراءة دليل الحسابات — لم يتم التهيئة'};
   if(existing.length) return {ok:true, seeded:0, skipped:true};
   var count=0;
   for(var i=0;i<DEFAULT_CHART_OF_ACCOUNTS.length;i++){
@@ -4204,22 +4323,70 @@ window.recordCustomerPayment=async function(documentId,opts){
   }));
 };
 
-function _isOpenReceivable(doc){
-  return doc.type==='sales_invoice' && (doc.status==='POSTED'||doc.status==='PARTIALLY_PAID'||doc.status==='OVERDUE');
+// ── SUB-LEDGER SCOPE, DERIVED FROM THE LEDGER ITSELF ──────────
+// FIX (2026-10 audit) — REAL BUG, found by unit-testing the AR/AP module
+// against the general ledger.
+//
+// The receivable/payable sub-ledger used to select documents by TYPE:
+//     doc.type==='sales_invoice'   (AR)
+//     doc.type==='purchase_invoice'(AP)
+// But four other document types post against the very same AR/AP accounts
+// whenever they are settled on credit terms:
+//     animal_sale        -> Debit  AR (1300)   [postAnimalSale, credit mode]
+//     inventory_purchase -> Credit AP (2100)   [postInventoryPurchase]
+//     animal_purchase    -> Credit AP (2100)   [postAnimalPurchase]
+//     asset_purchase     -> Credit AP (2100)   [postAssetPurchase]
+// So the general ledger (trial balance, balance sheet) carried those
+// balances while getCustomerBalance/getSupplierBalance/getARAging/
+// getAPAging and both statements reported ZERO for them. Concretely: feed,
+// livestock or equipment bought on credit -- the ordinary case on a real
+// farm -- created a liability that never appeared under "العملاء والموردون",
+// and an animal sold on credit never appeared as a receivable. The two
+// books disagreed with each other, and the sub-ledger was the one that was
+// wrong.
+//
+// Selection is now evidence-based instead of type-based: a document belongs
+// to the sub-ledger when ITS OWN POSTED JOURNAL ENTRY really debited AR /
+// credited AP. That is self-maintaining -- a future document type that posts
+// against AR/AP is picked up automatically, and one that does not (a cash
+// purchase, a loan drawdown against 2300, a payroll accrual against 2210)
+// is correctly excluded. The legacy type check is kept as an OR so an
+// unposted/legacy invoice is still listed rather than silently dropped.
+async function _entryIdsTouching(accountId, side){
+  var entries=await fbGet('journal_entries');
+  var ids={};
+  entries.forEach(function(e){
+    (e.lines||[]).forEach(function(l){
+      if(l.accountId!==accountId) return;
+      var amt=(side==='credit')?(+l.credit||0):(+l.debit||0);
+      if(amt>0) ids[e._id]=true;
+    });
+  });
+  return ids;
+}
+
+// Every document belonging to the AR sub-ledger, open or settled.
+async function _receivableDocs(){
+  var docs=await fbGet('source_documents');
+  var ids=await _entryIdsTouching(AR_ACCOUNT_ID,'debit');
+  return docs.filter(function(d){ return d.type==='sales_invoice' || !!ids[d.journalEntryId]; });
+}
+// The subset still owed (eligible for balance/aging).
+async function _openReceivableDocs(){
+  return (await _receivableDocs()).filter(function(d){ return SOURCE_DOCUMENT_OPEN_STATUSES.indexOf(d.status)!==-1; });
 }
 
 window.getCustomerBalance=async function(customerId){
   if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
-  var docs=await fbGet('source_documents');
-  var open=docs.filter(function(d){return _isOpenReceivable(d) && d.counterpartyId===customerId;});
+  var all=await _openReceivableDocs();
+  var open=all.filter(function(d){return d.counterpartyId===customerId;});
   var balance=open.reduce(function(s,d){return s+(+d.remainingAmount||0);},0);
   return {ok:true, balance:Math.round(balance*100)/100, openInvoiceCount:open.length};
 };
 
 window.getCustomerStatement=async function(customerId){
   if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
-  var docs=await fbGet('source_documents');
-  var mine=docs.filter(function(d){return d.type==='sales_invoice' && d.counterpartyId===customerId;});
+  var mine=(await _receivableDocs()).filter(function(d){return d.counterpartyId===customerId;});
   mine.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');});
   return {ok:true, invoices:mine};
 };
@@ -4230,9 +4397,9 @@ window.getCustomerStatement=async function(customerId){
 window.getARAging=async function(asOfDate){
   if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
   asOfDate=asOfDate||todayStr();
-  var docs=await fbGet('source_documents');
+  var docs=await _openReceivableDocs();
   var buckets={current:[], d1_30:[], d31_60:[], d61_90:[], d90_plus:[], noDueDate:[]};
-  docs.filter(_isOpenReceivable).forEach(function(d){
+  docs.forEach(function(d){
     if(!d.dueDate){ buckets.noDueDate.push(d); return; }
     var daysPast=Math.floor((new Date(asOfDate)-new Date(d.dueDate))/86400000);
     if(daysPast<=0) buckets.current.push(d);
@@ -4256,11 +4423,12 @@ window.getARAging=async function(asOfDate){
 window.refreshOverdueInvoiceStatuses=async function(asOfDate){
   if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
   asOfDate=asOfDate||todayStr();
-  var docs=await fbGet('source_documents');
+  // Same scope fix as the sub-ledger above: a credit inventory/animal/asset
+  // purchase and a credit animal sale are real due-date-bearing obligations
+  // too, and used to be skipped by the overdue sweep because of their type.
+  var docs=(await _openReceivableDocs()).concat(await _openPayableDocs());
   var toFlag=docs.filter(function(d){
-    return (d.type==='sales_invoice'||d.type==='purchase_invoice')
-      && (d.status==='POSTED'||d.status==='PARTIALLY_PAID')
-      && d.dueDate && d.dueDate<asOfDate;
+    return (d.status==='POSTED'||d.status==='PARTIALLY_PAID') && d.dueDate && d.dueDate<asOfDate;
   });
   var flagged=0;
   for(var i=0;i<toFlag.length;i++){
@@ -4325,22 +4493,28 @@ window.recordSupplierPayment=async function(documentId,opts){
   }));
 };
 
-function _isOpenPayable(doc){
-  return doc.type==='purchase_invoice' && (doc.status==='POSTED'||doc.status==='PARTIALLY_PAID'||doc.status==='OVERDUE');
+// AP mirror of _receivableDocs() above -- see the comment there for why
+// selection is derived from the ledger rather than from doc.type.
+async function _payableDocs(){
+  var docs=await fbGet('source_documents');
+  var ids=await _entryIdsTouching(AP_ACCOUNT_ID,'credit');
+  return docs.filter(function(d){ return d.type==='purchase_invoice' || !!ids[d.journalEntryId]; });
+}
+async function _openPayableDocs(){
+  return (await _payableDocs()).filter(function(d){ return SOURCE_DOCUMENT_OPEN_STATUSES.indexOf(d.status)!==-1; });
 }
 
 window.getSupplierBalance=async function(supplierId){
   if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
-  var docs=await fbGet('source_documents');
-  var open=docs.filter(function(d){return _isOpenPayable(d) && d.counterpartyId===supplierId;});
+  var all=await _openPayableDocs();
+  var open=all.filter(function(d){return d.counterpartyId===supplierId;});
   var balance=open.reduce(function(s,d){return s+(+d.remainingAmount||0);},0);
   return {ok:true, balance:Math.round(balance*100)/100, openBillCount:open.length};
 };
 
 window.getSupplierStatement=async function(supplierId){
   if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
-  var docs=await fbGet('source_documents');
-  var mine=docs.filter(function(d){return d.type==='purchase_invoice' && d.counterpartyId===supplierId;});
+  var mine=(await _payableDocs()).filter(function(d){return d.counterpartyId===supplierId;});
   mine.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');});
   return {ok:true, bills:mine};
 };
@@ -4348,9 +4522,9 @@ window.getSupplierStatement=async function(supplierId){
 window.getAPAging=async function(asOfDate){
   if(!can('finance')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
   asOfDate=asOfDate||todayStr();
-  var docs=await fbGet('source_documents');
+  var docs=await _openPayableDocs();
   var buckets={current:[], d1_30:[], d31_60:[], d61_90:[], d90_plus:[], noDueDate:[]};
-  docs.filter(_isOpenPayable).forEach(function(d){
+  docs.forEach(function(d){
     if(!d.dueDate){ buckets.noDueDate.push(d); return; }
     var daysPast=Math.floor((new Date(asOfDate)-new Date(d.dueDate))/86400000);
     if(daysPast<=0) buckets.current.push(d);
@@ -4623,6 +4797,14 @@ window.postAnimalPurchase=async function(opts){
   var created=await window.createSourceDocument({
     type:'animal_purchase', total:amount, date:opts.date, operationId:opts.operationId,
     counterpartyId:opts.supplierId||null, counterpartyName:opts.supplierName||null,
+    // FIX (2026-10 audit): opts.dueDate was accepted by this function's
+    // callers but NEVER forwarded to createSourceDocument() -- unlike
+    // postInventoryPurchase()/createSalesInvoice()/createPurchaseBill(),
+    // which all do. A credit-mode document with no dueDate can never be
+    // flagged OVERDUE by refreshOverdueInvoiceStatuses() and sits in the
+    // aging report's "noDueDate" bucket forever, so money owed on livestock
+    // and equipment silently aged with no due date and no alert.
+    dueDate:opts.paymentMode==='credit'?(opts.dueDate||null):null,
     sourceType:'animal', sourceId:opts.animalId, notes:opts.animalTag?('شراء حيوان: '+opts.animalTag):null,
   });
   if(!created.ok) return created;
@@ -4660,6 +4842,7 @@ window.postAnimalSale=async function(opts){
   var created=await window.createSourceDocument({
     type:'animal_sale', total:amount, date:opts.date, operationId:opts.operationId,
     counterpartyId:opts.customerId||null, counterpartyName:opts.customerName||null,
+    dueDate:opts.paymentMode==='credit'?(opts.dueDate||null):null, // FIX (2026-10 audit): was dropped — see postAnimalPurchase
     sourceType:'animal', sourceId:opts.animalId, notes:opts.animalTag?('بيع حيوان: '+opts.animalTag):null,
   });
   if(!created.ok) return created;
@@ -5006,6 +5189,7 @@ window.postLaborAccrual=async function(opts){
   var created=await window.createSourceDocument({
     type:'labor_payment', total:amount, date:opts.date, operationId:opts.operationId,
     counterpartyId:opts.employeeId, counterpartyName:opts.employeeName||null,
+    dueDate:opts.dueDate||null, // FIX (2026-10 audit): an accrual with no due date can never age or go overdue
     notes:opts.workPeriodStart?('فترة عمل: '+opts.workPeriodStart+' — '+(opts.workPeriodEnd||opts.workPeriodStart)):null,
   });
   if(!created.ok) return created;
@@ -5137,6 +5321,7 @@ window.postAssetPurchase=async function(opts){
   var created=await window.createSourceDocument({
     type:'asset_purchase', total:cost, date:opts.date, operationId:opts.operationId,
     counterpartyId:opts.supplierId||null, counterpartyName:opts.supplierName||null,
+    dueDate:opts.paymentMode==='credit'?(opts.dueDate||null):null, // FIX (2026-10 audit): was dropped — see postAnimalPurchase
     sourceType:'fixed_asset', sourceId:assetId, notes:'شراء أصل: '+opts.name,
   });
   if(!created.ok) return created;
@@ -6713,7 +6898,7 @@ window.findByTag=async function(tag){
 // here writes to it.
 window.renameTag=async function(opts){
   opts=opts||{};
-  if(!can('animals')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!canWrite('animals')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
   var animalId=opts.animalId, newTag=(opts.newTag||'').trim();
   if(!animalId || !newTag) return {ok:false, error:'بيانات ناقصة'};
   var animal=await fbGetOne('animals', animalId);
@@ -6728,7 +6913,40 @@ window.renameTag=async function(opts){
     await fbPatch('animals', animalId, {tag:newTag, previous_tags:priorTags});
     fbCacheInvalidate('animals');
     await logActivity('edit','animals','تغيير الترقيم: '+(animal.tag||'—')+' → '+newTag);
-    return {ok:true, oldTag:animal.tag, newTag:newTag};
+
+    // FIX (2026-10 audit) — DATA INTEGRITY: mother_tag/father_tag are
+    // documented in this very file as a CACHED PROJECTION of the canonical
+    // mother_id/father_id (see linkParents() above), and eleven call sites
+    // across the app display the parent by tag. Renaming an animal updated
+    // only the animal itself, so every one of its already-recorded offspring
+    // kept pointing at a tag that no longer existed: the pedigree view showed
+    // a phantom mother, repairGenealogy() could no longer resolve those
+    // children (their old mother_tag matched nothing -> "unresolved"), and a
+    // NEW animal could then be given the freed tag, silently re-parenting
+    // the old offspring in every tag-based view. Propagating the rename to
+    // children that reference the old tag keeps the projection in sync with
+    // the identity it mirrors. Best-effort per child: one failed patch never
+    // aborts the rest, and the rename itself is already committed.
+    var oldTag=animal.tag;
+    var propagated=0, failed=[];
+    if(oldTag){
+      var all=await fbGet('animals')||[];
+      for(var i=0;i<all.length;i++){
+        var other=all[i];
+        if(other._id===animalId) continue;
+        var patch={};
+        if(other.mother_tag===oldTag){ patch.mother_tag=newTag; if(animal.breed) patch.mother_breed=animal.breed; }
+        if(other.father_tag===oldTag){ patch.father_tag=newTag; }
+        if(!Object.keys(patch).length) continue;
+        try{ await fbPatch('animals', other._id, patch); propagated++; }
+        catch(e){ failed.push(other._id); }
+      }
+      if(propagated){
+        fbCacheInvalidate('animals');
+        await logActivity('edit','animals','تحديث '+ar(propagated)+' سجل مرتبطة بالترقيم القديم '+(oldTag||'—'));
+      }
+    }
+    return {ok:true, oldTag:oldTag, newTag:newTag, propagated:propagated, propagateFailed:failed};
   }catch(e){ return {ok:false, error:e.message}; }
 };
 
@@ -6738,7 +6956,7 @@ window.renameTag=async function(opts){
 // pattern as current_weight) -- never the tag fields alone.
 window.linkParents=async function(opts){
   opts=opts||{};
-  if(!can('animals')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
+  if(!canWrite('animals')) return {ok:false, error:'ليس لديك صلاحية لتنفيذ هذا الإجراء'};
   var animalId=opts.animalId;
   if(!animalId) return {ok:false, error:'بيانات ناقصة'};
   var fields={};

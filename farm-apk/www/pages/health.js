@@ -16,7 +16,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   renderNavbarV2('health.html');
 
   // FAB for mobile
-  addFAB('تسجيل سجل صحي جديد', function(){ openAddHealth(); });
+  addFAB('تسجيل سجل صحي جديد', function(){ openHealthModal(); });
   renderRelatedLinks('health.js');
   healthRecs=await fbGet('health');
   renderHealthPage(s);
@@ -61,7 +61,7 @@ function renderHealthPage(s){
   const treatmentTrend=[];
   for(let i=5;i>=0;i--){
     const d=new Date(nowH.getFullYear(),nowH.getMonth()-i,1);
-    const mStr=d.toISOString().slice(0,7);
+    const mStr=toLocalMonthKey(d);
     const count=healthRecs.filter(r=>(r.date||'').startsWith(mStr)).length;
     treatmentTrend.push({ label: arMonthsH[d.getMonth()].slice(0,3), value: count });
   }
@@ -106,15 +106,15 @@ function renderHealthPage(s){
           <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
             <span class="type-badge ${r.status==='active'?'badge-tasmeen':'badge-tarbiya'}">${r.status==='active'?'قيد العلاج':'مكتمل'}</span>
             ${inW?`<span class="type-badge badge-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>سحب ${ar(Math.max(0,dLeft))} يوم</span>`:''}
-            <span class="fw-bold">${r.animal_breed||'—'} ${r.animal_tag?`<span class="text-gray">#${r.animal_tag}</span>`:''}</span>
+            <span class="fw-bold">${escapeHtml(r.animal_breed||'—')} ${r.animal_tag?`<span class="text-gray">#${escapeHtml(r.animal_tag)}</span>`:''}</span>
           </div>
           <div style="font-size:.85rem">
-            <span class="text-gray">التشخيص: </span><strong>${r.diagnosis}</strong>
-            <span class="text-gray mx-2">|</span><span class="text-gray">الدواء: </span><strong>${r.medication}</strong>
-            ${r.dosage?`<span class="text-gray"> — ${r.dosage}</span>`:''}
+            <span class="text-gray">التشخيص: </span><strong>${escapeHtml(r.diagnosis||'')}</strong>
+            <span class="text-gray mx-2">|</span><span class="text-gray">الدواء: </span><strong>${escapeHtml(r.medication||'')}</strong>
+            ${r.dosage?`<span class="text-gray"> — ${escapeHtml(r.dosage)}</span>`:''}
           </div>
           ${r.bcs?`<small class="text-gray mt-1 d-block">تقييم الحالة الجسمانية (BCS): <strong>${r.bcs}/5</strong></small>`:''}
-          <small class="text-gray">${r.date||'—'} ${r.barn?`• ${r.barn}`:''}</small>
+          <small class="text-gray">${r.date||'—'} ${r.barn?`• ${escapeHtml(r.barn)}`:''}</small>
         </div>
         <div class="d-flex gap-2 flex-shrink-0">
           ${r.status==='active'&&can('health')?`<button class="action-btn primary sm" onclick="event.stopPropagation();completeHealth('${r._id}')"><i class="bi bi-check-lg" aria-hidden="true"></i><span class="visually-hidden">إكمال العلاج</span></button>`:''}
@@ -180,7 +180,7 @@ window.showHealthDetail=function(id){
       <span class="type-badge ${r.status==='active'?'badge-tasmeen':'badge-tarbiya'}">${r.status==='active'?'قيد العلاج':'مكتمل'}</span>
       ${inW?`<span class="type-badge badge-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>فترة تأثير علاج نشط</span>`:''}
     </div>
-    ${[['الحيوان',`${r.animal_breed||'—'} ${r.animal_tag?'#'+r.animal_tag:''}`],['النوع',r.animal_species==='goat'?'ماعز':'أغنام'],['الجمالون/العنبر',r.barn||'—'],['التشخيص',r.diagnosis],['الدواء',r.medication],['الجرعة',r.dosage||'—'],['تاريخ العلاج',r.date||'—'],['نهاية العلاج',r.treatment_end||'—'],['أيام تأثير العلاج',r.withdrawal_days?ar(r.withdrawal_days)+' يوم':'—'],['انتهاء تأثير العلاج',r.withdrawal_end||'—'],['BCS',r.bcs?r.bcs+'/5':'—'],['الطبيب',r.vet_name||'—'],['ملاحظات',r.notes||'—']].map(([k,v])=>`<div class="info-row"><span class="info-label">${k}</span><span class="info-value fw-bold">${v}</span></div>`).join('')}
+    ${[['الحيوان',`${escapeHtml(r.animal_breed||'—')} ${r.animal_tag?'#'+escapeHtml(r.animal_tag):''}`],['النوع',r.animal_species==='goat'?'ماعز':'أغنام'],['الجمالون/العنبر',escapeHtml(r.barn||'—')],['التشخيص',escapeHtml(r.diagnosis||'—')],['الدواء',escapeHtml(r.medication||'—')],['الجرعة',escapeHtml(r.dosage||'—')],['تاريخ العلاج',r.date||'—'],['نهاية العلاج',r.treatment_end||'—'],['أيام تأثير العلاج',r.withdrawal_days?ar(r.withdrawal_days)+' يوم':'—'],['انتهاء تأثير العلاج',r.withdrawal_end||'—'],['BCS',r.bcs?r.bcs+'/5':'—'],['الطبيب',escapeHtml(r.vet_name||'—')],['ملاحظات',escapeHtml(r.notes||'—')]].map(([k,v])=>`<div class="info-row"><span class="info-label">${k}</span><span class="info-value fw-bold">${v}</span></div>`).join('')}
     ${inW?`<div class="mt-3 p-3 text-center" style="background:rgba(244,67,54,.08);border-radius:10px;border:1px solid rgba(244,67,54,.25)">
       <div style="font-size:1.8rem;font-weight:800;color:var(--red)">${ar(Math.max(0,dLeft))}</div>
       <small class="text-gray">يوم متبقي حتى انتهاء تأثير العلاج (${r.withdrawal_end})</small>
@@ -202,20 +202,20 @@ window.openHealthModal=function(id){
     <h4><i class="bi bi-heart-pulse-fill accent-text"></i> ${id?'تعديل':'إضافة'} سجل صحي</h4>
     <div class="row g-2">
       <div class="col-6"><label>النوع</label><select class="field" id="h-sp" onchange="updateHBreeds()"><option value="goat" ${r.animal_species==='goat'?'selected':''}>ماعز</option><option value="sheep" ${r.animal_species==='sheep'?'selected':''}>أغنام</option></select></div>
-      <div class="col-6"><label>السلالة</label><select class="field" id="h-breed">${(r.animal_species==='sheep'?s.sheepBreeds:s.goatBreeds).map(b=>`<option value="${b}" ${r.animal_breed===b?'selected':''}>${b}</option>`).join('')}</select></div>
+      <div class="col-6"><label>السلالة</label><select class="field" id="h-breed">${(r.animal_species==='sheep'?s.sheepBreeds:s.goatBreeds).map(b=>`<option value="${escapeHtml(b)}" ${r.animal_breed===b?'selected':''}>${escapeHtml(b)}</option>`).join('')}</select></div>
     </div>
     <div class="row g-2">
-      <div class="col-6"><label>رقم الترقيم</label><input class="field" id="h-tag" value="${r.animal_tag||''}" placeholder="A-123"></div>
+      <div class="col-6"><label>رقم الترقيم</label><input class="field" id="h-tag" value="${escapeHtml(r.animal_tag||'')}" placeholder="A-123"></div>
       <div class="col-6"><label>الجمالون/العنبر</label><select class="field" id="h-barn">${barns.map(b=>`<option value="${b}" ${r.barn===b?'selected':''}>${b||'— غير محدد —'}</option>`).join('')}</select></div>
     </div>
     <div class="row g-2">
       <div class="col-6"><label>تاريخ العلاج *</label><input type="date" class="field" id="h-date" value="${r.date||todayStr()}"></div>
-      <div class="col-6"><label>اسم الطبيب</label><input class="field" id="h-vet" value="${r.vet_name||''}" placeholder="د. أحمد"></div>
+      <div class="col-6"><label>اسم الطبيب</label><input class="field" id="h-vet" value="${escapeHtml(r.vet_name||'')}" placeholder="د. أحمد"></div>
     </div>
-    <label>التشخيص *</label><input class="field" id="h-diag" value="${r.diagnosis||''}" placeholder="التشخيص">
+    <label>التشخيص *</label><input class="field" id="h-diag" value="${escapeHtml(r.diagnosis||'')}" placeholder="التشخيص">
     <div class="row g-2">
-      <div class="col-6"><label>الدواء *</label><input class="field" id="h-med" value="${r.medication||''}"></div>
-      <div class="col-6"><label>الجرعة</label><input class="field" id="h-dose" value="${r.dosage||''}" placeholder="5 مل"></div>
+      <div class="col-6"><label>الدواء *</label><input class="field" id="h-med" value="${escapeHtml(r.medication||'')}"></div>
+      <div class="col-6"><label>الجرعة</label><input class="field" id="h-dose" value="${escapeHtml(r.dosage||'')}" placeholder="5 مل"></div>
     </div>
     <div class="row g-2">
       <div class="col-6"><label>نهاية العلاج</label><input type="date" class="field" id="h-tend" value="${r.treatment_end||''}" onchange="calcWithdrawal()"></div>
@@ -233,7 +233,7 @@ window.openHealthModal=function(id){
       </div>
       <div class="col-6"><label>الحالة</label><select class="field" id="h-stat"><option value="active" ${r.status==='active'||!r.status?'selected':''}>قيد العلاج</option><option value="completed" ${r.status==='completed'?'selected':''}>مكتمل</option></select></div>
     </div>
-    <label>ملاحظات</label><textarea class="field" id="h-notes" rows="2">${r.notes||''}</textarea>
+    <label>ملاحظات</label><textarea class="field" id="h-notes" rows="2">${escapeHtml(r.notes||'')}</textarea>
     <div class="d-flex gap-2 justify-content-end mt-3">
       <button class="action-btn" onclick="closeModal()">إلغاء</button>
       <button class="action-btn primary" onclick="submitHealth()">حفظ</button>
@@ -243,13 +243,13 @@ window.openHealthModal=function(id){
 
 window.updateHBreeds=function(){
   const s=getSettings();const sp=document.getElementById('h-sp').value;
-  document.getElementById('h-breed').innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(b=>`<option value="${b}">${b}</option>`).join('');
+  document.getElementById('h-breed').innerHTML=(sp==='goat'?s.goatBreeds:s.sheepBreeds).map(b=>`<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('');
 };
 
 window.calcWithdrawal=function(){
   const tend=document.getElementById('h-tend').value;
   const wdays=+document.getElementById('h-wdays').value||0;
-  if(tend&&wdays>0){const dt=new Date(tend);dt.setDate(dt.getDate()+wdays);const we=dt.toISOString().slice(0,10);document.getElementById('h-wdate').textContent=we;document.getElementById('h-wshow').style.display='block';}
+  if(tend&&wdays>0){const we=shiftDateLocal(tend,wdays);document.getElementById('h-wdate').textContent=we;document.getElementById('h-wshow').style.display='block';}
   else document.getElementById('h-wshow').style.display='none';
 };
 
@@ -257,7 +257,7 @@ window.submitHealth=async function(){
   const diag=document.getElementById('h-diag').value.trim();const med=document.getElementById('h-med').value.trim();
   if(!diag||!med){toast('يرجى إدخال التشخيص والدواء','error');return;}
   const tend=document.getElementById('h-tend').value;const wdays=+document.getElementById('h-wdays').value||0;
-  let withdrawal_end='';if(tend&&wdays>0){const dt=new Date(tend);dt.setDate(dt.getDate()+wdays);withdrawal_end=dt.toISOString().slice(0,10);}
+  let withdrawal_end='';if(tend&&wdays>0){withdrawal_end=shiftDateLocal(tend,wdays);}
   const animalTag=document.getElementById('h-tag').value.trim();
   // Resolved ONCE, here, before the record is saved -- so the stored
   // health record itself carries animal_id, and every downstream use

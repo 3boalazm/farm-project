@@ -57,7 +57,7 @@ function renderMain() {
   const trendMonths=[]; const compareMonths=[];
   for(let i=5;i>=0;i--){
     const d=new Date(nowP.getFullYear(),nowP.getMonth()-i,1);
-    const mStr=d.toISOString().slice(0,7);
+    const mStr=toLocalMonthKey(d);
     const monthTotal=_prodData.filter(p=>(p.date||'').startsWith(mStr)).reduce((t,p)=>t+(+p.quantity||0),0);
     trendMonths.push({ label: arMonthsP[d.getMonth()].slice(0,3), value: monthTotal });
     const milkTotal=_prodData.filter(p=>p.type==='milk'&&(p.date||'').startsWith(mStr)).reduce((t,p)=>t+(+p.quantity||0),0);
@@ -132,8 +132,8 @@ function computeStats() {
   const today = todayStr();
   const monthAgo = new Date(); monthAgo.setMonth(monthAgo.getMonth() - 1);
   const yearAgo  = new Date(); yearAgo.setFullYear(yearAgo.getFullYear() - 1);
-  const monthStr = monthAgo.toISOString().slice(0,10);
-  const yearStr  = yearAgo.toISOString().slice(0,10);
+  const monthStr = toLocalDateStr(monthAgo);
+  const yearStr  = toLocalDateStr(yearAgo);
 
   const milk = _prodData.filter(p => p.type === 'milk');
   const wool = _prodData.filter(p => p.type === 'wool');
@@ -179,7 +179,7 @@ function renderMilkTab(el) {
   const now = new Date();
   for (let i = 13; i >= 0; i--) {
     const d = new Date(now); d.setDate(d.getDate() - i);
-    daily[d.toISOString().slice(0,10)] = 0;
+    daily[toLocalDateStr(d)] = 0;
   }
   milk.forEach(p => { if (daily[p.date] !== undefined) daily[p.date] += +p.quantity || 0; });
 
@@ -254,7 +254,7 @@ function renderWoolTab(el) {
   const now = new Date();
   for (let i = 11; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    monthly[d.toISOString().slice(0,7)] = 0;
+    monthly[toLocalMonthKey(d)] = 0;
   }
   wool.forEach(p => {
     const k = (p.date||'').slice(0,7);
@@ -409,7 +409,7 @@ function renderSummaryTab(el) {
   const now = new Date();
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    monthly[d.toISOString().slice(0,7)] = { milk: 0, wool: 0, weight: 0 };
+    monthly[toLocalMonthKey(d)] = { milk: 0, wool: 0, weight: 0 };
   }
   _prodData.forEach(p => {
     const k = (p.date||'').slice(0,7);

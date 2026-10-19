@@ -126,8 +126,8 @@ function renderActivityPage(){
             '<div class="fw-bold" style="font-size:.86rem;color:'+cfg.color+'">'+cfg.label+(l.resource?' — '+l.resource:'')+'</div>'+
             (role?'<span class="type-badge" style="background:'+role.color+'22;color:'+role.color+';border:1px solid '+role.color+'44;font-size:.68rem"><i class="bi '+role.icon+' me-1"></i>'+role.label+'</span>':'')+
           '</div>'+
-          '<div class="text-gray" style="font-size:.8rem;margin-top:2px">'+(l.description||'—')+'</div>'+
-          '<div style="font-size:.7rem;color:var(--text-muted);margin-top:3px"><i class="bi bi-person me-1"></i>'+(l.userName||'—')+
+          '<div class="text-gray" style="font-size:.8rem;margin-top:2px">'+escapeHtml(l.description||'—')+'</div>'+
+          '<div style="font-size:.7rem;color:var(--text-muted);margin-top:3px"><i class="bi bi-person me-1"></i>'+escapeHtml(l.userName||'—')+
             ' &nbsp;<i class="bi bi-clock me-1"></i>'+(l.timestamp?l.timestamp.replace('T',' ').slice(0,16):(l.date||'—'))+'</div>'+
         '</div>'+
       '</div>'+

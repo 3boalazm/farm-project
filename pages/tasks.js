@@ -337,8 +337,12 @@ function renderEmpty() {
 
 // ── Helpers ──────────────────────────────────────────────
 function weekAgoStr() {
-  const d = new Date(); d.setDate(d.getDate() - 7);
-  return d.toISOString().slice(0, 10);
+  // FIX (2026-10 audit): was `new Date(); setDate(-7); toISOString().slice(0,10)`
+  // — a UTC-derived "local" date, so for the first three hours of every day
+  // (this farm is UTC+3) the tasks page filtered "the last 7 days" against a
+  // window that started and ended one day early. Same bug class as the ~35
+  // other sites fixed with the shared local-calendar helpers.
+  return shiftDateLocal(new Date(), -7);
 }
 
 window.setFilter = function(f) {

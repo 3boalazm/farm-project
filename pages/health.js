@@ -61,7 +61,7 @@ function renderHealthPage(s){
   const treatmentTrend=[];
   for(let i=5;i>=0;i--){
     const d=new Date(nowH.getFullYear(),nowH.getMonth()-i,1);
-    const mStr=d.toISOString().slice(0,7);
+    const mStr=toLocalMonthKey(d);
     const count=healthRecs.filter(r=>(r.date||'').startsWith(mStr)).length;
     treatmentTrend.push({ label: arMonthsH[d.getMonth()].slice(0,3), value: count });
   }
@@ -249,7 +249,7 @@ window.updateHBreeds=function(){
 window.calcWithdrawal=function(){
   const tend=document.getElementById('h-tend').value;
   const wdays=+document.getElementById('h-wdays').value||0;
-  if(tend&&wdays>0){const dt=new Date(tend);dt.setDate(dt.getDate()+wdays);const we=dt.toISOString().slice(0,10);document.getElementById('h-wdate').textContent=we;document.getElementById('h-wshow').style.display='block';}
+  if(tend&&wdays>0){const we=shiftDateLocal(tend,wdays);document.getElementById('h-wdate').textContent=we;document.getElementById('h-wshow').style.display='block';}
   else document.getElementById('h-wshow').style.display='none';
 };
 
@@ -257,7 +257,7 @@ window.submitHealth=async function(){
   const diag=document.getElementById('h-diag').value.trim();const med=document.getElementById('h-med').value.trim();
   if(!diag||!med){toast('يرجى إدخال التشخيص والدواء','error');return;}
   const tend=document.getElementById('h-tend').value;const wdays=+document.getElementById('h-wdays').value||0;
-  let withdrawal_end='';if(tend&&wdays>0){const dt=new Date(tend);dt.setDate(dt.getDate()+wdays);withdrawal_end=dt.toISOString().slice(0,10);}
+  let withdrawal_end='';if(tend&&wdays>0){withdrawal_end=shiftDateLocal(tend,wdays);}
   const animalTag=document.getElementById('h-tag').value.trim();
   // Resolved ONCE, here, before the record is saved -- so the stored
   // health record itself carries animal_id, and every downstream use

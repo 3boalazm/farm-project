@@ -200,6 +200,12 @@ function renderAdminResetSection(){
       </div>
     </div>
   </div>
+<!-- BUG FIX (2026-10 audit): the <div class="page-wrap rail-v2-content">
+     opened at the top of <body> was NEVER closed — every page in this app
+     closes it, this one did not, so the browser auto-closed it at </body>
+     and the trailing inline <script> blocks ended up parsed as children of
+     the layout wrapper. Markup is now balanced; no visible change. -->
+</div>
 <script>
 window.removeBreed=function(type,name){
   const s=getSettings();const arr=type==='goat'?s.goatBreeds:s.sheepBreeds;

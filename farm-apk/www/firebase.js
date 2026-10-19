@@ -16,7 +16,133 @@ const FIREBASE_CONFIG = {
 const AR=['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
 const ar=n=>String(n??'').replace(/\d/g,d=>AR[+d]);
 const todayStr=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
-function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
+
+// ── LOCAL-CALENDAR DATE HELPERS (2026-10 audit) ────────────
+// Every record in this app stores plain local calendar strings
+// ('YYYY-MM-DD' / 'YYYY-MM') written by todayStr() and by native
+// <input type="date">. ~35 places then compared those against keys built
+// with `someDate.toISOString().slice(0,7|10)` -- which is UTC. For any
+// timezone east of Greenwich (this farm is UTC+2/+3) that shifts the key
+// BACKWARDS:
+//   • `new Date(y, m, 1).toISOString().slice(0,7)` is local midnight, i.e.
+//     21:00-22:00 UTC on the LAST day of the PREVIOUS month -> every
+//     6-month finance/production/health trend chart silently plotted the
+//     previous month's numbers under the current month's label, and the
+//     current month's own records matched no bucket at all.
+//   • `new Date().toISOString().slice(0,10)` is "yesterday" for any local
+//     time before 02:00-03:00 -> daily production trends, notification
+//     cutoffs and auto-task due dates were off by one day overnight.
+// These four helpers are the single correct way to derive a local
+// calendar key from a Date; firebase.js loads before every other script,
+// so they are available app-wide (pages/*.js included).
+const _p2=n=>String(n).padStart(2,'0');
+
+// 'YYYY-MM-DD' in LOCAL time. Accepts a Date or anything Date-parses;
+// a plain 'YYYY-MM-DD' string is parsed as local midnight (never UTC),
+// so round-tripping a stored date is always identity. Returns '' for an
+// unparseable/missing value instead of 'NaN-aN-aN'.
+function toLocalDateStr(d){
+  if(d==null||d==='')return '';
+  let x;
+  if(d instanceof Date) x=d;
+  else if(typeof d==='string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) x=new Date(d+'T00:00:00');
+  else x=new Date(d);
+  if(isNaN(x.getTime()))return '';
+  return x.getFullYear()+'-'+_p2(x.getMonth()+1)+'-'+_p2(x.getDate());
+}
+
+// 'YYYY-MM' in LOCAL time -- the correct key to match a record's
+// `date.startsWith(monthKey)` against.
+function toLocalMonthKey(d){
+  const s=toLocalDateStr(d);
+  return s?s.slice(0,7):'';
+}
+
+// Date arithmetic that stays on the local calendar: returns
+// 'YYYY-MM-DD' for base +/- days. Replaces the widespread
+// `var dt=new Date(x);dt.setDate(dt.getDate()+n);dt.toISOString().slice(0,10)`
+// pattern, whose UTC final step moved pregnancy due dates, drug
+// withdrawal windows and vaccination schedules by a day.
+function shiftDateLocal(base,days){
+  const s=toLocalDateStr(base);
+  if(!s)return '';
+  const x=new Date(s+'T00:00:00');
+  x.setDate(x.getDate()+(+days||0));
+  return toLocalDateStr(x);
+}
+
+// First day of the month `offsetMonths` away from the current one
+// (negative = past), as a real LOCAL Date -- for building trend buckets.
+function monthStartLocal(offsetMonths){
+  const n=new Date();
+  return new Date(n.getFullYear(), n.getMonth()+(+offsetMonths||0), 1);
+}
+
+// Last day of the month containing `d`, as 'YYYY-MM-DD' (local).
+function monthEndLocal(d){
+  const s=toLocalDateStr(d);
+  if(!s)return '';
+  const x=new Date(s+'T00:00:00');
+  return toLocalDateStr(new Date(x.getFullYear(), x.getMonth()+1, 0));
+}
+// FIX (2026-10 audit): this used to be `Date.now().toString(36) +
+// Math.random().toString(36).slice(2,5)` — only THREE base-36 random
+// characters (~46k outcomes). genId() is not a display-only helper: it is
+// the `operationId` idempotency key for every financial posting
+// (finance-entry/ar-ap/animals/periods) and the suffix of every
+// source-document number, and users.html uses it as a user id. Two
+// submissions inside the same millisecond therefore had a ~1/46656 chance
+// of colliding — and a collision on an operationId makes
+// createSourceDocument()/recordPaymentAgainstDocument() return
+// `{ok:true, idempotent:true}` for a DIFFERENT transaction, i.e. a real
+// invoice or payment is silently dropped while the UI reports success.
+// Measured in tests/unit/01: 3 duplicates in 500 same-millisecond calls.
+// Now 8 base-36 characters from crypto.getRandomValues when available
+// (~2.8e12 outcomes), same shape and length class, no API change.
+function genId(){
+  var rand;
+  try{
+    var c=(typeof crypto!=='undefined'&&crypto.getRandomValues)?crypto:(typeof window!=='undefined'&&window.crypto);
+    if(c&&c.getRandomValues){
+      var b=new Uint32Array(2);
+      c.getRandomValues(b);
+      rand=b[0].toString(36).padStart(7,'0').slice(-5)+b[1].toString(36).padStart(7,'0').slice(-3);
+    }
+  }catch(e){ /* fall through to Math.random */ }
+  if(!rand) rand=Math.random().toString(36).slice(2,7)+Math.random().toString(36).slice(2,5);
+  return Date.now().toString(36)+rand;
+}
+
+// ── HTML Escaping ──────────────────────────────────────────
+// No escaping helper existed anywhere in this codebase before this pass
+// (confirmed by direct grep of shared.js/firebase.js) -- free-text fields
+// (notes, names, descriptions, reasons, diagnoses...) were concatenated
+// straight into `.innerHTML=` template strings across the app, a
+// confirmed, live-proven stored-XSS vector (see
+// docs/repository/RISK_REGISTER.md). This is the first, additive step:
+// a safe, dependency-free escaper every page already has access to
+// (firebase.js loads before every other script). Use it on any
+// user-editable text value interpolated into an HTML string -- never on
+// values that are already trusted HTML you're deliberately building
+// (icon markup, badges assembled from fixed config objects, etc.).
+function escapeHtml(s){
+  return String(s??'').replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+
+// For the common onclick="fn('${value}')" pattern -- a value that's both
+// a single-quoted JS string literal AND sits inside a double-quoted HTML
+// attribute. escapeHtml() alone is NOT enough here: the browser decodes
+// HTML entities (turning an escaped &#39; back into a literal ') BEFORE
+// handing the attribute's text to the JS parser on click, so an
+// HTML-only escape doesn't stop a value containing a quote from breaking
+// out of the JS string once the handler actually runs. This escapes for
+// the JS-string context first (backslash, then single-quote), then for
+// the HTML-attribute context, so both layers hold.
+function escapeJsAttr(s){
+  return escapeHtml(String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
+}
 
 // ── PIN Hashing (Security Migration) ──────────────────────
 // Replaces plaintext PIN storage. Uses the browser's built-in Web
@@ -253,11 +379,71 @@ function can(page){
   const u=getUser();
   if(!u)return false;
   if(u.role==='admin')return true;
+  // FIX (2026-10 audit) — ELEVATION OF PRIVILEGE, found by unit-testing the
+  // permission model role by role.
+  //
+  // Twenty call sites across this app use can('admin') as an ADMIN-ONLY
+  // guard — but 'admin' is a ROLE name, not a permission key, and it appears
+  // in no role's permission list. Every one of those guards therefore fell
+  // through to the role predicate, and ROLE_PERMS.supervisor is
+  // "everything except users/finance/activity" — which returns TRUE for
+  // 'admin'. Measured effect before this fix: a مشرف (supervisor) could
+  //   • wipe the whole mortality register (dead.html's تصفير سجلات النافق),
+  //   • run animals.html's bulk reset/delete paths (3 separate guards),
+  //   • delete health records, vaccinations and tasks,
+  //   • edit the farm profile, and
+  //   • open activity.html — the audit log whose own on-screen message says
+  //     "هذه الصفحة للمدير فقط" and whose permission ROLE_PERMS explicitly
+  //     excludes for supervisors (the page checks can('admin'), never
+  //     can('activity'), so the exclusion was bypassed entirely),
+  //   • and run shared.js's repairGenealogy() herd-wide rewrite.
+  //
+  // 'admin' is now resolved as what every caller means by it: the admin ROLE.
+  // It is checked before custom_perms on purpose — users.html's permission
+  // editor can grant page permissions to any user, and that mechanism must
+  // never be able to mint an admin. One line closes all twenty holes; no
+  // call site needed to change.
+  if(page==='admin')return false;
   // Check custom permissions first
   if(u.custom_perms&&Array.isArray(u.custom_perms)){
     return u.custom_perms.includes(page);
   }
   return(ROLE_PERMS[u.role]||(()=>false))(page);
+}
+
+// ── canWrite(page) — the write-side companion to can() ──────
+// FIX (2026-10 audit) — ELEVATION OF PRIVILEGE, found by unit-testing the
+// services with each role in turn.
+//
+// can() answers "may this user SEE this area?", and ROLE_PERMS grants
+// 'animals' to worker AND to visitor -- correctly: a guest should be able to
+// look at the herd. But every mutating service in shared.js authorised
+// itself with that same can('animals'): recordAnimalWeight(),
+// deleteAnimalWeight(), _writeAnimalStatus() (markAnimalDead / sellAnimal /
+// quarantine / restore / correctAnimalCount), renameTag(), linkParents().
+// Net effect before this fix: a user logged in as زائر (visitor) — the one
+// role whose entire purpose is read-only — could record weights, mark
+// animals dead, SELL them (which also posts a real finance income record),
+// rename tags and re-parent offspring. Verified live by
+// tests/unit/07 before the fix (recordAnimalWeight returned ok:true for a
+// visitor).
+//
+// canWrite() is additive and deliberately narrow: identical to can() for
+// every role that isn't read-only, and for a read-only role it still allows
+// an explicit, per-user grant via custom_perms (the mechanism users.html
+// already persists), so no legitimate access is lost. Pages keep using can()
+// for visibility; the services — the authoritative write path, and the one
+// every page funnels through — use canWrite().
+const READ_ONLY_ROLES={visitor:true};
+
+function canWrite(page){
+  const u=getUser();
+  if(!u)return false;
+  if(!can(page))return false;              // no read access → certainly no write access
+  if(READ_ONLY_ROLES[u.role]){
+    return Array.isArray(u.custom_perms) && u.custom_perms.indexOf(page)!==-1;
+  }
+  return true;
 }
 
 // ── ANIMAL STATUS CONFIG ─────────────────────────────────
@@ -369,6 +555,42 @@ function _saveUndoStack(stack){
   try{sessionStorage.setItem(_UNDO_KEY,JSON.stringify(stack));}catch(e){}
 }
 
+// FIX (2026-10 audit) — THE UNDO FEATURE WAS DEAD CODE.
+// _pushUndo() was defined and undoLast()/the sidebar "تراجع" button were
+// fully wired, but NOTHING in the entire repository ever called
+// _pushUndo() (verified by grep across every .js/.html file, root and the
+// farm-apk copy alike). The button therefore always rendered at 40%
+// opacity and every click answered "لا توجد عمليات للتراجع عنها" — a
+// visible, advertised feature that could never do anything. fbDelete()
+// even performed an extra GET purely to capture the deleted record "for
+// undo" and then discarded it, so every delete paid for a round-trip
+// whose result was thrown away.
+//
+// The three writers below now capture their operation. Capture is
+// deliberately FILTERED, because an unfiltered stack would be worse than
+// no stack: background engines (notification service, weight/production
+// alert evaluators, workflow engine, activity log) write through the very
+// same fbPost/fbPatch, and a machine write landing on top of the 5-deep
+// stack would silently replace what the user actually meant to undo.
+// Journal entries and source documents are excluded on purpose too — the
+// accounting engine's immutability guarantee (and database.rules.json's
+// POSTED-write block) means "undo" must never attempt to reverse one;
+// corrections there go through reverseJournalEntry().
+var _UNDO_SKIP_ROOTS={
+  activity_log:1, login_notifications:1, notifications:1,
+  weight_alerts:1, production_alerts:1, workflow_history:1,
+  inventory_transactions:1, financial_audit_log:1,
+  journal_entries:1, source_documents:1, uid_lookup:1,
+  diary_snapshots:1
+};
+
+function _undoCapturable(path,data){
+  var root=String(path||'').split('/')[0];
+  if(_UNDO_SKIP_ROOTS[root]) return false;
+  if(data && (data.auto_generated || data.synced_at)) return false; // machine-written
+  return true;
+}
+
 function _pushUndo(op){
   var stack=_getUndoStack();
   stack.push(op);
@@ -377,14 +599,20 @@ function _pushUndo(op){
   _updateUndoBtn();
 }
 
+var _undoBtnRetries=0;
 function _updateUndoBtn(){
   var stack=_getUndoStack();
   var count=stack.length;
   var btn=document.getElementById('undo-btn');
   if(!btn){
-    setTimeout(_updateUndoBtn,500);
+    // FIX (2026-10 audit): this retried EVERY 500ms FOREVER on any page
+    // where the rail panel hasn't rendered (login.html, bayan.html, or
+    // simply before renderNavbarV2() ran) — an unbounded background timer
+    // per page load, for a button that would never appear. Bounded now.
+    if(_undoBtnRetries++<6) setTimeout(_updateUndoBtn,500);
     return;
   }
+  _undoBtnRetries=0;
   if(count>0){
     btn.style.background='rgba(255,193,7,.12)';
     btn.style.borderColor='rgba(255,193,7,.4)';
@@ -480,6 +708,40 @@ async function fbGet(path, skipCache){
   }catch(e){
     console.error('fbGet Error:',e);
     return [];
+  }
+}
+
+// ── fbGetSafe(path) ───────────────────────────────────────
+// Same read as fbGet(), but distinguishes "the collection really is
+// empty" (returns []) from "the read FAILED" (returns null). fbGet()
+// deliberately swallows every error and returns [] so pages can render
+// an empty state instead of crashing -- the right contract for display
+// code, and the wrong one for any decision of the form
+// `if(collection is empty) then create the default record`.
+//
+// Why this exists (found by the 2026-10 module audit): Users.init() ran
+// that exact empty-check on EVERY page load, so a single dropped request
+// (offline, DNS blip, 5xx, expired token) looked like a brand-new farm
+// and re-PUT users/admin1 with the factory PIN 1234 -- silently
+// resetting the real administrator's credentials on a live database.
+// seedDefaultChartOfAccounts() had the identical shape. Both now read
+// through this helper and refuse to bootstrap when the read failed.
+// fbGet() itself is untouched: ~200 display call sites keep their
+// never-throws, always-an-array contract.
+async function fbGetSafe(path){
+  try{
+    const r=await fetch(await fbUrl(path));
+    if(r.status===404||r.status===204) return [];
+    if(!r.ok){
+      if(r.status===401)_reportAuthFailure();
+      return null;
+    }
+    const data=await r.json();
+    if(!data || typeof data!=='object') return [];
+    return Object.entries(data).map(([id,v])=>({...v,_id:id}));
+  }catch(e){
+    console.error('fbGetSafe Error:',e);
+    return null;
   }
 }
 
@@ -579,6 +841,14 @@ async function fbPost(path,data){
 
   const res=await r.json();
 
+  // Undo capture (see _UNDO_SKIP_ROOTS above): a create is undone by
+  // deleting the id Firebase just returned. Machine-written collections are
+  // filtered out so a background engine's write can never displace the
+  // user's own last action from the 5-deep stack.
+  if(res && res.name && _undoCapturable(path,data)){
+    _pushUndo({type:'post', table:path, id:res.name, when:Date.now()});
+  }
+
   return res.name;
 }
 
@@ -605,6 +875,25 @@ async function fbPut(path,id,data){
 }
 
 async function fbPatch(path,id,patch){
+  // Undo capture: read the CURRENT value of exactly the keys about to be
+  // overwritten, so undo can restore them (a key that didn't exist before
+  // is restored as null, which removes it again). Skipped entirely for the
+  // machine-written collections listed in _UNDO_SKIP_ROOTS, so those pay
+  // no extra round-trip. Best-effort: if the pre-read fails, nothing is
+  // pushed — an undo entry that cannot actually restore anything would be
+  // worse than none, because undoLast() reports success unconditionally.
+  var _prev=null;
+  if(_undoCapturable(path,patch)){
+    try{
+      var _pr=await fetch(await fbUrl(path,id));
+      if(_pr.ok){
+        var _cur=(await _pr.json())||{};
+        _prev={};
+        for(var _k in patch){ if(Object.prototype.hasOwnProperty.call(patch,_k)) _prev[_k]=Object.prototype.hasOwnProperty.call(_cur,_k)?_cur[_k]:null; }
+      }
+    }catch(e){ _prev=null; }
+  }
+
   const body=JSON.stringify({
     ...patch,
     updated_at:new Date().toISOString()
@@ -615,6 +904,8 @@ async function fbPatch(path,id,patch){
     headers:JSON_HEADERS,
     body
   });
+
+  if(r.ok && _prev) _pushUndo({type:'patch', table:path, id:id, prev:_prev, when:Date.now()});
 
   // Same fix as fbPost above — invalidate unconditionally, not just on failure.
   fbCacheInvalidate(path);
@@ -642,6 +933,13 @@ async function fbDelete(path,id){fbCacheInvalidate(path);
     fbCacheInvalidate(path);
   const t=await r.text();
     throw new Error(`DELETE ${path}/${id}: ${r.status} ${t}`);
+  }
+
+  // Undo capture: the pre-read above already paid for the deleted record's
+  // full contents — until now it was read and then discarded on every
+  // single delete in the app.
+  if(_delData && _undoCapturable(path,null)){
+    _pushUndo({type:'delete', table:path, id:id, prev:_delData, when:Date.now()});
   }
 }
 
@@ -698,11 +996,19 @@ const Users={
   },
 
   async init(){
-    const users = await fbGet('users');
-    if(!users.length){
-      // FIX: this bootstrap path runs on EVERY page load (via initApp()
-      // below) whenever the users collection is empty — was still
-      // writing a plaintext pin.
+    // SECURITY/DATA-INTEGRITY FIX (2026-10 audit): this bootstrap runs on
+    // EVERY page load. It used fbGet(), which returns [] both for a truly
+    // empty collection AND for any failed request -- so one dropped read
+    // on a live farm looked like "fresh install" and re-created users/admin1
+    // with the factory PIN 1234, overwriting the real admin's pin_hash and
+    // name. fbGetSafe() returns null on failure, and a failed read now
+    // aborts the bootstrap instead of guessing. The write itself is also
+    // wrapped: initApp() fires this on every page, and an unhandled
+    // rejection here used to surface as a raw console error on load.
+    const users = await fbGetSafe('users');
+    if(users===null) return;      // read failed — never bootstrap on a network error
+    if(users.length) return;      // a real roster already exists — leave it alone
+    try{
       await fbPut('users','admin1',{
         id:'admin1',
         name:'مدير المزرعة',
@@ -711,6 +1017,8 @@ const Users={
         active:true,
         created:todayStr()
       });
+    }catch(e){
+      console.warn('Users.init bootstrap skipped:',e.message);
     }
   }
 };
@@ -718,7 +1026,15 @@ const Users={
 // ── SETTINGS ─────────────────────────────────────────────
 function getSettings(){
   const cfg=window.FARM_CONFIG||{};
-  const saved=JSON.parse(localStorage.getItem('farm_settings')||'{}');
+  // ROBUSTNESS FIX (2026-10 audit): this bare JSON.parse threw on a
+  // corrupt/partial farm_settings value, and getSettings() is called from
+  // renderNavbarV2() on EVERY page -- one bad character in localStorage
+  // blanked the sidebar, the header and the page body at once. getUser()
+  // right above already guards its own parse the same way; this now does
+  // too, falling back to config.js defaults instead of taking the page down.
+  let saved={};
+  try{ saved=JSON.parse(localStorage.getItem('farm_settings')||'{}')||{}; }
+  catch(e){ saved={}; }
 
   return{
     farmName:             cfg.farmName||saved.farmName||'بيان المزرعة',
@@ -753,6 +1069,12 @@ function saveSettings(s){
 // ── INIT ─────────────────────────────────────────────────
 async function initApp(){
   initFirebase();
-  await Users.init();
+  // Never let the boot-time bootstrap become an unhandled rejection on
+  // every page (it fires before any page code runs, so nothing downstream
+  // could catch it). Users.init() is best-effort by nature: a farm that
+  // already has users needs nothing from it, and a farm that can't reach
+  // the database right now must simply carry on rendering.
+  try{ await Users.init(); }
+  catch(e){ console.warn('initApp: Users.init skipped —', e && e.message); }
 }
 initApp();

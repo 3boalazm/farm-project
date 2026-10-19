@@ -723,7 +723,7 @@ window.executeAction = async function() {
     }
     else if (parsed.action === 'add_breeding') {
       var expBirth = null;
-      if (d.mating_date) { var bd = new Date(d.mating_date); bd.setDate(bd.getDate() + (getSettings().pregnancyDays||150)); expBirth = bd.toISOString().slice(0,10); }
+      if (d.mating_date) { expBirth = shiftDateLocal(d.mating_date, getSettings().pregnancyDays||150); }
       await fbPost('breeding', { female_tag:d.female_tag||null, female_breed:d.female_breed||null, female_species:d.female_species||'goat', male_tag:d.male_tag||null, male_breed:d.male_breed||null, mating_date:d.mating_date||todayStr(), expected_birth:d.expected_birth||expBirth, status:'pregnant', notes:'سُجِّل عبر المساعد الذكي' });
       await logActivity('add','breeding','تسجيل تقريع: '+(d.female_tag||d.female_breed||'—'));
       addMsg('system','✅ تم تسجيل التقريع' + (expBirth ? ' — الولادة المتوقعة: '+expBirth : ''));

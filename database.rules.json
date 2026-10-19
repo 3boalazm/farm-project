@@ -36,6 +36,20 @@
     "animals": {
       ".read": "auth != null",
       ".write": "auth != null",
+      // PERFORMANCE FIX (2026-10 audit): the app runs a real server-side
+      // query against this collection on EVERY animal creation and every
+      // tag-uniqueness check -- shared.js's _tagExistsInFirebase() fetches
+      //   animals.json?orderBy="tag"&equalTo="GT-000123"
+      // (used by generateAnimalTag() and isTagTaken()). Without this index
+      // Realtime Database cannot answer that query from an index: it logs
+      // "index not defined" and downloads the ENTIRE animals node to the
+      // client to filter it locally -- once per candidate tag, inside
+      // generateAnimalTag()'s retry loop. On a herd of a few thousand that is
+      // the difference between a ~1 KB lookup and a multi-megabyte download
+      // per birth recorded. Adding ".indexOn" changes no access rule at all.
+      // NOTE: rules only take effect once deployed (firebase deploy --only
+      // database) -- committing this file alone changes nothing server-side.
+      ".indexOn": ["tag"],
       "$id": {
         ".validate": "newData.hasChild('species') && newData.hasChild('breed') && newData.hasChild('gender')",
         "species": { ".validate": "newData.val() === 'goat' || newData.val() === 'sheep'" },

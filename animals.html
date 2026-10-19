@@ -1659,7 +1659,7 @@ window._parseImpFile=function(file){
         Object.keys(colMap).forEach(function(field){
           var val=String(row[colMap[field]]||'').trim();
           if(_NORM[field]){var n=_NORM[field][val]||_NORM[field][val.toLowerCase()];if(n!==undefined)val=n;}
-          if(field==='birth_date'&&val instanceof Date)val=val.toISOString().slice(0,10);
+          if(field==='birth_date'&&val instanceof Date)val=toLocalDateStr(val); // local date, not UTC-shifted
           if(field==='current_weight'&&val){var w=parseFloat(val);val=(isNaN(w)||w<=0||w>500)?'':w;}
           if(val!==''&&val!==undefined)d[field]=val;
         });

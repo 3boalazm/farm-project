@@ -88,14 +88,14 @@ function computeMetrics(d) {
 
 function buildMonthlyFin(fin) {
   const months={};const now=new Date();
-  for(let i=5;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);months[d.toISOString().slice(0,7)]={income:0,expense:0};}
+  for(let i=5;i>=0;i--){const d=monthStartLocal(-i);months[toLocalMonthKey(d)]={income:0,expense:0};}
   fin.forEach(r=>{const k=(r.date||'').slice(0,7);if(months[k]){if(r.type==='income')months[k].income+=+r.amount||0;else months[k].expense+=+r.amount||0;}});
   return months;
 }
 
 function buildMonthlyBreeding(br) {
   const months={};const now=new Date();
-  for(let i=5;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);months[d.toISOString().slice(0,7)]={births:0,events:0};}
+  for(let i=5;i>=0;i--){const d=monthStartLocal(-i);months[toLocalMonthKey(d)]={births:0,events:0};}
   br.filter(r=>r.status==='born').forEach(r=>{const k=(r.mating_date||'').slice(0,7);if(months[k]){months[k].births+=+r.offspring_count||0;months[k].events+=1;}});
   return months;
 }
@@ -517,7 +517,7 @@ function renderInventoryTab(el, m) {
   const lowStock = meds.filter(x=>+x.quantity<=+x.min_quantity&&+x.min_quantity>0).length + feeds.filter(x=>+x.quantity<=+x.min_quantity&&+x.min_quantity>0).length;
   const outOfStock = meds.filter(x=>+x.quantity<=0).length + feeds.filter(x=>+x.quantity<=0).length;
   const totalFeedCost = feeds.reduce((s,f)=>s+((+f.quantity||0)*(+f.cost_per_unit||0)),0);
-  const monthPrefix = new Date().toISOString().slice(0,7);
+  const monthPrefix = toLocalMonthKey(new Date());
   const monthConsumptionKg = consumption.filter(c=>(c.date||'').startsWith(monthPrefix)).reduce((s,c)=>s+(+c.quantity_kg||0),0);
   el.innerHTML=`
   <div class="row g-3 mb-4">

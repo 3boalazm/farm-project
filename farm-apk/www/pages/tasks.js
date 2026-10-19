@@ -284,7 +284,7 @@ function renderTaskCard(t, today) {
   const autoBadge = t.auto_generated ? `<span class="type-badge" style="background:var(--purple)22;color:var(--purple);border:1px solid var(--purple)44;font-size:.62rem" title="مصدر الحدث: ${AUTO_EVENT_LABELS[t.auto_source_type]||t.auto_source_type||''}"><i class="bi bi-robot me-1"></i>مولّدة تلقائيًا — ${AUTO_EVENT_LABELS[t.auto_source_type]||''}</span>` : '';
 
   return `
-  <div class="task-card ${statusClass}" role="article" aria-label="مهمة: ${t.title}">
+  <div class="task-card ${statusClass}" role="article" aria-label="مهمة: ${escapeHtml(t.title||'')}">
     <div class="d-flex align-items-start gap-3">
       <button class="task-checkbox ${t.status === 'done' ? 'checked' : ''}" onclick="toggleTaskDone('${t._id}')"
         aria-label="${t.status === 'done' ? 'إلغاء إنجاز المهمة' : 'تعليم كمنجزة'}" title="${t.status === 'done' ? 'تم الإنجاز' : 'انقر للإنجاز'}">
@@ -294,7 +294,7 @@ function renderTaskCard(t, today) {
       <div class="flex-grow-1 min-w-0">
         <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
           <div class="fw-bold ${t.status === 'done' ? 'text-gray' : ''}" style="font-size:.92rem;${t.status === 'done' ? 'text-decoration:line-through;' : ''}">
-            ${t.title}
+            ${escapeHtml(t.title || '')}
           </div>
           <div class="d-flex gap-1 align-items-center flex-shrink-0">
             <span class="priority-dot" style="background:${pri.color}" title="أولوية ${pri.label}" aria-label="أولوية ${pri.label}"></span>
@@ -308,10 +308,10 @@ function renderTaskCard(t, today) {
 
         <div class="d-flex gap-3 mt-2 flex-wrap text-gray" style="font-size:.78rem">
           <span><i class="bi bi-calendar-event me-1" aria-hidden="true"></i>${ar ? ar(t.date) : t.date}</span>
-          ${t.related_tag ? `<span><i class="bi bi-tag-fill me-1" aria-hidden="true"></i>${t.related_tag}</span>` : ''}
-          ${t.barn ? `<span><i class="bi bi-building me-1" aria-hidden="true"></i>${t.barn}</span>` : ''}
-          ${t.assigned_to_name ? `<span><i class="bi bi-person-fill me-1" aria-hidden="true"></i>${t.assigned_to_name}</span>` : ''}
-          ${t.notes ? `<span><i class="bi bi-chat-left-text me-1" aria-hidden="true"></i>${t.notes}</span>` : ''}
+          ${t.related_tag ? `<span><i class="bi bi-tag-fill me-1" aria-hidden="true"></i>${escapeHtml(t.related_tag)}</span>` : ''}
+          ${t.barn ? `<span><i class="bi bi-building me-1" aria-hidden="true"></i>${escapeHtml(t.barn)}</span>` : ''}
+          ${t.assigned_to_name ? `<span><i class="bi bi-person-fill me-1" aria-hidden="true"></i>${escapeHtml(t.assigned_to_name)}</span>` : ''}
+          ${t.notes ? `<span><i class="bi bi-chat-left-text me-1" aria-hidden="true"></i>${escapeHtml(t.notes)}</span>` : ''}
         </div>
 
         <div class="d-flex gap-2 mt-2 align-items-center">
@@ -337,8 +337,12 @@ function renderEmpty() {
 
 // ── Helpers ──────────────────────────────────────────────
 function weekAgoStr() {
-  const d = new Date(); d.setDate(d.getDate() - 7);
-  return d.toISOString().slice(0, 10);
+  // FIX (2026-10 audit): was `new Date(); setDate(-7); toISOString().slice(0,10)`
+  // — a UTC-derived "local" date, so for the first three hours of every day
+  // (this farm is UTC+3) the tasks page filtered "the last 7 days" against a
+  // window that started and ended one day early. Same bug class as the ~35
+  // other sites fixed with the shared local-calendar helpers.
+  return shiftDateLocal(new Date(), -7);
 }
 
 window.setFilter = function(f) {
@@ -403,7 +407,7 @@ window.openTaskModal = function(presetData) {
       '<h4><i class="bi bi-plus-circle accent-text" aria-hidden="true"></i> ' + (d._id ? 'تعديل مهمة' : 'مهمة جديدة') + '</h4>' +
 
       '<label for="t-title">عنوان المهمة *</label>' +
-      '<input class="field" id="t-title" value="' + (d.title || '') + '" placeholder="مثال: تنظيف جمالون ج١ع١" aria-required="true">' +
+      '<input class="field" id="t-title" value="' + escapeHtml(d.title || '') + '" placeholder="مثال: تنظيف جمالون ج١ع١" aria-required="true">' +
 
       '<div class="row g-2">' +
         '<div class="col-6">' +
@@ -429,7 +433,7 @@ window.openTaskModal = function(presetData) {
           '<label for="t-assign">المُكلَّف</label>' +
           '<select class="field" id="t-assign" aria-label="الشخص المُكلَّف">' +
             '<option value="">— غير محدد —</option>' +
-            workers.map(w => '<option value="' + w._id + '" data-name="' + (w.name||'') + '"' + (d.assigned_to === w._id ? ' selected' : '') + '>' + (w.name || w.email) + ' (' + (ROLES[w.role]?.label || w.role) + ')</option>').join('') +
+            workers.map(w => '<option value="' + w._id + '" data-name="' + escapeHtml(w.name||'') + '"' + (d.assigned_to === w._id ? ' selected' : '') + '>' + escapeHtml(w.name || w.email || '') + ' (' + (ROLES[w.role]?.label || w.role) + ')</option>').join('') +
           '</select>' +
         '</div>' +
         '<div class="col-6">' +
@@ -460,7 +464,7 @@ window.openTaskModal = function(presetData) {
       '</div>' +
 
       '<label for="t-notes">ملاحظات</label>' +
-      '<textarea class="field" id="t-notes" rows="2" placeholder="تفاصيل إضافية...">' + (d.notes || '') + '</textarea>' +
+      '<textarea class="field" id="t-notes" rows="2" placeholder="تفاصيل إضافية...">' + escapeHtml(d.notes || '') + '</textarea>' +
 
       '<div class="d-flex gap-2 justify-content-end mt-3">' +
         '<button class="action-btn" onclick="closeModal()" aria-label="إلغاء">إلغاء</button>' +
