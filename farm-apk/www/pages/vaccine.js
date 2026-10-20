@@ -32,7 +32,15 @@ function renderVaccPage(s){
     </div>`:''
   );
   const el=document.getElementById('content');
-  // STREAM v3 header
+  const done=vaccines.filter(v=>v.status==='done').reduce((t,v)=>t+(+v.count||0),0);
+  const pend=vaccines.filter(v=>v.status==='pending').reduce((t,v)=>t+(+v.count||0),0);
+  const over=vaccines.filter(v=>v.status==='overdue').reduce((t,v)=>t+(+v.count||0),0);
+  const tot=done+pend+over||1;
+
+  // Upcoming in next 7 days
+  const upcoming=vaccines.filter(v=>v.status==='pending'&&v.scheduled_date&&daysUntil(v.scheduled_date)>=0&&daysUntil(v.scheduled_date)<=7);
+
+  // STREAM v3 header — after done/pend/over/upcoming are known
   const _vacState = over>0?'act':(pend>0||upcoming.length?'watch':'ok');
   const _vacStreamHead = renderStreamHead({
     state: _vacState,
@@ -55,13 +63,6 @@ function renderVaccPage(s){
       vaccines.filter(function(v){return v.status==='overdue';}).slice(0,6).map(function(v){return { href:'#', kind:'health', av:'⏰', tag: v.name||v.vaccine||'—', why:'متأخر '+(v.scheduled_date||'') }}),
       upcoming.slice(0,6).map(function(v){return { href:'#', kind:'weight', av:'📅', tag: v.name||v.vaccine||'—', why: v.scheduled_date||'' }})
     ).slice(0,12)}) : '';
-  const done=vaccines.filter(v=>v.status==='done').reduce((t,v)=>t+(+v.count||0),0);
-  const pend=vaccines.filter(v=>v.status==='pending').reduce((t,v)=>t+(+v.count||0),0);
-  const over=vaccines.filter(v=>v.status==='overdue').reduce((t,v)=>t+(+v.count||0),0);
-  const tot=done+pend+over||1;
-
-  // Upcoming in next 7 days
-  const upcoming=vaccines.filter(v=>v.status==='pending'&&v.scheduled_date&&daysUntil(v.scheduled_date)>=0&&daysUntil(v.scheduled_date)<=7);
 
   const filtered=vaccFilter==='all'?vaccines:vaccines.filter(v=>v.status===vaccFilter);
 
