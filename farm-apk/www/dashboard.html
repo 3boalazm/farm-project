@@ -277,12 +277,15 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
 
   renderPageHeaderV2({
     title: 'مرحباً ' + escapeHtml(getUser().name||'') + ' 👋',
-    description: escapeHtml(s.farmName||'') + ' — ' + todayAr(),
-    secondaryActions: `<a href="diary.html" class="action-btn" style="background:rgba(16,185,129,.1);border-color:rgba(16,185,129,.3);color:var(--orange)"><i class="bi bi-journal-text"></i> يومية المزرعة</a>
-     <a href="assistant.html" class="action-btn" style="background:rgba(52,211,153,.1);border-color:rgba(52,211,153,.3);color:var(--green)"><i class="bi bi-robot"></i> المساعد الذكي</a>
-     ${can('animals') ? `<button class="action-btn" onclick="openUnifiedBirthModal('goat')" style="background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.35);color:var(--yellow)"><i class="bi bi-stars"></i> مواليد</button>
-       <button class="action-btn danger" onclick="openMarkDeathDash()"><i class="bi bi-x-octagon"></i> نفوق</button>` : ''}`,
-    primaryAction: can('animals') ? `<button class="action-btn primary" onclick="openAddAnimalDash()"><i class="bi bi-plus-lg"></i> إضافة حيوان</button>` : ''
+    // HOME v3: the daybar below carries the date and the clock; the header
+    // keeps only the farm's name so nothing is said twice above the fold.
+    description: escapeHtml(s.farmName||''),
+    secondaryActions: `<a href="diary.html" class="action-btn"><i class="bi bi-journal-text"></i> يومية المزرعة</a>
+     <a href="assistant.html" class="action-btn"><i class="bi bi-robot"></i> المساعد الذكي</a>`,
+    // HOME v3: no primary action here. The quick strip below is the single
+    // place for "do something now" — five buttons in the header plus a strip
+    // on the page meant the same action appeared twice above the fold.
+    primaryAction: ''
   });
 
   // Build Breed Data for table/chart
@@ -329,120 +332,177 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
   `).join('');
 
   el.innerHTML = `
-    <div class="dash-tabs" role="tablist" aria-label="أقسام لوحة التحكم">
+    ${(() => {
+      /* ══════════════════════════════════════════════════════════════
+         HOME v3 (2026-10-20) — the page is no longer "five tabs of cards".
+         It is one decision stream that answers, in order:
+           1 · daybar   — what day is it, and should I worry? (score pill)
+           2 · focus    — the ONE decision of the day + a verb, then 2 next
+           3 · pulse    — today's six numbers as an instrument strip (no
+                          card chrome, hairline separators) + the real
+                          7-day milk sparkline
+           4 · quick    — glove-sized actions, permission-gated
+           5 · attention— the animals that actually need a human, as a
+                          horizontal strip that scrolls on a phone
+         Everything below (tabs, panels, alerts, finance) keeps its ids and
+         content: 10 assertions in 4 specs open panels by #dash-tab-N, and
+         #dash-alerts is the target of the unified decision engine.
+         Variable names carry the suffix H — this file's convention for
+         self-contained IIFE scopes.
+         ══════════════════════════════════════════════════════════════ */
+      const nowH = new Date();
+      const dayH = pageNow(nowH);
+      const stateH = healthScore >= 75 ? 'ok' : (healthScore >= 60 ? 'watch' : 'act');
+
+      // who needs a human right now (active health record OR active weight alert)
+      const _tagsH = new Set((health || []).filter(r => r.status === 'active').map(r => r.animal_tag));
+      const _widsH = new Set((weightAlerts || []).filter(a => a.status === 'active').map(a => a.animal_id));
+      const attH = (animals || []).filter(a => a.status === 'alive' && (_tagsH.has(a.tag) || _widsH.has(a._id)));
+      const openTasksH = (dailyTasks || []).filter(t => t.status !== 'done');
+      const overdueH = openTasksH.filter(t => t.date && t.date < today);
+
+      // 7 daily milk totals → the shared sparkline. Day keys come from
+      // pageNow().isoDays() — ISO storage keys, never pad2(), which renders
+      // Arabic-Indic digits for the SCREEN and silently produced an empty
+      // trend band when it was used to match a production row's date.
+      const daysH = dayH.isoDays(7);
+      const seriesH = daysH.map(ds => (production || []).filter(x => x.type === 'milk' && x.date === ds).reduce((t, x) => t + (+x.quantity || 0), 0));
+      const hasMilkH = seriesH.some(v => v > 0);
+      const milkTodayH = seriesH[seriesH.length - 1] || 0;
+
+      // ── the ONE decision ────────────────────────────────────────────
+      const A = priorityAlerts || [];
+      let fState = 'calm', fTitle = '', fWhy = '', fCta = null, fNext = [];
+      if (A.length) {
+        const first = A[0];
+        fState = first.severity === 'critical' ? 'act' : (first.severity === 'watch' ? 'watch' : 'ok');
+        fTitle = ar(A.length) + (A.length === 1 ? ' أولوية تحتاج قرارًا اليوم'
+          : A.length === 2 ? ' أولويتان تحتاجان قرارًا اليوم' : ' أولويات تحتاج قرارًا اليوم');
+        fWhy = first.message || first.title || '';
+        fCta = { href: first.actionHref || '#dash-alerts', label: first.actionLabel || 'اعرض التفاصيل', icon: first.icon || 'bi-arrow-left-circle' };
+        fNext = A.slice(1, 3).map(a => ({ href: a.actionHref || '#dash-alerts', label: a.title || '', icon: a.icon || 'bi-circle' }));
+      } else if (attH.length) {
+        fState = 'watch';
+        fTitle = ar(attH.length) + (attH.length === 1 ? ' حيوان يحتاج انتباهًا اليوم'
+          : attH.length === 2 ? ' حيوانان يحتاجان انتباهًا اليوم' : ' حيوانات تحتاج انتباهًا اليوم');
+        fWhy = 'حالة صحية نشطة أو فقدان وزن — الشريط تحت يعرضهم واحدًا واحدًا.';
+        fCta = { href: 'health.html', label: 'افتح السجل الصحي', icon: 'bi-heart-pulse' };
+      } else if (overdueH.length) {
+        fState = 'watch';
+        fTitle = ar(overdueH.length) + (overdueH.length === 1 ? ' مهمة متأخرة عن موعدها'
+          : overdueH.length === 2 ? ' مهمتان متأخرتان عن موعدهما' : ' مهام متأخرة عن موعدها');
+        fWhy = (overdueH[0].title || 'أول مهمة متأخرة') + (overdueH.length > 1 ? ' — و' + ar(overdueH.length - 1) + ' غيرها' : '');
+        fCta = { href: 'tasks.html', label: 'اعرض المهام', icon: 'bi-check2-square' };
+      } else {
+        fState = 'calm';
+        fTitle = 'لا شيء يحتاج قرارًا اليوم';
+        fWhy = 'لا أولويات مفتوحة ولا حيوان تحت العلاج ولا مهام متأخرة — سجّل اليوم العادي من الإجراءات السريعة.';
+        fCta = { href: 'diary.html', label: 'افتح يومية المزرعة', icon: 'bi-journal-text' };
+      }
+
+      // The markup itself is built by the shared PAGE STREAM builders
+      // (shared.js · PAGE STREAM V3): this block computes the numbers, the
+      // builder owns the language, so all 37 pages speak it identically.
+      return renderStream({
+        id: 'dash-home',
+        state: stateH,
+        day: todayAr(),
+        pill: { value: ar(healthScore), max: '/١٠٠', label: healthLabel, title: 'حالة المزرعة' },
+        chips: [
+          { icon: 'bi-heart-pulse', text: ar(alive.length) + ' حيّ' },
+          { icon: 'bi-activity', text: ar((animals || []).length) + ' إجمالي' },
+          attH.length ? { icon: 'bi-exclamation-triangle', text: ar(attH.length) + ' يحتاج انتباه', alert: true } : null,
+        ].filter(Boolean),
+        focus: { state: fState, eyebrow: 'قرار اليوم', aria: 'قرار اليوم', title: fTitle, why: fWhy, cta: fCta, next: fNext },
+        pulse: [
+          { label: 'مواليد', value: ar(todaySummary.births), foot: 'اليوم', state: todaySummary.births > 0 ? 'good' : 'flat', icon: 'bi-stars' },
+          { label: 'نفوق', value: ar(todaySummary.deaths), foot: 'اليوم', state: todaySummary.deaths > 0 ? 'bad' : 'flat', icon: 'bi-droplet' },
+          { label: 'لبن', value: hasMilkH ? ar(Math.round(milkTodayH)) : '—', foot: 'لتر اليوم', state: milkTodayH > 0 ? 'good' : 'flat', icon: 'bi-egg-fried' },
+          { label: 'إيرادات', value: todaySummary.income.toLocaleString('ar-EG'), foot: s.currency + ' اليوم', state: todaySummary.income > 0 ? 'good' : 'flat', icon: 'bi-arrow-down-circle' },
+          { label: 'مصروفات', value: todaySummary.expense.toLocaleString('ar-EG'), foot: s.currency + ' اليوم', state: todaySummary.expense > 0 ? 'watch' : 'flat', icon: 'bi-arrow-up-circle' },
+          { label: 'مهام مفتوحة', value: ar(openTasksH.length), foot: overdueH.length ? ar(overdueH.length) + ' متأخرة' : 'لا متأخرات', state: overdueH.length ? 'bad' : 'flat', icon: 'bi-check2-square' },
+        ],
+        pulseAria: 'نبض اليوم',
+        trend: {
+          label: 'لبن — ٧ أيام', ariaLabel: 'إنتاج اللبن خلال آخر سبعة أيام', series: seriesH,
+          emptyText: 'لا يوجد إنتاج لبن مسجّل هذا الأسبوع', emptyHref: 'production.html', emptyLabel: 'سجّل الإنتاج',
+        },
+        // glove-sized actions — the single place for "do something now";
+        // gated with firebase.js can() so a worker never sees a dead button
+        quick: [
+          { label: 'إضافة حيوان', icon: 'bi-plus-lg', onclick: 'openAddAnimalDash()', gate: 'animals' },
+          { label: 'مولود جديد', icon: 'bi-balloon-heart', onclick: "openUnifiedBirthModal('goat')", gate: 'animals' },
+          { label: 'تسجيل نفوق', icon: 'bi-x-octagon', onclick: 'openMarkDeathDash()', gate: 'animals' },
+          { label: 'تسجيل إنتاج', icon: 'bi-egg-fried', href: 'production.html' },
+          { label: 'تسجيل وزن', icon: 'bi-speedometer2', href: 'animals.html' },
+          { label: 'حالة صحية', icon: 'bi-heart-pulse', href: 'health.html' },
+          { label: 'تحصين', icon: 'bi-shield-plus', href: 'vaccine.html' },
+          { label: 'إيراد / مصروف', icon: 'bi-cash-coin', href: 'finance-entry.html', gate: 'finance' },
+          { label: 'المهام', icon: 'bi-check2-square', href: 'tasks.html' },
+        ],
+        // the animals that need a human, as a strip that scrolls on a phone
+        att: {
+          title: 'يحتاج انتباه', aria: 'حيوانات تحتاج انتباه',
+          items: attH.slice(0, 14).map(a => {
+            const sick = _tagsH.has(a.tag), lost = _widsH.has(a._id);
+            return {
+              href: 'animal-detail.html?id=' + encodeURIComponent(a._id),
+              kind: sick ? 'health' : 'weight',
+              av: a.species === 'goat' ? '🐐' : '🐑',
+              tag: a.tag || '—',
+              why: sick && lost ? 'حالة صحية + فقدان وزن' : (sick ? 'حالة صحية نشطة' : 'فقدان وزن'),
+            };
+          }),
+        },
+      }) + `
+
+    <nav class="dash-nav" aria-label="أقسام تفصيلية">
+      <h2 class="dash-nav__title"><i class="bi bi-sliders"></i> التفاصيل والمؤشرات</h2>
+      <div class="dash-tabs" role="tablist" aria-label="أقسام لوحة التحكم">`;
+    })()}
       <button type="button" class="dash-tab is-active" role="tab" id="dash-tab-0" aria-selected="true" aria-controls="dash-panel-0" tabindex="0">نظرة عامة</button>
       <button type="button" class="dash-tab" role="tab" id="dash-tab-1" aria-selected="false" aria-controls="dash-panel-1" tabindex="-1">الأولويات والتنبؤ</button>
       <button type="button" class="dash-tab" role="tab" id="dash-tab-2" aria-selected="false" aria-controls="dash-panel-2" tabindex="-1">المؤشرات التنفيذية</button>
       <button type="button" class="dash-tab" role="tab" id="dash-tab-3" aria-selected="false" aria-controls="dash-panel-3" tabindex="-1">التحليلات</button>
       <button type="button" class="dash-tab" role="tab" id="dash-tab-4" aria-selected="false" aria-controls="dash-panel-4" tabindex="-1">السجلات والنشاط</button>
     </div>
+    </nav>
     <div class="dash-tab-panel" id="dash-panel-0" role="tabpanel" aria-labelledby="dash-tab-0">
     ${(() => {
-      /* ── LAYER 1 · STATUS — "should I worry?" ─────────────────────────
-         First thing above the fold, and in an RTL page the FIRST column is
-         the TOP-RIGHT quadrant, which is where an Arabic reader's eye lands
-         (the F-pattern mirrors). So the single north-star number — the herd
-         health score — sits there, 3rem tall, coloured by state and never by
-         colour alone (icon + word + data-state attribute for the border).
-         Next to it: today's four counters and a real 7-day trend, because a
-         red box on its own cannot tell a blip from a slide.
-         Self-contained variable names (suffix S) per this file's convention. */
-      const _tagsS = new Set((health||[]).filter(r=>r.status==='active').map(r=>r.animal_tag));
-      const _widsS = new Set((weightAlerts||[]).filter(a=>a.status==='active').map(a=>a.animal_id));
-      const needS = (animals||[]).filter(a=>a.status==='alive'&&(_tagsS.has(a.tag)||_widsS.has(a._id))).length;
-      const overdueS = (dailyTasks||[]).filter(t=>t.status!=='done'&&t.date&&t.date<today).length;
-      const stateS = healthScore>=75?'ok':(healthScore>=60?'watch':'act');
-      const iconS  = stateS==='ok'?'bi-shield-check':(stateS==='watch'?'bi-exclamation-triangle':'bi-exclamation-octagon');
-      const nowS = new Date();
-      const clockS = pad2(nowS.getHours())+':'+pad2(nowS.getMinutes());
-      // The hero must not promise a list that is not there: `priorityAlerts`
-      // (the unified operational ranking) and `needS` (animals with an active
-      // health/weight record) are computed from different sources, so when the
-      // ranking came back empty the link goes to the health register instead
-      // of scrolling to "لا توجد تنبيهات".
-      const targetS = (priorityAlerts && priorityAlerts.length) ? '#dash-alerts' : 'health.html';
-      const goS     = (priorityAlerts && priorityAlerts.length) ? 'اعرض القائمة' : 'اعرض السجل الصحي';
-      const actionS = needS>0
-        ? `<a class="dash-hero__link" href="${targetS}">${ar(needS)} حيوان يحتاج انتباهًا اليوم — ${goS}</a>`
-        : (overdueS>0
-            ? `<a class="dash-hero__link" href="tasks.html">${ar(overdueS)} مهمة متأخرة عن موعدها</a>`
-            : `<span class="dash-hero__link is-calm"><i class="bi bi-check2-circle me-1"></i>لا شيء يحتاج قرارًا اليوم</span>`);
-
-      // 7 daily milk totals → an inline SVG sparkline. No chart library, no
-      // canvas: it has to survive print, dark mode and a 320px phone.
-      // ISO day keys, NOT pad2(): pad2 renders Arabic-Indic digits for the
-      // screen, and a production row's `date` is stored as 2026-10-20. Using
-      // the display helper here would silently produce an empty trend band.
-      const isoS=(d)=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-      const daysS=[]; for(let i=6;i>=0;i--){const d=new Date(nowS); d.setDate(d.getDate()-i); daysS.push(isoS(d));}
-      const seriesS=daysS.map(ds=>(production||[]).filter(x=>x.type==='milk'&&x.date===ds).reduce((t,x)=>t+(+x.quantity||0),0));
-      const hasMilkS=seriesS.some(v=>v>0);
-      const last3S=seriesS.slice(-3).reduce((t,v)=>t+v,0), prev3S=seriesS.slice(0,3).reduce((t,v)=>t+v,0);
-      const deltaS=(hasMilkS&&prev3S>0)?Math.round(((last3S-prev3S)/prev3S)*100):null;
-      const sparkS=(()=>{
-        if(!hasMilkS) return '';
-        const w=252,h=46,max=Math.max.apply(null,seriesS),min=Math.min.apply(null,seriesS),span=(max-min)||1;
-        const pts=seriesS.map((v,i)=>[((i/(seriesS.length-1))*w).toFixed(1),(h-6-((v-min)/span)*(h-14)).toFixed(1)]);
-        const line=pts.map(pt=>pt[0]+','+pt[1]).join(' ');
-        const last=pts[pts.length-1];
-        return `<svg class="dash-spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="إنتاج اللبن خلال آخر سبعة أيام">
-          <polygon class="dash-spark__area" points="0,${h} ${line} ${w},${h}"></polygon>
-          <polyline class="dash-spark__line" points="${line}"></polyline>
-          <circle class="dash-spark__dot" cx="${last[0]}" cy="${last[1]}" r="3.2"></circle>
-        </svg>`;
-      })();
-
-      return `
-      <div class="dash-status mb-4">
-        <div class="row g-3">
-          <div class="col-12 col-lg-4">
-            <div class="wonder-card dash-hero h-100" data-state="${stateS}">
-              <div class="dash-hero__label">حالة المزرعة</div>
-              <div class="dash-hero__value" style="color:${healthColor}">${ar(healthScore)}<span class="dash-hero__unit">/١٠٠</span></div>
-              <div class="dash-hero__state" style="color:${healthColor}"><i class="bi ${iconS} me-1"></i>${healthLabel}</div>
-              <div class="dash-hero__next">${actionS}</div>
-              <div class="dash-hero__meta"><i class="bi bi-clock-history me-1"></i>آخر تحديث ${clockS}</div>
-            </div>
-          </div>
-          <div class="col-12 col-lg-8">
-            <div class="wonder-card dash-kpis-card h-100">
-              <div class="dash-kpis__head">
-                <span>ملخص اليوم — ${todayAr()}</span>
-              </div>
-              <div class="dash-kpis">
-                <div class="dash-kpi" data-state="${todaySummary.births>0?'good':'flat'}">
-                  <span class="dash-kpi__label"><i class="bi bi-stars me-1"></i>مواليد</span>
-                  <span class="dash-kpi__value" style="color:var(--yellow)">${ar(todaySummary.births)}</span>
-                  <span class="dash-kpi__foot">اليوم</span>
-                </div>
-                <div class="dash-kpi" data-state="${todaySummary.deaths>0?'bad':'flat'}">
-                  <span class="dash-kpi__label"><i class="bi bi-droplet me-1"></i>نفوق</span>
-                  <span class="dash-kpi__value" style="color:${todaySummary.deaths>0?'var(--red)':'var(--text)'}">${ar(todaySummary.deaths)}</span>
-                  <span class="dash-kpi__foot">اليوم</span>
-                </div>
-                <div class="dash-kpi" data-state="${todaySummary.income>0?'good':'flat'}">
-                  <span class="dash-kpi__label"><i class="bi bi-arrow-down-circle me-1"></i>إيرادات</span>
-                  <span class="dash-kpi__value" style="color:var(--green)">${todaySummary.income.toLocaleString('ar-EG')}</span>
-                  <span class="dash-kpi__foot">${s.currency} اليوم</span>
-                </div>
-                <div class="dash-kpi" data-state="${todaySummary.expense>0?'watch':'flat'}">
-                  <span class="dash-kpi__label"><i class="bi bi-arrow-up-circle me-1"></i>مصروفات</span>
-                  <span class="dash-kpi__value" style="color:var(--orange)">${todaySummary.expense.toLocaleString('ar-EG')}</span>
-                  <span class="dash-kpi__foot">${s.currency} اليوم</span>
-                </div>
-              </div>
-              <div class="dash-trend" dir="ltr">
-                <div class="dash-trend__head" dir="rtl">
-                  <span><i class="bi bi-graph-up me-1"></i>إنتاج اللبن — آخر ٧ أيام</span>
-                  ${deltaS===null?'':`<span class="dash-trend__delta" data-dir="${deltaS>=0?'up':'down'}">${deltaS>=0?'▲':'▼'} ${ar(Math.abs(deltaS))}٪</span>`}
-                </div>
-                ${hasMilkS?sparkS:`<div class="dash-trend__empty" dir="rtl">لا يوجد إنتاج لبن مسجّل هذا الأسبوع — <a href="production.html">سجّل الإنتاج</a> ليظهر الاتجاه هنا.</div>`}
-                ${hasMilkS?`<div class="dash-trend__axis"><span>قبل ٧ أيام</span><span>اليوم</span></div>`:''}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>`;
+      /* ── LAYER 1 · TIMELINE (HOME v3) ──────────────────────────────────
+         The status layer moved above the tabs: the daybar carries the score,
+         the focus card carries the one decision, and the pulse strip carries
+         today's six numbers. What panel 0 was missing entirely is *what
+         already happened today* — so the first thing inside the panel is now
+         a real timeline of activity_log, not a fourth restatement of the
+         same counters. Same rule as everywhere else in this file: nothing
+         renders unless a computed number says so. Suffix T for scope. */
+      /* The markup is the shared streamTimeline() builder (shared.js · PAGE
+         STREAM V3); this block only maps activity_log rows onto it. Same
+         rule as everywhere else in this file: nothing renders unless a
+         computed number says so. Suffix T for scope. */
+      const iconT = (a) => a === 'add' ? 'bi-plus-circle' : a === 'edit' ? 'bi-pencil-square'
+        : a === 'delete' ? 'bi-trash3' : a === 'login' ? 'bi-box-arrow-in-right' : 'bi-dot';
+      const kindT = (a) => a === 'delete' ? 'bad' : a === 'add' ? 'good' : a === 'login' ? 'info' : 'flat';
+      const hhmmT = (ts) => {
+        if (!ts) return '';
+        const d = new Date(ts);
+        return isNaN(d.getTime()) ? '' : pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+      };
+      return streamTimeline({
+        className: 'mb-4',
+        title: 'الحركة', aria: 'حركة اليوم',
+        items: (recentActivity || []).slice(0, 8).map(r => ({
+          kind: kindT(r.action), time: hhmmT(r.timestamp), icon: iconT(r.action),
+          text: r.description || r.action || '—',
+          meta: (r.userName || '') + (r.resource ? ' · ' + r.resource : ''),
+        })),
+        empty: {
+          className: 'mb-4', text: 'لا حركة مسجّلة بعد اليوم',
+          small: 'أي إضافة أو تعديل في التطبيق يظهر هنا تلقائيًا',
+          href: 'reports.html', label: 'التقارير',
+        },
+      });
     })()}
     ${(() => {
       /* ── LAYER 2 · CONTEXT — why the number moved ─────────────────────

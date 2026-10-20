@@ -39,6 +39,26 @@ function renderBreedingPage(s){
   );
 
   const el=document.getElementById('content');
+  const _breedState = upcoming.length?'watch':(returnHeat.length?'act':(pregnant.length?'ok':'calm'));
+  const _breedStreamHead = renderStreamHead({
+    state: _breedState,
+    day: 'التكاثر — '+(typeof todayAr==='function'?todayAr():todayStr()),
+    pill: { value: ar(pregnant.length), max:'/ '+ar(breedingRecs.length), label:'حامل', title:'الحوامل الآن' },
+    chips: [
+      { icon:'bi-heart', text: ar(breedingRecs.length)+' سجل' },
+      { icon:'bi-stars', text: ar(born.reduce(function(t,r){return t+(+r.offspring_count||0);},0))+' مولود' },
+      upcoming.length?{ icon:'bi-alarm', text: ar(upcoming.length)+' ولادة قريبة', alert:true }:null,
+      returnHeat.length?{ icon:'bi-arrow-repeat', text: ar(returnHeat.length)+' رجع شياع', alert:true }:null,
+    ].filter(Boolean),
+    focus: upcoming.length?{ state:'watch', eyebrow:'قرار التكاثر', title: ar(upcoming.length)+(upcoming.length===1?' ولادة متوقعة خلال ١٥ يوم':' ولادات متوقعة'), why:'حضّر عنبر الولادة والمتابعة اليومية.', cta:{ href:'births.html', label:'اعرض المواليد', icon:'bi-stars' } }: (returnHeat.length?{ state:'act', eyebrow:'قرار التكاثر', title: ar(returnHeat.length)+(returnHeat.length===1?' رجع شياع':' رجع شياع'), why:'يحتاج إعادة تلقيح — راجع السجلات المميزة.', cta:{ onclick:'openBModal()', label:'سجل تقريع', icon:'bi-plus-lg' } }: (pregnant.length?{ state:'ok', eyebrow:'التكاثر مستقر', title: ar(pregnant.length)+' حامل — لا ولادات مستعجلة', why: 'متابعة دورية حتى موعد الولادة.', cta:{ href:'births.html', label:'سجل ولادة', icon:'bi-balloon-heart' } }:null)),
+    quick: [
+      { label:'تسجيل تقريع', icon:'bi-plus-lg', onclick:'openBModal()' },
+      { label:'تسجيل ولادة', icon:'bi-stars', onclick:'openBirthModal()' },
+      { label:'تقرير خصوبة', icon:'bi-graph-up', onclick:'showFertilityReport()' },
+      { label:'تصدير', icon:'bi-filetype-csv', onclick:'exportBreedingCSV()' },
+    ],
+  });
+  const _breedAtt = upcoming.length ? streamAttention({ title:'ولادات قريبة', count: upcoming.length, items: upcoming.slice(0,12).map(function(r){ return { href:'births.html', kind:'health', av:'🐐', tag: r.female_tag||r.animal_tag||'—', why: 'متوقع '+r.expected_birth }; }) }) : '';
   const filtered=bFilter==='all'?breedingRecs:breedingRecs.filter(r=>r.status===bFilter);
 
   var statsHtml=['#مجموعات التكاثر',ar(breedingRecs.length),'bi-collection-fill','var(--orange)','حوامل الآن',ar(pregnant.length),'bi-heart-fill','var(--blue)','مواليد ناجحة',ar(born.length),'bi-check-circle-fill','var(--green)','إجمالي المواليد',ar(born.reduce((t,r)=>t+(+r.offspring_count||0),0)),'bi-people-fill','var(--yellow)','توائم',ar(twins.length),'bi-people-fill','var(--purple)','رجع شياع',ar(returnHeat.length),'bi-arrow-repeat','var(--red)'];
@@ -113,7 +133,7 @@ function renderBreedingPage(s){
     }).join('');
   }
 
-  el.innerHTML='<div class="row g-3 mb-4">'+statsCards+'</div>'+upcomingHtml+returnHeatHtml+filtersHtml+recHtml;
+  el.innerHTML=_breedStreamHead+_breedAtt+'<div class="row g-3 mb-4">'+statsCards+'</div>'+upcomingHtml+returnHeatHtml+filtersHtml+recHtml;
 }
 
 function daysUntil(d){return Math.ceil((new Date(d)-new Date())/86400000);}

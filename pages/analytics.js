@@ -54,7 +54,24 @@ function renderAnalyticsPage(el) {
   const latestOps = a.operationalEfficiency[a.operationalEfficiency.length-1];
   const latestRisk = a.riskTrend[a.riskTrend.length-1];
 
-  el.innerHTML = `
+  // STREAM header — analytics reads as a decision page too
+  const _anaState = a.riskTrend&&a.riskTrend[a.riskTrend.length-1]&&a.riskTrend[a.riskTrend.length-1].totalAlerts>0?'watch':'ok';
+  const _anaStreamHead = renderStreamHead({
+    state: _anaState,
+    day: 'التحليلات — '+(typeof todayAr==='function'?todayAr():todayStr()),
+    pill: { value: latestProd?ar(latestProd.index):'—', max:'/١٠٠', label: latestProd&&latestProd.index>=60?'مستقر':'متابعة', title:'مؤشر الإنتاجية' },
+    chips: [
+      { icon:'bi-heart-pulse', text: latestHealth&&latestHealth.recoveryRate!==null?ar(latestHealth.recoveryRate)+'٪ تعافي':'—' },
+      { icon:'bi-check-square', text: latestOps&&latestOps.completionRate!==null?ar(latestOps.completionRate)+'٪ إنجاز':'—' },
+      latestRisk&&latestRisk.totalAlerts?{ icon:'bi-exclamation-triangle', text: ar(latestRisk.totalAlerts)+' تنبيه', alert:true }:null,
+    ].filter(Boolean),
+    quick: [
+      { label:'الرئيسية', icon:'bi-house', href:'dashboard.html' },
+      { label:'تصدير Excel', icon:'bi-file-earmark-excel', onclick:'exportAnalyticsExcel()' },
+      { label:'واتساب', icon:'bi-whatsapp', onclick:'shareAnalyticsWhatsApp()' },
+    ],
+  });
+  el.innerHTML = _anaStreamHead+`
   <div class="d-flex gap-2 flex-wrap mb-4">
     ${[['week','أسبوعي'],['month','شهري'],['quarter','فصلي'],['year','سنوي']].map(([g,l])=>`<button class="filter-btn${_granularity===g?' active':''}" onclick="switchGranularity('${g}')">${l}</button>`).join('')}
   </div>

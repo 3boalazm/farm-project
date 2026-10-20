@@ -76,10 +76,34 @@ function renderBarnsPage(){
   });
   const el=document.getElementById('content');
 
+  // STREAM header — barn occupancy as a decision page
+  const _barnAlive = alive.length;
+  const _barnFull = BARNS.map(function(b){ var c=alive.filter(function(a){return b.stalls.includes(a.barn);}).length; return {id:b.id, total:c, pct:Math.min(100,Math.round(c/(MAX_STALL*2)*100))}; });
+  const _barnOver = _barnFull.filter(function(b){return b.pct>=90;});
+  const _barnState = _barnOver.length?'act':(alive.filter(function(a){return !a.barn;}).length?'watch':'ok');
+  const _barnStreamHead = renderStreamHead({
+    state: _barnState,
+    day: 'الجمالونات — '+(typeof todayAr==='function'?todayAr():todayStr()),
+    pill: { value: ar(_barnAlive), label:'في العنابر', title:'الرؤوس الحية' },
+    chips: [
+      { icon:'bi-grid-3x3-gap', text: '٥ جمالونات' },
+      { icon:'bi-columns-gap', text: '١٠ عنابر' },
+      _barnOver.length?{ icon:'bi-exclamation-triangle', text: ar(_barnOver.length)+' ممتلئ', alert:true }:null,
+      alive.filter(function(a){return !a.barn;}).length?{ icon:'bi-question-circle', text: ar(alive.filter(function(a){return !a.barn;}).length)+' غير محدد', alert:true }:null,
+    ].filter(Boolean),
+    focus: _barnOver.length?{ state:'act', eyebrow:'قرار الجمالونات', title: ar(_barnOver.length)+( _barnOver.length===1?' عنبر ممتلئ':' عنابر ممتلئة'), why:'تجاوز '+ar(MAX_STALL)+' رأس للعنبر — يلزم نقل فوري لتجنّب التكدّس.', cta:{ onclick:'openTransferModal()', label:'نقل حيوانات', icon:'bi-arrow-left-right' } } : ( alive.filter(function(a){return !a.barn;}).length?{ state:'watch', eyebrow:'قرار الجمالونات', title: ar(alive.filter(function(a){return !a.barn;}).length)+(alive.filter(function(a){return !a.barn;}).length===1?' حيوان بلا عنبر':' حيوان بلا عنبر'), why:'لم يُسند إلى عنبر — حدّد له عنبرًا من الخريطة.', cta:{ onclick:'openTransferModal()', label:'توزيع', icon:'bi-geo-alt' } }:null),
+    quick: [
+      { label:'نقل حيوانات', icon:'bi-arrow-left-right', onclick:'openTransferModal()', gate:'animals' },
+      { label:'القطيع', icon:'bi-list-ul', href:'animals.html' },
+      { label:'تصدير', icon:'bi-filetype-csv', onclick:'exportStallsCSV()' },
+    ],
+  });
+  const _barnAtt = _barnOver.length?streamAttention({ title:'عنابر ممتلئة', count: _barnOver.length, items: _barnOver.map(function(b){ return { href:'#', kind:'health', av:'🏗️', tag: b.id, why: b.total+' رأس — '+b.pct+'٪ إشغال' }; }) }):'';
+
   const allInStalls=alive.filter(a=>a.barn).length;
   const unassigned=alive.filter(a=>!a.barn).length;
 
-  el.innerHTML=`
+  el.innerHTML=_barnStreamHead+_barnAtt+`
   <div class="row g-3 mb-4">
     <div class="col-6 col-md-3"><div class="summary-card"><div class="summary-number accent-text">${ar(5)}</div><small class="text-gray">جمالونات</small></div></div>
     <div class="col-6 col-md-3"><div class="summary-card"><div class="summary-number" style="color:var(--blue)">${ar(10)}</div><small class="text-gray">عنابر</small></div></div>

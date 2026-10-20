@@ -2627,3 +2627,422 @@ body.demo-mode{padding-bottom:56px}
   margin:var(--sp-2) 0 0; font-size:var(--fs-xs); line-height:1.8;
   color:var(--text-secondary);
 }
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   §17 · HOME v3 — the decision stream (dashboard.html, 2026-10-20)
+   ──────────────────────────────────────────────────────────────────────
+   The home page stopped being "five tabs of cards". Above the tabs there is
+   now one stream that answers, in reading order for an RTL page:
+     .daybar    what day is it, and should I worry?  (score pill + herd chips)
+     .focus     the ONE decision of the day, with a verb, then two next
+     .pulse     today's six numbers as an instrument strip — hairlines, no
+                card chrome — plus the real 7-day milk sparkline
+     .quick     glove-sized actions (≥72px), permission-gated in the template
+     .att       the animals that need a human, as a strip that scrolls
+   and inside panel 0, .tl is the day's timeline (activity_log) — what
+   actually happened, which the old page never showed.
+   Everything is token-driven, so dark/light, contrast and density prefs keep
+   working, and nothing here styles a bare Bootstrap class (§9's rule).
+   ══════════════════════════════════════════════════════════════════════ */
+.home{display:flex; flex-direction:column; gap:var(--sp-4); margin-bottom:var(--sp-5)}
+/* pages whose body is a form or a register take the head-only variant:
+   identity + decision + actions, then their own content below */
+.home--head{gap:var(--sp-3); margin-bottom:var(--sp-4)}
+.home__title{
+  display:flex; align-items:center; gap:var(--sp-2); margin:0 0 var(--sp-2);
+  font-size:var(--fs-sm); font-weight:var(--fw-bold); color:var(--text-secondary);
+}
+.home__count{
+  padding:0 var(--sp-2); border-radius:999px; font-size:var(--fs-xs);
+  background:var(--surface-base); border:1px solid var(--border-default); color:var(--text-primary);
+}
+
+/* ── 1 · daybar ─────────────────────────────────────────────────────── */
+.daybar{
+  display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp-3) var(--sp-4);
+  padding:var(--sp-3) var(--sp-4);
+  background:var(--surface-raised); color:var(--text-primary);
+  border:1px solid var(--border-default); border-inline-start:4px solid var(--border-subtle);
+  border-radius:var(--r-xl); box-shadow:var(--elev-1);
+}
+.daybar[data-state="ok"]{border-inline-start-color:var(--success)}
+.daybar[data-state="watch"]{border-inline-start-color:var(--warning)}
+.daybar[data-state="act"]{border-inline-start-color:var(--danger)}
+.daybar__when{display:flex; flex-direction:column; gap:2px; min-inline-size:0}
+.daybar__day{font-size:var(--fs-md); font-weight:var(--fw-bold); line-height:1.5}
+.daybar__clock{font-size:var(--fs-xs); color:var(--text-secondary)}
+.statepill{
+  display:inline-flex; align-items:baseline; gap:var(--sp-1-5);
+  padding:var(--sp-2) var(--sp-3); border-radius:999px;
+  background:var(--surface-base); border:1px solid var(--border-default);
+  font-size:var(--fs-sm); color:var(--text-primary);
+}
+.statepill i{align-self:center; font-size:1rem}
+.statepill b{font-size:var(--fs-xl); font-weight:var(--fw-bold); font-variant-numeric:tabular-nums}
+.statepill__max{font-size:var(--fs-xs); color:var(--text-secondary)}
+.statepill em{font-style:normal; font-weight:var(--fw-bold)}
+.statepill[data-state="ok"] b,.statepill[data-state="ok"] em,.statepill[data-state="ok"] i{color:var(--success)}
+.statepill[data-state="watch"] b,.statepill[data-state="watch"] em,.statepill[data-state="watch"] i{color:var(--warning)}
+.statepill[data-state="act"] b,.statepill[data-state="act"] em,.statepill[data-state="act"] i{color:var(--danger)}
+.daybar__herd{display:flex; flex-wrap:wrap; gap:var(--sp-2); margin-inline-start:auto}
+.herdchip{
+  display:inline-flex; align-items:center; gap:var(--sp-1-5);
+  padding:var(--sp-1-5) var(--sp-2-5); border-radius:var(--r-md);
+  font-size:var(--fs-xs); color:var(--text-secondary);
+  background:var(--surface-base); border:1px solid var(--border-hairline);
+}
+.herdchip--alert{color:var(--warning); border-color:var(--warning)}
+
+/* ── 2 · focus: one decision, one verb ──────────────────────────────── */
+.focus{
+  position:relative; display:grid; grid-template-columns:minmax(0,1fr); gap:var(--sp-3);
+  padding:var(--sp-4); overflow:hidden;
+  background:var(--surface-raised); color:var(--text-primary);
+  border:1px solid var(--border-default); border-radius:var(--r-xl); box-shadow:var(--elev-2);
+}
+.focus::before{
+  content:""; position:absolute; inset-block:0; inset-inline-start:0; inline-size:5px;
+  background:var(--border-subtle);
+}
+.focus[data-state="act"]::before{background:var(--danger)}
+.focus[data-state="watch"]::before{background:var(--warning)}
+.focus[data-state="ok"]::before{background:var(--info)}
+.focus[data-state="calm"]::before{background:var(--success)}
+.focus__main{min-inline-size:0}
+.focus__eyebrow{
+  font-size:var(--fs-xs); font-weight:var(--fw-bold); letter-spacing:.04em;
+  color:var(--text-secondary);
+}
+.focus__title{margin:var(--sp-1) 0 var(--sp-2); font-size:var(--fs-xl); font-weight:var(--fw-bold); line-height:1.55}
+.focus__why{margin:0 0 var(--sp-3); font-size:var(--fs-sm); line-height:1.9; color:var(--text-secondary)}
+.focus__cta{
+  display:inline-flex; align-items:center; gap:var(--sp-2);
+  padding:var(--sp-2-5) var(--sp-4); border-radius:var(--r-md);
+  font-family:var(--font-ui); font-size:var(--fs-sm); font-weight:var(--fw-bold);
+  text-decoration:none; color:#fff; background:var(--info); border:1px solid transparent;
+}
+.focus[data-state="act"] .focus__cta{background:var(--danger)}
+.focus[data-state="watch"] .focus__cta{background:var(--warning)}
+.focus[data-state="ok"] .focus__cta{background:var(--info)}
+.focus[data-state="calm"] .focus__cta{background:var(--surface-base); color:var(--text-primary); border-color:var(--border-default)}
+.focus__cta:hover{filter:brightness(1.08)}
+.focus__cta:focus-visible{outline:2px solid var(--focus-ring); outline-offset:2px}
+.focus__next{
+  list-style:none; margin:0; padding:var(--sp-3) 0 0; display:grid; gap:var(--sp-2);
+  border-top:1px dashed var(--border-default);
+}
+.focus__next a{
+  display:flex; align-items:center; gap:var(--sp-1-5); font-size:var(--fs-xs); line-height:1.7;
+  color:var(--text-secondary); text-decoration:none;
+}
+.focus__next a:hover{color:var(--text-primary)}
+.focus__next a:focus-visible{outline:2px solid var(--focus-ring); outline-offset:2px}
+@media (min-width:992px){
+  .focus{grid-template-columns:minmax(0,1.7fr) minmax(0,1fr); align-items:start}
+  .focus__next{border-top:0; border-inline-start:1px dashed var(--border-default); padding:var(--sp-1) 0 var(--sp-1) var(--sp-4)}
+}
+
+/* ── 3 · pulse: an instrument strip, not six cards ──────────────────── */
+.pulse{
+  display:grid; gap:var(--sp-3); padding:var(--sp-3) var(--sp-4);
+  background:var(--surface-raised); color:var(--text-primary);
+  border:1px solid var(--border-default); border-radius:var(--r-xl);
+}
+.pulse__grid{display:grid; grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (min-width:576px){.pulse__grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (min-width:1200px){.pulse__grid{grid-template-columns:repeat(6,minmax(0,1fr))}}
+.pulse__cell{
+  display:flex; flex-direction:column; gap:2px; min-inline-size:0;
+  padding:var(--sp-2) var(--sp-3); border-inline-start:1px solid var(--border-hairline);
+}
+.pulse__cell:first-child{border-inline-start:0; padding-inline-start:0}
+.pulse__label{display:flex; align-items:center; gap:var(--sp-1); font-size:var(--fs-xs); color:var(--text-secondary)}
+.pulse__value{font-size:var(--fs-lg); font-weight:var(--fw-bold); font-variant-numeric:tabular-nums; line-height:1.4}
+.pulse__foot{font-size:var(--fs-xs); color:var(--text-secondary)}
+.pulse__cell[data-state="good"] .pulse__value{color:var(--success)}
+.pulse__cell[data-state="bad"] .pulse__value{color:var(--danger)}
+.pulse__cell[data-state="watch"] .pulse__value{color:var(--warning)}
+.pulse__trend{padding-top:var(--sp-2); border-top:1px solid var(--border-hairline)}
+.pulse__trendhead{
+  display:flex; align-items:center; justify-content:space-between; gap:var(--sp-2);
+  margin-bottom:var(--sp-1); font-size:var(--fs-xs); color:var(--text-secondary);
+}
+.pulse__delta[data-dir="up"]{color:var(--success); font-weight:var(--fw-bold)}
+.pulse__delta[data-dir="down"]{color:var(--danger); font-weight:var(--fw-bold)}
+.pulse__delta[data-dir="flat"]{color:var(--text-secondary)}
+.pulse__empty{font-size:var(--fs-xs); line-height:1.9; color:var(--text-secondary)}
+.pulse__trend .dash-spark{display:block; width:100%; height:40px}
+
+/* ── 4 · quick actions: ≥72px, glove-friendly ───────────────────────── */
+.quick{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--sp-2)}
+@media (min-width:576px){.quick{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media (min-width:992px){.quick{grid-template-columns:repeat(auto-fill,minmax(112px,1fr))}}
+.quick__btn{
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:var(--sp-1-5);
+  min-height:72px; padding:var(--sp-3) var(--sp-2);
+  font-family:var(--font-ui); font-size:var(--fs-xs); font-weight:var(--fw-bold); text-align:center;
+  text-decoration:none; cursor:pointer;
+  color:var(--text-primary); background:var(--surface-raised);
+  border:1px solid var(--border-default); border-radius:var(--r-lg);
+  transition:border-color .15s ease, transform .15s ease;
+}
+.quick__btn i{font-size:1.3rem; color:var(--text-secondary)}
+.quick__btn:hover{border-color:var(--brand); transform:translateY(-1px)}
+.quick__btn:hover i{color:var(--brand)}
+.quick__btn:focus-visible{outline:2px solid var(--focus-ring); outline-offset:2px}
+
+/* ── 5 · attention strip ────────────────────────────────────────────── */
+.att__strip{
+  display:flex; gap:var(--sp-2); overflow-x:auto; padding-bottom:var(--sp-2);
+  scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch;
+}
+.attchip{
+  display:flex; align-items:center; gap:var(--sp-2); flex:0 0 auto; scroll-snap-align:start;
+  padding:var(--sp-2) var(--sp-3); text-decoration:none;
+  color:var(--text-primary); background:var(--surface-raised);
+  border:1px solid var(--border-default); border-inline-start:3px solid var(--danger);
+  border-radius:var(--r-lg);
+}
+.attchip[data-kind="weight"]{border-inline-start-color:var(--warning)}
+.attchip:hover{border-color:var(--brand)}
+.attchip:focus-visible{outline:2px solid var(--focus-ring); outline-offset:2px}
+.attchip__av{font-size:1.25rem; line-height:1}
+.attchip__body{display:flex; flex-direction:column; line-height:1.5; min-inline-size:0}
+.attchip__body b{font-size:var(--fs-sm); font-weight:var(--fw-bold)}
+.attchip__body small{font-size:var(--fs-xs); color:var(--text-secondary)}
+
+/* ── timeline (panel 0) ─────────────────────────────────────────────── */
+.tl{
+  padding:var(--sp-3) var(--sp-4);
+  background:var(--surface-raised); color:var(--text-primary);
+  border:1px solid var(--border-default); border-radius:var(--r-xl);
+}
+.tl__list{list-style:none; margin:0; padding:0; display:grid; gap:0}
+.tl__item{
+  display:grid; grid-template-columns:46px 26px minmax(0,1fr); gap:var(--sp-2);
+  align-items:start; padding-block:var(--sp-2); border-bottom:1px dashed var(--border-hairline);
+}
+.tl__item:last-child{border-bottom:0}
+.tl__time{padding-top:3px; font-size:var(--fs-xs); color:var(--text-secondary); font-variant-numeric:tabular-nums}
+.tl__dot{
+  display:grid; place-items:center; inline-size:26px; block-size:26px; border-radius:50%;
+  font-size:.85rem; color:var(--text-secondary);
+  background:var(--surface-base); border:1px solid var(--border-hairline);
+}
+.tl__item[data-kind="good"] .tl__dot{color:var(--success); border-color:var(--success)}
+.tl__item[data-kind="bad"] .tl__dot{color:var(--danger); border-color:var(--danger)}
+.tl__item[data-kind="info"] .tl__dot{color:var(--info); border-color:var(--info)}
+.tl__body{display:flex; flex-direction:column; gap:2px; min-inline-size:0}
+.tl__body b{font-size:var(--fs-sm); font-weight:var(--fw-semibold); line-height:1.7}
+.tl__body small{font-size:var(--fs-xs); color:var(--text-secondary)}
+.tl--empty{display:flex; align-items:center; gap:var(--sp-3)}
+.tl--empty>i{font-size:1.6rem; color:var(--text-secondary)}
+.tl--empty b{display:block; font-size:var(--fs-sm); font-weight:var(--fw-bold)}
+.tl--empty small{display:block; font-size:var(--fs-xs); color:var(--text-secondary); line-height:1.8}
+
+/* ── the tabs become a section navigator under the stream ───────────── */
+.dash-nav{margin-bottom:var(--sp-3)}
+.dash-nav__title{
+  display:flex; align-items:center; gap:var(--sp-2); margin:0 0 var(--sp-2);
+  font-size:var(--fs-sm); font-weight:var(--fw-bold); color:var(--text-secondary);
+}
+.dash-nav .dash-tabs{border-block-end:1px solid var(--border-hairline)}
+
+/* ── prefs: density, motion, contrast ───────────────────────────────── */
+html[data-density="compact"] .home{gap:var(--sp-3)}
+html[data-density="compact"] .daybar,
+html[data-density="compact"] .focus,
+html[data-density="compact"] .pulse{padding:var(--sp-2) var(--sp-3)}
+html[data-density="compact"] .quick__btn{min-height:60px}
+html[data-density="comfortable"] .focus__title{font-size:var(--fs-2xl, 1.5rem)}
+html[data-motion="off"] .quick__btn{transition:none}
+html[data-motion="off"] .quick__btn:hover{transform:none}
+@media (prefers-reduced-motion:reduce){
+  .quick__btn{transition:none}
+  .quick__btn:hover{transform:none}
+}
+html[data-contrast="high"] .daybar,
+html[data-contrast="high"] .focus,
+html[data-contrast="high"] .pulse,
+html[data-contrast="high"] .tl{border-width:2px}
+html[data-contrast="high"] .pulse__cell{border-inline-start-color:var(--border-strong)}
+
+/* ── 320px phones and print ─────────────────────────────────────────── */
+@media (max-width:400px){
+  .daybar__herd{margin-inline-start:0}
+  .statepill{inline-size:100%; justify-content:flex-start}
+  .tl__item{grid-template-columns:40px 24px minmax(0,1fr)}
+}
+@media print{
+  .quick,.att,.focus__next{display:none !important}
+  .daybar,.focus,.pulse,.tl{box-shadow:none; break-inside:avoid}
+  .att__strip{overflow:visible; flex-wrap:wrap}
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   §18  PAGE MAST v3 — the header every page now shares (2026-10-21)
+   Every one of the 37 pages renders its heading through renderPageHeader
+   or renderPageHeaderV2 in shared.js. The old header was a loose h4 +
+   breadcrumb + flex actions that floated above the content with no
+   identity of its own — on a phone it was the first thing you wanted to
+   scroll past. The new mast gives each page a moment of orientation:
+
+     breadcrumb  where am I (pill trail, not slash-separated hrefs)
+     mast        what is this page / should I worry / what can I do
+                 accent bar on the inline-start (logical, RTL-safe),
+                 title in the page's own voice, description as a
+                 sentence (escaped), actions as one toolbar.
+
+   It reuses the same tokens and the same 4px accent language as .daybar,
+   so the home and the inner pages read as one product. Old markup
+   (#page-header > d-flex > h4) would have rendered as browser-default
+   before §18 — now it cannot, because this section styles the legacy
+   containers too.
+   ══════════════════════════════════════════════════════════════════════ */
+.page-breadcrumb{
+  display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp-1);
+  margin:0 0 var(--sp-3); font-size:var(--fs-xs);
+}
+.page-breadcrumb a{
+  display:inline-flex; align-items:center; gap:var(--sp-1);
+  padding:var(--sp-1) var(--sp-2-5); border-radius:999px;
+  color:var(--text-secondary); text-decoration:none;
+  background:var(--surface-base); border:1px solid var(--border-hairline);
+}
+.page-breadcrumb a:hover{color:var(--text-primary); border-color:var(--border-default)}
+.page-breadcrumb span[aria-current]{color:var(--text-primary); font-weight:var(--fw-bold)}
+.page-breadcrumb__sep{color:var(--text-muted); font-size:var(--fs-xs); padding:0 var(--sp-1)}
+.page-mast{
+  display:grid; gap:var(--sp-3); margin-bottom:var(--sp-5);
+  padding:var(--sp-4) var(--sp-4); background:var(--surface-raised);
+  color:var(--text-primary); border:1px solid var(--border-default);
+  border-inline-start:4px solid var(--brand); border-radius:var(--r-xl); box-shadow:var(--elev-1);
+}
+.page-mast__title{
+  margin:0; font-size:var(--fs-xl); font-weight:var(--fw-bold); line-height:1.5;
+}
+.page-mast__title i{color:var(--brand); margin-inline-end:var(--sp-1-5)}
+.page-mast__desc{
+  margin:var(--sp-1-5) 0 0; font-size:var(--fs-sm); line-height:1.8; color:var(--text-secondary);
+}
+.page-mast__actions{
+  display:flex; flex-wrap:wrap; gap:var(--sp-2); align-items:center;
+}
+@media (min-width:768px){
+  .page-mast{grid-template-columns:minmax(0,1fr) auto; align-items:center}
+}
+
+/* ── legacy header rescue: pages still emitting the old d-flex>h4 markup
+   (e.g. cached HTML, or a page that bypasses renderPageHeaderV2) would
+   otherwise sit unstyled. This makes that structure inherit the mast. ── */
+#page-header > .d-flex.justify-content-between{
+  padding:var(--sp-4); background:var(--surface-raised);
+  border:1px solid var(--border-default); border-inline-start:4px solid var(--brand);
+  border-radius:var(--r-xl); box-shadow:var(--elev-1); margin-bottom:var(--sp-4);
+}
+#page-header > .d-flex.justify-content-between h4{font-size:var(--fs-xl); font-weight:var(--fw-bold)}
+
+/* ══════════════════════════════════════════════════════════════════════
+   §19  LISTING REFRESH v3 — filters, tables, cards, empty states
+   The herd is the product. Every list page (animals, births, dead,
+   health, production, inventory, finance, breeding, tasks, vaccine …
+   20+ pages) shared the same Bootstrap row + wonder-card filter bar +
+   plain <table class="tbl"> pattern, which made them indistinguishable:
+   a wall of selects above a wall of rows. The refresh keeps every
+   class the pages already emit — no HTML change required — but gives
+   each element a distinct role in the page's story:
+
+     filter bar    a toolbar, not a card — tighter, grouped, with a
+                   visible active state so the operator knows what is
+                   filtered without reopening each select
+     data table    header as a sentence (small caps, muted), rows with
+                   hairline separators, hover as a whisper not a flash
+     empty state   a moment, not a blank: icon + sentence + next step
+     section card  wonder-card is now a surface with an accent edge
+                   when it carries a KPI or an alert
+   All tokens, all RTL-logical, all print-safe.
+   ══════════════════════════════════════════════════════════════════════ */
+/* filter bar — every page with #filters-bar or .filter-bar is affected */
+#filters-bar.wonder-card, .filter-bar{
+  padding:var(--sp-3) var(--sp-4); background:var(--surface-raised);
+  border:1px solid var(--border-default); border-radius:var(--r-xl);
+}
+#filters-bar .field, .filter-bar .field{
+  border-radius:var(--r-md); border-color:var(--border-default);
+}
+.filter-btn{
+  padding:var(--sp-1-5) var(--sp-3); border-radius:999px;
+  font-size:var(--fs-xs); font-weight:var(--fw-bold);
+  background:var(--surface-base); border:1px solid var(--border-hairline); color:var(--text-secondary);
+}
+.filter-btn.active{ background:var(--brand); color:#fff; border-color:var(--brand); }
+.filter-btn:hover{border-color:var(--brand)}
+
+/* view toggle (animals.html list/cards) */
+.view-toggle{display:inline-flex; gap:1px; padding:2px; border-radius:999px; background:var(--surface-base); border:1px solid var(--border-hairline)}
+.view-toggle-btn{padding:var(--sp-1-5) var(--sp-2-5); border-radius:999px; border:0; background:transparent; color:var(--text-secondary)}
+.view-toggle-btn.active{background:var(--surface-raised); color:var(--text-primary); box-shadow:var(--elev-1)}
+
+/* wonder-card / section-card — the generic surface */
+.wonder-card, .section-card{
+  background:var(--surface-raised); border:1px solid var(--border-default);
+  border-radius:var(--r-xl); box-shadow:var(--elev-1);
+}
+
+/* kpi-card — the 4-up grid on health/production/finance pages */
+.kpi-card{
+  background:var(--surface-raised); border:1px solid var(--border-default);
+  border-radius:var(--r-lg); padding:var(--sp-3) var(--sp-4);
+}
+.kpi-card .kpi-value, .kpi-card [class*="kpi-value"]{font-variant-numeric:tabular-nums}
+
+/* record-card / animal-row — every row in every list */
+.record-card, .animal-row{
+  background:var(--surface-raised); border:1px solid var(--border-default);
+  border-radius:var(--r-lg); transition:border-color .15s ease, box-shadow .15s ease;
+}
+.record-card:hover, .animal-row:hover{border-color:var(--border-strong); box-shadow:var(--elev-1)}
+
+/* data table */
+table.tbl, table.data-table{
+  border-collapse:separate; border-spacing:0;
+}
+table.tbl th, table.data-table th{
+  font-size:var(--fs-xs); font-weight:var(--fw-bold); letter-spacing:.03em;
+  text-transform:uppercase; color:var(--text-secondary);
+  background:var(--surface-base); border-bottom:1px solid var(--border-default);
+  padding:var(--sp-2-5) var(--sp-3);
+}
+table.tbl td, table.data-table td{
+  padding:var(--sp-2-5) var(--sp-3); border-bottom:1px solid var(--border-hairline);
+  font-size:var(--fs-sm);
+}
+table.tbl tbody tr:hover td, table.data-table tbody tr:hover td{
+  background:var(--surface-base);
+}
+
+/* empty / error / loading */
+.empty-state{
+  padding:var(--sp-6) var(--sp-4); text-align:center;
+  background:var(--surface-raised); border:1px dashed var(--border-default); border-radius:var(--r-xl);
+}
+.empty-state i{font-size:1.8rem; color:var(--text-muted); display:block; margin-bottom:var(--sp-2)}
+.empty-state p{font-size:var(--fs-sm); font-weight:var(--fw-bold); color:var(--text-primary)}
+.empty-state small{color:var(--text-secondary)}
+
+/* action buttons — slightly more tactile */
+.action-btn{border-radius:var(--r-md); font-weight:var(--fw-bold)}
+.action-btn.primary{background:var(--brand); border-color:var(--brand); color:#fff}
+.action-btn.primary:hover{filter:brightness(1.06)}
+.action-btn.danger{color:var(--danger); border-color:var(--danger)}
+.action-btn.danger:hover{background:var(--danger); color:#fff}
+
+/* section containers that already use renderSectionContainer */
+.wonder-card h6{font-size:var(--fs-md)}
+
+/* print: keep the new surfaces calm */
+@media print{
+  .page-mast{box-shadow:none; break-after:avoid}
+  #filters-bar.wonder-card, .filter-bar{box-shadow:none}
+}

@@ -33,13 +33,37 @@ function renderFinancePage(s){
   const byCat={};finRecs.filter(r=>r.type==='expense').forEach(r=>{byCat[r.category]=(byCat[r.category]||0)+(+r.amount||0);});
   const topCats=Object.entries(byCat).sort((a,b)=>b[1]-a[1]).slice(0,6);
 
+  // STREAM v3 header is built inline (not via renderPageHeaderV2's description)
+  // so the page's own financial insight can live inside the mast.
+  const _finNetLabel = net>=0?'صافي ربح':'صافي خسارة';
+  const _finNetValue = (net>=0?'+':'')+net.toLocaleString('ar-EG');
+  const _finState = net<0?'act':(totalEx>totalIn*0.85?'watch':'ok');
+  // Still call renderPageHeaderV2 for breadcrumb + mast shell (now styled as page-mast)
   renderPageHeaderV2({
-    title: '<i class="bi bi-wallet2 accent-text"></i> المالية والحسابات',
+    title: '<i class="bi bi-wallet2 accent-text"></i> المالية والحسابات — '+(typeof todayAr==='function'?todayAr():todayStr()),
     breadcrumb: [{label:'الرئيسية', href:'dashboard.html'}, {label:'المالية'}],
     primaryAction: '<button class="action-btn primary" onclick="openFinModal()"><i class="bi bi-plus-lg"></i> إضافة معاملة</button>',
     secondaryActions: `<button class="action-btn sm" onclick="showCostPerHead()"><i class="bi bi-calculator"></i> تكلفة/رأس</button><button class="action-btn sm" onclick="exportFinCSV()"><i class="bi bi-filetype-csv"></i> تصدير</button>`
   });
   const el=document.getElementById('content');
+
+  const _finStreamHead = renderStreamHead({
+    state: _finState,
+    day: _finNetLabel+' — '+_finNetValue+' '+curr,
+    pill: { value: ar(finRecs.length), label:'معاملة', title:'كل المعاملات' },
+    chips: [
+      { icon:'bi-arrow-down-circle', text: ar(totalIn.toLocaleString('ar-EG'))+' '+curr+' إيراد' },
+      { icon:'bi-arrow-up-circle', text: ar(totalEx.toLocaleString('ar-EG'))+' '+curr+' مصروف' },
+      { icon: net>=0?'bi-graph-up':'bi-graph-down', text: _finNetLabel+': '+_finNetValue+' '+curr, alert: net<0 },
+    ],
+    focus: net<0?{ state:'act', eyebrow:'قرار المالية', title: 'المصروفات تفوق الإيرادات', why: 'صافي '+(net.toLocaleString('ar-EG'))+' '+curr+' — راجع أكبر فئات المصروف وقلّلها.', cta:{ onclick:'showCostPerHead()', label:'تكلفة الرأس', icon:'bi-calculator' } } : (topCats.length?{ state:'ok', eyebrow:'أكبر مصروف', title: topCats[0][0]+' — '+topCats[0][1].toLocaleString('ar-EG')+' '+curr, why: 'يمثّل '+Math.round(topCats[0][1]/totalEx*100)+'٪ من المصروفات.', cta:{ href:'finance.html', label:'اعرض التفاصيل', icon:'bi-wallet2' } }:null),
+    quick: [
+      { label:'إضافة معاملة', icon:'bi-plus-lg', onclick:'openFinModal()', gate:'finance' },
+      { label:'تكلفة/رأس', icon:'bi-calculator', onclick:'showCostPerHead()' },
+      { label:'تصدير', icon:'bi-filetype-csv', onclick:'exportFinCSV()' },
+      { label:'الإنتاج', icon:'bi-droplet', href:'production.html' },
+    ],
+  });
 
   const kpiHtml = `
   <div class="row g-3 mb-4">
@@ -72,7 +96,7 @@ function renderFinancePage(s){
   const revExpSvg=renderGroupedBarSVG(revExpTrendF,{colors:['#10b981','#ef4444']});
   const trendHtml=renderChartContainer({ title:'الإيرادات مقابل المصروفات', subtitle:'آخر 6 أشهر', chartHtml: revExpSvg||'', state: revExpSvg?'ready':'empty' });
 
-  el.innerHTML = kpiHtml + `<div class="row g-3 mb-4"><div class="col-md-5">${distributionHtml}</div><div class="col-md-7">${trendHtml}</div></div>` + `
+  el.innerHTML = _finStreamHead + kpiHtml + `<div class="row g-3 mb-4"><div class="col-md-5">${distributionHtml}</div><div class="col-md-7">${trendHtml}</div></div>` + `
   <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <div class="d-flex gap-2 flex-wrap align-items-center">
       ${['all','income','expense'].map(f=>`<button class="filter-btn${finFilter===f?' active':''}" onclick="finFilter='${f}';renderFinancePage(getSettings())">${{all:'الكل',income:'إيرادات',expense:'مصروفات'}[f]}</button>`).join('')}

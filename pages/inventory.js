@@ -47,6 +47,37 @@ function renderInventoryPage(s){
   });
   const el=document.getElementById('content');
 
+  // STREAM v3 header for inventory
+  const _invState = expiringSoon>0||lowMedItems.length>0||lowFeedItems.length>0 ? 'act' : (meds.length+feeds.length+equipment.length?'ok':'calm');
+  const _invTotal = meds.length+feeds.length+equipment.length;
+  const _invStreamHead = renderStreamHead({
+    state: _invState,
+    day: 'المخزون — '+(typeof todayAr==='function'?todayAr():todayStr()),
+    pill: { value: ar(_invTotal), label:'صنف', title:'إجمالي الأصناف' },
+    chips: [
+      { icon:'bi-capsule', text: ar(meds.length)+' دواء' },
+      { icon:'bi-bag', text: ar(feeds.length)+' علف' },
+      { icon:'bi-tools', text: ar(equipment.length)+' معدّة' },
+      expiringSoon?{ icon:'bi-exclamation-triangle', text: ar(expiringSoon)+' ينتهي قريبًا', alert:true }:null,
+      (lowMedItems.length+lowFeedItems.length)?{ icon:'bi-arrow-down', text: ar(lowMedItems.length+lowFeedItems.length)+' حد أدنى', alert:true }:null,
+    ].filter(Boolean),
+    focus: (expiringSoon||lowMedItems.length||lowFeedItems.length) ? { state:'act', eyebrow:'قرار المخزون', title: ar((expiringSoon?1:0)+(lowMedItems.length?1:0)+(lowFeedItems.length?1:0))+' تنبيه يحتاج قرارًا', why: [expiringSoon?ar(expiringSoon)+' دواء ينتهي خلال ٣٠ يوم':null, lowMedItems.length?ar(lowMedItems.length)+' دواء عند الحد الأدنى':null, lowFeedItems.length?ar(lowFeedItems.length)+' علف عند الحد الأدنى':null].filter(Boolean).join(' • '), cta:{ onclick:"invTab='meds';renderInventoryPage(getSettings())", label:'اعرض الصيدلية', icon:'bi-capsule' } } : ( _invTotal===0?{ state:'calm', eyebrow:'المخزون فارغ', title:'لا أصناف مسجّلة', why:'أضف أول دواء أو علف لبدء التتبع.', cta:{ onclick:'openAddInv()', label:'إضافة صنف', icon:'bi-plus-lg' } }:null),
+    quick: [
+      { label:'إضافة صنف', icon:'bi-plus-lg', onclick:'openAddInv()', gate:'inventory' },
+      { label:'الصيدلية', icon:'bi-capsule', onclick:"invTab='meds';renderInventoryPage(getSettings())" },
+      { label:'الأعلاف', icon:'bi-bag', onclick:"invTab='feeds';renderInventoryPage(getSettings())" },
+      { label:'تصدير', icon:'bi-filetype-csv', onclick:'exportInvCSV()' },
+    ],
+  });
+  const _invAtt = (lowMedItems.length||lowFeedItems.length||expiringSoon) ? streamAttention({
+    title:'يحتاج انتباه', count: lowMedItems.length+lowFeedItems.length+expiringSoon,
+    items: [].concat(
+      lowMedItems.slice(0,6).map(function(m){ return { href:"#", kind:'health', av:'💊', tag: m.name||'—', why: 'حد أدنى: '+m.quantity+m.unit } }),
+      lowFeedItems.slice(0,6).map(function(f){ return { href:"#", kind:'weight', av:'🌾', tag: f.name||'—', why: 'حد أدنى: '+f.quantity+f.unit } }),
+      meds.filter(function(m){return m.expiry&&daysLeft(m.expiry)>=0&&daysLeft(m.expiry)<=30;}).slice(0,4).map(function(m){ return { href:"#", kind:'health', av:'⏰', tag: m.name||'—', why: 'ينتهي '+m.expiry } })
+    ).slice(0,12)
+  }) : '';
+
   // Alerts — one Alert Card per real signal, instead of one grouped banner
   const alertsHtml = [
     expiringSoon>0 ? renderAlertCard({ severity:'critical', icon:'bi-capsule', title:`${ar(expiringSoon)} دواء قارب على الانتهاء`, source:'الصيدلية', actionLabel:'عرض', actionHref:'javascript:invTab="meds";renderInventoryPage(getSettings())' }) : '',
@@ -61,7 +92,7 @@ function renderInventoryPage(s){
     contentHtml: [...lowMedItems, ...lowFeedItems].slice(0,8).map(item => renderInventoryStockIndicator({ name:item.name, quantity:+item.quantity, minQuantity:+item.min_quantity, unit:item.unit||'' })).join('')
   }) : '';
 
-  el.innerHTML=`
+  el.innerHTML=_invStreamHead+_invAtt+`
   ${alertsHtml ? `<div class="mb-4">${alertsHtml}</div>` : ''}
   ${stockIndicatorsHtml ? `<div class="mb-4">${stockIndicatorsHtml}</div>` : ''}
 

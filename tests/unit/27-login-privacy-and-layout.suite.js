@@ -112,8 +112,8 @@ const iso = (offsetDays) => {
 // 14 positional args: animals, breeding, health, finance, meds, feeds,
 // equipment, production, activity, weightAlerts, vaccinations,
 // productionAlerts, dailyTasks, workflowHistory.
-function renderCall(app, { animals = [], health = [], production = [], weightAlerts = [], dailyTasks = [] } = {}) {
-  const args = [animals, [], health, [], [], [], [], production, [], weightAlerts, [], [], dailyTasks, []];
+function renderCall(app, { animals = [], health = [], production = [], weightAlerts = [], dailyTasks = [], activity = [], finance = [] } = {}) {
+  const args = [animals, [], health, finance, [], [], [], production, activity, weightAlerts, [], [], dailyTasks, []];
   return app.eval(`(() => { try { renderDashboard(${JSON.stringify(args[0])},${JSON.stringify(args[1])},${JSON.stringify(args[2])},${JSON.stringify(args[3])},${JSON.stringify(args[4])},${JSON.stringify(args[5])},${JSON.stringify(args[6])},${JSON.stringify(args[7])},${JSON.stringify(args[8])},${JSON.stringify(args[9])},${JSON.stringify(args[10])},${JSON.stringify(args[11])},${JSON.stringify(args[12])},${JSON.stringify(args[13])}); return 'ok'; } catch (e) { return 'THREW: ' + e.message; } })()`);
 }
 
@@ -299,98 +299,179 @@ module.exports = suite('27 · Login privacy, keypad geometry & the Bootstrap-gri
     assert.ok(!padBlock.includes('col-') && !padBlock.includes('row g-2'), 'inside a plain CSS grid');
   });
 
-  /* ── 5 · the dashboard's reading order ────────────────────────────── */
+  /* ── 5 · the home page (HOME v3, 2026-10-20) ────────────────────────
+     The page stopped being "five tabs of cards": above the tab navigator
+     there is now one decision stream — daybar (what day / should I worry),
+     focus (the ONE decision + a verb), pulse (today's six numbers as an
+     instrument strip + the real sparkline), quick (glove-sized actions),
+     attention (the animals that need a human) — and panel 0 opens with the
+     day's timeline, which the old page never showed. The invariants the old
+     tests protected are all still asserted, against the new structure. */
 
-  test('panel 0 reads status → context → work list → detail, with the hero first', async () => {
+  const MILK7 = [6, 5, 7, 4, 8, 6, 9].map((q, i) => ({ type: 'milk', date: iso(6 - i), quantity: q }));
+  const HERD = [
+    { _id: 'a1', tag: 'G-1', status: 'alive', species: 'goat', breed: 'بلدى' },
+    { _id: 'a2', tag: 'G-2', status: 'alive', species: 'sheep', breed: 'رحمانى' },
+    { _id: 'a3', tag: 'G-3', status: 'alive', species: 'goat', breed: 'شامي' },
+  ];
+
+  test('the home reads day → decision → pulse → actions → attention, above the tab navigator', async () => {
     const app = await bootDashboard();
-    const animals = [
-      { _id: 'a1', tag: 'G-1', status: 'alive', species: 'goat', breed: 'بلدى' },
-      { _id: 'a2', tag: 'G-2', status: 'alive', species: 'sheep', breed: 'رحمانى' },
-    ];
     const health = [{ animal_tag: 'G-1', status: 'active', type: 'treatment', date: iso(1) }];
-    const production = [6, 5, 7, 4, 8, 6, 9].map((q, i) => ({ type: 'milk', date: iso(6 - i), quantity: q }));
-    assert.strictEqual(renderCall(app, { animals, health, production }), 'ok');
+    const activity = [{ action: 'add', resource: 'production_log', description: 'تسجيل إنتاج: ٢٤ لتر', userName: 'عامل', timestamp: new Date().toISOString() }];
+    assert.strictEqual(renderCall(app, { animals: HERD, health, production: MILK7, activity }), 'ok');
     const got = J(app.eval(`(() => {
-      const p0 = document.getElementById('dash-panel-0');
-      const kids = [...p0.children];
-      const at = (needle) => kids.findIndex((k) => (k.textContent || '').includes(needle));
+      const kids = [...document.getElementById('content').children];
+      const home = document.getElementById('dash-home');
+      const nav = document.querySelector('.dash-nav');
+      const p0 = [...document.getElementById('dash-panel-0').children];
+      const at = (needle) => p0.findIndex((k) => (k.textContent || '').includes(needle));
       return {
-        order: kids.map((k) => (k.className || '').toString().slice(0, 24)),
-        hero: at('حالة المزرعة'),
-        briefing: at('موجز اليوم'),
-        alerts: kids.findIndex((k) => k.querySelector('#dash-alerts') || k.id === 'dash-alerts'),
+        homeIndex: kids.indexOf(home), navIndex: kids.indexOf(nav),
+        homeKids: [...home.children].map((k) => (k.className || '').toString().split(' ')[0]),
+        timeline: at('الحركة'), briefing: at('موجز اليوم'),
+        alerts: p0.findIndex((k) => k.querySelector('#dash-alerts') || k.id === 'dash-alerts'),
         finance: at('المالية التنفيذية اليوم'),
-        total: kids.length,
+        quick: [...document.querySelectorAll('.quick__btn')].map((b) => b.textContent.trim()),
+        quickOnclick: [...document.querySelectorAll('.quick__btn[onclick]')].length,
+        headerBtns: document.querySelectorAll('#page-header .action-btn').length,
+        tabs: [...document.querySelectorAll('.dash-tab')].map((t) => t.id),
+        panels: [...document.querySelectorAll('.dash-tab-panel')].map((p) => p.id),
       };
     })()`));
-    assert.ok(got.hero === 0, `the status layer must be the first thing in panel 0, order: ${JSON.stringify(got.order)}`);
-    assert.ok(got.briefing > got.hero, 'context (the trend sentences) comes after the status strip');
-    assert.ok(got.alerts > got.briefing, 'the work list comes after the context');
+    assert.strictEqual(got.homeIndex, 0, 'the stream is the first thing on the page');
+    assert.ok(got.navIndex > got.homeIndex, 'the tab navigator sits under it, not above it');
+    assert.deepStrictEqual(got.homeKids.slice(0, 4), ['daybar', 'focus', 'pulse', 'quick'],
+      `day → decision → pulse → actions, got ${JSON.stringify(got.homeKids)}`);
+    assert.ok(got.homeKids.includes('att'), 'and the attention strip renders when animals need a human');
+    assert.ok(got.timeline === 0, `panel 0 opens with what already happened today, got index ${got.timeline}`);
+    assert.ok(got.briefing > got.timeline, 'then the context sentences');
+    assert.ok(got.alerts > got.briefing, 'then the work list');
     assert.ok(got.finance > got.alerts, 'and the money detail is last');
+    // one place for actions: the strip, not the header (which keeps the diary
+    // and the assistant only) — an admin sees the three herd modals too
+    assert.ok(got.quick.includes('إضافة حيوان') && got.quick.includes('مولود جديد') && got.quick.includes('تسجيل نفوق'),
+      `the herd actions live in the strip: ${JSON.stringify(got.quick)}`);
+    assert.ok(got.quick.includes('تسجيل إنتاج') && got.quick.includes('حالة صحية') && got.quick.includes('المهام'));
+    assert.strictEqual(got.quickOnclick, 3, 'exactly the three modal actions are buttons; the rest are links');
+    assert.ok(got.headerBtns <= 2, `the header must not duplicate the strip, found ${got.headerBtns} buttons`);
+    // the four specs that open panels by id must keep working
+    assert.deepStrictEqual(got.tabs, ['dash-tab-0', 'dash-tab-1', 'dash-tab-2', 'dash-tab-3', 'dash-tab-4']);
+    assert.deepStrictEqual(got.panels, ['dash-panel-0', 'dash-panel-1', 'dash-panel-2', 'dash-panel-3', 'dash-panel-4']);
     app.close();
   });
 
-  test('the hero carries a north-star number, a state word and a last-updated stamp — state is never colour alone', async () => {
+  test('the daybar carries the north-star score with a word, an icon and a timestamp — never colour alone', async () => {
     const app = await bootDashboard();
-    const animals = [{ _id: 'a1', tag: 'G-1', status: 'alive', species: 'goat', breed: 'بلدى' }];
     const health = [{ animal_tag: 'G-1', status: 'active', type: 'treatment', date: iso(1) }];
-    assert.strictEqual(renderCall(app, { animals, health }), 'ok');
+    assert.strictEqual(renderCall(app, { animals: HERD, health }), 'ok');
     const got = J(app.eval(`(() => {
-      const h = document.querySelector('#dash-panel-0 .dash-hero');
+      const bar = document.querySelector('#dash-home .daybar');
+      const pill = bar.querySelector('.statepill');
       return {
-        state: h.getAttribute('data-state'),
-        value: h.querySelector('.dash-hero__value').textContent.trim(),
-        word: h.querySelector('.dash-hero__state').textContent.trim(),
-        icon: !!h.querySelector('.dash-hero__state i'),
-        next: h.querySelector('.dash-hero__next').textContent.trim(),
-        link: (h.querySelector('.dash-hero__link') || {}).getAttribute ? h.querySelector('.dash-hero__link').getAttribute('href') : null,
-        meta: h.querySelector('.dash-hero__meta').textContent,
-        kpis: [...document.querySelectorAll('#dash-panel-0 .dash-kpi')].map((k) => k.getAttribute('data-state')),
-        kpiLabels: [...document.querySelectorAll('#dash-panel-0 .dash-kpi__label')].map((k) => k.textContent.trim()),
+        state: bar.getAttribute('data-state'),
+        pillState: pill.getAttribute('data-state'),
+        value: pill.querySelector('b').textContent.trim(),
+        max: pill.querySelector('.statepill__max').textContent.trim(),
+        word: pill.querySelector('em').textContent.trim(),
+        icon: !!pill.querySelector('i'),
+        clock: bar.querySelector('.daybar__clock').textContent,
+        herd: [...bar.querySelectorAll('.herdchip')].map((c) => c.textContent.trim()),
+        cells: [...document.querySelectorAll('.pulse__cell')].map((c) => c.getAttribute('data-state')),
+        labels: [...document.querySelectorAll('.pulse__label')].map((l) => l.textContent.trim()),
+        values: [...document.querySelectorAll('.pulse__value')].map((v) => v.textContent.trim()),
       };
     })()`));
-    assert.ok(['ok', 'watch', 'act'].includes(got.state), `the hero must declare a machine-readable state, got ${got.state}`);
-    assert.ok(/\d/.test(got.value.replace(/[٠-٩]/g, '0')), 'a big number, not a label');
-    assert.ok(got.word.length > 1, 'and the state as a word: ممتاز / جيد / يحتاج انتباه / حرج');
+    assert.ok(['ok', 'watch', 'act'].includes(got.state), `the daybar must declare a machine-readable state, got ${got.state}`);
+    assert.strictEqual(got.pillState, got.state, 'and the pill agrees with it');
+    assert.ok(/\d/.test(got.value.replace(/[٠-٩]/g, '0')), `a big number, not a label: ${got.value}`);
+    assert.strictEqual(got.max, '/١٠٠');
+    assert.ok(got.word.length > 1, 'plus the state as a word: ممتاز / جيد / يحتاج انتباه / حرج');
     assert.ok(got.icon, 'plus an icon, so greyscale and colour-blindness still read it');
-    assert.ok(/آخر تحديث/.test(got.meta), 'a dashboard without a timestamp is a rumour');
-    assert.ok(got.kpis.length === 4 && got.kpis.every((s) => ['good', 'watch', 'bad', 'flat'].includes(s)),
-      'four KPI tiles, each with its own state attribute');
-    assert.deepStrictEqual(got.kpiLabels, ['مواليد', 'نفوق', 'إيرادات', 'مصروفات']);
-    // The hero points at the work list, so the first glance has a next step.
-    assert.ok(got.link === '#dash-alerts' || got.link === 'health.html' || /لا شيء يحتاج قرارًا/.test(got.next),
-      `expected a link to the work list (or the health register when it is empty) or an all-clear, got ${got.next} / ${got.link}`);
-    // …and it must never point at an empty list: #dash-alerts only when the
-    // ranking actually produced cards.
-    if (got.link === '#dash-alerts') {
-      assert.ok(app.window.document.querySelectorAll('#dash-alerts .alert-card, #dash-alerts > *:not(.fw-bold)').length > 0,
-        'the hero linked to the work list, so the work list must not be the empty-state badge');
-    }
+    assert.ok(/آخر تحديث/.test(got.clock), 'a dashboard without a timestamp is a rumour');
+    assert.ok(got.herd.length >= 2, `the herd chips say how many animals this is about: ${JSON.stringify(got.herd)}`);
+    assert.strictEqual(got.cells.length, 6, 'six numbers in the strip, not four cards');
+    assert.ok(got.cells.every((s) => ['good', 'watch', 'bad', 'flat'].includes(s)), 'each with its own state attribute');
+    assert.deepStrictEqual(got.labels, ['مواليد', 'نفوق', 'لبن', 'إيرادات', 'مصروفات', 'مهام مفتوحة']);
+    assert.ok(got.values.every((v) => v.length > 0 && !/undefined|NaN/.test(v)), `no placeholder junk: ${JSON.stringify(got.values)}`);
     app.close();
   });
 
-  test('the trend band is a real 7-point inline SVG, and its empty state says what to do next', async () => {
+  test('the focus card names ONE decision with a verb, and never links to an empty list', async () => {
     const app = await bootDashboard();
-    const animals = [{ _id: 'a1', tag: 'G-1', status: 'alive', species: 'goat', breed: 'بلدى' }];
-    const production = [6, 5, 7, 4, 8, 6, 9].map((q, i) => ({ type: 'milk', date: iso(6 - i), quantity: q }));
-    assert.strictEqual(renderCall(app, { animals, production }), 'ok');
+    const health = [{ animal_tag: 'G-1', status: 'active', type: 'treatment', date: iso(1) }];
+    const weightAlerts = [{ _id: 'w1', animal_id: 'a2', animal_tag: 'G-2', status: 'active', severity: 'danger' }];
+    assert.strictEqual(renderCall(app, { animals: HERD, health, weightAlerts }), 'ok');
+    const got = J(app.eval(`(() => {
+      const f = document.querySelector('#dash-home .focus');
+      const cta = f.querySelector('.focus__cta');
+      return {
+        state: f.getAttribute('data-state'),
+        eyebrow: f.querySelector('.focus__eyebrow').textContent.trim(),
+        title: f.querySelector('.focus__title').textContent.trim(),
+        why: (f.querySelector('.focus__why') || {}).textContent || '',
+        cta: cta ? cta.getAttribute('href') : null,
+        ctaText: cta ? cta.textContent.trim() : '',
+        chips: [...document.querySelectorAll('.attchip')].map((c) => ({
+          href: c.getAttribute('href'), kind: c.getAttribute('data-kind'), text: c.textContent.trim(),
+        })),
+      };
+    })()`));
+    assert.ok(['act', 'watch', 'ok', 'calm'].includes(got.state), `the decision states its urgency, got ${got.state}`);
+    assert.strictEqual(got.eyebrow, 'قرار اليوم');
+    assert.ok(got.title.length > 5, `it says what needs deciding: ${got.title}`);
+    assert.ok(/\d|[٠-٩]/.test(got.title), 'and how many');
+    assert.ok(got.cta && got.ctaText.length > 2, 'every decision carries a verb, not just a number');
+    if (got.cta === '#dash-alerts') {
+      assert.ok(app.window.document.querySelectorAll('#dash-alerts .alert-card, #dash-alerts > *:not(.fw-bold)').length > 0,
+        'the decision linked to the work list, so the work list must not be the empty-state badge');
+    }
+    assert.strictEqual(got.chips.length, 2, 'G-1 (health) and G-2 (weight) need a human');
+    assert.ok(got.chips.every((c) => /^animal-detail\.html\?id=/.test(c.href)), 'each chip opens that animal');
+    assert.deepStrictEqual(got.chips.map((c) => c.kind).sort(), ['health', 'weight'], 'and says why');
+    app.close();
+  });
+
+  test('an all-clear day says so, with a way into the day\'s work instead of a red box', async () => {
+    const app = await bootDashboard();
+    assert.strictEqual(renderCall(app, { animals: HERD }), 'ok');
+    const got = J(app.eval(`(() => {
+      const f = document.querySelector('#dash-home .focus');
+      return { state: f.getAttribute('data-state'), title: f.querySelector('.focus__title').textContent.trim(),
+               cta: f.querySelector('.focus__cta').getAttribute('href'),
+               cls: f.querySelector('.focus__cta').className,
+               chips: document.querySelectorAll('.attchip').length };
+    })()`));
+    assert.strictEqual(got.state, 'calm');
+    assert.ok(/لا شيء يحتاج قرارًا/.test(got.title), `an all-clear must say so, got: ${got.title}`);
+    assert.ok(/calm/.test(got.cls), 'and read as calm, not as an alarm');
+    assert.strictEqual(got.cta, 'diary.html', 'the way forward on a quiet day is the farm diary');
+    assert.strictEqual(got.chips, 0, 'no attention strip when nothing needs attention');
+    app.close();
+  });
+
+  test('the trend is a real 7-point inline SVG in the strip, and its empty state says what to do next', async () => {
+    const app = await bootDashboard();
+    assert.strictEqual(renderCall(app, { animals: HERD, production: MILK7 }), 'ok');
     const withData = J(app.eval(`(() => {
-      const s = document.querySelector('#dash-panel-0 .dash-spark');
+      const s = document.querySelector('#dash-home .pulse__trend .dash-spark');
       const pts = (s.querySelector('polyline').getAttribute('points') || '').trim().split(/\\s+/);
-      return { svg: !!s, points: pts.length, delta: (document.querySelector('.dash-trend__delta') || {}).textContent || '',
-               empty: !!document.querySelector('#dash-panel-0 .dash-trend__empty') };
+      return { svg: !!s, points: pts.length, delta: (document.querySelector('.pulse__delta') || {}).textContent || '',
+               dir: document.querySelector('.pulse__delta').getAttribute('data-dir'),
+               empty: !!document.querySelector('.pulse__empty') };
     })()`));
     assert.ok(withData.svg, 'a sparkline must render when there is milk data');
     assert.strictEqual(withData.points, 7, 'seven days, seven points');
-    assert.ok(/٪/.test(withData.delta), `the band states its change, got "${withData.delta}"`);
+    assert.ok(/٪/.test(withData.delta), `the strip states its change, got "${withData.delta}"`);
+    assert.ok(['up', 'down'].includes(withData.dir), 'and the direction is an attribute, not colour alone');
     assert.ok(!withData.empty, 'and no empty state while there is data');
 
     const app2 = await bootDashboard();
-    assert.strictEqual(renderCall(app2, { animals }), 'ok');
+    assert.strictEqual(renderCall(app2, { animals: HERD }), 'ok');
     const empty = J(app2.eval(`(() => {
-      const e = document.querySelector('#dash-panel-0 .dash-trend__empty');
+      const e = document.querySelector('#dash-home .pulse__empty');
       return { text: e ? e.textContent.trim() : '', href: e && e.querySelector('a') ? e.querySelector('a').getAttribute('href') : null,
-               svg: !!document.querySelector('#dash-panel-0 .dash-spark') };
+               svg: !!document.querySelector('#dash-home .dash-spark') };
     })()`));
     assert.ok(!empty.svg, 'no fake flat line when nothing was recorded');
     assert.ok(/سجّل/.test(empty.text) && empty.href === 'production.html',
@@ -398,11 +479,56 @@ module.exports = suite('27 · Login privacy, keypad geometry & the Bootstrap-gri
     app.close(); app2.close();
   });
 
+  test('the timeline shows what already happened today, and says so when nothing did', async () => {
+    const app = await bootDashboard();
+    const activity = [
+      { action: 'add', resource: 'production_log', description: 'تسجيل إنتاج: ٢٤ لتر', userName: 'عامل', timestamp: new Date(Date.now() - 3600e3).toISOString() },
+      { action: 'delete', resource: 'inventory_feeds', description: 'حذف صنف منتهي', userName: 'مدير', timestamp: new Date(Date.now() - 7200e3).toISOString() },
+    ];
+    assert.strictEqual(renderCall(app, { animals: HERD, activity }), 'ok');
+    const got = J(app.eval(`(() => {
+      const rows = [...document.querySelectorAll('#dash-panel-0 .tl__item')];
+      return {
+        count: rows.length,
+        times: rows.map((r) => r.querySelector('.tl__time').textContent.trim()),
+        kinds: rows.map((r) => r.getAttribute('data-kind')),
+        first: rows[0].querySelector('.tl__body b').textContent.trim(),
+        meta: rows[0].querySelector('.tl__body small').textContent.trim(),
+        empty: !!document.querySelector('#dash-panel-0 .tl--empty'),
+      };
+    })()`));
+    assert.strictEqual(got.count, 2, 'one row per logged action');
+    assert.ok(got.times.every((t) => /^\d{1,2}:\d{2}$/.test(t.replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)))),
+      `each row carries its clock time, got ${JSON.stringify(got.times)}`);
+    assert.deepStrictEqual(got.kinds, ['good', 'bad'], 'an add reads as good and a delete as bad — shape, not colour');
+    assert.strictEqual(got.first, 'تسجيل إنتاج: ٢٤ لتر');
+    assert.ok(/عامل/.test(got.meta) && /production_log/.test(got.meta), 'and who did it, where');
+    assert.ok(!got.empty, 'no empty state while there is activity');
+
+    const app2 = await bootDashboard();
+    assert.strictEqual(renderCall(app2, { animals: HERD }), 'ok');
+    const empty = J(app2.eval(`(() => {
+      const e = document.querySelector('#dash-panel-0 .tl--empty');
+      return { text: e ? e.textContent.trim() : '', href: e && e.querySelector('a') ? e.querySelector('a').getAttribute('href') : null,
+               rows: document.querySelectorAll('#dash-panel-0 .tl__item').length };
+    })()`));
+    assert.strictEqual(empty.rows, 0, 'no invented history');
+    assert.ok(/لا حركة مسجّلة/.test(empty.text) && empty.href === 'reports.html',
+      `the empty state says what it is and where the full history lives, got: ${empty.text} → ${empty.href}`);
+    app.close(); app2.close();
+  });
+
   test('the sparkline keys its days with ISO dates, not the Arabic-Indic display helper', () => {
     // pad2() renders ٠١٢٣ for the screen; production rows store 2026-10-20.
     // Using pad2 to build the day keys silently produced an empty trend band.
-    const band = DASH.slice(DASH.indexOf('LAYER 1 · STATUS'), DASH.indexOf('LAYER 2 · CONTEXT'));
-    assert.ok(/isoS\s*=/.test(band), 'the status layer formats its own ISO day keys');
-    assert.ok(!/daysS\.push\([^)]*pad2/.test(band), 'and never builds a storage key with pad2()');
+    // HOME v3 moved the sparkline into the pulse strip, and PAGE STREAM V3
+    // moved the drawing into shared.js's sparkSVG(); what the page still owns
+    // is the day KEYS, so the rule is asserted on the keys it builds.
+    const band = DASH.slice(DASH.indexOf('HOME v3'), DASH.indexOf('<nav class="dash-nav"'));
+    assert.ok(band.length > 500, 'the home stream block must be found in dashboard.html');
+    assert.ok(/isoDays\(7\)/.test(band), 'the home takes its day keys from the shared ISO helper');
+    assert.ok(!/daysH\.push\([^)]*pad2/.test(band) && !/seriesH[\s\S]{0,200}pad2/.test(band),
+      'and never builds a storage key with pad2()');
+    assert.ok(/seriesH\s*=/.test(band) && /series:\s*seriesH/.test(band), 'the series it computes is the series it draws');
   });
 });

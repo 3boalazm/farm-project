@@ -37,6 +37,42 @@ function renderHealthPage(s){
   });
   const el=document.getElementById('content');
 
+  // ── STREAM v3 header for this page: every list page now opens with its
+  // identity and its one decision, so the health page reads like the home.
+  const _healthState = inWithdrawal.length>0 ? 'act' : (active.length>0 ? 'watch' : 'ok');
+  const _healthStreamHead = renderStreamHead({
+    state: _healthState,
+    day: 'السجل الصحي — '+(typeof todayAr==='function'?todayAr():todayStr()),
+    pill: { value: ar(active.length), max: '/'+ar(healthRecs.length), label: active.length===1?'قيد العلاج':'قيد العلاج', title: 'الحالات النشطة' },
+    chips: [
+      { icon:'bi-heart-pulse', text: ar(healthRecs.length)+' سجل' },
+      { icon:'bi-exclamation-triangle', text: ar(inWithdrawal.length)+' فترة سحب', alert: inWithdrawal.length>0 },
+      { icon:'bi-check-circle', text: ar(completed.length)+' مكتمل' },
+    ],
+    focus: (function(){
+      if(inWithdrawal.length) return { state:'act', eyebrow:'قرار الصحة', title: ar(inWithdrawal.length)+(inWithdrawal.length===1?' حيوان في فترة سحب':' حيوانات في فترة سحب'), why:'يُمنع البيع أو الذبح حتى انتهاء فترة تأثير العلاج — راجع السجلات المميزة بالإنذار.', cta:{ href:'#', label:'راجع فترة السحب', icon:'bi-exclamation-triangle' }, next: active.length?[{ href:'#', label: ar(active.length)+' قيد العلاج', icon:'bi-heart-pulse' }]:[] };
+      if(active.length) return { state:'watch', eyebrow:'قرار الصحة', title: ar(active.length)+(active.length===1?' حالة تحت العلاج':' حالات تحت العلاج'), why:'تقييم الحالة الجسمانية (BCS) وتاريخ العلاج يحددان الخطوة التالية.', cta:{ href:'#', label:'أكمل علاجًا', icon:'bi-check-lg' } };
+      return { state:'calm', eyebrow:'السجل مستقر', title:'لا حالات تحت العلاج', why:'كل السجلات مكتملة — سجّل حالة جديدة عند الحاجة.', cta:{ href:'#', onclick:'openHealthModal()', label:'سجل جديد', icon:'bi-plus-lg' } };
+    })(),
+    pulse: [
+      { label:'قيد العلاج', value: ar(active.length), foot: active.length?'يحتاج متابعة':'لا حالات', state: active.length?'watch':'flat', icon:'bi-heart-pulse' },
+      { label:'فترة سحب', value: ar(inWithdrawal.length), foot: inWithdrawal.length?'يُمنع البيع':'مستقر', state: inWithdrawal.length?'bad':'flat', icon:'bi-exclamation-octagon' },
+      { label:'مكتملة', value: ar(completed.length), foot: 'سجل مغلق', state: completed.length?'good':'flat', icon:'bi-check-circle' },
+      { label:'إجمالي', value: ar(healthRecs.length), foot: 'كل السجلات', state: 'flat', icon:'bi-collection' },
+    ],
+    quick: [
+      { label:'سجل جديد', icon:'bi-plus-lg', onclick:'openHealthModal()', gate:'health' },
+      { label:'تصدير', icon:'bi-filetype-csv', onclick:'exportHealthCSV()' },
+      { label:'القطيع', icon:'bi-list-ul', href:'animals.html' },
+      { label:'التحصين', icon:'bi-bandaid', href:'vaccine.html' },
+    ],
+  });
+
+  const _healthAtt = inWithdrawal.length ? streamAttention({
+    title:'في فترة سحب', count: inWithdrawal.length,
+    items: inWithdrawal.slice(0,12).map(function(r){ return { href:"#", kind:'health', av:'⚠️', tag: r.animal_tag||r.animal_breed||'—', why: (r.medication||'')+' — حتى '+r.withdrawal_end }; })
+  }) : '';
+
   // KPI Summary (Analytics Template) — was 4 plain summary-cards, now the shared KPI Card component
   const kpiHtml = `
   <div class="row g-3 mb-4">
@@ -90,7 +126,7 @@ function renderHealthPage(s){
   // Filter Bar + Data list (Listing Template) — kept as record-cards, not forced into a literal <table>:
   // health records carry rich per-record detail (diagnosis/medication/dosage/withdrawal/BCS) that
   // compresses badly into narrow table columns, so the existing card-list is the better fit here.
-  el.innerHTML = kpiHtml + analyticsHtml + withdrawalAlertsHtml + `
+  el.innerHTML = _healthStreamHead + _healthAtt + kpiHtml + analyticsHtml + withdrawalAlertsHtml + `
   <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <div class="filter-bar">
       ${[{f:'all',l:'الكل',n:healthRecs.length},{f:'active',l:'قيد العلاج',n:active.length},{f:'withdrawal',l:'فترة سحب',n:inWithdrawal.length},{f:'completed',l:'مكتمل',n:completed.length}].map(x=>`<button class="filter-btn${healthFilter===x.f?' active':''}" onclick="healthFilter='${x.f}';renderHealthPage(getSettings())">${x.l} (${x.n})</button>`).join('')}

@@ -139,7 +139,31 @@ function render() {
     completion: todayTasks.length ? Math.round(todayTasks.filter(t => t.status === 'done').length / todayTasks.length * 100) : 0,
   };
 
-  el.innerHTML = `
+  // STREAM v3 header for tasks
+  const _taskState = stats.overdue?'act':(stats.today? (stats.completion<60?'watch':'ok'):'calm');
+  const _taskStreamHead = renderStreamHead({
+    state: _taskState,
+    day: 'المهام — '+(typeof todayAr==='function'?todayAr():todayStr()),
+    pill: { value: ar(stats.today), label:'اليوم', title:'مهام اليوم' },
+    chips: [
+      { icon:'bi-check-circle', text: ar(stats.done)+' منجزة' },
+      { icon:'bi-hourglass-split', text: ar(stats.pending)+' انتظار' },
+      stats.overdue?{ icon:'bi-exclamation-triangle', text: ar(stats.overdue)+' متأخرة', alert:true }:null,
+      { icon:'bi-graph-up', text: ar(stats.completion)+'% إنجاز' },
+    ].filter(Boolean),
+    focus: stats.overdue?{ state:'act', eyebrow:'قرار المهام', title: ar(stats.overdue)+(stats.overdue===1?' مهمة متأخرة':' مهام متأخرة'), why:'تجاوزت تاريخ الاستحقاق — راجع الفلتر "المتأخرة".', cta:{ onclick:"setFilter('overdue')", label:'اعرض المتأخرة', icon:'bi-exclamation-triangle' } } : (stats.today===0?{ state:'calm', eyebrow:'لا مهام اليوم', title:'يوم بلا مهام مجدولة', why:'استخدم القوالب لإنشاء مهام متكررة ليوم غد.', cta:{ onclick:'openTemplatesPanel()', label:'القوالب الجاهزة', icon:'bi-bookmark' } } : (stats.completion===100?{ state:'calm', eyebrow:'يوم مكتمل', title:'كل مهام اليوم منجزة', why:'إنجاز '+ar(stats.completion)+'٪ — يوم مثمر.', cta:{ onclick:'openTaskModal()', label:'مهمة جديدة', icon:'bi-plus-lg' } }:null)),
+    quick: [
+      { label:'مهمة جديدة', icon:'bi-plus-lg', onclick:'openTaskModal()', gate:'animals' },
+      { label:'القوالب', icon:'bi-bookmark', onclick:'openTemplatesPanel()' },
+      { label:'المتأخرة', icon:'bi-exclamation-triangle', onclick:"setFilter('overdue')" },
+      { label:'مهامي', icon:'bi-person', onclick:"setFilter('by-me')" },
+    ],
+  });
+  const _taskAtt = stats.overdue ? streamAttention({
+    title:'متأخرة', count: stats.overdue,
+    items: _tasks.filter(function(t){return !t.is_template && t.status!=='done' && t.date < today;}).slice(0,12).map(function(t){ return { href:'#', kind:'health', av:'⚠️', tag: t.title||'—', why: t.date+' • '+(t.assigned_to_name||t.barn||'') } })
+  }) : '';
+  el.innerHTML = _taskStreamHead+_taskAtt+`
   <!-- KPI Row -->
   <div class="row g-3 mb-4">
     ${[

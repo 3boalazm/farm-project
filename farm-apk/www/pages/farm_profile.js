@@ -21,7 +21,24 @@ function renderFarmProfile(s,animals,users){
   });
   const el=document.getElementById('content');
 
-  el.innerHTML=`
+  const _fpState = alive.length? (dead.length/alive.length>0.05?'watch':'ok') : 'calm';
+  const _fpStreamHead = renderStreamHead({
+    state: _fpState,
+    day: 'ملف المزرعة — '+(typeof todayAr==='function'?todayAr():todayStr()),
+    pill: { value: ar(alive.length), label:'حيّ', title:'الرؤوس الحية' },
+    chips: [
+      { icon:'bi-people', text: ar(users.length)+' مستخدم' },
+      { icon:'bi-geo-alt', text: escapeHtml(s.farmAddress||'—') },
+      alive.length?{ icon:'bi-heart-pulse', text: ar(users.filter(function(u){return u.active!==false;}).length)+' نشط' }:null,
+    ].filter(Boolean),
+    quick: [
+      { label:'تعديل الملف', icon:'bi-pencil', onclick:'openEditProfile()', gate:'admin' },
+      { label:'المستخدمون', icon:'bi-people', href:'users.html' },
+      { label:'الإعدادات', icon:'bi-gear', href:'settings.html' },
+    ],
+  });
+
+  el.innerHTML=_fpStreamHead+`
   <!-- Header card -->
   <div class="profile-header mb-4">
     <div class="d-flex align-items-start gap-4 flex-wrap">

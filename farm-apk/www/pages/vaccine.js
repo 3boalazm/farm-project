@@ -40,9 +40,33 @@ function renderVaccPage(s){
   // Upcoming in next 7 days
   const upcoming=vaccines.filter(v=>v.status==='pending'&&v.scheduled_date&&daysUntil(v.scheduled_date)>=0&&daysUntil(v.scheduled_date)<=7);
 
+  // STREAM v3 header — after done/pend/over/upcoming are known
+  const _vacState = over>0?'act':(pend>0||upcoming.length?'watch':'ok');
+  const _vacStreamHead = renderStreamHead({
+    state: _vacState,
+    day: 'التحصين — '+(typeof todayAr==='function'?todayAr():todayStr()),
+    pill: { value: ar(vaccines.length), label:'جدول', title:'إجمالي الجداول' },
+    chips: [
+      { icon:'bi-check-circle', text: ar(done)+' منفّذ' },
+      { icon:'bi-clock', text: ar(pend)+' قيد الانتظار' },
+      over?{ icon:'bi-exclamation-circle', text: ar(over)+' متأخر', alert:true }:null,
+      upcoming.length?{ icon:'bi-alarm', text: ar(upcoming.length)+' خلال ٧ أيام', alert:true }:null,
+    ].filter(Boolean),
+    focus: over?{ state:'act', eyebrow:'قرار التحصين', title: ar(over)+' متأخر عن موعده', why:'تجاوز تاريخ التحصين — نسّق مع الطبيب فورًا.', cta:{ onclick:'openVaccModal()', label:'جدولة تحصين', icon:'bi-plus-lg' } } : (upcoming.length?{ state:'watch', eyebrow:'قرار التحصين', title: ar(upcoming.length)+(upcoming.length===1?' تحصين خلال أسبوع':' تحصينات خلال أسبوع'), why:'حضّر اللقاحات والأيدي العاملة.', cta:{ href:'#', label:'اعرض القادم', icon:'bi-calendar-check' } } : (pend?{ state:'ok', eyebrow:'التحصين مجدول', title: ar(pend)+' في الانتظار — لا متأخرات', why:'تابع الجدول الزمني.', cta:{ onclick:'openVaccModal()', label:'جدولة جديدة', icon:'bi-plus-lg' } }:null)),
+    quick: [
+      { label:'جدولة تحصين', icon:'bi-plus-lg', onclick:'openVaccModal()', gate:'health' },
+      { label:'القوالب', icon:'bi-bookmark', onclick:'openTemplates()' },
+      { label:'الصحة', icon:'bi-heart-pulse', href:'health.html' },
+    ],
+  });
+  const _vacAtt = over||upcoming.length ? streamAttention({ title:'يحتاج انتباه', count: (over?1:0)+upcoming.length, items: [].concat(
+      vaccines.filter(function(v){return v.status==='overdue';}).slice(0,6).map(function(v){return { href:'#', kind:'health', av:'⏰', tag: v.name||v.vaccine||'—', why:'متأخر '+(v.scheduled_date||'') }}),
+      upcoming.slice(0,6).map(function(v){return { href:'#', kind:'weight', av:'📅', tag: v.name||v.vaccine||'—', why: v.scheduled_date||'' }})
+    ).slice(0,12)}) : '';
+
   const filtered=vaccFilter==='all'?vaccines:vaccines.filter(v=>v.status===vaccFilter);
 
-  el.innerHTML=`
+  el.innerHTML=_vacStreamHead+_vacAtt+`
   <div class="row g-3 mb-4">
     ${[{l:'تم التنفيذ',v:done,pct:Math.round(done/tot*100),c:'var(--green)',i:'bi-check-circle-fill'},
        {l:'قيد الانتظار',v:pend,pct:Math.round(pend/tot*100),c:'var(--orange)',i:'bi-clock-fill'},
