@@ -241,8 +241,12 @@
   --rail-border:rgba(52,211,153,.14);
   --rail-ink:#8fb8a8;
   --rail-ink-hover:#d7f2e5;
-  --rail-item-active-bg:var(--brand-400);
-  --rail-item-active-ink:#03231a;
+  /* The rail is a dark surface in BOTH themes, so the active item cannot use
+     theme-swapping brand tokens — see §11.4 and
+     docs/bugs/THEME-SWITCH-SIDEBAR-ACTIVE.md. These are the proven values
+     (8.6:1), identical in light mode. */
+  --rail-item-active-bg:#34d399;
+  --rail-item-active-ink:#022c22;
   --topbar-bg:var(--surface-glass);
   --topbar-border:var(--border-subtle);
   --bottomnav-bg:var(--surface-glass);
@@ -377,8 +381,8 @@ html[data-theme="light"],html.light-mode,html.light-mode body,body.light-mode{
   --rail-border:rgba(15,23,42,.09);
   --rail-ink:#64748b;
   --rail-ink-hover:#0f172a;
-  --rail-item-active-bg:var(--brand-700);   /* same AA reason as --btn-primary-bg */
-  --rail-item-active-ink:#ffffff;
+  --rail-item-active-bg:#34d399;   /* NOT --brand-700: the rail stays dark in light mode */
+  --rail-item-active-ink:#022c22;
 
   --field-bg:#ffffff;
   --field-bg-hover:#ffffff;
@@ -447,7 +451,7 @@ html[data-theme="light"],html.light-mode,html.light-mode body,body.light-mode{
     --info:#1d4ed8;    --info-surface:#dbeafe;    --info-border:#93c5fd;
     --shadow-rgb:rgba(15,23,42,.16);
     --rail-bg:linear-gradient(180deg,#fff,#f7faf9); --rail-border:rgba(15,23,42,.09);
-    --rail-ink:#64748b; --rail-item-active-bg:var(--brand-700); --rail-item-active-ink:#fff;
+    --rail-ink:#64748b; --rail-item-active-bg:#34d399; --rail-item-active-ink:#022c22;  /* §11.4: theme-independent, the hotfix pair */
     --field-bg:#fff; --field-border:#d8dfeb; --field-ink:#0f172a; --field-placeholder:#6b7a95;
     --btn-primary-bg:var(--brand-700); --btn-primary-bg-hover:var(--brand-800); --btn-primary-ink:#fff;
     --btn-secondary-bg:#fff; --btn-secondary-border:#d8dfeb; --btn-secondary-ink:#0f172a;
@@ -2095,11 +2099,18 @@ html.light-mode .rail-v2-panel,html[data-theme="light"] .rail-v2-panel{
   background:var(--rail-bg)!important;
 }
 
-/* 11.4 Active rail items hardcoded #34d399 on #022c22 — correct in dark,
-   unreadable in light (the documented THEME-SWITCH-SIDEBAR-ACTIVE bug class,
-   reappearing through the token rename). Both now come from theme tokens that
-   keep the proven ≥7:1 pairing per theme. */
-.sidebar-item.active,.rail-v2__icon-link.active,.rail-v2__child.active,
+/* 11.4 Active rail items. The first draft of this section moved them onto
+   theme tokens, which re-broke the documented THEME-SWITCH-SIDEBAR-ACTIVE
+   hotfix: --brand-700 in light mode is rgb(4,120,87), and behind near-black
+   ink that is the same ~2:1 failure the hotfix was written for. The rail is a
+   dark gradient in BOTH themes, so the active pair is theme-independent by
+   design: #34d399 on #022c22 (8.6:1). The tokens above now carry the same
+   values; this !important rule is the guarantee that no token block, media
+   query or density variant can out-specify it.
+   Regression-tested by tests/regression/theme-sidebar-active.spec.js. */
+.sidebar-item.active,.rail-v2__icon-link.active,.rail-v2__child.active{
+  background:#34d399!important;color:#022c22!important;
+}
 .rail-v2__avatar,.rail-v2-panel__avatar,.user-avatar{
   background:var(--rail-item-active-bg)!important;color:var(--rail-item-active-ink)!important;
 }

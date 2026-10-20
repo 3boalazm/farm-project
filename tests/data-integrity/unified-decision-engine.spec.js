@@ -4,7 +4,7 @@
 // specifically verify NOTHING is recalculated and NO new persistent
 // state is created.
 
-const { test, expect } = require('../fixtures/farm-test');
+const { test, expect, showDashPanel } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupMockEngine(page) {
@@ -138,6 +138,7 @@ test.describe('Unified Decision Engine', () => {
       if (window.renderUnifiedPriorities) await window.renderUnifiedPriorities(animals, health, [], []);
     });
     await page.waitForTimeout(300);
+    await showDashPanel(page, 1);   // the unified priorities panel lives in tab 1 (الأولويات والتنبؤ)
     const bodyText = await page.evaluate(() => document.body.innerText);
     expect(bodyText).toContain('الأولويات التشغيلية');
     expect(bodyText).not.toContain('ذكاء الوزن — Sprint 2');

@@ -157,7 +157,12 @@ test.describe('Weight Intelligence Engine', () => {
     await page.waitForTimeout(300);
     const realErrors = errors.filter((e) => !e.includes('Failed to fetch'));
     expect(realErrors).toEqual([]);
-    const bodyText = await page.evaluate(() => document.body.innerText);
+    // textContent, not innerText: the v2 dashboard renders five tab panels and
+    // keeps four of them `hidden`, and innerText skips hidden content. This
+    // test's claim is "the panel renders the alert without errors", not "the
+    // alert is in the default tab" — with an empty animal list the tag can land
+    // in either the priorities panel or the operational timeline.
+    const bodyText = await page.evaluate(() => document.body.textContent);
     expect(bodyText).toContain('G-1');
   });
 });
