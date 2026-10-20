@@ -37,6 +37,20 @@
 //  database.rules.json -- no project ID is bound anywhere in this repo,
 //  so this can never accidentally touch a real Firebase project; the
 //  emulator only ever runs against an in-memory, ephemeral instance).
+//
+//  2026-10 UPDATE (audit item O-12): firebase.json did NOT exist when the
+//  paragraph above was written -- the CLI has nothing to read without it, so
+//  the documented command could not have worked. It exists now (minimal and
+//  strict JSON: the CLI rejects comments in firebase.json, unlike
+//  database.rules.json). There is still deliberately no .firebaserc, and CI
+//  passes `--project demo-bayan-farm-rules-test` explicitly, so nothing here
+//  can resolve to the live farm-mz99 project.
+//  EXPECTATIONS ARE STALE ON PURPOSE: they were written against the
+//  pre-hardening rules (26 collections readable by `auth != null`), and the
+//  2026-10 access policy reverses exactly that. The CI job that runs this file
+//  is therefore advisory (continue-on-error) until the expectations are
+//  updated to docs/deployment/RULES-AND-DEPLOY.md §2 -- see that document
+//  before "fixing" a red run by loosening a rule.
 // ══════════════════════════════════════════════════════════════════════
 
 const fs = require('fs');

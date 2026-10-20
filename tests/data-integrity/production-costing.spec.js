@@ -6,7 +6,7 @@
 // Milk/wool/manure SALES themselves are Phase 4's createSalesInvoice,
 // not re-tested here.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupProdMocks(page, overrides = {}) {
@@ -15,6 +15,7 @@ async function setupProdMocks(page, overrides = {}) {
   await page.waitForTimeout(600);
   await page.evaluate((ov) => {
     window.fbGet = async (c) => (ov[c] !== undefined ? ov[c] : []);
+    window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
   }, overrides);
 }
 
@@ -40,8 +41,10 @@ test.describe('Production Costing (Phase 13)', () => {
     expect(r.cost).toBe(200);
     expect(r.grossMargin).toBe(600);
     expect(r.quantity).toBe(70); // 40 + 30, excludes wool's 999
-    expect(r.costPerUnit).toBe(200 / 70);
-    expect(r.revenuePerUnit).toBe(800 / 70);
+    // shared.js rounds per-unit money to 2 decimals (`Math.round(x*100)/100`),
+    // so the exact float 200/70 is not what the engine returns — 2.86 is.
+    expect(r.costPerUnit).toBeCloseTo(200 / 70, 2);
+    expect(r.revenuePerUnit).toBeCloseTo(800 / 70, 2);   // 11.43, same rounding
   });
 
   test('getProductionMargin: zero quantity returns null per-unit figures, never a fabricated number or divide-by-zero', async ({ page }) => {

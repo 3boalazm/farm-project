@@ -5,7 +5,7 @@
 // accounts-receivable.spec.js exactly, in the opposite direction --
 // purchase bills are Phase 2 source documents under the hood.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupAPMocks(page, overrides = {}) {
@@ -16,6 +16,7 @@ async function setupAPMocks(page, overrides = {}) {
     window._store = JSON.parse(JSON.stringify(ov));
     window._writeLog = [];
     window.fbGet = async (c) => (window._store[c] !== undefined ? window._store[c] : []);
+    window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
     window.fbPost = async (c, d) => {
       const id = 'id_' + (window._writeLog.length + 1);
       window._writeLog.push({ op: 'post', c, id, d });
@@ -122,6 +123,7 @@ test.describe('Accounts Payable (Phase 5)', () => {
       window._store = JSON.parse(JSON.stringify(ov));
       window._writeLog = [];
       window.fbGet = async (c) => (window._store[c] !== undefined ? window._store[c] : []);
+      window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
       window.fbPost = async (c, d) => { window._writeLog.push({ op: 'post', c, d }); return 'id'; };
       window.fbPatch = async (c, id, d) => { window._writeLog.push({ op: 'patch', c, id, d }); };
     }, { accounts: ACCOUNTS, source_documents: [{ _id: 'd1', type: 'purchase_invoice', status: 'POSTED', total: 100, remainingAmount: 100 }] });

@@ -150,9 +150,16 @@ function escapeJsAttr(s){
 // the user's own id so two people with the same PIN don't produce the
 // same hash. Real improvement over plaintext, but not a complete fix
 // on its own: a 4-digit PIN only has 10,000 possible values, fast to
-// brute-force offline even hashed, if an attacker can already read the
-// users collection at all (a Firebase rules problem, tracked
-// separately — see database.rules.secure.json, not deployed).
+// brute-force offline even hashed, if an attacker can read the users
+// collection at all. Two things close that (2026-10 audit, O-18):
+//   1. database.rules.json no longer lets any client read users/ or any
+//      stored hash — see the "users" and "pin_vault" blocks there.
+//   2. hashPinV2() below replaces this single-round hash with PBKDF2
+//      (120k rounds), so one offline guess costs ~50 ms instead of
+//      ~0.005 ms — days of work for the whole 4-digit space.
+// hashPin() is kept ONLY so pin_hash values already stored can still be
+// verified during migration; nothing new is written with it (the lazy
+// upgrade path writes pin_hash_v2 into pin_vault instead).
 async function hashPin(pin, userId){
   const enc=new TextEncoder().encode('bayan-farm-pin-salt:'+userId+':'+pin);
   const digest=await crypto.subtle.digest('SHA-256', enc);
@@ -179,6 +186,82 @@ async function hashPin(pin, userId){
 function _authEmailFor(appUserId){ return 'u_'+appUserId+'@bayan-farm.internal'; }
 function _authPasswordFor(pin){ return 'bfarm-pin-'+pin+'-v1'; }
 
+// ── PIN hashing v2 — PBKDF2 (O-18) ────────────────────────
+// A single SHA-256 round over a public salt is not a password hash: the
+// whole 4-digit PIN space (10,000 values) enumerates in well under a
+// second on a phone. PBKDF2-SHA256 with a per-user salt and 120,000 rounds
+// makes each guess ~50 ms, and it is a browser-native primitive — no new
+// dependency, and no server needed to compute it.
+const PIN_V2_ITERATIONS=120000;
+function _toHex(buf){ return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join(''); }
+
+async function hashPinV2(pin, userId){
+  try{
+    if(!(typeof crypto!=='undefined' && crypto.subtle && crypto.subtle.importKey)) return null;
+    const base=await crypto.subtle.importKey('raw', new TextEncoder().encode(String(pin)),
+      {name:'PBKDF2'}, false, ['deriveBits']);
+    const bits=await crypto.subtle.deriveBits({
+      name:'PBKDF2',
+      salt:new TextEncoder().encode('bayan-farm-v2:'+userId),
+      iterations:PIN_V2_ITERATIONS, hash:'SHA-256'
+    }, base, 256);
+    return _toHex(bits);
+  }catch(e){ console.warn('hashPinV2 unavailable:', e.message); return null; }
+}
+
+// Verifies an entered PIN against ONE user record, newest scheme first.
+// Returns {ok, scheme} so the caller knows whether a lazy upgrade is due
+// ('v2' needs none; 'v1'/'plain' do). Pure computation — no network: the
+// caller decides whether a migration write is even allowed (it usually
+// isn't for a non-admin, and that's fine, it retries next login).
+async function verifyPinAgainstRecord(record, pin){
+  if(!record) return {ok:false, scheme:null};
+  const id=record.id;
+  if(record.pin_hash_v2){
+    const v2=await hashPinV2(pin, id);
+    return v2 ? {ok:v2===record.pin_hash_v2, scheme:'v2'} : {ok:false, scheme:'v2'};
+  }
+  if(record.pin_hash){
+    return {ok:(await hashPin(pin, id))===record.pin_hash, scheme:'v1'};
+  }
+  if(record.pin!=null && String(record.pin)===String(pin)) return {ok:true, scheme:'plain'};
+  return {ok:false, scheme:null};
+}
+
+// ── Public user projection (O-18) ────────────────────────
+// The login picker and every "who did this" label only ever need a name, a
+// role and an active flag. user_directory holds exactly that and is the
+// only user-shaped collection an ordinary client may read, which is what
+// lets the secret-bearing users collection stay closed.
+function publicUserProjection(u){
+  if(!u||!u.id) return null;
+  const name=String(u.name||'');
+  return {
+    id:u.id, name, role:u.role,
+    active:u.active!==false,
+    initials:name.trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join(''),
+    custom_perms:Array.isArray(u.custom_perms)?u.custom_perms.slice(0,12):[]
+  };
+}
+
+async function syncUserDirectory(u){
+  const proj=publicUserProjection(u);
+  if(!proj) return false;
+  try{ await fbPut('user_directory', proj.id, proj); return true; }
+  catch(e){ console.warn('syncUserDirectory (non-fatal):', e.message); return false; }
+}
+
+// Directory-first read with a graceful legacy fallback: until the hardened
+// rules are deployed, user_directory is simply empty and the real users
+// collection is still readable, so the app works either way.
+async function readUserDirectory(){
+  const dir=await fbGetSafe('user_directory');
+  if(Array.isArray(dir)&&dir.length) return dir;
+  const legacy=await fbGetSafe('users');
+  if(Array.isArray(legacy)&&legacy.length) return legacy.map(publicUserProjection).filter(Boolean);
+  return Array.isArray(dir)?dir:[];
+}
+
 let _authIdToken=null, _authTokenExpiry=0, _authUid=null;
 
 function _authStore(d){
@@ -204,35 +287,156 @@ async function _authRefresh(){
   }catch(e){return null;}
 }
 
-// Called once, right after a successful PIN login (see login.html).
-// Tries signing in to the bridged account; creates it if this is the
-// first time (lazy migration, same pattern as the pin_hash migration).
-async function signInWithFirebaseAuth(appUserId, pin){
-  const email=_authEmailFor(appUserId), password=_authPasswordFor(pin);
+// SECURITY FIX (2026-10 audit, F-29 — authentication bypass): this used to
+// fall through to accounts:signUp whenever signInWithPassword failed, for
+// ANY reason. A wrong PIN produces exactly the same failure as a missing
+// account, so anyone could type any 4 digits and the bridge would CREATE
+// that Firebase Auth account for them. Harmless while the rules were open;
+// fatal once the hardened rules make the bridge identity the authority on
+// who a session is. Provisioning is now explicit: `provision:true` is only
+// ever passed by a code path that has ALREADY verified the PIN against a
+// stored hash — Users.add() (admin creates the account) and the lazy
+// migration in login.html after a successful legacy verification.
+//
+// Returns {ok, uid, reason} rather than a bare uid, so the login screen can
+// distinguish "wrong PIN" from "the Email/Password provider is not enabled
+// in this Firebase project yet" and say something the owner can act on.
+async function signInWithFirebaseAuth(appUserId, pin, opts){
+  opts=opts||{};
+  const email=opts.email||_authEmailFor(appUserId), password=_authPasswordFor(pin);
   const base='https://identitytoolkit.googleapis.com/v1/accounts:';
+  const post=(endpoint)=>fetch(base+endpoint+'?key='+FIREBASE_CONFIG.apiKey,{
+    method:'POST', headers:JSON_HEADERS,
+    body:JSON.stringify({email,password,returnSecureToken:true})
+  });
+  const errMsg=async(r)=>{
+    try{ const e=await r.json(); return (e&&e.error&&e.error.message)||('HTTP '+r.status); }
+    catch(x){ return 'HTTP '+r.status; }
+  };
   try{
-    let r=await fetch(base+'signInWithPassword?key='+FIREBASE_CONFIG.apiKey,{
-      method:'POST', headers:JSON_HEADERS,
-      body:JSON.stringify({email,password,returnSecureToken:true})
-    });
-    if(!r.ok){
-      r=await fetch(base+'signUp?key='+FIREBASE_CONFIG.apiKey,{
-        method:'POST', headers:JSON_HEADERS,
-        body:JSON.stringify({email,password,returnSecureToken:true})
-      });
+    let r;
+    if(opts.forceSignUp){
+      // A freshly-numbered slot address cannot exist yet, so go straight to
+      // signUp and skip the round-trip that would only answer EMAIL_NOT_FOUND.
+      r=await post('signUp');
+    }else{
+      r=await post('signInWithPassword');
+      if(!r.ok && opts.provision){
+        const msg=await errMsg(r.clone());
+        // Only create the account when Firebase says it does not exist — never
+        // on a wrong password, never on a provider-level failure.
+        if(/EMAIL_NOT_FOUND/i.test(msg)) r=await post('signUp');
+      }
     }
-    if(!r.ok)return null; // Firebase Auth not enabled yet, or a real failure — best-effort
+    if(!r.ok){
+      const msg=await errMsg(r.clone());
+      const reason = /OPERATION_NOT_ALLOWED|PASSWORD_LOGIN_DISABLED/i.test(msg) ? 'provider-disabled'
+        : /EMAIL_NOT_FOUND/i.test(msg) ? 'not-provisioned'
+        : /INVALID_LOGIN_CREDENTIALS|INVALID_PASSWORD|INVALID_EMAIL|USER_DISABLED|WEAK_PASSWORD/i.test(msg) ? 'invalid-credentials'
+        : 'auth-failed';
+      if(reason==='provider-disabled') _authProviderState('disabled'); else _authProviderState('enabled');
+      return {ok:false, uid:null, reason, detail:msg};
+    }
     _authStore(await r.json());
-    // Maintain uid_lookup/{firebaseUid} -> appUserId so database rules
-    // can later resolve "who is this Firebase UID, in app terms" to
-    // check their role (needed since auth.uid is a random string
-    // Firebase assigns, unrelated to this app's own user ids).
-    try{ await fbPut('uid_lookup', _authUid, {appUserId}); }catch(e){ /* best-effort */ }
-    return _authUid;
+    _authProviderState('enabled');
+    // Maintain uid_lookup/{firebaseUid} -> appUserId so database rules can
+    // resolve "who is this Firebase UID, in app terms" and check their role
+    // (auth.uid is a random string Firebase assigns, unrelated to this app's
+    // own user ids). Every hardened rule in database.rules.json depends on
+    // this mapping existing, so a failure here is worth shouting about.
+    try{ await fbPut('uid_lookup', _authUid, {appUserId}); }
+    catch(e){ console.warn('uid_lookup write failed — server-side role checks will deny this session:', e.message); }
+    return {ok:true, uid:_authUid, reason:'signed-in'};
   }catch(e){
-    console.warn('Firebase Auth bridge unavailable (non-fatal, app continues on PIN-hash auth):',e.message);
-    return null;
+    console.warn('Firebase Auth bridge unavailable (non-fatal, app continues on PIN-hash auth):', e.message);
+    return {ok:false, uid:null, reason:'network', detail:e.message};
   }
+}
+
+// Remembers whether this Firebase project has the Email/Password provider
+// switched on, so login.html can print the one-line setup instruction
+// instead of a generic failure. Probing with a bogus credential is safe:
+// Firebase answers OPERATION_NOT_ALLOWED when the provider is off, and
+// EMAIL_NOT_FOUND when it is on and that account simply does not exist.
+function _authProviderState(st){
+  try{
+    if(st) sessionStorage.setItem('_farm_auth_provider', st);
+    return sessionStorage.getItem('_farm_auth_provider')||'unknown';
+  }catch(e){ return st||'unknown'; }
+}
+async function probeAuthProvider(){
+  const known=_authProviderState();
+  if(known!=='unknown') return known;
+  await signInWithFirebaseAuth('__provider_probe__', '000000');
+  return _authProviderState();
+}
+
+// ── Bridge slots: rotating a PIN must not lock anybody out ─────────
+// The bridge password is derived from the PIN, so an admin who rotates
+// someone's PIN in users.html leaves that person's Firebase Auth account
+// holding the OLD password — and Firebase's public API can only change a
+// password with that account's own idToken, which nobody has. Rather than
+// lock the user out (or keep the old PIN working), each app user gets up to
+// four synthetic identities ("slots"): u_{id}@…, u_{id}-2@…, u_{id}-3@…
+// Login tries them newest-first; when Firebase rejects all of them but the
+// stored hash verifies the PIN, a FRESH slot is provisioned for the new PIN
+// and written back. Rotation therefore self-heals on the next login, with no
+// server and no admin credential.
+function _authSlotsFor(rec, appUserId){
+  if(rec && Array.isArray(rec.auth_slots) && rec.auth_slots.length){
+    const emails=rec.auth_slots.map(s=>s&&s.email).filter(Boolean);
+    if(emails.length) return emails.slice().reverse();     // newest first
+  }
+  return [_authEmailFor(appUserId)];                       // conventional primary
+}
+
+async function signInBestSlot(appUserId, pin, rec){
+  let last={ok:false, uid:null, reason:'not-provisioned'};
+  const slots=_authSlotsFor(rec, appUserId);
+  for(const email of slots){
+    const r=await signInWithFirebaseAuth(appUserId, pin, {email});
+    if(r.ok) return r;
+    last=r;
+    // A disabled provider or a dead network will not improve on the next
+    // slot; anything else (wrong password, unknown account) might.
+    if(r.reason==='provider-disabled'||r.reason==='network') break;
+  }
+  return last;
+}
+
+// Creates the next slot for a PIN that has ALREADY been verified against a
+// stored hash. Never called on an unverified guess (see F-29).
+async function provisionAuthSlot(appUserId, pin, rec){
+  const prev=(rec && Array.isArray(rec.auth_slots)) ? rec.auth_slots : [];
+  const n=prev.length+1;
+  const email = n<=1 ? _authEmailFor(appUserId) : ('u_'+appUserId+'-'+n+'@bayan-farm.internal');
+  const r=await signInWithFirebaseAuth(appUserId, pin, {email, provision:true, forceSignUp:n>1});
+  if(r.ok){
+    const slots=prev.concat([{email, n, created:todayStr()}]).slice(-4);
+    // Best-effort: a normal user can write their own record under the
+    // hardened rules, and an admin can write anyone's. If it fails the slot
+    // still works for this session — it just gets re-created at next login.
+    try{ await fbPatch('users', appUserId, {auth_slots:slots}); }catch(e){}
+  }
+  return r;
+}
+
+// One-call PIN rotation for users.html: hashes (both schemes), the
+// write-only vault, and the bridge. `pin` is the new plaintext PIN and is
+// never stored anywhere.
+async function rotatePin(appUserId, pin){
+  if(!appUserId || pin==null) return {ok:false, reason:'missing'};
+  const v1=await hashPin(pin, appUserId);
+  const v2=await hashPinV2(pin, appUserId);
+  const patch={pin_hash:v1, pin:null};
+  if(v2) patch.pin_hash_v2=v2;
+  try{ await fbPatch('users', appUserId, patch); }
+  catch(e){ return {ok:false, reason:'write-denied', detail:e.message}; }
+  if(v2){ try{ await fbPut('pin_vault', appUserId, {pin_hash_v2:v2}); }catch(e){} }
+  let rec=null;
+  try{ rec=await fbGetOne('users', appUserId); }catch(e){}
+  const bridge=await provisionAuthSlot(appUserId, String(pin), rec);
+  return {ok:true, bridge:bridge.ok, reason:bridge.ok?'rotated':'rotated-hash-only'};
 }
 
 // ── Anonymous Auth safety net ────────────────────────────
@@ -642,13 +846,13 @@ async function undoLast(){
   try{
     if(op.type==='post'){
       // Undo add: delete the created record
-      if(op.id){await fetch(await fbUrl(op.table,op.id),{method:'DELETE'});}
+      if(op.id){await _fbFetch(await fbUrl(op.table,op.id),{method:'DELETE'});}
       fbCacheInvalidate(op.table);
       toast('تم التراجع عن إضافة سجل في '+op.table);
     } else if(op.type==='patch'){
       // Undo edit: restore previous values
       if(op.prev&&op.id){
-        var r=await fetch(await fbUrl(op.table,op.id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(op.prev)});
+        var r=await _fbFetch(await fbUrl(op.table,op.id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(op.prev)});
       }
       fbCacheInvalidate(op.table);
       toast('تم التراجع عن تعديل سجل في '+op.table);
@@ -661,7 +865,7 @@ async function undoLast(){
         // double-.json URL that would have always failed. Now calls
         // fbUrl(op.table, op.id) directly, matching every other call
         // site in this file.
-        await fetch(await fbUrl(op.table,op.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(op.prev)});
+        await _fbFetch(await fbUrl(op.table,op.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(op.prev)});
       }
       fbCacheInvalidate(op.table);
       toast('تم استعادة السجل المحذوف في '+op.table);
@@ -676,10 +880,28 @@ async function undoLast(){
   }
 }
 
+// ── Server verdict tracking ──────────────────────────────
+// Every data call goes through here so the app can tell "the server
+// refused me" (401 = no usable identity, 403 = authenticated but the rules
+// said no) apart from "the network is down" or "that record does not exist".
+// With the hardened rules in database.rules.json this distinction is what
+// lets login.html print an actionable setup message instead of a spinner
+// that never resolves, and lets verifySession() know when a denial is a
+// permissions problem rather than an outage.
+let _lastFbStatus=0, _lastFbPath='', _lastFbAt=0;
+async function _fbFetch(url, opts){
+  const r=await fetch(url, opts);
+  _lastFbStatus=r.status; _lastFbPath=String(url).split('?')[0]; _lastFbAt=Date.now();
+  return r;
+}
+function lastFbStatus(){ return _lastFbStatus; }
+function lastFbPath(){ return _lastFbPath; }
+function isPermissionDenied(){ return _lastFbStatus===401 || _lastFbStatus===403; }
+
 async function fbGet(path, skipCache){
   if(!skipCache){const cached=_fbCacheGet(path);if(cached)return cached;}
   try{
-    const r=await fetch(await fbUrl(path));
+    const r=await _fbFetch(await fbUrl(path));
 
     if(r.status===404||r.status===204){
       _fbCacheSet(path,[]);
@@ -730,7 +952,7 @@ async function fbGet(path, skipCache){
 // never-throws, always-an-array contract.
 async function fbGetSafe(path){
   try{
-    const r=await fetch(await fbUrl(path));
+    const r=await _fbFetch(await fbUrl(path));
     if(r.status===404||r.status===204) return [];
     if(!r.ok){
       if(r.status===401)_reportAuthFailure();
@@ -746,7 +968,7 @@ async function fbGetSafe(path){
 }
 
 async function fbGetOne(path,id){
-  const r=await fetch(await fbUrl(path,id));
+  const r=await _fbFetch(await fbUrl(path,id));
 
   if(!r.ok){
     if(r.status===401)_reportAuthFailure();
@@ -760,7 +982,7 @@ async function fbGetOne(path,id){
 // جلب عنصر واحد مباشرة (لا يحوّله لقائمة)
 async function fbGetSingle(path){
   try{
-    const r=await fetch(await fbUrl(path));
+    const r=await _fbFetch(await fbUrl(path));
     if(r.status===404||r.status===204)return null;
     if(!r.ok){
       if(r.status===401)_reportAuthFailure();
@@ -811,6 +1033,153 @@ const JSON_HEADERS={
   'Content-Type':'application/json'
 };
 
+// ── Write retry with exponential backoff + jitter (O-14) ─────
+// A failed write used to fail exactly once, behind a generic toast: one
+// dropped packet on a farm's mobile connection and the record was simply
+// gone, with the user none the wiser until the numbers stopped adding up.
+// Writes are now retried with backoff — but the retry policy differs by
+// verb, because that is what correctness demands:
+//   PUT / PATCH / DELETE  idempotent by definition: replaying them cannot
+//                         duplicate anything, so both network failures and
+//                         retryable statuses are retried.
+//   POST                  creates a new key, so a replay CAN duplicate. It is
+//                         therefore retried only when the server actually
+//                         answered with a retryable status (429/5xx — the
+//                         write was not applied), never when the request never
+//                         got a response and its fate is unknown.
+// The finance engine additionally dedupes on operationId, so its POSTs are
+// safe either way (see idempotencyKey() in shared.js).
+const WRITE_RETRY_ATTEMPTS = 3;
+const WRITE_RETRY_BASE_MS = 350;
+
+function _retryableStatus(st){
+  return st===408 || st===409 || st===425 || st===429 || (st>=500 && st<=504);
+}
+function _backoffDelay(attempt, retryAfterSec){
+  if(retryAfterSec) return Math.min(8000, retryAfterSec*1000);
+  const base = WRITE_RETRY_BASE_MS * Math.pow(2.2, attempt-1);
+  return Math.round(base * (0.75 + Math.random()*0.5));      // jitter: never a thundering herd
+}
+const _sleep=(ms)=>new Promise((r)=>setTimeout(r, ms));
+
+async function _writeFetch(url, opts, meta){
+  meta = meta || {};
+  const idempotent = meta.idempotent !== false;
+  // When the browser already knows there is no network, retrying just delays
+  // the message the user needs to see ("you are offline"). Fail fast instead;
+  // offline-sync.js is what queues writes for later.
+  const attempts = (typeof navigator!=='undefined' && navigator.onLine===false) ? 1 : WRITE_RETRY_ATTEMPTS;
+  let lastRes=null;
+  for(let attempt=1; attempt<=attempts; attempt++){
+    try{
+      const r = await _fbFetch(url, opts);
+      if(r.ok || !_retryableStatus(r.status)) return r;
+      lastRes = r;
+      if(attempt===attempts) return r;
+      const ra = parseFloat(r.headers && r.headers.get ? (r.headers.get('Retry-After')||'') : '') || 0;
+      diagPush('retry', meta.label+' got HTTP '+r.status+' — retrying ('+attempt+'/'+(attempts-1)+')', {path:meta.path, status:r.status});
+      await _sleep(_backoffDelay(attempt, ra));
+      continue;
+    }catch(e){
+      // No response at all. Replaying an idempotent verb is safe; replaying a
+      // POST is not, so a POST gives up and reports instead of guessing.
+      if(!idempotent || attempt===attempts){
+        diagPush('write-failed', meta.label+' failed: '+e.message, {path:meta.path, attempts:attempt});
+        throw e;
+      }
+      diagPush('retry', meta.label+' network failure — retrying ('+attempt+'/'+(attempts-1)+')', {path:meta.path, error:e.message});
+      await _sleep(_backoffDelay(attempt, 0));
+    }
+  }
+  return lastRes;
+}
+
+// ── Client diagnostics (O-17) ─────────────────────────────
+// Observability scored 4/10 in PRODUCTION-READINESS-SCORE.md for one reason:
+// when something broke on a farm, the only evidence was a developer console
+// nobody was looking at. This is a deliberately small ring buffer plus an
+// opt-in uploader — no dependency, no PII beyond what the app already stores,
+// and nothing that can block or slow a user action.
+const DIAG_RING_MAX = 40;
+// One flush drains the whole ring: a partial batch would leave the caller
+// thinking the errors were shipped when a second flush was still owed.
+const DIAG_UPLOAD_MAX = DIAG_RING_MAX;
+const _diag = [];
+let _diagUnsent = 0;
+
+function diagPush(kind, message, meta){
+  try{
+    _diag.push({ t:new Date().toISOString(), kind:String(kind), message:String(message||'').slice(0,400),
+                 meta:meta||null, sent:false });
+    if(_diag.length > DIAG_RING_MAX) _diag.splice(0, _diag.length-DIAG_RING_MAX);
+    if(_diagWorthSending(kind)) _diagUnsent++;
+  }catch(e){ /* diagnostics must never be the thing that breaks */ }
+  return true;
+}
+function _diagWorthSending(kind){
+  return kind==='error' || kind==='write-failed' || kind==='retry';
+}
+function diagnostics(){
+  const u = (typeof getUser==='function' && getUser()) || null;
+  return {
+    entries: _diag.map((d)=>({ t:d.t, kind:d.kind, message:d.message, meta:d.meta, sent:!!d.sent })),
+    unsent: _diagUnsent,
+    lastStatus: _lastFbStatus,
+    lastPath: _lastFbPath,
+    permissionDenied: _lastFbStatus===401 || _lastFbStatus===403,
+    session: u ? { id:u.id, role:u.role, verifiedBy:u.verifiedBy||null } : null,
+    authProvider: (typeof _authProviderState==='function') ? _authProviderState() : 'unknown',
+    userAgent: (typeof navigator!=='undefined') ? navigator.userAgent : '',
+  };
+}
+// Ships the interesting entries to app_logs. Rules let any active staff member
+// write their own entries and only an admin read them back, so a worker's
+// browser cannot read anyone else's diagnostics.
+async function flushDiagnostics(reason){
+  if(!_diagUnsent) return 0;
+  if(typeof initFirebase==='function' && !initFirebase()) return 0;
+  const u = (typeof getUser==='function' && getUser()) || null;
+  // Each entry is marked as it ships, so a second flush is a no-op instead of
+  // re-uploading the same ring forever (the ring is capped, the database is
+  // not — an uploader that repeats itself is how a diagnostics feature becomes
+  // the thing that fills the quota).
+  const batch = _diag.filter((d)=>!d.sent && _diagWorthSending(d.kind)).slice(0, DIAG_UPLOAD_MAX);
+  let sent = 0;
+  for(const d of batch){
+    try{
+      await fbPost('app_logs', {
+        kind:d.kind, message:d.message, meta:d.meta, at:d.t,
+        userId:u?u.id:null, userRole:u?u.role:null,
+        page:(typeof location!=='undefined')?location.pathname.split('/').pop():null,
+        reason:reason||'auto',
+      });
+      d.sent = true; sent++;
+    }catch(e){ break; }        // offline: keep them in the ring for the next flush
+  }
+  if(sent) _diagUnsent = Math.max(0, _diagUnsent - sent);
+  return sent;
+}
+// Capture the two failure channels a browser actually offers, throttled so a
+// render loop cannot flood the database.
+let _diagLastErrorAt = 0, _diagErrorCount = 0;
+function _installDiagnostics(){
+  if(typeof window==='undefined' || window.__farmDiagInstalled) return;
+  window.__farmDiagInstalled = true;
+  window.addEventListener('error', (e)=>{
+    _diagErrorCount++;
+    const now = Date.now();
+    diagPush('error', (e.message||'script error') + (e.filename?' @ '+String(e.filename).split('/').pop()+':'+e.lineno:''), null);
+    if(now - _diagLastErrorAt > 60000){ _diagLastErrorAt = now; try{ flushDiagnostics('error'); }catch(x){} }
+  });
+  window.addEventListener('unhandledrejection', (e)=>{
+    const r = e.reason;
+    diagPush('error', 'unhandled rejection: ' + ((r && r.message) || String(r)).slice(0,300), null);
+  });
+  // Flush on the way out: the last thing a user does before a crash matters most.
+  window.addEventListener('pagehide', ()=>{ try{ flushDiagnostics('pagehide'); }catch(x){} });
+}
+_installDiagnostics();
+
 async function fbPost(path,data){
   // Will capture the new ID after creation for undo
 
@@ -819,11 +1188,14 @@ async function fbPost(path,data){
     created_at:new Date().toISOString()
   });
 
-  const r=await fetch(await fbUrl(path),{
+  // POST is NOT replayed on a network failure: without a response there is no
+  // way to know whether the row was created, and a duplicate is worse than an
+  // error the user can see. Retryable STATUSES (429/5xx) are safe to retry.
+  const r=await _writeFetch(await fbUrl(path),{
     method:'POST',
     headers:JSON_HEADERS,
     body
-  });
+  }, {label:'fbPost', path, idempotent:false});
 
   // BUG FIX: cache invalidation used to happen ONLY inside the failure
   // branch below. On a successful POST, the 45-second cache still held
@@ -858,11 +1230,13 @@ async function fbPut(path,id,data){
     updated_at:new Date().toISOString()
   });
 
-  const r=await fetch(await fbUrl(path,id),{
+  // PUT is idempotent: replaying it after a dropped packet or a 503 cannot
+  // duplicate anything, so O-14's retry policy applies in full.
+  const r=await _writeFetch(await fbUrl(path,id),{
     method:'PUT',
     headers:JSON_HEADERS,
     body
-  });
+  }, {label:'fbPut', path:path+'/'+id, idempotent:true});
 
   // Same fix as fbPost above — invalidate unconditionally, not just on failure.
   fbCacheInvalidate(path);
@@ -885,7 +1259,7 @@ async function fbPatch(path,id,patch){
   var _prev=null;
   if(_undoCapturable(path,patch)){
     try{
-      var _pr=await fetch(await fbUrl(path,id));
+      var _pr=await _fbFetch(await fbUrl(path,id));
       if(_pr.ok){
         var _cur=(await _pr.json())||{};
         _prev={};
@@ -899,11 +1273,14 @@ async function fbPatch(path,id,patch){
     updated_at:new Date().toISOString()
   });
 
-  const r=await fetch(await fbUrl(path,id),{
+  // PATCH of the same keys with the same values is idempotent too (the undo
+  // pre-read above is a GET and is deliberately left unretried: a failed
+  // pre-read only costs the undo entry, never the write).
+  const r=await _writeFetch(await fbUrl(path,id),{
     method:'PATCH',
     headers:JSON_HEADERS,
     body
-  });
+  }, {label:'fbPatch', path:path+'/'+id, idempotent:true});
 
   if(r.ok && _prev) _pushUndo({type:'patch', table:path, id:id, prev:_prev, when:Date.now()});
 
@@ -921,12 +1298,12 @@ async function fbDelete(path,id){fbCacheInvalidate(path);
   // Capture data before deletion for undo
   var _delData=null;
   try{
-    var _dr=await fetch(await fbUrl(path,id));
+    var _dr=await _fbFetch(await fbUrl(path,id));
     if(_dr.ok)_delData=await _dr.json();
   }catch(e){}
-  const r=await fetch(await fbUrl(path,id),{
+  const r=await _writeFetch(await fbUrl(path,id),{
     method:'DELETE'
-  });
+  }, {label:'fbDelete', path:path+'/'+id, idempotent:true});
 
   if(!r.ok){
     if(r.status===401)_reportAuthFailure();
@@ -968,31 +1345,72 @@ async function logActivity(action, resource, description, extra={}){
 }
 
 // ── LOCAL USERS ──────────────────────────────────────────
+// Reads come from the PUBLIC projection (user_directory) so that no page
+// needs the users collection to be readable — that is what makes the
+// hardened `users/.read: false` rule survivable. Writes still go to users
+// (admin-only under the hardened rules) and are mirrored into the
+// projection in the same call, so the two can't drift apart silently.
 const Users={
   async all(){
-    return await fbGet('users');
+    return await readUserDirectory();
   },
 
+  // Full record, admin/owner only under the hardened rules. Falls back to
+  // the projection so name lookups keep working for roles that may not read
+  // the real collection (a worker resolving "who assigned this task").
   async get(id){
-    const direct=await fbGetOne('users', id);
-    if(direct) return direct;
-    const users=await fbGet('users');
-    return users.find(u=>u.id===id)||null;
+    try{
+      const direct=await fbGetOne('users', id);
+      if(direct) return direct;
+    }catch(e){ /* denied under hardened rules — fall through to the directory */ }
+    const dir=await readUserDirectory();
+    return dir.find(u=>u.id===id)||null;
   },
 
   async add(user){
-    return await fbPut('users', user.id, {
-      ...user,
-      created: todayStr()
-    });
+    // The plaintext PIN (if the caller passes one) is used to derive hashes
+    // and to provision the Firebase Auth bridge, then dropped: it is never
+    // part of the record that gets written.
+    const plain = user.pin!=null ? String(user.pin) : (user.pin_provision!=null ? String(user.pin_provision) : null);
+    const record={...user, created:todayStr()};
+    delete record.pin; delete record.pin_provision;
+    if(plain){
+      if(!record.pin_hash) record.pin_hash=await hashPin(plain, record.id);
+      const v2=record.pin_hash_v2 || await hashPinV2(plain, record.id);
+      if(v2) record.pin_hash_v2=v2;
+    }
+    const res=await fbPut('users', record.id, record);
+    await syncUserDirectory(record);
+    // Provision the bridge account for the new user right now, while an admin
+    // who knows the initial PIN is the one asking. This is one of only two
+    // places allowed to CREATE a bridge identity (the other is a login whose
+    // PIN already verified against a stored hash) — see the F-29 note on
+    // signInWithFirebaseAuth().
+    if(plain){
+      try{ await provisionAuthSlot(record.id, plain, record); }
+      catch(e){ console.warn('bridge provisioning for', record.id, 'failed (non-fatal):', e.message); }
+      if(record.pin_hash_v2){
+        try{ await fbPut('pin_vault', record.id, {pin_hash_v2:record.pin_hash_v2}); }catch(e){}
+      }
+    }
+    return res;
   },
 
   async update(id,patch){
-    return await fbPatch('users', id, patch);
+    const res=await fbPatch('users', id, patch);
+    try{
+      const fresh=await fbGetOne('users', id);
+      if(fresh) await syncUserDirectory(fresh);
+      else await syncUserDirectory({id, ...patch});
+    }catch(e){ /* best-effort mirror */ }
+    return res;
   },
 
   async del(id){
-    return await fbDelete('users', id);
+    const res=await fbDelete('users', id);
+    try{ await fbDelete('user_directory', id); }catch(e){}
+    try{ await fbDelete('pin_vault', id); }catch(e){}
+    return res;
   },
 
   async init(){
@@ -1005,23 +1423,73 @@ const Users={
     // aborts the bootstrap instead of guessing. The write itself is also
     // wrapped: initApp() fires this on every page, and an unhandled
     // rejection here used to surface as a raw console error on load.
+    //
+    // O-18 addendum: under the hardened rules this read is DENIED for an
+    // anonymous session (users/.read is false), which fbGetSafe() also
+    // reports as null — so the bootstrap correctly does nothing instead of
+    // re-creating a factory admin on a farm that already has one.
     const users = await fbGetSafe('users');
-    if(users===null) return;      // read failed — never bootstrap on a network error
+    if(users===null) return;      // read failed or denied — never bootstrap on that
     if(users.length) return;      // a real roster already exists — leave it alone
     try{
+      const v2=await hashPinV2('1234','admin1');
       await fbPut('users','admin1',{
         id:'admin1',
         name:'مدير المزرعة',
         role:'admin',
         pin_hash:await hashPin('1234','admin1'),
+        ...(v2?{pin_hash_v2:v2}:{}),
         active:true,
         created:todayStr()
       });
+      await syncUserDirectory({id:'admin1',name:'مدير المزرعة',role:'admin',active:true});
+      if(v2){ try{ await fbPut('pin_vault','admin1',{pin_hash_v2:v2}); }catch(e){} }
     }catch(e){
       console.warn('Users.init bootstrap skipped:',e.message);
     }
   }
 };
+
+// ── Server-verified session (O-01) ───────────────────────
+// Every permission check in this app reads localStorage['farm_user'], which
+// anyone can edit in DevTools: that is a UI convenience, not a security
+// control. The real control is database.rules.json (the server refuses the
+// write regardless of what the browser believes). This closes the remaining
+// gap on the client: once per session, ask the server who this user actually
+// is and drop the session if the answer disagrees — so a hand-edited role
+// stops working at the next page load instead of only at the next write.
+let _sessionVerdict=null;
+async function verifySession(opts){
+  opts=opts||{};
+  const u=getUser();
+  if(!u) return {ok:false, reason:'no-session'};
+  if(_sessionVerdict && !opts.force) return _sessionVerdict;
+
+  let rec=null;
+  try{ rec=await fbGetOne('users', u.id); }catch(e){ rec=null; }
+  if(!rec){
+    const dir=await readUserDirectory();
+    rec=dir.find(x=>x.id===u.id)||null;
+  }
+  // No record reachable at all = offline, rules not deployed yet, or a
+  // read denied for a non-admin. Locking the user out on that would turn
+  // every network blip into a forced re-login, so it is NOT treated as a
+  // mismatch — the server still enforces every write either way.
+  if(!rec){ _sessionVerdict={ok:true, reason:'unverifiable'}; return _sessionVerdict; }
+
+  const serverRole=rec.role||u.role;
+  if(rec.active===false){
+    _sessionVerdict={ok:false, reason:'deactivated', serverRole};
+  }else if(serverRole!==u.role){
+    _sessionVerdict={ok:false, reason:'role-mismatch', serverRole, localRole:u.role};
+  }else{
+    _sessionVerdict={ok:true, reason:'verified', serverRole};
+  }
+  if(!_sessionVerdict.ok && !opts.dryRun){
+    try{ localStorage.removeItem('farm_user'); }catch(e){}
+  }
+  return _sessionVerdict;
+}
 
 // ── SETTINGS ─────────────────────────────────────────────
 function getSettings(){
@@ -1076,5 +1544,17 @@ async function initApp(){
   // the database right now must simply carry on rendering.
   try{ await Users.init(); }
   catch(e){ console.warn('initApp: Users.init skipped —', e && e.message); }
+  // Ask the server who we are (O-01). Never fatal: a denied or failed read
+  // means "unverifiable", and the rules are still what actually stops a
+  // forged session from writing anything.
+  try{
+    const verdict=await verifySession();
+    if(verdict && !verdict.ok){
+      console.warn('session rejected by the server ('+verdict.reason+') — clearing it');
+      if(typeof window!=='undefined' && window.location && !/login\.html/.test(window.location.pathname)){
+        window.location.href='login.html';
+      }
+    }
+  }catch(e){ console.warn('initApp: verifySession skipped —', e && e.message); }
 }
 initApp();

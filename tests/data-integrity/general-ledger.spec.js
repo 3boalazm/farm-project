@@ -4,7 +4,7 @@
 // transaction-history pattern to any account, signed in the
 // account's own normal-balance direction.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupLedgerMocks(page, overrides = {}) {
@@ -13,6 +13,7 @@ async function setupLedgerMocks(page, overrides = {}) {
   await page.waitForTimeout(600);
   await page.evaluate((ov) => {
     window.fbGet = async (c) => (ov[c] !== undefined ? ov[c] : []);
+    window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
     window.getUser = () => ({ name: 'T', role: 'admin' });
   }, overrides);
 }

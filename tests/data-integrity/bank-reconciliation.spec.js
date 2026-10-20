@@ -2,7 +2,7 @@
 // Phase 23: regression protection for Bank Reconciliation
 // (window.reconcileBankAccount / getBankReconciliationHistory).
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupReconMocks(page, overrides = {}) {
@@ -13,6 +13,7 @@ async function setupReconMocks(page, overrides = {}) {
     window._store = JSON.parse(JSON.stringify(ov));
     window._writeLog = [];
     window.fbGet = async (c) => (window._store[c] !== undefined ? window._store[c] : []);
+    window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
     window.fbPost = async (c, d) => {
       const id = 'id_' + (window._writeLog.length + 1);
       window._writeLog.push({ op: 'post', c, id, d });
@@ -134,6 +135,7 @@ test.describe('Bank Reconciliation (Phase 23)', () => {
     await page.evaluate((ov) => {
       window._writeLog = [];
       window.fbGet = async (c) => (ov[c] !== undefined ? ov[c] : []);
+      window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
       window.fbPost = async (c, d) => { window._writeLog.push({ op: 'post', c, d }); return 'id'; };
       window.fbPatch = async (c, id, d) => { window._writeLog.push({ op: 'patch', c, id, d }); };
     }, { cash_bank_accounts: CBA, journal_entries: [] });

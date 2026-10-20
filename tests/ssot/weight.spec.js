@@ -17,7 +17,7 @@
 // this test's actual job: proving the canonical path is still the only
 // path, not the write-refused-for-a-fake-id branch.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 test.describe('Weight SSOT regression', () => {
@@ -35,6 +35,7 @@ test.describe('Weight SSOT regression', () => {
         return 'id';
       };
       window.fbGet = async (c) => (c.endsWith('/weights') ? window._weightsDB.slice() : []);
+      window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
       // recordAnimalWeight()'s step 3 (animal-existence check) calls this --
       // must resolve to a real, alive-status animal or every write is
       // correctly refused before reaching fbPost at all.

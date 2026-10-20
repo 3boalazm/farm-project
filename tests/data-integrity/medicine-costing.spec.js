@@ -4,7 +4,7 @@
 // feed-costing.spec.js exactly, over the Medicine Expense account (6200)
 // instead of Feed Expense (6100) -- pure reporting, no writes.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupMedMocks(page, overrides = {}) {
@@ -13,6 +13,7 @@ async function setupMedMocks(page, overrides = {}) {
   await page.waitForTimeout(600);
   await page.evaluate((ov) => {
     window.fbGet = async (c) => (ov[c] !== undefined ? ov[c] : []);
+    window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
   }, overrides);
 }
 

@@ -10,7 +10,7 @@
 // renderDashboard explicitly with the real Promise.all-fetched data --
 // exactly mirroring the real page's own DOMContentLoaded flow.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect, showDashPanel } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 function daysAgoLocal(n) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }
@@ -21,6 +21,7 @@ async function renderWithMockData(page, mocks) {
   await page.waitForTimeout(500);
   await page.evaluate((m) => {
     window.fbGet = async (c) => (m[c] !== undefined ? m[c] : []);
+    window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
     window.fbPost = async () => 'id';
     window.fbPatch = async () => {};
     window.logActivity = async () => {};
@@ -70,6 +71,7 @@ test.describe('Executive Dashboard (Sprint 6)', () => {
       ],
       health: [{ animal_tag: 'G-1', status: 'active', diagnosis: 'x', date: daysAgoLocal(1) }],
     });
+    await showDashPanel(page, 2);   // the executive KPI strip lives in panel 2
     const bodyText = await page.evaluate(() => document.body.innerText);
     expect(bodyText).toContain('مؤشرات تنفيذية');
     const healthyCount = await page.evaluate(() => {
@@ -87,6 +89,7 @@ test.describe('Executive Dashboard (Sprint 6)', () => {
         { title: 'مهمة مُنجزة', status: 'done', priority: 'high', date: daysAgoLocal(-2), related_tag: 'G-1' },
       ],
     });
+    await showDashPanel(page, 4);   // tasks + operational timeline live in panel 4
     const bodyText = await page.evaluate(() => document.body.innerText);
     expect(bodyText).toContain('المهام القادمة');
     expect(bodyText).toContain('مهمة ب');
@@ -103,6 +106,7 @@ test.describe('Executive Dashboard (Sprint 6)', () => {
       production_log: [{ animal_id: 'x1', animal_tag: 'G-1', type: 'milk', date: daysAgoLocal(2), quantity: 5, unit: 'liter' }],
       breeding: [{ status: 'born', female_tag: 'G-1', actual_birth: daysAgoLocal(3), offspring_count: 2 }],
     });
+    await showDashPanel(page, 4);
     const bodyText = await page.evaluate(() => document.body.innerText);
     expect(bodyText).toContain('الجدول الزمني التشغيلي');
     // Each source contributed exactly its own single record -- count

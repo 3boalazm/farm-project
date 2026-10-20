@@ -5,7 +5,7 @@
 // results) and that Production's forecast is a direct reuse of
 // evaluateProductionKPIs(), never a recalculation.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 function daysAgoStr(n) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }
@@ -17,6 +17,7 @@ async function setupForecastMocks(page, overrides = {}) {
   await page.waitForTimeout(500);
   await page.evaluate((ov) => {
     window.fbGet = async (c) => (ov[c] !== undefined ? ov[c] : []);
+    window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
     window.fbPost = async () => 'id';
     window.fbPatch = async () => {};
   }, overrides);

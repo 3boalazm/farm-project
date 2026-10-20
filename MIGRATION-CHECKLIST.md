@@ -25,3 +25,28 @@
 
 ## What this means for scope
 Given the above, this session needs to (re)implement essentially all of Sprints G/H/H.1's code-level fixes from scratch on this copy, **plus** build the genuinely new Phase 4 PWA recovery tools. `addFAB` is excluded from the work list since it's already correct. Proceeding to implementation now, in the same order as the task's phases.
+
+---
+
+## 2026-10 addendum — status of every row above
+
+The table above is a *historical snapshot* of a recovery session and is kept
+verbatim for that reason. As of the 2026-10 hardening pass every ❌ in it is
+closed in code, with two rows superseded:
+
+| Row above | Status now |
+|---|---|
+| Admin PIN fallback scoped to empty DB | ✅ `FIRST_RUN` guard in `login.html` (directory empty **and** `users` empty/unreadable) — never `pin === '1234'` alone |
+| Plaintext PIN / SHA-256 | ✅ superseded: `hashPinV2()` PBKDF2-SHA256 120 k + per-user salt in a write-only `pin_vault`; SHA-256 kept only as a one-time legacy matcher |
+| Legacy PIN migration | ✅ verify-once-then-upgrade, lazy `pin_vault` write |
+| Firebase Auth bridge | ✅ slot-based (`auth_slots`, max 4), explicit provisioning only after a PIN is proven (audit F-29) |
+| `Users.init()` plaintext PIN write | ✅ gone |
+| `fbUrl` async / awaited | ✅ `async` since the earlier pass; all call sites `await` it |
+| Cache invalidation on successful write | ✅ plus `fbCacheInvalidate()` on reseed in tests |
+| Undo-delete double `.json` | ✅ fixed |
+| `settings.html` auth gate + script deps | ✅ full dependency chain, `requireAuth()` |
+| Admin reset section content | ✅ rendered, and `weights` is out of the reset list (audit O-15: deprecated collection, frozen in the rules) |
+| `cost.html` / `breeding.js` / `inventory.js` permission checks | ✅ plus every named inventory operation and `submitBreeding()` (audit O-07/O-08) |
+| Service worker registration | ✅ wired into all 34 pages, gated on `FARM_CONFIG.enableServiceWorker` (ships `false`) — audit O-09 |
+| `sw-register.js` | ✅ exists, with `farmSwEnabled()` and admin recovery tools surfaced in `settings.html` |
+| `database.rules.secure.json` / rules deployment | ⚠️ superseded: there is no `database.rules.secure.json`; `database.rules.json` itself is policy-generated (`scripts/apply-access-policy.js`, 43/48 collections) and `firebase.json` now exists so it can actually be deployed. Deployment is still an owner action (Console + `firebase login`) — `docs/deployment/RULES-AND-DEPLOY.md` |

@@ -33,7 +33,11 @@ const EXCLUDE_DIRS = new Set([
 ]);
 const EXCLUDE_FILES = new Set([
   'package.json', 'package-lock.json', 'playwright.config.js',
-  'vercel.json', 'database.rules.json', 'farm-apk.zip'
+  'vercel.json', 'database.rules.json', 'farm-apk.zip',
+  // firebase.json is Firebase CLI config (rules deploy + emulator ports), not a
+  // web asset — the APK has no use for it and should not ship deployment
+  // config. Added 2026-10 when firebase.json was created (audit O-11/O-12).
+  'firebase.json'
 ]);
 const INCLUDE_DIR_NAMES = new Set(['pages', 'media', 'api']);
 

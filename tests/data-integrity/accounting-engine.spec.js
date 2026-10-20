@@ -5,7 +5,7 @@
 // -- the existing `finance` collection and computeFinanceKPIs/Trend are
 // completely untouched by this engine and are not re-tested here.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupAccountingMocks(page, overrides = {}) {
@@ -15,6 +15,7 @@ async function setupAccountingMocks(page, overrides = {}) {
   await page.evaluate((ov) => {
     window._writeLog = [];
     window.fbGet = async (c) => (ov[c] !== undefined ? ov[c] : []);
+    window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
     window.fbPost = async (c, d) => { window._writeLog.push({ op: 'post', c, d }); return 'id_' + window._writeLog.length; };
     window.fbPut = async (c, id, d) => { window._writeLog.push({ op: 'put', c, id, d }); };
     window.fbPatch = async (c, id, d) => { window._writeLog.push({ op: 'patch', c, id, d }); };
@@ -34,7 +35,18 @@ test.describe('Accounting Engine (Phase 1)', () => {
     expect(r.ok).toBe(true);
     expect(r.seeded).toBeGreaterThan(30);
     const writes = await page.evaluate(() => window._writeLog);
-    expect(writes.every((w) => w.op === 'put' && w.c === 'accounts')).toBe(true);
+    // Seeding writes ~40 accounts with PUT and then logs one activity row. The
+    // original assertion (`writes.every(op === 'put' && c === 'accounts')`)
+    // failed the moment logActivity() actually reached a database — i.e. it
+    // only ever passed because the write was lost to the network. Assert both
+    // halves instead: every account write is a PUT to `accounts`, and the audit
+    // trail row exists.
+    const accountWrites = writes.filter((w) => w.c === 'accounts');
+    expect(accountWrites.length).toBeGreaterThan(30);
+    expect(accountWrites.every((w) => w.op === 'put')).toBe(true);
+    expect(writes.filter((w) => w.c === 'accounts').length,
+      'seeding must not write anywhere except accounts and the audit trail').toBe(writes.length - 1);
+    expect(writes.some((w) => w.c === 'activity_log'), 'logActivity must record the seeding').toBe(true);
   });
 
   test('seedDefaultChartOfAccounts: does nothing if accounts already exist', async ({ page }) => {
@@ -179,6 +191,7 @@ test.describe('Accounting Engine (Phase 1)', () => {
     await page.evaluate((ov) => {
       window._writeLog = [];
       window.fbGet = async (c) => (ov[c] !== undefined ? ov[c] : []);
+      window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
       window.fbPost = async (c, d) => { window._writeLog.push({ op: 'post', c, d }); return 'id'; };
       window.fbPut = async (c, id, d) => { window._writeLog.push({ op: 'put', c, id, d }); };
     }, { accounts: TWO_ACCOUNTS });

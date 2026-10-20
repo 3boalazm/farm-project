@@ -5,9 +5,13 @@
 //  Network-First with Cache Fallback: Firebase REST API
 //  Background Sync: queued writes via offline-sync.js
 // ══════════════════════════════════════════════════════════════
-var CACHE_STATIC = 'farm-static-v5';
-var CACHE_PAGES  = 'farm-pages-v5';
-var CACHE_DATA   = 'farm-data-v5';    // Firebase GET responses
+// v6 (2026-10): the v2 design system (ui.css) and shell runtime (ui-shell.js)
+// joined the app shell, and sw-register.js is now loaded by every page. A
+// version bump is what makes an already-installed worker drop the v5 caches on
+// activate — without it, users would keep the pre-redesign stylesheet.
+var CACHE_STATIC = 'farm-static-v6';
+var CACHE_PAGES  = 'farm-pages-v6';
+var CACHE_DATA   = 'farm-data-v6';    // Firebase GET responses
 
 var APP_SHELL = [
   '/', '/index.html', '/dashboard.html', '/login.html',
@@ -15,8 +19,9 @@ var APP_SHELL = [
   '/breeding.html', '/births.html', '/production.html',
   '/tasks.html', '/notifications.html', '/reports.html',
   '/inventory.html', '/finance.html', '/settings.html',
-  '/styles.css', '/config.js', '/firebase.js',
-  '/nav.js', '/shared.js', '/offline-sync.js', '/manifest.json',
+  '/styles.css', '/ui.css', '/config.js', '/firebase.js',
+  '/nav.js', '/shared.js', '/ui-shell.js', '/offline-sync.js',
+  '/sw-register.js', '/manifest.json',
 ];
 
 var CDN_DOMAINS = [

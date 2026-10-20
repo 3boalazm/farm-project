@@ -8,7 +8,7 @@
 // this suite fails, by construction, without anyone writing a new
 // test case for it.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect, makeFarm, interceptBackend } = require('../fixtures/farm-test');
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 const ROLES = ['admin', 'supervisor', 'vet', 'worker', 'visitor'];
@@ -29,6 +29,11 @@ test.describe('Permission matrix (generated from live nav.js + firebase.js)', ()
 
   test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext();
+    // O-19: beforeAll runs on worker-scoped fixtures, so the automatic
+    // `context` interception from tests/fixtures/farm-test.js does not apply
+    // here — build the fake backend by hand or this page load would go to the
+    // real farm-mz99 project.
+    await interceptBackend(context, makeFarm());
     // Must authenticate before visiting, or requireAuth() redirects to
     // login.html -- which deliberately skips loading nav.js entirely
     // (per CLAUDE.md), so FARM_NAV would never be defined.

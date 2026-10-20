@@ -10,12 +10,7 @@
   <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
 
-<script>
-(function(){
-  var t=localStorage.getItem('farm_theme');
-  if(t==='light')document.documentElement.classList.add('light-mode');
-})();
-</script>
+<script>(function(){var d=document.documentElement;try{var t=localStorage.getItem('farm_theme');if(t==='light'){d.classList.add('light-mode');d.setAttribute('data-theme','light');}else if(t==='auto'){d.removeAttribute('data-theme');}else{d.setAttribute('data-theme','dark');}var n=localStorage.getItem('farm_density');if(n)d.setAttribute('data-density',n);var c=localStorage.getItem('farm_contrast');if(c==='high')d.setAttribute('data-contrast','high');var m=localStorage.getItem('farm_motion');if(m==='off')d.setAttribute('data-motion','off');}catch(e){}})();</script>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>الإعدادات — بيان المزرعة</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -26,10 +21,15 @@
 <link rel="icon" type="image/png" sizes="16x16" href="media/favicon-16.png">
 <link rel="apple-touch-icon" href="media/apple-touch-icon.png">
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="ui.css">
 <script src="config.js"></script>
 <script src="firebase.js"></script>
 <script src="nav.js"></script>
 <script src="shared.js"></script>
+<script src="ui-shell.js"></script>
+<!-- O-09: the offline/PWA registrar. Loaded on every page; registration
+     itself is gated on FARM_CONFIG.enableServiceWorker in config.js. -->
+<script src="sw-register.js" defer></script>
 </head>
 <body>
 <div class="page-wrap rail-v2-content">
@@ -200,6 +200,75 @@ function renderAdminResetSection(){
       </div>
     </div>
   </div>
+  <!-- ══════════════════════════════════════════════════════════════
+       O-09 · the offline layer, visible and reversible
+       sw.js and sw-register.js existed and were complete, but no page
+       loaded the registrar, so the whole PWA layer was dormant and its
+       recovery tools were unreachable. Every page loads it now; whether
+       it REGISTERS is FARM_CONFIG.enableServiceWorker. This card shows
+       the real state and keeps the two recovery tools one tap away —
+       which is what makes turning the flag on a safe decision.
+       ══════════════════════════════════════════════════════════════ -->
+  <div class="settings-section" style="border-color:rgba(59,130,246,.28)">
+    <h6 class="fw-bold mb-3">
+      <i class="bi bi-cloud-arrow-down-fill me-1" style="color:var(--blue)"></i>
+      العمل دون اتصال (Service Worker)
+    </h6>
+    <div class="wonder-card p-3">
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <span class="type-badge badge-gray" id="sw-flag-badge">—</span>
+        <span class="type-badge badge-gray" id="sw-reg-badge">—</span>
+        <small class="text-gray ms-auto" id="sw-cache-info"></small>
+      </div>
+      <p class="text-gray mt-2 mb-3" style="font-size:.82rem;line-height:1.9">
+        التفعيل يتم من <code>config.js → enableServiceWorker</code>. عند التفعيل يُخزَّن هيكل التطبيق
+        (الصفحات وui.css وui-shell.js) ليعمل دون اتصال، وتبقى قراءات Firebase من الشبكة أولًا.
+        إذا ظهر إصدار قديم بعد نشر تحديث، استخدم أداتَي الاستعادة:
+      </p>
+      <div class="d-flex gap-2 flex-wrap">
+        <button class="action-btn sm" onclick="uiSwClearData()" aria-label="مسح تخزين البيانات">
+          <i class="bi bi-eraser-fill me-1"></i> مسح كاش البيانات
+        </button>
+        <button class="action-btn sm danger" onclick="uiSwUnregister()" aria-label="إلغاء تفعيل العمل دون اتصال">
+          <i class="bi bi-plug-fill me-1"></i> إلغاء التسجيل وإفراغ الكاش
+        </button>
+        <button class="action-btn sm ghost" onclick="uiSwRefresh()" aria-label="تحديث حالة Service Worker">
+          <i class="bi bi-arrow-clockwise me-1"></i> تحديث الحالة
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       O-17 · observability the farmer can actually reach
+       Errors used to end their life in a developer console nobody opens.
+       firebase.js now keeps a 40-entry ring buffer (errors, unhandled
+       rejections, write retries) and can ship it to app_logs — readable
+       by an admin only. This card is the human-facing half: what this
+       device saw, who it thinks it is, and whether the server agrees.
+       ══════════════════════════════════════════════════════════════ -->
+  <div class="settings-section" style="border-color:rgba(245,158,11,.3)">
+    <h6 class="fw-bold mb-3">
+      <i class="bi bi-activity me-1" style="color:var(--orange)"></i>
+      التشخيص وسجل الأخطاء
+    </h6>
+    <div class="wonder-card p-3">
+      <div id="diag-summary" class="d-flex gap-2 flex-wrap mb-3"></div>
+      <div class="d-flex gap-2 flex-wrap mb-3">
+        <button class="action-btn sm primary" onclick="uiDiagFlush()" aria-label="رفع السجلات">
+          <i class="bi bi-cloud-upload-fill me-1"></i> رفع السجلات إلى app_logs
+        </button>
+        <button class="action-btn sm ghost" onclick="uiDiagCopy()" aria-label="نسخ التشخيص">
+          <i class="bi bi-clipboard-fill me-1"></i> نسخ تقرير التشخيص
+        </button>
+        <button class="action-btn sm ghost" onclick="uiDiagRender()" aria-label="تحديث">
+          <i class="bi bi-arrow-clockwise me-1"></i> تحديث
+        </button>
+      </div>
+      <div id="diag-list" style="max-height:260px;overflow-y:auto;font-size:.78rem;line-height:1.9"></div>
+    </div>
+  </div>
+
 <!-- BUG FIX (2026-10 audit): the <div class="page-wrap rail-v2-content">
      opened at the top of <body> was NEVER closed — every page in this app
      closes it, this one did not, so the browser auto-closed it at </body>
@@ -305,7 +374,13 @@ window.resetAnimals=async function(){
   if(!confirm('مسح كل بيانات القطيع؟\nحيوانات + أوزان + سجلات النافق'))return;
   toast('جاري المسح...','info');
   var r1=await _deleteTable('animals');
-  var r2=await _deleteTable('weights');
+  // O-15 CLOSED: `weights` was the pre-SSOT top-level collection, superseded
+  // by the certified animals/{id}/weights nesting, and database.rules.json now
+  // freezes it (admin-read, nobody writes). Deleting it from a reset-all was
+  // both a no-op on real farms and a guaranteed permission error for anyone
+  // who is not an admin -- so it is no longer part of the reset. The rows, if
+  // any exist, are a migration question, not a reset question.
+  var r2={ok:true, skipped:'weights (deprecated collection — see O-15)'};
   await logActivity('delete','system','مسح بيانات القطيع');
   toast(r1?'✅ تم مسح القطيع':'⚠️ المسح جزئي — تحقق من الاتصال');
 };
@@ -354,18 +429,114 @@ window.resetEverything=async function(){
   toast('جاري مسح كل البيانات...','info');
   const tables=['animals','health','breeding','vaccinations','finance',
                 'inventory_meds','inventory_feeds','inventory_equipment',
-                'activity_log','login_notifications','notifications','weights'];
+                'activity_log','login_notifications','notifications'];
   let deleted=0;
   for(const t of tables){const ok=await _deleteTable(t);if(ok)deleted++;}
   console.log('Deleted', deleted, 'of', tables.length, 'tables');
   // Also reset localStorage settings
-  const keysToKeep=['farm_theme','farm_notif_sound','breed_colors','_loginNotifPushed'];
+  const keysToKeep=['farm_theme','farm_notif_sound','breed_colors','_loginNotifPushed',
+                    // UI preferences are per-device display settings, not farm
+                    // data: a data reset must not silently re-theme the app
+                    // (2026-10 UI pass, ui-shell.js Prefs).
+                    'farm_density','farm_contrast','farm_motion','farm_ui_recent'];
   Object.keys(localStorage).forEach(function(k){
     if(keysToKeep.indexOf(k)<0)localStorage.removeItem(k);
   });
   toast(deleted===tables.length?'✅ تم مسح كل البيانات — يمكنك إعادة استيراد البيانات من صفحة الاستيراد':'⚠️ تم مسح '+deleted+' من '+tables.length+' — بعض البيانات لم يتم مسحها، تحقق من الاتصال', deleted===tables.length?'success':'error');
   setTimeout(function(){location.href='dashboard.html';},2000);
 };
+</script>
+<script>
+// O-09 + O-17 · the settings panels above. Every function is defensive:
+// these are recovery tools, and a recovery tool that throws is worse than
+// no tool at all.
+(function(){
+  function badge(el, text, cls){
+    var n=document.getElementById(el); if(!n) return;
+    n.textContent=text; n.className='type-badge '+(cls||'badge-gray');
+  }
+  window.uiSwRefresh=function(){
+    try{
+      var on=(typeof farmSwEnabled==='function')?farmSwEnabled():false;
+      badge('sw-flag-badge', on?'التفعيل: مفعّل في config.js':'التفعيل: متوقف في config.js', on?'badge-tarbiya':'badge-gray');
+      var supported=('serviceWorker' in navigator);
+      if(!supported){ badge('sw-reg-badge','المتصفح لا يدعم Service Worker','badge-yellow'); return; }
+      navigator.serviceWorker.getRegistrations().then(function(regs){
+        var active=regs.filter(function(r){return r.active;}).length;
+        badge('sw-reg-badge', active?('مسجّل وحيّ ('+active+')'):'غير مسجّل', active?'badge-tarbiya':'badge-gray');
+        var info=document.getElementById('sw-cache-info');
+        if(info&&'caches' in window){
+          caches.keys().then(function(keys){ info.textContent='الكاشات: '+(keys.join('، ')||'لا شيء'); });
+        }
+      }).catch(function(){ badge('sw-reg-badge','تعذّر قراءة حالة التسجيل','badge-yellow'); });
+    }catch(e){ badge('sw-reg-badge','تعذّر قراءة الحالة','badge-yellow'); }
+  };
+  window.uiSwClearData=function(){
+    if(typeof requestClearDataCache!=='function'){ toast('أدوات الاستعادة غير محمّلة في هذه الصفحة','error'); return; }
+    Promise.resolve(requestClearDataCache(4000)).then(function(ok){
+      toast(ok?'تم مسح كاش البيانات':'لا يوجد Service Worker نشط للرد — لا يوجد كاش بيانات','ok'?'success':'warning');
+      window.uiSwRefresh();
+    }).catch(function(e){ toast('تعذّر مسح الكاش: '+e.message,'error'); });
+  };
+  window.uiSwUnregister=function(){
+    var run=function(){
+      if(typeof unregisterServiceWorker!=='function'){ toast('أدوات الاستعادة غير محمّلة','error'); return; }
+      Promise.resolve(unregisterServiceWorker()).then(function(ok){
+        toast(ok?'تم إلغاء التسجيل وإفراغ الكاش — أعد تحميل الصفحة':'لا يوجد تسجيل لإلغائه',ok?'success':'warning');
+        window.uiSwRefresh();
+      }).catch(function(e){ toast('تعذّر إلغاء التسجيل: '+e.message,'error'); });
+    };
+    if(window.UIShell&&UIShell.confirm){
+      UIShell.confirm({title:'إلغاء العمل دون اتصال؟',
+        message:'سيُحذف Service Worker وكل الكاشات من هذا الجهاز. التطبيق يعمل بشكل طبيعي بعدها، لكن بدون دعم الاتصال الضعيف.',
+        confirmLabel:'إلغاء التسجيل', danger:true}).then(function(ok){ if(ok) run(); });
+    }else if(window.confirm('إلغاء تسجيل Service Worker وإفراغ الكاش؟')){ run(); }
+  };
+
+  window.uiDiagRender=function(){
+    var box=document.getElementById('diag-list'), sum=document.getElementById('diag-summary');
+    if(typeof diagnostics!=='function'){ if(box) box.textContent='firebase.js غير محمّل'; return; }
+    var d=diagnostics();
+    if(sum){
+      var s=d.session;
+      sum.innerHTML=[
+        {t:'الجلسة: '+(s?(s.id+' ('+((ROLES[s.role]||{}).label||s.role)+')'):'لا أحد'), c:s?'badge-blue':'badge-gray'},
+        {t:'التحقق: '+(s&&s.verifiedBy==='firebase-auth'?'Firebase Auth ✓':(s&&s.verifiedBy?'رمز PIN (مرحلة انتقالية)':'—')), c:s&&s.verifiedBy==='firebase-auth'?'badge-tarbiya':'badge-yellow'},
+        {t:'مزوّد البريد/كلمة السر: '+(d.authProvider==='enabled'?'مفعّل':d.authProvider==='disabled'?'غير مفعّل في Console':'غير معروف'), c:d.authProvider==='enabled'?'badge-tarbiya':'badge-yellow'},
+        {t:'آخر استجابة للخادم: '+(d.lastStatus||'—')+(d.permissionDenied?' (مرفوضة بالصلاحيات)':''), c:d.permissionDenied?'badge-danger':'badge-gray'},
+        {t:'أخطاء غير مُرسلة: '+d.unsent, c:d.unsent?'badge-yellow':'badge-gray'}
+      ].map(function(x){ return '<span class="type-badge '+x.c+'">'+x.t+'</span>'; }).join('');
+    }
+    if(box){
+      box.innerHTML=d.entries.length? d.entries.slice().reverse().map(function(e){
+        var when=(e.t||'').slice(11,19);
+        var kind=e.kind==='error'?'badge-danger':e.kind==='retry'?'badge-yellow':'badge-gray';
+        return '<div class="d-flex gap-2 align-items-start mb-1" style="border-bottom:1px solid var(--border);padding-bottom:4px">'+
+          '<span class="type-badge '+kind+'" style="flex-shrink:0">'+e.kind+'</span>'+
+          '<span class="text-gray" style="flex-shrink:0">'+when+'</span>'+
+          '<span style="word-break:break-word">'+escapeHtml(e.message||'')+'</span></div>';
+      }).join('') : '<span class="text-gray">لا توجد أخطاء مسجّلة على هذا الجهاز في هذه الجلسة.</span>';
+    }
+  };
+  window.uiDiagFlush=function(){
+    if(typeof flushDiagnostics!=='function'){ toast('firebase.js غير محمّل','error'); return; }
+    Promise.resolve(flushDiagnostics('manual')).then(function(n){
+      toast(n?('تم رفع '+n+' سجل إلى app_logs (للمدير فقط)'):'لا توجد سجلات تستحق الرفع', n?'success':'warning');
+      window.uiDiagRender();
+    }).catch(function(e){ toast('تعذّر الرفع: '+e.message,'error'); });
+  };
+  window.uiDiagCopy=function(){
+    try{
+      var text=JSON.stringify(diagnostics(),null,2);
+      if(navigator.clipboard&&navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text).then(function(){ toast('تم نسخ تقرير التشخيص','success'); },
+          function(){ window.prompt('انسخ التقرير يدويًا:', text); });
+      }else{ window.prompt('انسخ التقرير يدويًا:', text); }
+    }catch(e){ toast('تعذّر النسخ: '+e.message,'error'); }
+  };
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){ window.uiSwRefresh(); window.uiDiagRender(); });
+  else { window.uiSwRefresh(); window.uiDiagRender(); }
+})();
 </script>
 <script src="farm-react.js" defer></script>
 <script>

@@ -148,10 +148,37 @@ module.exports = suite('10 · Finance service & KPIs', ({ test }) => {
     assert.strictEqual(totalRevenue, 10, "today's record lands in the current month's bucket");
   });
 
-  test('a "loss" record is invisible to income/expense bucketing (documented gap, asserted so it cannot silently change)', async () => {
-    reset({ finance: { l1: { date: '2026-05-01', type: 'loss', amount: 4000, category: 'نفوق' } } });
-    const k = J(await app.eval(`(async()=>await computeFinanceKPIs('2026-05-01','2026-05-31'))()`));
-    assert.strictEqual(k.revenue + k.expenses, 0, 'shared.js itself flags that type:"loss" is excluded from the P&L buckets');
-    assert.strictEqual(k.recordCount, 1, 'but the record IS counted, so the gap is a bucketing gap, not a filter gap');
+  test('O-06 CLOSED: a "loss" record counts as an expense in the P&L, and stays separately visible', async () => {
+    // This test used to pin the opposite: type:'loss' was excluded from the
+    // buckets, so computeFinanceKPIs() reported a farm that had written off
+    // 4,000 EGP of dead stock as breaking even. A loss is money out; it now
+    // lands in `expenses` (and therefore netProfit, roi, margin and
+    // avgCostPerAnimal) while `losses` keeps it visible on its own line.
+    // Dated inside the CURRENT month: computeFinanceTrend() buckets the last N
+    // periods from today, so a hardcoded 2026-05 fixture would fall outside
+    // every bucket it returns (and would start silently passing for the wrong
+    // reason once the calendar moved on).
+    const today = app.eval(`todayStr()`);
+    const from = today.slice(0, 8) + '01', to = today.slice(0, 8) + '28';
+    reset({ finance: {
+      l1: { date: today.slice(0, 8) + '02', type: 'loss', amount: 4000, category: 'نفوق' },
+      e1: { date: today.slice(0, 8) + '03', type: 'expense', amount: 1000, category: 'أعلاف ومواد تغذية' },
+      i1: { date: today.slice(0, 8) + '04', type: 'income', amount: 9000, category: 'بيع حيوانات' },
+    } });
+    const k = J(await app.eval(`(async()=>await computeFinanceKPIs(${JSON.stringify(from)},${JSON.stringify(to)}))()`));
+    assert.strictEqual(k.revenue, 9000);
+    assert.strictEqual(k.operatingExpenses, 1000, 'operating expenses are still reported on their own');
+    assert.strictEqual(k.losses, 4000, 'and so are the write-offs');
+    assert.strictEqual(k.lossCount, 1);
+    assert.strictEqual(k.expenses, 5000, 'a loss is money out: it belongs in the expense total');
+    assert.strictEqual(k.netProfit, 4000, 'profit may no longer ignore what the farm lost');
+    assert.strictEqual(k.recordCount, 3);
+
+    const trend = J(await app.eval(`(async()=>await computeFinanceTrend('month',3))()`));
+    const month = trend[trend.length - 1];      // the current month is always last
+    assert.ok(month, 'the trend returns buckets: ' + JSON.stringify(trend));
+    assert.strictEqual(month.expenses, 5000, 'the chart and the KPI row cannot disagree about the same month');
+    assert.strictEqual(month.losses, 4000);
+    assert.strictEqual(month.profit, 4000);
   });
 });

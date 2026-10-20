@@ -7,7 +7,7 @@
 // goes negative, unit conversion (bags vs kg) is correct, and every
 // notification/KPI is read-only.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect, showDashPanel } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupInvMocks(page, overrides = {}) {
@@ -17,6 +17,7 @@ async function setupInvMocks(page, overrides = {}) {
   await page.evaluate((ov) => {
     window._writeLog = [];
     window.fbGet = async (c) => (ov[c] !== undefined ? ov[c] : []);
+    window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
     window.fbPost = async (c, d) => { window._writeLog.push({ op: 'post', c, d }); return 'id'; };
     window.fbPatch = async (c, id, d) => { window._writeLog.push({ op: 'patch', c, id, d }); };
     window.getUser = () => ({ name: 'T', role: 'admin' });
@@ -61,8 +62,14 @@ test.describe('Farm Inventory (v1.7)', () => {
 
   test('purchase transaction creates a real finance expense record (Purchase-to-Finance linking)', async ({ page }) => {
     await setupInvMocks(page, { inventory_feeds: [{ _id: 'f1', name: 'علف', quantity: 5, cost_per_unit: 100 }] });
-    await page.evaluate(() => window.recordInventoryTransaction('feeds', 'علف', 3, 'purchase', null));
+    // The link lives in purchaseFeed(), not in recordInventoryTransaction():
+    // the transaction helper only writes the stock movement and the
+    // inventory_transactions row, and purchaseFeed() is what turns the cost
+    // into a finance expense (via feedPurchase). Calling the helper directly
+    // and expecting a finance row tested a function that never had one.
+    await page.evaluate(() => window.purchaseFeed({ itemName: 'علف', quantity: 3 }));
     const writes = await page.evaluate(() => window._writeLog);
+    expect(writes.some((w) => w.c === 'inventory_transactions'), 'the stock movement is still recorded').toBe(true);
     const finWrite = writes.find((w) => w.c === 'finance');
     expect(finWrite).toBeTruthy();
     expect(finWrite.d.amount).toBe(300);
@@ -162,6 +169,7 @@ test.describe('Farm Inventory (v1.7)', () => {
       feed_consumption: [],
     });
     await page.evaluate(() => window.renderInventoryExecCard());
+    await showDashPanel(page, 1);   // #inventory-exec-card lives in panel 1
     await page.waitForTimeout(300);
     const bodyText = await page.evaluate(() => document.body.innerText);
     expect(bodyText).toContain('المخزون');

@@ -2,7 +2,7 @@
 // Sprint 4, Epic 4: regression protection for window.evaluateProductionKPIs(),
 // window.evaluateProductionAlert(), and the dashboard ranking panel.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupMockEngine(page) {
@@ -102,6 +102,7 @@ test.describe('Production Intelligence Engine', () => {
     await page.addInitScript(() => {
       localStorage.setItem('farm_user', JSON.stringify({ name: 'T', role: 'admin' }));
       window.fbGet = async (path) => (path === 'production_log' || path === 'daily_tasks' || path === 'production_alerts' ? [] : []);
+      window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
       window.fbPost = async () => 'id';
       window.fbPatch = async () => {};
       window.logActivity = async () => {};

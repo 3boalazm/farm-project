@@ -318,31 +318,117 @@ const NS = {
   },
 
   // ── Weather check ──────────────────────────────────
+  // O-16 CLOSED (2026-10 audit). F-13 removed a dead duplicate of this
+  // function and recorded, in git history and in the report, exactly which
+  // behaviours died with it. They are restored here deliberately — this is a
+  // product decision taken in this pass, not a silent merge:
+  //   • the documented severity ladder: ≥40 °C danger, ≥35 °C warning,
+  //     ≤5 °C danger, ≤12 °C warning (the running code only had ≥38 / ≤8, so
+  //     a 36 °C afternoon and a 10 °C night both passed in silence);
+  //   • the humidity>85% respiratory warning;
+  //   • the once-per-day throttle, per alert identity, in
+  //     localStorage['_lastWeatherAlert'] — without it the 15-minute poller
+  //     re-notifies the same condition all day long;
+  //   • the "الطقس مناسب" all-clear, so a farmer who checks the bell knows the
+  //     check actually RAN. Silence and "nothing to report" used to be
+  //     indistinguishable, which is how the dead twin went unnoticed.
+  // Every number a user sees goes through ar() like the rest of the app.
   async checkWeather(){
     if(!initFirebase())return;
     try{
       const w=await getWeather();
-      if(!w?.main)return;
-      const temp=Math.round(w.main.temp);
-      const humidity=w.main.humidity;
+      if(!w||!w.main)return;
+      const temp=Math.round(+w.main.temp);
+      const humidity=Math.round(+w.main.humidity||0);
       const prev=NS._lastWeatherTemp;
       NS._lastWeatherTemp=temp;
+      if(!isFinite(temp))return;
+      const today=todayStr();
 
-      // Extreme heat
-      if(temp>=38){
-        const n={type:'danger',cat:'الطقس',icon:'bi-thermometer-high',title:'إجهاد حراري شديد — '+ar(temp)+'°م',msg:'رطوبة '+ar(humidity)+'٪ — زِد المياه وأوقف الرعي في الظهيرة',href:'dashboard.html',id:'heat-'+todayStr()+'-'+temp};
-        NS.save(n); NS.push('⚠️ إجهاد حراري — '+ar(temp)+'°م', 'رطوبة '+ar(humidity)+'٪ — إجراءات طارئة مطلوبة', '🌡️', n.id, 'dashboard.html');
+      // Once per day, per alert identity. The 15-minute poller calls this all
+      // day; the farmer should hear about a given condition once.
+      const firstToday=function(id){
+        try{
+          const map=JSON.parse(localStorage.getItem('_lastWeatherAlert')||'{}')||{};
+          if(map[id]===today) return false;
+          map[id]=today;
+          localStorage.setItem('_lastWeatherAlert',JSON.stringify(map));
+          return true;
+        }catch(e){ return true; }   // corrupt storage must not silence a weather warning
+      };
+      // `matched` counts CONDITIONS, `fired` counts NOTIFICATIONS. They must
+      // stay separate: a condition already reported today is throttled, so
+      // nothing new is emitted — and the all-clear below must not then claim
+      // the weather is fine on a 42 °C afternoon just because it said so at
+      // six in the morning.
+      let fired=0, matched=0;
+      const emit=function(n,title,body,icon,level){
+        matched++;
+        if(!firstToday(n.id))return;
+        NS.save(n);
+        NS.push(title,body,icon,n.id,n.href,level||n.type);
+        fired++;
+      };
+
+      // Heat ladder
+      if(temp>=40){
+        emit({type:'danger',cat:'الطقس',icon:'bi-thermometer-high',
+          title:'إجهاد حراري شديد — '+ar(temp)+'°م',
+          msg:'رطوبة '+ar(humidity)+'٪ — زِد المياه وأوقف الرعي في الظهيرة ووفّر ظلاً',
+          href:'dashboard.html',id:'heat-severe-'+today},
+          '⚠️ إجهاد حراري شديد — '+ar(temp)+'°م','رطوبة '+ar(humidity)+'٪ — إجراءات طارئة مطلوبة','🌡️','danger');
+      }else if(temp>=35){
+        emit({type:'warning',cat:'الطقس',icon:'bi-thermometer-high',
+          title:'إجهاد حراري — '+ar(temp)+'°م',
+          msg:'رطوبة '+ar(humidity)+'٪ — كثّف مياه الشرب وقلّل الرعي وقت الظهيرة',
+          href:'dashboard.html',id:'heat-'+today},
+          '🌡️ إجهاد حراري — '+ar(temp)+'°م','كثّف مياه الشرب','🌡️','warning');
       }
-      // Extreme cold
-      if(temp<=8){
-        const n={type:'warning',cat:'الطقس',icon:'bi-snow',title:'برد شديد — '+ar(temp)+'°م',msg:'تحقق من التدفئة وزد الأعلاف',href:'dashboard.html',id:'cold-'+todayStr()+'-'+temp};
-        NS.save(n); NS.push('❄️ برد شديد — '+ar(temp)+'°م', 'تحقق من التدفئة', '❄️', n.id, 'dashboard.html');
+      // Cold ladder
+      if(temp<=5){
+        emit({type:'danger',cat:'الطقس',icon:'bi-snow',
+          title:'برد شديد — '+ar(temp)+'°م',
+          msg:'خطر على المواليد: تدفئة إضافية وأعلاف أكثر وفرشة جافة',
+          href:'dashboard.html',id:'cold-severe-'+today},
+          '❄️ برد شديد — '+ar(temp)+'°م','تدفئة المواليد وأعلاف إضافية','❄️','danger');
+      }else if(temp<=12){
+        emit({type:'warning',cat:'الطقس',icon:'bi-snow',
+          title:'برودة — '+ar(temp)+'°م',
+          msg:'تحقق من التدفئة وزد الأعلاف',
+          href:'dashboard.html',id:'cold-'+today},
+          '❄️ برودة — '+ar(temp)+'°م','تحقق من التدفئة','❄️','warning');
       }
-      // Sudden temperature change (>8°C from last check)
-      if(prev!==null&&Math.abs(temp-prev)>=8){
+      // Humidity: the respiratory-risk warning the dead twin carried
+      if(humidity>85){
+        emit({type:'warning',cat:'الطقس',icon:'bi-droplet-fill',
+          title:'رطوبة عالية — '+ar(humidity)+'٪',
+          msg:'خطر التهابات تنفسية: حسّن التهوية وفرشة جافة، وراقب السعال',
+          href:'health.html',id:'humidity-'+today},
+          '💧 رطوبة '+ar(humidity)+'٪','خطر تنفسي — حسّن التهوية','💧','warning');
+      }
+      // Sudden swing (≥8 °C since the last reading)
+      if(typeof prev==='number' && isFinite(prev) && Math.abs(temp-prev)>=8){
         const dir=temp>prev?'ارتفاع':'انخفاض';
-        const n={type:'warning',cat:'الطقس',icon:'bi-thermometer-half',title:'تغير مفاجئ في الحرارة',msg:dir+' مفاجئ من '+ar(prev)+'°م إلى '+ar(temp)+'°م',href:'dashboard.html',id:'weather-change-'+Date.now()};
-        NS.save(n); NS.push('تغير مناخي مفاجئ', dir+' من '+ar(prev)+' إلى '+ar(temp)+'°م', '🌤️', n.id, 'dashboard.html');
+        emit({type:'warning',cat:'الطقس',icon:'bi-thermometer-half',
+          title:'تغير مفاجئ في الحرارة',
+          msg:dir+' مفاجئ من '+ar(prev)+'°م إلى '+ar(temp)+'°م — راقب الشهية والتنفس',
+          href:'dashboard.html',id:'weather-change-'+today+'-'+prev+'-'+temp},
+          'تغير مناخي مفاجئ',dir+' من '+ar(prev)+'°م إلى '+ar(temp)+'°م','🌤️','warning');
+      }
+      // All-clear: once a day, and only when NO condition matched. Checking
+      // `fired` here instead of `matched` was a real bug — on the second poll
+      // of a 42 °C day the heat alert is throttled, `fired` stays 0, and the
+      // bell cheerfully reports fine weather in the middle of a heatwave.
+      if(!matched){
+        if(firstToday('weather-clear-'+today)){
+          const n={type:'info',cat:'الطقس',icon:'bi-sun',
+            title:'الطقس مناسب',
+            msg:ar(temp)+'°م ورطوبة '+ar(humidity)+'٪ — لا توجد تحذيرات طقس اليوم',
+            href:'dashboard.html',id:'weather-clear-'+today};
+          NS.save(n);
+          NS.push('☀️ الطقس مناسب', ar(temp)+'°م — لا تحذيرات', '☀️', n.id, n.href, 'info');
+          fired++;
+        }
       }
     }catch(e){console.warn('NS.checkWeather:',e);}
   },

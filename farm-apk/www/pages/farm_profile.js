@@ -5,7 +5,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   document.getElementById('footer-year').textContent=ar(new Date().getFullYear());
   document.getElementById('footer-farm').textContent=s.farmName;
   renderNavbarV2('farm-profile.html');
-  const [animals,users]=await Promise.all([fbGet('animals'),fbGet('users')]);
+  const [animals,users]=await Promise.all([fbGet('animals'),Users.all()]);   // O-18: public projection
   renderFarmProfile(s,animals,users);
 });
 

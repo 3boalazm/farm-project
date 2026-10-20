@@ -8,7 +8,7 @@
 // transitions). Also re-verifies those chokepoints still function
 // correctly after being touched by this phase.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupAuditMocks(page, overrides = {}) {
@@ -19,6 +19,7 @@ async function setupAuditMocks(page, overrides = {}) {
     window._store = JSON.parse(JSON.stringify(ov));
     window._writeLog = [];
     window.fbGet = async (c) => (window._store[c] !== undefined ? window._store[c] : []);
+    window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
     window.fbPost = async (c, d) => {
       const id = 'id_' + (window._writeLog.length + 1);
       window._writeLog.push({ op: 'post', c, id, d });

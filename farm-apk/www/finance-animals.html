@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
 
-<script>(function(){var t=localStorage.getItem('farm_theme');if(t==='light')document.documentElement.classList.add('light-mode');}());</script>
+<script>(function(){var d=document.documentElement;try{var t=localStorage.getItem('farm_theme');if(t==='light'){d.classList.add('light-mode');d.setAttribute('data-theme','light');}else if(t==='auto'){d.removeAttribute('data-theme');}else{d.setAttribute('data-theme','dark');}var n=localStorage.getItem('farm_density');if(n)d.setAttribute('data-density',n);var c=localStorage.getItem('farm_contrast');if(c==='high')d.setAttribute('data-contrast','high');var m=localStorage.getItem('farm_motion');if(m==='off')d.setAttribute('data-motion','off');}catch(e){}})();</script>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>محاسبة الحيوانات — بيان المزرعة</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -20,6 +20,7 @@
 <link rel="icon" type="image/png" sizes="16x16" href="media/favicon-16.png">
 <link rel="apple-touch-icon" href="media/apple-touch-icon.png">
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="ui.css">
 </head>
 <body>
 <div class="page-wrap rail-v2-content">
@@ -46,6 +47,10 @@
 <script src="firebase.js"></script>
 <script src="nav.js"></script>
 <script src="shared.js"></script>
+<script src="ui-shell.js"></script>
+<!-- O-09: the offline/PWA registrar. Loaded on every page; registration
+     itself is gated on FARM_CONFIG.enableServiceWorker in config.js. -->
+<script src="sw-register.js" defer></script>
 <script src="offline-sync.js" defer></script>
 <script src="pages/datepicker.js" defer></script>
 <script>
@@ -162,14 +167,20 @@ window.faSubmitPurchase=async function(){
   if(paymentMode==='cash' && !cashAccountId){ toast('يرجى اختيار الحساب النقدي/البنكي','error'); return; }
 
   const btn=document.getElementById('ap-submit-btn');
+  // O-04 CLOSED: the idempotency key is minted ONCE per logical operation and
+  // reused by every retry of it, so a double-click, a timeout-then-retry or a
+  // reload-and-resubmit all hit the engine's create-or-return-existing dedupe
+  // instead of writing a second record. Cleared the moment the write confirms.
+  const opScope='purchase:'+animal._id+':'+amount+':'+date;
   btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> جارٍ التسجيل...';
   const r = await postAnimalPurchase({
     animalId:animal._id, animalTag:animal.tag, amount, date, paymentMode,
-    cashAccountId: paymentMode==='cash' ? cashAccountId : undefined, operationId:genId(),
+    cashAccountId: paymentMode==='cash' ? cashAccountId : undefined, operationId:idempotencyKey(opScope),
   });
   btn.disabled=false; btn.innerHTML='<i class="bi bi-cart-plus me-1"></i> تسجيل الشراء';
 
   if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
+  clearIdempotencyKey(opScope);
   toast('تم تسجيل شراء الحيوان بنجاح','success');
   document.getElementById('ap-amount').value='';
 };
@@ -231,14 +242,20 @@ window.faSubmitSale=async function(){
   if(paymentMode==='cash' && !cashAccountId){ toast('يرجى اختيار الحساب النقدي/البنكي','error'); return; }
 
   const btn=document.getElementById('as-submit-btn');
+  // O-04 CLOSED: the idempotency key is minted ONCE per logical operation and
+  // reused by every retry of it, so a double-click, a timeout-then-retry or a
+  // reload-and-resubmit all hit the engine's create-or-return-existing dedupe
+  // instead of writing a second record. Cleared the moment the write confirms.
+  const opScope='sale:'+animal._id+':'+salePrice+':'+date;
   btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> جارٍ التسجيل...';
   const r = await postAnimalSale({
     animalId:animal._id, animalTag:animal.tag, salePrice, revenueAccountId, date, paymentMode,
-    cashAccountId: paymentMode==='cash' ? cashAccountId : undefined, operationId:genId(),
+    cashAccountId: paymentMode==='cash' ? cashAccountId : undefined, operationId:idempotencyKey(opScope),
   });
   btn.disabled=false; btn.innerHTML='<i class="bi bi-cash-coin me-1"></i> تسجيل البيع';
 
   if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
+  clearIdempotencyKey(opScope);
   toast(r.costBasisKnown ? `تم تسجيل البيع — تكلفة البيع المقيّدة: ${ar(r.knownCost)} ${getSettings().currency}` : 'تم تسجيل البيع (بدون تكلفة أساس معروفة)','success');
   document.getElementById('as-price').value='';
 };
@@ -280,11 +297,17 @@ window.faSubmitDeath=async function(){
   if(!animal){ toast('يرجى اختيار حيوان','error'); return; }
 
   const btn=document.getElementById('ad-submit-btn');
+  // O-04 CLOSED: the idempotency key is minted ONCE per logical operation and
+  // reused by every retry of it, so a double-click, a timeout-then-retry or a
+  // reload-and-resubmit all hit the engine's create-or-return-existing dedupe
+  // instead of writing a second record. Cleared the moment the write confirms.
+  const opScope='death:'+animal._id+':'+date;
   btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> جارٍ التسجيل...';
-  const r = await postAnimalDeath({animalId:animal._id, animalTag:animal.tag, date, operationId:genId()});
+  const r = await postAnimalDeath({animalId:animal._id, animalTag:animal.tag, date, operationId:idempotencyKey(opScope)});
   btn.disabled=false; btn.innerHTML='<i class="bi bi-file-earmark-minus me-1"></i> تسجيل الأثر المحاسبي';
 
   if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
+  clearIdempotencyKey(opScope);
   toast(r.costBasisKnown ? `تم تسجيل الخسارة: ${ar(r.amount)} ${getSettings().currency}` : (r.reason||'لا يوجد أثر محاسبي مطلوب'),'success');
 };
 

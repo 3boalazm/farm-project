@@ -20,11 +20,13 @@ module.exports = suite('16 · Alerts, tasks & forecasting', ({ test }) => {
     assert.strictEqual(alerts[0].current_weight, 90);
     assert.strictEqual(alerts[0].previous_weight, 100);
     assert.strictEqual(alerts[0].status, 'active');
-    assert.match(alerts[0].detail, /10٪/, 'the real percentage is stated in the detail');
-    // NOTE (audit finding, cosmetic): this detail string interpolates raw
-    // ASCII digits while almost every other user-visible number in the app
-    // goes through ar() — see docs/audit/FULL-AUDIT-2026-10.md.
-    assert.strictEqual(/[٠-٩]/.test(alerts[0].detail), false);
+    // O-13 CLOSED: this detail used to interpolate raw ASCII digits while
+    // almost every other user-visible number in the app goes through ar(), so
+    // the alerts list mixed "10٪" into otherwise fully Arabic-Indic text.
+    assert.match(alerts[0].detail, /١٠٪/, 'the real percentage is stated in the detail');
+    assert.ok(/[٠-٩]/.test(alerts[0].detail), 'and it is stated in Arabic-Indic digits');
+    assert.strictEqual(/[0-9]/.test(alerts[0].detail), false,
+      'no ASCII digits may remain in the alert detail: ' + alerts[0].detail);
 
     const again = J(await app.eval(`(async()=>await evaluateWeightAlert('a1','GT-1','ج١ع١'))()`));
     assert.strictEqual(J(db.collection('weight_alerts')).length, 1, 're-evaluation must not duplicate');
@@ -71,8 +73,12 @@ module.exports = suite('16 · Alerts, tasks & forecasting', ({ test }) => {
     // Computed the same way the engine does, so the test cannot flake across
     // midnight (this suite runs in the farm's real timezone, UTC+3).
     const expectedDays = app.eval(`Math.floor((Date.now()-new Date(${JSON.stringify(d(-60))}).getTime())/86400000)`);
-    assert.ok(new RegExp('\\b' + expectedDays + '\\b').test(alerts[0].detail),
-      'the real number of days is stated, got: ' + alerts[0].detail);
+    // O-13 CLOSED: the day count is Arabic-Indic like the rest of the app's
+    // user-visible numbers, so the expectation is converted the same way.
+    const expectedDaysAr = app.eval(`ar(${expectedDays})`);
+    assert.ok(alerts[0].detail.includes(expectedDaysAr),
+      'the real number of days is stated in Arabic-Indic digits, got: ' + alerts[0].detail);
+    assert.strictEqual(/[0-9]/.test(alerts[0].detail), false, 'no ASCII digits in the detail');
     const again = J(await app.eval(`(async()=>await evaluateMissingWeightAlerts(${JSON.stringify(list)},30))()`));
     assert.strictEqual(again.length, 0, 'never a second alert for the same condition');
     assert.strictEqual(J(db.collection('weight_alerts')).length, 1);

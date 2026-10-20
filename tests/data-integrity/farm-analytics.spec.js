@@ -5,7 +5,7 @@
 // tests specifically verify no risk/health/production score is
 // recalculated (only real, timestamped events are counted).
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 function monthsAgoStr(n, day) { const d = new Date(); d.setMonth(d.getMonth() - n); if (day) d.setDate(day); return d.toISOString().slice(0, 10); }
@@ -16,6 +16,7 @@ async function setupAnalyticsMocks(page, overrides = {}) {
   await page.waitForTimeout(500);
   await page.evaluate((ov) => {
     window.fbGet = async (c) => (ov[c] !== undefined ? ov[c] : []);
+    window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
   }, overrides);
 }
 

@@ -27,7 +27,10 @@ module.exports = {
   // i.e. the gate failed without ever producing an inspectable report.
   // `list` stays for the readable console stream; `html` fills the folder
   // the existing upload step already expects (it is in .gitignore).
-  reporter: [['list'], ['html', { open: 'never' }]],
+  // `json` feeds scripts/report-playwright-failures.js, which turns failures
+  // into GitHub *annotations* — the one part of a CI run that is readable from
+  // the API in environments where log and artifact downloads are blocked.
+  reporter: [['list'], ['html', { open: 'never' }], ['json', { outputFile: 'test-results/results.json' }]],
   use: {
     baseURL: process.env.BASE_URL || 'http://localhost:8080',
     headless: true,

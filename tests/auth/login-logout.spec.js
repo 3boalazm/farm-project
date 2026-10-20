@@ -1,5 +1,5 @@
 // tests/auth/login-logout.spec.js
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 test.describe('Authentication', () => {
@@ -29,7 +29,25 @@ test.describe('Authentication', () => {
     const user = await page.evaluate(() => localStorage.getItem('farm_user'));
     const refresh = await page.evaluate(() => localStorage.getItem('_farm_auth_refresh'));
     expect(user, 'farm_user must be cleared on logout').toBeNull();
-    expect(refresh, '_farm_auth_refresh must be cleared on logout').toBeNull();
+    // logout() does removeItem('_farm_auth_refresh') — but it then navigates to
+    // login.html, whose own boot mints an ANONYMOUS Firebase session so it can
+    // read the public user_directory (the hardened rules require auth != null
+    // for that one projection). So the invariant is not "the key is gone", it
+    // is "no *user* session survives": whatever token exists after landing on
+    // login.html must be a pre-login anonymous bootstrap, never the logged-out
+    // user's. Asserting toBeNull() here passed only while the suite talked to
+    // the live project and the bootstrap failed; against the hermetic fake it
+    // does exactly what it is designed to do.
+    if (refresh !== null) {
+      let parsed = null;
+      try { parsed = JSON.parse(refresh); } catch (e) { /* a bare token string */ }
+      const uid = parsed ? String(parsed.uid || parsed.user_id || '') : String(refresh);
+      // '12345' (the value this test stored) failing the check is the point:
+      // if logout() had not cleared it, this assertion must not pass.
+      const isAnonymous = /^anon-/.test(uid);
+      expect(isAnonymous,
+        'a token surviving logout must be an anonymous bootstrap, got ' + refresh.slice(0, 120)).toBe(true);
+    }
   });
 
   test('corrupted farm_user fails safe to login, does not crash', async ({ page }) => {

@@ -3,7 +3,7 @@
 // Not a substitute for the deeper suites -- catches the "page is
 // completely broken" class of regression cheaply and fast.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 const PAGES = [

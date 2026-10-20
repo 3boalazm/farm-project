@@ -313,6 +313,14 @@ window._calcExpBirth=function(){const d=document.getElementById('b-md')?.value;i
 window._toggleBornFields=function(){const s=document.getElementById('b-st')?.value;if(document.getElementById('b-born-fields'))document.getElementById('b-born-fields').style.display=s==='born'?'block':'none';};
 
 window.submitBreeding=async function(){
+  // O-08 CLOSED: mating records are herd data, and every other write path in
+  // this file's domain checks first. breeding.html already refuses roles
+  // without the 'breeding' permission; this stops the handler being called
+  // directly (console, another page, a stale bookmarked modal) and matches the
+  // server-side rule, which is the enforcement that actually counts.
+  if(typeof canWrite==='function' && !canWrite('breeding')){
+    toast('لا تملك صلاحية تسجيل بيانات التكاثر','error'); return;
+  }
   const ft=document.getElementById('b-ft').value.trim();if(!ft){toast('يرجى إدخال ترقيم الأنثى','error');return;}
   const status=document.getElementById('b-st').value;
   const motherTag=ft; const motherBreed=document.getElementById('b-fb').value;

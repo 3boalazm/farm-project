@@ -5,7 +5,7 @@
 // duplicated, and that repeated/failed calls are safe (idempotency,
 // retry safety).
 
-const { test, expect } = require('@playwright/test');
+const { test, expect, showDashPanel } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupWorkflowMocks(page, overrides = {}) {
@@ -133,6 +133,7 @@ test.describe('Workflow Engine (v1.4)', () => {
       window.renderDashboard(animals, [], [], [], [], [], [], [], [], [], [], [], [], workflowHistory);
     });
     await page.waitForTimeout(300);
+    await showDashPanel(page, 4);   // the operational timeline lives in tab 4 (السجلات والنشاط)
     const bodyText = await page.evaluate(() => document.body.innerText);
     expect(bodyText).toContain('مسار عمل');
     expect(errors.filter((e) => !e.includes('Failed to fetch'))).toEqual([]);

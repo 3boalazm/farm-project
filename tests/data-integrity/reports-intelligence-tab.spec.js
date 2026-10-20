@@ -7,7 +7,7 @@
 // covered by tests/data-integrity/unified-decision-engine.spec.js and
 // is not re-tested here.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function loadReportsWithData(page, mocks) {
@@ -16,6 +16,7 @@ async function loadReportsWithData(page, mocks) {
   await page.waitForTimeout(700);
   await page.evaluate((m) => {
     window.fbGet = async (c) => (m[c] !== undefined ? m[c] : []);
+    window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
     window.fbPost = async () => 'id';
     window.fbPatch = async () => {};
     window.logActivity = async () => {};

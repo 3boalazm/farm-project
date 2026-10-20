@@ -4,7 +4,7 @@
 // classifies real cash/bank journal lines by their real counter-account,
 // never a derived indirect-method reconciliation.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupCashFlowMocks(page, overrides = {}) {
@@ -14,6 +14,7 @@ async function setupCashFlowMocks(page, overrides = {}) {
   await page.evaluate((ov) => {
     window._store = JSON.parse(JSON.stringify(ov));
     window.fbGet = async (c) => (window._store[c] !== undefined ? window._store[c] : []);
+    window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
     window.getUser = () => ({ name: 'T', role: 'admin' });
   }, overrides);
 }
@@ -90,6 +91,7 @@ test.describe('Cash Flow Statement (Phase 22)', () => {
     await page.waitForTimeout(600);
     await page.evaluate((ov) => {
       window.fbGet = async (c) => (ov[c] !== undefined ? ov[c] : []);
+      window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
     }, { cash_bank_accounts: CBA, journal_entries: [] });
     const r = await page.evaluate(() => window.getCashFlowStatement('2026-01-01', '2026-01-31'));
     expect(r.ok).toBe(false);

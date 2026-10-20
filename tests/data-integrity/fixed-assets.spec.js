@@ -3,7 +3,7 @@
 // (window.postAssetPurchase / postDepreciation /
 // getAssetAccumulatedDepreciation / getAssetBookValue).
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupAssetMocks(page, overrides = {}) {
@@ -14,6 +14,7 @@ async function setupAssetMocks(page, overrides = {}) {
     window._store = JSON.parse(JSON.stringify(ov));
     window._writeLog = [];
     window.fbGet = async (c) => (window._store[c] !== undefined ? window._store[c] : []);
+    window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
     window.fbPost = async (c, d) => {
       const id = 'id_' + (window._writeLog.length + 1);
       window._writeLog.push({ op: 'post', c, id, d });
@@ -153,6 +154,7 @@ test.describe('Fixed Assets & Depreciation (Phase 14)', () => {
       window._store = JSON.parse(JSON.stringify(ov));
       window._writeLog = [];
       window.fbGet = async (c) => (window._store[c] !== undefined ? window._store[c] : []);
+      window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
       window.fbPost = async (c, d) => { window._writeLog.push({ op: 'post', c, d }); return 'id'; };
     }, { accounts: ACCOUNTS, fixed_assets: [{ _id: 'as1', name: 'x', acquisitionCost: 1000, usefulLifeMonths: 12, residualValue: 0 }] });
     const purchase = await page.evaluate(() => window.postAssetPurchase({ name: 'x', acquisitionCost: 1000, usefulLifeMonths: 12, paymentMode: 'cash', cashAccountId: '1110', operationId: 'x1' }));

@@ -7,46 +7,51 @@
 // directly from the browser first. If the browser blocks that (cross-origin),
 // it automatically retries against this same-origin endpoint instead.
 //
-// Key resolution order:
-//   1. process.env.GROQ_API_KEY  — preferred: the key never leaves the server.
-//   2. the 'x-user-key' request header — fallback that preserves this app's
-//      existing "each user brings their own key" model (the key is already in
-//      that user's own localStorage, exactly as the Gemini setup worked).
+// Key resolution (2026-10 audit, O-21 — see server/api-guard.js):
+//   1. 'x-user-key' request header — the caller's OWN key: their quota, their
+//      bill. This is what assistant.html sends today, so nothing about the
+//      existing UX changes.
+//   2. process.env.GROQ_API_KEY — the OWNER's key, and only for callers that
+//      also present FARM_API_TOKEN via 'x-farm-token'. Before this change any
+//      page on the internet could relay through here with CORS "*" and spend
+//      the owner's credits; now that path requires a token the browser does
+//      not have, and if no token is configured the server key is refused
+//      outright instead of becoming an open relay.
 //
-// Deliberately mirrors api/claude.js's structure rather than introducing a
-// second, different proxy style in the same folder.
+// Also new: an origin allowlist, a per-IP rate limit, a body-size cap and a
+// clamp on requested completion tokens.
+const guard = require('../server/api-guard');
+
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-user-key');
+  guard.setCors(req, res);
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const apiKey = process.env.GROQ_API_KEY || req.headers['x-user-key'];
-  if (!apiKey) {
-    return res.status(500).json({
-      error: 'No Groq key: set GROQ_API_KEY in Vercel environment variables, or send x-user-key.'
-    });
-  }
+  const tooLarge = guard.bodyTooLarge(req);
+  if (tooLarge) return res.status(413).json({ error: 'Request body too large (limit ' + tooLarge + ' bytes).' });
+
+  const auth = guard.authorize(req, {
+    serverKey: process.env.GROQ_API_KEY || '',
+    headerKey: req.headers['x-user-key'],
+  });
+  if (!auth.ok) return res.status(auth.status).json({ error: auth.error });
 
   try {
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type':  'application/json',
-        'Authorization': 'Bearer ' + apiKey,
+        // Built here, never forwarded from the client: an inbound
+        // Authorization header is dropped so it cannot be smuggled through.
+        'Authorization': 'Bearer ' + auth.apiKey,
       },
-      body: JSON.stringify(req.body),
+      body: JSON.stringify(guard.clampBody(req.body)),
     });
 
-    const data = await response.json();
+    const data = await response.json().catch(() => ({ error: 'upstream returned a non-JSON body' }));
     return res.status(response.status).json(data);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(502).json({ error: 'Upstream request failed: ' + err.message });
   }
 };

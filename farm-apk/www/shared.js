@@ -263,6 +263,17 @@ function renderNavbarV2(activePage=''){
   <div id="modal-root"></div>`;
   document.body.insertAdjacentHTML('afterbegin', html);
   if(window.updateGlobalBellBadge) window.updateGlobalBellBadge();
+  // ── Design-system shell (2026-10 UI pass) ───────────────────────────
+  // ui-shell.js adds the appbar (breadcrumbs, ⌘K search, quick-add, bell,
+  // theme, user menu), the mobile bottom nav, toasts v2 and the table
+  // behaviours on top of this rail. Strictly additive and optional: if the
+  // file is missing (an older cached page, or a build that excludes it) the
+  // rail above renders exactly as it did before, and a failure inside the
+  // shell must never take the navigation down with it.
+  if(window.UIShell&&typeof window.UIShell.mount==='function'){
+    try{window.UIShell.mount({activePage:activePage});}
+    catch(e){console.warn('UIShell.mount failed; falling back to the legacy rail',e);}
+  }
 }
 
 function toggleRailExpanded(){
@@ -374,10 +385,12 @@ document.addEventListener('click',()=>{
   if(dd)dd.style.display='none';
   _notifOpen=false;
 });
-async function loadNotifDropdown(){
-  const dd=document.getElementById('notif-dropdown');
-  if(!dd)return;
-  dd.innerHTML='<div class="notif-dropdown-header"><span class="fw-bold"><i class="bi bi-bell-fill accent-text me-2"></i>الإشعارات</span><a href="notifications.html" style="font-size:.78rem;color:var(--gray)">عرض الكل</a></div><div class="notif-dropdown-body"><div class="text-center py-3"><div class="spinner" style="width:22px;height:22px;border-width:2px"></div></div></div>';
+// ── Inbox derivation — ONE definition of "what needs attention" ───────
+// Extracted (2026-10 UI pass) from loadNotifDropdown() so the legacy bell
+// dropdown in the user panel and the new shell notification center
+// (ui-shell.js) can never disagree about what is urgent: both render THIS
+// list. Pure read, never throws, and returns the danger count the badges use.
+async function computeInboxNotifications(){
   try{
     const t=new Date();     // still needed for the day-distance math below
     const today=todayStr(); // local date, not UTC (2026-10 audit fix)
@@ -401,6 +414,21 @@ async function loadNotifDropdown(){
     // Low stock
     meds.filter(m=>+m.quantity<=+m.min_quantity&&+m.min_quantity>0).slice(0,2).forEach(m=>{notifs.push({type:'warning',icon:'bi-capsule',title:'مخزون منخفض: '+m.name,msg:'متبقي '+m.quantity,href:'inventory.html'});});
     feeds.filter(f=>+f.quantity<=+f.min_quantity&&+f.min_quantity>0).slice(0,2).forEach(f=>{notifs.push({type:'warning',icon:'bi-bag-fill',title:'علف منخفض: '+f.name,msg:'متبقي '+f.quantity+' '+f.unit,href:'inventory.html'});});
+    return {items:notifs,dangerCount:notifs.filter(function(n){return n.type==='danger';}).length};
+  }catch(e){
+    // A failed read must never break the bell; an empty inbox is the honest
+    // fallback (fbGet already degrades to [] per collection).
+    console.warn('computeInboxNotifications:',e);
+    return {items:[],dangerCount:0};
+  }
+}
+
+async function loadNotifDropdown(){
+  const dd=document.getElementById('notif-dropdown');
+  if(!dd)return;
+  dd.innerHTML='<div class="notif-dropdown-header"><span class="fw-bold"><i class="bi bi-bell-fill accent-text me-2"></i>الإشعارات</span><a href="notifications.html" style="font-size:.78rem;color:var(--gray)">عرض الكل</a></div><div class="notif-dropdown-body"><div class="text-center py-3"><div class="spinner" style="width:22px;height:22px;border-width:2px"></div></div></div>';
+  try{
+    const {items:notifs}=await computeInboxNotifications();
 
     const catC={danger:'var(--red)',warning:'var(--orange)',info:'var(--blue)',success:'var(--green)'};
     const body=dd.querySelector('.notif-dropdown-body');
@@ -1655,6 +1683,38 @@ window.recordIncome=function(opts){
   return _writeFinanceTransaction(Object.assign({},opts,{type:'income',
     activityMsg:function(r){return 'إيراد: '+r.category+' — '+ar(r.amount)+' '+getSettings().currency;}}));
 };
+// ── Idempotency keys (O-04) ──────────────────────────────
+// The finance engine dedupes on opts.operationId: a repeated id returns the
+// ALREADY-recorded result instead of writing twice. That machinery was useless
+// in practice because every submit handler minted a fresh genId() at click
+// time -- so a double-click, a retry after a timeout, or a reload-and-resubmit
+// each produced a NEW key and a NEW duplicate record.
+// idempotencyKey(scope) mints one key per logical operation and keeps it in
+// sessionStorage, so the same scope reuses the same key across clicks AND
+// across a page reload; clearIdempotencyKey(scope) is called once the write
+// is confirmed, so the next operation of that kind starts fresh.
+function idempotencyKey(scope){
+  var k='farm_op_'+String(scope);
+  try{
+    var existing=sessionStorage.getItem(k);
+    if(existing) return existing;
+    var fresh=genId();
+    sessionStorage.setItem(k,fresh);
+    return fresh;
+  }catch(e){ return genId(); }   // private mode / no storage: still one key per call site run
+}
+function clearIdempotencyKey(scope){
+  try{ sessionStorage.removeItem('farm_op_'+String(scope)); }catch(e){}
+}
+// Convenience for the common "submit a form, then reset it" shape: returns the
+// key to use now and clears it if `ok` says the write landed.
+function operationKey(scope, ok){
+  var k=idempotencyKey(scope);
+  if(ok) clearIdempotencyKey(scope);
+  return k;
+}
+if(typeof window!=='undefined'){ window.idempotencyKey=idempotencyKey; window.clearIdempotencyKey=clearIdempotencyKey; window.operationKey=operationKey; }
+
 window.recordExpense=function(opts){
   opts=opts||{};
   return _writeFinanceTransaction(Object.assign({},opts,{type:'expense',
@@ -1662,12 +1722,14 @@ window.recordExpense=function(opts){
 };
 // Distinct from recordExpense: the existing app already writes death
 // losses as type:'loss', not 'expense' -- preserved here exactly rather
-// than silently reclassified. Flagged, not fixed: finance.js's own
-// revenue/expense analytics currently buckets only type==='income' and
-// type==='expense' (confirmed by direct search), meaning 'loss' records
-// are presently invisible to the farm's own P&L summary. Whether losses
-// should count as expenses in that report is a business-logic decision
-// this pass surfaces rather than unilaterally makes.
+// than silently reclassified, so historical records keep their meaning.
+// O-06 is CLOSED on the read side: computeFinanceKPIs() and
+// computeFinanceTrend() now count type:'loss' inside `expenses` (and
+// report it separately as `losses`), so a write-off can no longer make
+// the farm look more profitable than it was. The legacy-migration
+// analyser still classifies 'loss' as AMBIGUOUS on purpose -- choosing
+// a chart-of-accounts mapping for it is a human decision, and that
+// machinery only ever runs when someone invokes it deliberately.
 window.recordLoss=function(opts){
   opts=opts||{};
   return _writeFinanceTransaction(Object.assign({},opts,{type:'loss',
@@ -2241,7 +2303,7 @@ var WEIGHT_ALERT_RULES = {
       var latest=sortedHistory[0], prev=sortedHistory[1];
       if(!prev.weight||prev.weight<=0) return null;
       var pct=(latest.weight-prev.weight)/prev.weight;
-      if(pct<=-0.05) return {current:latest.weight, previous:prev.weight, detail:'فقدان '+Math.abs(Math.round(pct*100))+'٪ منذ آخر وزن'};
+      if(pct<=-0.05) return {current:latest.weight, previous:prev.weight, detail:'فقدان '+ar(Math.abs(Math.round(pct*100)))+'٪ منذ آخر وزن'};
       return null;
     },
   },
@@ -2337,7 +2399,7 @@ window.evaluateMissingWeightAlerts = async function(animalsList, maxDays){
             animal_id:a._id, animal_tag:a.tag||'', barn:a.barn||null,
             rule_type:'missing_weight', severity:'medium', action:'إعادة الوزن',
             current_weight:a.current_weight||null, previous_weight:null,
-            detail:'لا يوجد وزن مسجّل منذ '+Math.floor(daysSince)+' يوم',
+            detail:'لا يوجد وزن مسجّل منذ '+ar(Math.floor(daysSince))+' يوم',
             status:'active', detected_at:new Date().toISOString(), resolved_at:null,
           };
           var newId=await fbPost('weight_alerts',alertData);
@@ -2680,7 +2742,7 @@ window.evaluateOperationalPriority = async function(animalId, animalTag, barn){
       healthRisk.recommendations.forEach(function(r){ evidence.push({source:'health', label:r.label, detail:r.evidence}); });
     }
     if(prodDrop){
-      evidence.push({source:'production', label:'انخفاض إنتاج', detail:'انخفاض '+Math.round(prodDrop.dropPct*100)+'٪ ('+(prodDrop.type==='milk'?'حليب':'صوف')+')'});
+      evidence.push({source:'production', label:'انخفاض إنتاج', detail:'انخفاض '+ar(Math.round(prodDrop.dropPct*100))+'٪ ('+(prodDrop.type==='milk'?'حليب':'صوف')+')'});
     }
     if(myPendingTasks.length>0){
       evidence.push({source:'tasks', label:'مهام معلّقة', detail:ar(myPendingTasks.length)+' مهمة بانتظار التنفيذ'});
@@ -3419,9 +3481,19 @@ window.computeFinanceKPIs = async function(startDate, endDate){
     var finance = results[0]||[], animals = results[1]||[];
     var inRange = finance.filter(function(f){ return f.date && (!startDate||f.date>=startDate) && (!endDate||f.date<=endDate); });
     var incomeRecs = inRange.filter(function(f){return f.type==='income';});
-    var expenseRecs = inRange.filter(function(f){return f.type==='expense';});
+    // O-06 CLOSED (2026-10): `type:'loss'` records — written by recordLoss()
+    // for animal deaths and similar write-offs — used to be filtered out here,
+    // so the farm's own P&L quietly overstated profit by every loss it had
+    // ever recorded. A loss is money out: it now counts in `expenses` (and
+    // therefore in netProfit, roi, margin and avgCostPerAnimal) while staying
+    // separately visible as `losses`, so nobody has to guess why the expense
+    // total moved. Existing records are untouched — this is a read-side fix.
+    var operatingRecs = inRange.filter(function(f){return f.type==='expense';});
+    var lossRecs = inRange.filter(function(f){return f.type==='loss';});
+    var expenseRecs = operatingRecs.concat(lossRecs);
     var revenue = incomeRecs.reduce(function(s,f){return s+(+f.amount||0);},0);
     var expenses = expenseRecs.reduce(function(s,f){return s+(+f.amount||0);},0);
+    var losses = lossRecs.reduce(function(s,f){return s+(+f.amount||0);},0);
     var netProfit = revenue-expenses;
     var aliveCount = animals.filter(function(a){return a.status==='alive';}).length;
     var feedTotal = expenseRecs.filter(function(f){return f.category===FINANCE_CATEGORY_FEED;}).reduce(function(s,f){return s+(+f.amount||0);},0);
@@ -3439,6 +3511,9 @@ window.computeFinanceKPIs = async function(startDate, endDate){
       feedCostPct: expenses>0 ? Math.round((feedTotal/expenses)*1000)/1000 : null,
       medicineCostPct: expenses>0 ? Math.round((medTotal/expenses)*1000)/1000 : null,
       categoryBreakdown:categoryBreakdown, recordCount:inRange.length,
+      operatingExpenses:Math.round(operatingRecs.reduce(function(s,f){return s+(+f.amount||0);},0)*100)/100,
+      losses:Math.round(losses*100)/100,
+      lossCount:lossRecs.length,
     };
   }catch(e){ return null; }
 };
@@ -3450,8 +3525,12 @@ window.computeFinanceTrend = async function(granularity, periodCount){
     var buckets = window.bucketByPeriod(finance, 'date', granularity, periodCount);
     return buckets.map(function(b){
       var revenue = b.records.filter(function(f){return f.type==='income';}).reduce(function(s,f){return s+(+f.amount||0);},0);
-      var expenses = b.records.filter(function(f){return f.type==='expense';}).reduce(function(s,f){return s+(+f.amount||0);},0);
-      return { label:b.label, revenue:Math.round(revenue*100)/100, expenses:Math.round(expenses*100)/100, profit:Math.round((revenue-expenses)*100)/100 };
+      // O-06: losses count as expenses in the trend too, so the chart and the
+      // KPI row above can never disagree about the same month.
+      var expenses = b.records.filter(function(f){return f.type==='expense'||f.type==='loss';}).reduce(function(s,f){return s+(+f.amount||0);},0);
+      var losses = b.records.filter(function(f){return f.type==='loss';}).reduce(function(s,f){return s+(+f.amount||0);},0);
+      return { label:b.label, revenue:Math.round(revenue*100)/100, expenses:Math.round(expenses*100)/100,
+               losses:Math.round(losses*100)/100, profit:Math.round((revenue-expenses)*100)/100 };
     });
   }catch(e){ return []; }
 };
@@ -3515,6 +3594,14 @@ window.recordInventoryTransaction = async function(itemType, itemName, deltaQty,
 // than inventing a multi-location model this codebase doesn't have.
 
 window.purchaseFeed=async function(opts){
+  // O-07 CLOSED: defence in depth. inventory.html already refuses roles
+  // without the 'inventory' permission, but a named operation is callable
+  // from any page (and from the console), so it now checks for itself --
+  // exactly like initialStock() always did. The hardened database rules
+  // are the real enforcement; this is the client telling the truth early.
+  if(typeof canWrite==='function' && !canWrite('inventory')){
+    return {ok:false, error:'لا تملك صلاحية تعديل المخزن', permission:'inventory'};
+  }
   opts=opts||{};
   var r=await window.recordInventoryTransaction('feeds', opts.itemName, Math.abs(opts.quantity||0), 'purchase', opts.sourceId||null);
   if(!r||!r.matched) return {ok:false, error:r?'الصنف غير موجود':'خطأ في تسجيل الحركة'};
@@ -3531,6 +3618,14 @@ window.purchaseMedicine=async function(opts){
   return {ok:true, before:r.before, after:r.after};
 };
 window.consumeFeed=async function(opts){
+  // O-07 CLOSED: defence in depth. inventory.html already refuses roles
+  // without the 'inventory' permission, but a named operation is callable
+  // from any page (and from the console), so it now checks for itself --
+  // exactly like initialStock() always did. The hardened database rules
+  // are the real enforcement; this is the client telling the truth early.
+  if(typeof canWrite==='function' && !canWrite('inventory')){
+    return {ok:false, error:'لا تملك صلاحية تعديل المخزن', permission:'inventory'};
+  }
   opts=opts||{};
   var r=await window.recordInventoryTransaction('feeds', opts.itemName, -Math.abs(opts.quantity||0), opts.reason||'feeding', opts.sourceId||null);
   return r&&r.matched ? {ok:true, before:r.before, after:r.after} : {ok:false, error:r?'الصنف غير موجود':'خطأ في تسجيل الحركة'};
@@ -3541,16 +3636,40 @@ window.consumeMedicine=async function(opts){
   return r&&r.matched ? {ok:true, before:r.before, after:r.after} : {ok:false, error:r?'الصنف غير موجود':'خطأ في تسجيل الحركة'};
 };
 window.expireStock=async function(opts){
+  // O-07 CLOSED: defence in depth. inventory.html already refuses roles
+  // without the 'inventory' permission, but a named operation is callable
+  // from any page (and from the console), so it now checks for itself --
+  // exactly like initialStock() always did. The hardened database rules
+  // are the real enforcement; this is the client telling the truth early.
+  if(typeof canWrite==='function' && !canWrite('inventory')){
+    return {ok:false, error:'لا تملك صلاحية تعديل المخزن', permission:'inventory'};
+  }
   opts=opts||{};
   var r=await window.recordInventoryTransaction(opts.itemType, opts.itemName, -Math.abs(opts.quantity||0), 'expiry', opts.sourceId||null);
   return r&&r.matched ? {ok:true, before:r.before, after:r.after} : {ok:false, error:r?'الصنف غير موجود':'خطأ في تسجيل الحركة'};
 };
 window.returnStock=async function(opts){
+  // O-07 CLOSED: defence in depth. inventory.html already refuses roles
+  // without the 'inventory' permission, but a named operation is callable
+  // from any page (and from the console), so it now checks for itself --
+  // exactly like initialStock() always did. The hardened database rules
+  // are the real enforcement; this is the client telling the truth early.
+  if(typeof canWrite==='function' && !canWrite('inventory')){
+    return {ok:false, error:'لا تملك صلاحية تعديل المخزن', permission:'inventory'};
+  }
   opts=opts||{};
   var r=await window.recordInventoryTransaction(opts.itemType, opts.itemName, Math.abs(opts.quantity||0), 'return', opts.sourceId||null);
   return r&&r.matched ? {ok:true, before:r.before, after:r.after} : {ok:false, error:r?'الصنف غير موجود':'خطأ في تسجيل الحركة'};
 };
 window.stockAdjustment=async function(opts){
+  // O-07 CLOSED: defence in depth. inventory.html already refuses roles
+  // without the 'inventory' permission, but a named operation is callable
+  // from any page (and from the console), so it now checks for itself --
+  // exactly like initialStock() always did. The hardened database rules
+  // are the real enforcement; this is the client telling the truth early.
+  if(typeof canWrite==='function' && !canWrite('inventory')){
+    return {ok:false, error:'لا تملك صلاحية تعديل المخزن', permission:'inventory'};
+  }
   opts=opts||{};
   var r=await window.recordInventoryTransaction(opts.itemType, opts.itemName, opts.deltaQty||0, 'adjustment', opts.sourceId||null);
   return r&&r.matched ? {ok:true, before:r.before, after:r.after} : {ok:false, error:r?'الصنف غير موجود':'خطأ في تسجيل الحركة'};
@@ -3560,6 +3679,14 @@ window.stockAdjustment=async function(opts){
 // Animal Status's correctAnimalCount(), same 'never silently' spirit:
 // the correction is a real, visible ledger entry, not an overwrite.
 window.inventoryCorrection=async function(opts){
+  // O-07 CLOSED: defence in depth. inventory.html already refuses roles
+  // without the 'inventory' permission, but a named operation is callable
+  // from any page (and from the console), so it now checks for itself --
+  // exactly like initialStock() always did. The hardened database rules
+  // are the real enforcement; this is the client telling the truth early.
+  if(typeof canWrite==='function' && !canWrite('inventory')){
+    return {ok:false, error:'لا تملك صلاحية تعديل المخزن', permission:'inventory'};
+  }
   opts=opts||{};
   var table=INVENTORY_COLLECTION[opts.itemType];
   if(!table) return {ok:false, error:'نوع صنف غير صالح'};
@@ -3572,6 +3699,14 @@ window.inventoryCorrection=async function(opts){
   return r&&r.matched ? {ok:true, before:r.before, after:r.after} : {ok:false, error:'خطأ في تسجيل التصحيح'};
 };
 window.transferStock=async function(opts){
+  // O-07 CLOSED: defence in depth. inventory.html already refuses roles
+  // without the 'inventory' permission, but a named operation is callable
+  // from any page (and from the console), so it now checks for itself --
+  // exactly like initialStock() always did. The hardened database rules
+  // are the real enforcement; this is the client telling the truth early.
+  if(typeof canWrite==='function' && !canWrite('inventory')){
+    return {ok:false, error:'لا تملك صلاحية تعديل المخزن', permission:'inventory'};
+  }
   opts=opts||{};
   var table=INVENTORY_COLLECTION[opts.itemType];
   if(!table) return {ok:false, error:'نوع صنف غير صالح'};

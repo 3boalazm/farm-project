@@ -4,7 +4,7 @@
 // expense -> Retained Earnings 3300) dated the day AFTER the period,
 // then locks the period via the existing Phase 17 closeFiscalPeriod.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupCloseMocks(page, overrides = {}) {
@@ -15,6 +15,7 @@ async function setupCloseMocks(page, overrides = {}) {
     window._store = JSON.parse(JSON.stringify(ov));
     window._writeLog = [];
     window.fbGet = async (c) => (window._store[c] !== undefined ? window._store[c] : []);
+    window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
     window.fbPost = async (c, d) => {
       const id = 'id_' + (window._writeLog.length + 1);
       window._writeLog.push({ op: 'post', c, id, d });
@@ -120,6 +121,7 @@ test.describe('Month-End Close (Phase 30)', () => {
     await page.evaluate((ov) => {
       window._writeLog = [];
       window.fbGet = async (c) => (ov[c] !== undefined ? ov[c] : []);
+      window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
     }, { accounts: ACCOUNTS, journal_entries: [], fiscal_periods: [{ _id: '2026-01', startDate: '2026-01-01', endDate: '2026-01-31', status: 'OPEN' }] });
     const r = await page.evaluate(() => window.runMonthEndClose('2026-01'));
     expect(r.ok).toBe(false);

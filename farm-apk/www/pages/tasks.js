@@ -63,7 +63,10 @@ async function loadData() {
   try {
     const [tasks, users] = await Promise.all([
       fbGet('daily_tasks').catch(() => []),
-      fbGet('users').catch(() => []),
+      // O-18: user names come from the public projection (user_directory),
+      // not the secret-bearing users collection, which the hardened rules no
+      // longer let an ordinary session read.
+      Users.all().catch(() => []),
     ]);
     _tasks = tasks || [];
     _users = users || [];

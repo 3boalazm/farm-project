@@ -9,7 +9,7 @@
 // same way an actual farm's month would unfold. It proves the phases
 // compose correctly together, not just individually.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 test('a full realistic farm accounting month, end-to-end, stays internally consistent at every stage', async ({ page }) => {
@@ -20,6 +20,7 @@ test('a full realistic farm accounting month, end-to-end, stays internally consi
   await page.evaluate(() => {
     window._store = {};
     window.fbGet = async (c) => (window._store[c] !== undefined ? window._store[c] : []);
+    window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
     window.fbPost = async (c, d) => {
       const id = c + '_' + Math.floor(Math.random() * 1e9);
       window._store[c] = window._store[c] || [];

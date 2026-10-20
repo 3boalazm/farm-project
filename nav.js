@@ -13,7 +13,13 @@ var FARM_NAV = [
     {href:'animals.html',   icon:'bi-list-ul',             label:'إدارة القطيع',          perm:'animals'},
     {href:'goats.html',     icon:'bi-tropical-storm',      label:'الماعز',                perm:'animals'},
     {href:'sheep.html',     icon:'bi-cloud-fill',          label:'الأغنام',               perm:'animals'},
-    {href:'bayan.html',     icon:'bi-clipboard-data',      label:'بيان القطيع',           perm:'bayan'},
+    // O-02 CLOSED: bayan.html is a STATIC snapshot (hardcoded counts dated
+    // ٢٠٢٦/٠٤/٢٤), not a live view. `archive:true` makes every surface that
+    // renders navigation say so — the rail pill, the sidebar, the ⌘K palette
+    // and the page's own banner — so months-old numbers can never be read as
+    // today's herd. It stays in the nav because it is a formal printable
+    // deliverable; it just no longer pretends to be live.
+    {href:'bayan.html',     icon:'bi-clipboard-data',      label:'بيان القطيع',           perm:'bayan', archive:true, archiveNote:'أرشيف — بيان ثابت بتاريخ ٢٠٢٦/٠٤/٢٤ وليس بيانات حية'},
     {href:'births.html',    icon:'bi-stars',               label:'المواليد',              perm:'animals'},
     {href:'dead.html',      icon:'bi-x-octagon-fill',      label:'النافق',                perm:'animals'},
     {href:'barns.html',     icon:'bi-grid-3x3-gap-fill',   label:'الجمالونات والعنابر',   perm:'animals'},
