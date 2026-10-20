@@ -2,7 +2,7 @@
 // Sprint 4, Epic 4: regression protection for window.evaluateProductionKPIs(),
 // window.evaluateProductionAlert(), and the dashboard ranking panel.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupMockEngine(page) {

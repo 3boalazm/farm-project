@@ -5,7 +5,7 @@
 // tests specifically verify no risk/health/production score is
 // recalculated (only real, timestamped events are counted).
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 function monthsAgoStr(n, day) { const d = new Date(); d.setMonth(d.getMonth() - n); if (day) d.setDate(day); return d.toISOString().slice(0, 10); }

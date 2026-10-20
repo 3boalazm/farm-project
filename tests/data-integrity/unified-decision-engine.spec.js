@@ -4,7 +4,7 @@
 // specifically verify NOTHING is recalculated and NO new persistent
 // state is created.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupMockEngine(page) {

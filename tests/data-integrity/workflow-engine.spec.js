@@ -5,7 +5,7 @@
 // duplicated, and that repeated/failed calls are safe (idempotency,
 // retry safety).
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupWorkflowMocks(page, overrides = {}) {

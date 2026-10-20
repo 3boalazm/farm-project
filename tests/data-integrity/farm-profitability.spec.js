@@ -3,7 +3,7 @@
 // (window.getAnimalProfitability / rankAnimalProfitability). Realized
 // P&L built entirely from Phase 2/7 evidence -- no new storage.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupProfitMocks(page, overrides = {}) {

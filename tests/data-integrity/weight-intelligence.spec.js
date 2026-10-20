@@ -2,7 +2,7 @@
 // Sprint 2, Epic 2: regression protection for window.evaluateWeightAlert(),
 // window.evaluateMissingWeightAlerts(), and window.resolveWeightAlert().
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupMockEngine(page) {

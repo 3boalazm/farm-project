@@ -5,7 +5,7 @@
 // accounts-receivable.spec.js exactly, in the opposite direction --
 // purchase bills are Phase 2 source documents under the hood.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupAPMocks(page, overrides = {}) {

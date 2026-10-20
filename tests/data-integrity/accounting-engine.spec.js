@@ -5,7 +5,7 @@
 // -- the existing `finance` collection and computeFinanceKPIs/Trend are
 // completely untouched by this engine and are not re-tested here.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupAccountingMocks(page, overrides = {}) {

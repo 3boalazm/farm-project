@@ -6,7 +6,7 @@
 // instances directly; it is a template for adding a case whenever a
 // new modal-driven write is introduced, per docs/certification/MODAL_LIFECYCLE.md.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 test.describe('Modal field-read-before-close (historical bug class)', () => {

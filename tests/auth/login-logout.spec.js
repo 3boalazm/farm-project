@@ -1,5 +1,5 @@
 // tests/auth/login-logout.spec.js
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 test.describe('Authentication', () => {

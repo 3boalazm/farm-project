@@ -3,7 +3,7 @@
 // (window.validateFinancialReportsCrossConsistency). Cross-checks
 // figures computed via genuinely independent code paths.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupValidationMocks(page, overrides = {}) {

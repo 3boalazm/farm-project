@@ -4,7 +4,7 @@
 // getEmployeeBalance). Mirrors Accounts Payable (Phase 5) exactly --
 // accrual/payment are Phase 2 source documents under the hood.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupLaborMocks(page, overrides = {}) {

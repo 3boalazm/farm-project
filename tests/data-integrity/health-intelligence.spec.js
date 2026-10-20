@@ -1,7 +1,7 @@
 // tests/data-integrity/health-intelligence.spec.js
 // Sprint 3, Epic 3: regression protection for window.evaluateHealthRisk().
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupMockEngine(page) {

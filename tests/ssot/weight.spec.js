@@ -17,7 +17,7 @@
 // this test's actual job: proving the canonical path is still the only
 // path, not the write-refused-for-a-fake-id branch.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 test.describe('Weight SSOT regression', () => {

@@ -7,7 +7,7 @@
 // goes negative, unit conversion (bags vs kg) is correct, and every
 // notification/KPI is read-only.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupInvMocks(page, overrides = {}) {

@@ -3,7 +3,7 @@
 // (window.getFinancialDashboardKPIs). Pure composition over Phases
 // 22/24/26 -- never recalculates their outputs itself.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupKpiMocks(page, overrides = {}) {

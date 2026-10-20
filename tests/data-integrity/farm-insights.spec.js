@@ -7,7 +7,7 @@
 // exists), plus the genuinely new functions' own correctness,
 // determinism, and the 100%-read-only guarantee.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 function daysAgoStr(n) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }

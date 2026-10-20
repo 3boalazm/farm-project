@@ -3,7 +3,7 @@
 // (window.getFinancialIntegrityStatus). Pure composition over Phases
 // 24/26/29 -- never recalculates their outputs itself.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupIntegrityMocks(page, overrides = {}) {

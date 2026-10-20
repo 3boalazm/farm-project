@@ -5,7 +5,7 @@
 // documents under the hood; only the animal-specific recipe and the
 // cost-basis-gated COGS/write-off logic are tested here.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupAnimalMocks(page, overrides = {}) {

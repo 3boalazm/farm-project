@@ -6,7 +6,7 @@
 // closed/locked period -- the one place this phase reaches back into
 // prior, already-shipped code.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupPeriodMocks(page, overrides = {}) {

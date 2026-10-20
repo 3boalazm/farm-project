@@ -4,7 +4,7 @@
 // classifies real cash/bank journal lines by their real counter-account,
 // never a derived indirect-method reconciliation.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupCashFlowMocks(page, overrides = {}) {

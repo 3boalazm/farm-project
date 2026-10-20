@@ -6,7 +6,7 @@
 // and never appears as a live tag in the resulting markup, while normal
 // text (including Arabic) still renders correctly.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 const PAYLOADS = {

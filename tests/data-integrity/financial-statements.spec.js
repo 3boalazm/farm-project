@@ -4,7 +4,7 @@
 // are purely computed from accounts + journal_entries -- no storage,
 // no invented numbers.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupFsMocks(page, overrides = {}) {

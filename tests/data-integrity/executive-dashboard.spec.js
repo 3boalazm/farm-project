@@ -10,7 +10,7 @@
 // renderDashboard explicitly with the real Promise.all-fetched data --
 // exactly mirroring the real page's own DOMContentLoaded flow.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 function daysAgoLocal(n) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }

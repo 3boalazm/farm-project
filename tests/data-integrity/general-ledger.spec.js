@@ -4,7 +4,7 @@
 // transaction-history pattern to any account, signed in the
 // account's own normal-balance direction.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupLedgerMocks(page, overrides = {}) {

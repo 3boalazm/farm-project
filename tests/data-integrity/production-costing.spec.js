@@ -6,7 +6,7 @@
 // Milk/wool/manure SALES themselves are Phase 4's createSalesInvoice,
 // not re-tested here.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupProdMocks(page, overrides = {}) {

@@ -7,7 +7,7 @@
 // confirmed sale-from-detail-page bug is genuinely fixed, and every
 // KPI is read-only.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 function monthsAgoStr(n, day) { const d = new Date(); d.setMonth(d.getMonth() - n); if (day) d.setDate(day); return d.toISOString().slice(0, 10); }

@@ -9,7 +9,7 @@
 // same way an actual farm's month would unfold. It proves the phases
 // compose correctly together, not just individually.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 test('a full realistic farm accounting month, end-to-end, stays internally consistent at every stage', async ({ page }) => {

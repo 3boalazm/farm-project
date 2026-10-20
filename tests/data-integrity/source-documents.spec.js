@@ -6,7 +6,7 @@
 // engine (postJournalEntry/reverseJournalEntry) -- does not re-test those
 // directly, see accounting-engine.spec.js for that coverage.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupDocMocks(page, overrides = {}) {

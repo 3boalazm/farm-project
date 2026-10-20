@@ -5,7 +5,7 @@
 // fbPost('animals', ...) call inside a birth-context flow without
 // going through the shared helper, this catches the count drifting.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const fs = require('fs');
 const path = require('path');
 

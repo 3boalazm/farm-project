@@ -5,7 +5,7 @@
 // specifically what Sprint 9 added: the operational-priority trigger,
 // the global bell badge, expiration, and the read_at timestamp.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures/farm-test');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 async function setupNotifMocks(page, overrides = {}) {
