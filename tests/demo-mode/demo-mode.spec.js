@@ -78,7 +78,10 @@ test.describe('Demo mode', () => {
     // …and one page asserted on its actual markup, so "content" cannot mean noise
     await page.goto(`${BASE_URL}/animals.html`);
     await page.waitForLoadState('networkidle').catch(() => {});
-    expect(await page.locator('.animal-card-v2').count()).toBeGreaterThan(10);
+    // animals.html defaults to LIST view (localStorage 'animals_view_mode');
+    // .animal-card-v2 only exists in cards view, so assert on .animal-row,
+    // which both views render, and accept a table for future view modes.
+    expect(await page.locator('.animal-row, .animal-card-v2, tbody tr').count()).toBeGreaterThan(10);
     await expect(page.locator('body')).toContainText(/(GT-|SH-)\d/);
   });
 
