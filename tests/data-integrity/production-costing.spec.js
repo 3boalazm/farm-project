@@ -44,7 +44,7 @@ test.describe('Production Costing (Phase 13)', () => {
     // shared.js rounds per-unit money to 2 decimals (`Math.round(x*100)/100`),
     // so the exact float 200/70 is not what the engine returns — 2.86 is.
     expect(r.costPerUnit).toBeCloseTo(200 / 70, 2);
-    expect(r.revenuePerUnit).toBe(800 / 70);
+    expect(r.revenuePerUnit).toBeCloseTo(800 / 70, 2);   // 11.43, same rounding
   });
 
   test('getProductionMargin: zero quantity returns null per-unit figures, never a fabricated number or divide-by-zero', async ({ page }) => {
