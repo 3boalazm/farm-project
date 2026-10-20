@@ -263,6 +263,17 @@ function renderNavbarV2(activePage=''){
   <div id="modal-root"></div>`;
   document.body.insertAdjacentHTML('afterbegin', html);
   if(window.updateGlobalBellBadge) window.updateGlobalBellBadge();
+  // ── Design-system shell (2026-10 UI pass) ───────────────────────────
+  // ui-shell.js adds the appbar (breadcrumbs, ⌘K search, quick-add, bell,
+  // theme, user menu), the mobile bottom nav, toasts v2 and the table
+  // behaviours on top of this rail. Strictly additive and optional: if the
+  // file is missing (an older cached page, or a build that excludes it) the
+  // rail above renders exactly as it did before, and a failure inside the
+  // shell must never take the navigation down with it.
+  if(window.UIShell&&typeof window.UIShell.mount==='function'){
+    try{window.UIShell.mount({activePage:activePage});}
+    catch(e){console.warn('UIShell.mount failed; falling back to the legacy rail',e);}
+  }
 }
 
 function toggleRailExpanded(){
@@ -374,10 +385,12 @@ document.addEventListener('click',()=>{
   if(dd)dd.style.display='none';
   _notifOpen=false;
 });
-async function loadNotifDropdown(){
-  const dd=document.getElementById('notif-dropdown');
-  if(!dd)return;
-  dd.innerHTML='<div class="notif-dropdown-header"><span class="fw-bold"><i class="bi bi-bell-fill accent-text me-2"></i>الإشعارات</span><a href="notifications.html" style="font-size:.78rem;color:var(--gray)">عرض الكل</a></div><div class="notif-dropdown-body"><div class="text-center py-3"><div class="spinner" style="width:22px;height:22px;border-width:2px"></div></div></div>';
+// ── Inbox derivation — ONE definition of "what needs attention" ───────
+// Extracted (2026-10 UI pass) from loadNotifDropdown() so the legacy bell
+// dropdown in the user panel and the new shell notification center
+// (ui-shell.js) can never disagree about what is urgent: both render THIS
+// list. Pure read, never throws, and returns the danger count the badges use.
+async function computeInboxNotifications(){
   try{
     const t=new Date();     // still needed for the day-distance math below
     const today=todayStr(); // local date, not UTC (2026-10 audit fix)
@@ -401,6 +414,21 @@ async function loadNotifDropdown(){
     // Low stock
     meds.filter(m=>+m.quantity<=+m.min_quantity&&+m.min_quantity>0).slice(0,2).forEach(m=>{notifs.push({type:'warning',icon:'bi-capsule',title:'مخزون منخفض: '+m.name,msg:'متبقي '+m.quantity,href:'inventory.html'});});
     feeds.filter(f=>+f.quantity<=+f.min_quantity&&+f.min_quantity>0).slice(0,2).forEach(f=>{notifs.push({type:'warning',icon:'bi-bag-fill',title:'علف منخفض: '+f.name,msg:'متبقي '+f.quantity+' '+f.unit,href:'inventory.html'});});
+    return {items:notifs,dangerCount:notifs.filter(function(n){return n.type==='danger';}).length};
+  }catch(e){
+    // A failed read must never break the bell; an empty inbox is the honest
+    // fallback (fbGet already degrades to [] per collection).
+    console.warn('computeInboxNotifications:',e);
+    return {items:[],dangerCount:0};
+  }
+}
+
+async function loadNotifDropdown(){
+  const dd=document.getElementById('notif-dropdown');
+  if(!dd)return;
+  dd.innerHTML='<div class="notif-dropdown-header"><span class="fw-bold"><i class="bi bi-bell-fill accent-text me-2"></i>الإشعارات</span><a href="notifications.html" style="font-size:.78rem;color:var(--gray)">عرض الكل</a></div><div class="notif-dropdown-body"><div class="text-center py-3"><div class="spinner" style="width:22px;height:22px;border-width:2px"></div></div></div>';
+  try{
+    const {items:notifs}=await computeInboxNotifications();
 
     const catC={danger:'var(--red)',warning:'var(--orange)',info:'var(--blue)',success:'var(--green)'};
     const body=dd.querySelector('.notif-dropdown-body');
