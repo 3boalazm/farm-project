@@ -585,7 +585,7 @@ window.submitProd = async function() {
 
   // Validate: milk only from females
   if (type === 'milk' && animal.gender !== 'female') {
-    if (!confirm('هذا حيوان ذكر — هل تريد المتابعة؟ (الحليب عادة للإناث)')) return;
+    if (!await farmConfirm({message:'هذا حيوان ذكر — هل تريد المتابعة؟ (الحليب عادة للإناث)', danger:true})) return;
   }
 
   closeModal();
@@ -637,7 +637,7 @@ window.submitProd = async function() {
 
 window.delProdRec = async function(id) {
   if (!can('animals')) { toast('ليس لديك صلاحية لتنفيذ هذا الإجراء', 'error'); return; }
-  if (!id || !confirm('حذف هذا السجل نهائياً؟')) return;
+  if (!id || !await farmConfirm({message:'حذف هذا السجل نهائياً؟', danger:true})) return;
   try {
     await fbDelete('production_log', id);
     toast('تم الحذف');

@@ -110,8 +110,7 @@
   <div id="page-header"></div>
   <div id="diary-main"><div class="text-center py-5"><div class="spinner"></div></div></div>
   <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
-    <span id="footer-year"></span> &copy; <span id="footer-farm"></span><br>
-    <small style="font-size:.72rem;color:var(--text-muted)">إشراف: لواء أحمد رجب نوح | تطوير: جندي مصطفى محمد إبراهيم</small>
+    <span id="footer-year"></span> &copy; <span id="footer-farm"></span>
   </footer>
 </div>
 <script src="config.js"></script>
@@ -517,7 +516,7 @@ window.saveEdits=async function(){
     if(diff>0)adds+=diff; else removes+=Math.abs(diff);
   });
 
-  if(!confirm('سيتم:\n'+(adds>0?'• إضافة '+adds+' حيوان\n':'')+(removes>0?'• تعطيل '+removes+' حيوان\n':'')+'\nتأكيد؟'))return;
+  if(!await farmConfirm({message:'سيتم:\n'+(adds>0?'• إضافة '+adds+' حيوان\n':'')+(removes>0?'• تعطيل '+removes+' حيوان\n':'')+'\nتأكيد؟', danger:true}))return;
 
   toast('جاري التطبيق...','info');
   var totalAdded=0, totalRemoved=0;

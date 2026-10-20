@@ -35,8 +35,7 @@
   <div id="tab-recon" style="display:none"></div>
 
   <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
-    © <span id="footer-year"></span> <span id="footer-farm"></span><br>
-    <small style="font-size:.72rem;color:var(--text-muted)">إشراف: لواء أحمد رجب نوح | تطوير: جندي مصطفى محمد إبراهيم</small>
+    © <span id="footer-year"></span> <span id="footer-farm"></span>
   </footer>
 </div>
 <script src="config.js"></script>
@@ -158,7 +157,7 @@ window.fpSubmitPeriod=async function(){
 };
 
 window.fpCloseMonth=async function(periodKey){
-  if(!confirm('سيتم ترحيل قيد إقفال يصفّر الإيرادات والمصروفات لهذه الفترة إلى الأرباح المرحّلة، ثم قفل الفترة عن أي ترحيل جديد. هل تريد المتابعة؟')) return;
+  if(!await farmConfirm({message:'سيتم ترحيل قيد إقفال يصفّر الإيرادات والمصروفات لهذه الفترة إلى الأرباح المرحّلة، ثم قفل الفترة عن أي ترحيل جديد. هل تريد المتابعة؟', danger:true})) return;
   const r = await runMonthEndClose(periodKey);
   if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
   toast(r.journalEntryId ? `تم الإقفال — صافي الدخل: ${ar(r.netIncome)} ${getSettings().currency}` : 'تم قفل الفترة (لا يوجد نشاط لإقفاله)','success');
@@ -167,7 +166,7 @@ window.fpCloseMonth=async function(periodKey){
 };
 
 window.fpLockPeriod=async function(periodKey){
-  if(!confirm('القفل النهائي إجراء لا يمكن التراجع عنه. هل أنت متأكد؟')) return;
+  if(!await farmConfirm({message:'القفل النهائي إجراء لا يمكن التراجع عنه. هل أنت متأكد؟', danger:true})) return;
   const r = await lockFiscalPeriod(periodKey);
   if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
   toast('تم القفل النهائي للفترة','success');
@@ -176,7 +175,10 @@ window.fpLockPeriod=async function(periodKey){
 };
 
 window.fpReopenPeriod=async function(periodKey){
-  const reason = prompt('سبب إعادة الفتح (مطلوب):');
+  // window.prompt() is not bridged in the Capacitor WebView (it returns
+  // null), so reopening a locked fiscal period — an audited action that
+  // requires a written reason — was impossible from the app on a phone.
+  const reason = await farmPrompt({title:'إعادة فتح الفترة', label:'سبب إعادة الفتح (مطلوب)', required:true, confirmLabel:'إعادة الفتح'});
   if(!reason) return;
   const r = await reopenFiscalPeriod(periodKey, reason);
   if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }

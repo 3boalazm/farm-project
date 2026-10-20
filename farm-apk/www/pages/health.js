@@ -165,7 +165,7 @@ window.completeHealth=async function(id){
 
 window.delHealth=async function(id){
   if(!can('admin')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return;}
-  if(!confirm('حذف هذا السجل؟'))return;
+  if(!await farmConfirm({message:'حذف هذا السجل؟', danger:true}))return;
   try{await fbDelete('health',id);await logActivity('delete','health','حذف سجل صحي');toast('تم الحذف');healthRecs=healthRecs.filter(r=>r._id!==id);renderHealthPage(getSettings());}
   catch(e){toast('فشل: '+e.message,'error');}
 };
@@ -210,7 +210,7 @@ window.openHealthModal=function(id){
     </div>
     <div class="row g-2">
       <div class="col-6"><label>تاريخ العلاج *</label><input type="date" class="field" id="h-date" value="${r.date||todayStr()}"></div>
-      <div class="col-6"><label>اسم الطبيب</label><input class="field" id="h-vet" value="${escapeHtml(r.vet_name||'')}" placeholder="د. أحمد"></div>
+      <div class="col-6"><label>اسم الطبيب</label><input class="field" id="h-vet" value="${escapeHtml(r.vet_name||'')}" placeholder="اكتب اسم الطبيب"></div>
     </div>
     <label>التشخيص *</label><input class="field" id="h-diag" value="${escapeHtml(r.diagnosis||'')}" placeholder="التشخيص">
     <div class="row g-2">

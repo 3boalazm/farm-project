@@ -244,6 +244,21 @@ and move focus to their first item on open.
 
 ---
 
+### 11.1 · عقد التأكيد والإدخال — ‏`farmConfirm` / `farmPrompt` (‏2026-10-20)
+
+كل إجراء تخريبى فى التطبيق يُؤكَّد عبر هاتين الدالتين، لا عبر `window.confirm()` / `window.prompt()` — فالاثنان **بلا جسر فى WebView الخاص بـCapacitor** (يرجعان `false` / `null`)، وقد تسبّبا فى أن كل حذف ومسح على الهاتف كان يلغى نفسه بصمت. التفاصيل الكاملة: `docs/bugs/DESTRUCTIVE-ACTIONS-2026-10.md`.
+
+| الدالة | الخيارات | الإرجاع |
+|---|---|---|
+| `farmConfirm(message \| opts)` | `title, message\|body, confirmLabel, cancelLabel, danger, icon, typeToConfirm, onConfirm, onCancel` | ‏`Promise<boolean>` |
+| `farmPrompt(message \| opts)` | `title, label, placeholder, confirmLabel, cancelLabel, required, onConfirm, onCancel` | ‏`Promise<string \| null>` |
+
+- **ثلاثة مستويات** بالترتيب: حوار الـshell (`showModal` من `shared.js`) ← `window.confirm`/`window.prompt` ← لوحة inline تُضاف إلى `<body>` (‏`.farm-confirm-fallback`, ‏`ui.css` §15). مستوى مفقود لا يجوز أن يُلغى الإجراء.
+- ‏`typeToConfirm:'عبارة'` و`required:true` يضعان الحقل **داخل الحوار** بدل `prompt()`، ويبقى زر التأكيد `:disabled` حتى تُكتب العبارة/الإجابة.
+- الإغلاق بـEscape أو بالضغط على الخلفية يمرّ عبر `closeModal()` دون لمس أزرارنا، فـ`MutationObserver` على `#modal-root` يحسم الوعد بـ`false`/`null` — لا تعليق.
+- عقد الـcallback (`onConfirm`) **ما زال مدعومًا** (يستخدمه إجراءَا تسجيل الخروج داخل `ui-shell.js`).
+- ‏`UIShell.confirm` / `UIShell.prompt` نفس الدالتين على سطح الـshell، والتعريف في `ui-shell.js` §6 (‏`CONFIRM dialog`) — `Confirm`/`Prompt` و`farmConfirm`/`farmPrompt`.
+
 ## 12. Notification center (`ui.css` §8.2, `ui-shell.js` §9)
 
 The bell opens a **panel**, not a page: grouped into "يحتاج إجراء الآن" / "قريبًا / متابعة" /

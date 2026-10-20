@@ -2520,3 +2520,48 @@ html[data-motion="off"] .dash-hero,html[data-motion="off"] .dash-kpi{transition:
   .dash-hero__value{font-size:2.4rem}
   .dash-kpi__value{font-size:1.35rem}
 }
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   §15 · CONFIRM FALLBACK + typed confirmation
+   ──────────────────────────────────────────────────────────────────────
+   The shell's confirm dialog is built on shared.js showModal(). Inside the
+   Capacitor WebView there is no dialog bridge at all — window.confirm()
+   returns false and window.prompt() returns null, which is why "مسح كل
+   البيانات" and every other destructive action quietly did nothing on a
+   phone. ui-shell.js now falls back to this plain panel, so the action is
+   still confirmable, still focusable and still honest about what it will do.
+   ══════════════════════════════════════════════════════════════════════ */
+.farm-confirm-fallback{
+  position:fixed; inset:0; z-index:var(--z-modal, 1050);
+  display:grid; place-items:center; padding:var(--sp-4);
+  background:rgba(0,0,0,.58);
+}
+.farm-confirm-fallback__box{
+  width:min(420px, 100%); padding:var(--sp-5); text-align:start;
+  background:var(--surface-raised); color:var(--text-primary);
+  border:1px solid var(--border-default); border-radius:var(--r-xl);
+  box-shadow:var(--elev-3);
+}
+.farm-confirm-fallback__box strong{display:block; margin-bottom:var(--sp-2); font-size:var(--fs-md); font-weight:var(--fw-bold)}
+.farm-confirm-fallback__box p{margin:0 0 var(--sp-3); font-size:var(--fs-sm); line-height:1.8; color:var(--text-secondary)}
+.farm-confirm-fallback__box input{
+  width:100%; padding:var(--sp-2-5) var(--sp-3); margin-bottom:var(--sp-3);
+  font-family:var(--font-ui); font-size:var(--fs-sm);
+  color:var(--text-primary); background:var(--surface-base);
+  border:1px solid var(--border-default); border-radius:var(--r-md);
+}
+.farm-confirm-fallback__foot{display:flex; gap:var(--sp-2); justify-content:flex-end}
+
+/* the typed-confirmation body — scoped to the alertdialog so the other
+   shell dialogs (preferences, shortcuts) keep their own .dialog__body */
+.dialog__label{display:block; margin-bottom:var(--sp-1-5); font-size:var(--fs-xs); color:var(--text-secondary)}
+[role="alertdialog"] .dialog__body{padding:0 var(--sp-5) var(--sp-4)}
+[role="alertdialog"] .dialog__body .input{
+  width:100%; padding:var(--sp-2-5) var(--sp-3);
+  font-family:var(--font-ui); font-size:var(--fs-sm);
+  color:var(--text-primary); background:var(--surface-base);
+  border:1px solid var(--border-default); border-radius:var(--r-md);
+}
+[role="alertdialog"] .dialog__body .input:focus-visible{outline:2px solid var(--focus-ring); outline-offset:2px}
+#uiConfirmOk:disabled{opacity:.5; cursor:not-allowed}

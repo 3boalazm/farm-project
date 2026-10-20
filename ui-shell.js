@@ -621,33 +621,253 @@
   });
 
   /* ══════════════════════════════════════════════════════════════════
-     6 · CONFIRM dialog — replaces window.confirm(), which cannot be styled,
-     is blocking, and reads "example.com says" in Arabic UIs.
+     6 · CONFIRM + PROMPT — replaces window.confirm()/window.prompt(), which
+     cannot be styled, are blocking, read "example.com says" in Arabic UIs, and
+     (decisively) are NOT bridged in the Capacitor WebView: confirm() returns
+     false and prompt() returns null there, so every guarded delete, bulk action
+     and data wipe cancelled itself silently on a phone.
+     Since 2026-10-20 both are promise-returning — farmConfirm() → boolean,
+     farmPrompt() → string|null — with three tiers (shell dialog → the native
+     dialog → an appended panel) and the legacy onConfirm callback still
+     honoured. See docs/bugs/DESTRUCTIVE-ACTIONS-2026-10.md.
      ══════════════════════════════════════════════════════════════════ */
+  /* One confirmation for the whole app.
+     ────────────────────────────────────────────────────────────────────
+     It returns Promise<boolean> AND still honours an onConfirm callback,
+     because callers use both: users.html writes
+     `const ok = await UIShell.confirm({...}); if(!ok) return;` while the
+     logout actions in this file pass `onConfirm`. Until 2026-10-20 open()
+     returned undefined, so every `await`-style caller saw a falsy answer and
+     cancelled silently — deleting a user did nothing at all, with no error
+     anywhere. It also read only `o.body` while callers passed `message`, so
+     the dialog showed a title and no explanation.
+
+     Three levels, because this app runs in a browser AND inside a Capacitor
+     WebView where window.confirm()/window.prompt() are not bridged and
+     quietly return false/null:
+       1. the shell dialog (shared.js showModal) — styled, focus-trapped;
+       2. window.confirm — a plain browser without the shell;
+       3. an inline panel appended to <body> — a WebView with neither.
+     A destructive action must never be cancelled by a missing browser
+     feature, and it must never hang waiting for one. */
   var Confirm = {
     open: function (o) {
       o = o || {};
+      var bodyText = o.body || o.message || '';
+      var typeTo = o.typeToConfirm || null;
+      var resolvePromise, settled = false, observer = null;
+      var promise = new Promise(function (res) { resolvePromise = res; });
+      function finish(v) {
+        if (settled) return;
+        settled = true;
+        if (observer) { try { observer.disconnect(); } catch (e) {} observer = null; }
+        resolvePromise(v);
+      }
+      function yes() { finish(true); safe(function () { o.onConfirm && o.onConfirm(); }); }
+      function no() { finish(false); safe(function () { o.onCancel && o.onCancel(); }); }
+
       if (root.showModal) {
         root.showModal(
           '<div class="dialog dialog--sm" role="alertdialog" aria-modal="true" aria-labelledby="uiConfirmTitle">' +
           '<div class="dialog__head">' +
           '<span class="dialog__icon' + (o.danger ? ' dialog__icon--danger' : '') + '"><i class="bi ' + esc(o.icon || (o.danger ? 'bi-exclamation-triangle-fill' : 'bi-question-circle-fill')) + '"></i></span>' +
           '<div><h2 class="dialog__title" id="uiConfirmTitle">' + esc(o.title || 'تأكيد') + '</h2>' +
-          (o.body ? '<div class="dialog__subtitle">' + esc(o.body) + '</div>' : '') + '</div>' +
-          '<button type="button" class="dialog__close" onclick="closeModal()" aria-label="إغلاق"><i class="bi bi-x-lg"></i></button>' +
+          (bodyText ? '<div class="dialog__subtitle">' + esc(bodyText) + '</div>' : '') + '</div>' +
+          '<button type="button" class="dialog__close" id="uiConfirmX" aria-label="إغلاق"><i class="bi bi-x-lg"></i></button>' +
           '</div>' +
+          (typeTo
+            ? '<div class="dialog__body"><label class="dialog__label" for="uiConfirmType">اكتب <b>' + esc(typeTo) + '</b> للتأكيد</label>' +
+              '<input type="text" class="input" id="uiConfirmType" autocomplete="off" autocapitalize="off" spellcheck="false" dir="rtl"></div>'
+            : '') +
           '<div class="dialog__foot">' +
-          '<button type="button" class="btn btn--secondary" onclick="closeModal()">' + esc(o.cancelLabel || 'إلغاء') + '</button>' +
-          '<button type="button" class="btn ' + (o.danger ? 'btn--danger' : 'btn--primary') + '" id="uiConfirmOk">' + esc(o.confirmLabel || 'تأكيد') + '</button>' +
+          '<button type="button" class="btn btn--secondary" id="uiConfirmCancel">' + esc(o.cancelLabel || 'إلغاء') + '</button>' +
+          '<button type="button" class="btn ' + (o.danger ? 'btn--danger' : 'btn--primary') + '" id="uiConfirmOk"' + (typeTo ? ' disabled' : '') + '>' + esc(o.confirmLabel || 'تأكيد') + '</button>' +
           '</div></div>'
         );
-        var ok = $('#uiConfirmOk');
-        if (ok) ok.addEventListener('click', function () { root.closeModal && root.closeModal(); safe(function () { o.onConfirm && o.onConfirm(); }); });
-        return;
+        var close = function () { root.closeModal && root.closeModal(); };
+        var okBtn = $('#uiConfirmOk'), cancelBtn = $('#uiConfirmCancel'), xBtn = $('#uiConfirmX');
+        if (okBtn) okBtn.addEventListener('click', function () { close(); yes(); });
+        if (cancelBtn) cancelBtn.addEventListener('click', function () { close(); no(); });
+        if (xBtn) xBtn.addEventListener('click', function () { close(); no(); });
+        if (typeTo) {
+          var inp = $('#uiConfirmType');
+          if (inp) {
+            var sync = function () { if (okBtn) okBtn.disabled = (inp.value.trim() !== String(typeTo)); };
+            inp.addEventListener('input', sync);
+            inp.addEventListener('keydown', function (e) {
+              if (e.key === 'Enter' && okBtn && !okBtn.disabled) { e.preventDefault(); close(); yes(); }
+            });
+            sync();
+            setTimeout(function () { try { inp.focus(); } catch (e) {} }, 40);
+          }
+        }
+        // Escape and a backdrop click close the modal inside shared.js without
+        // touching these buttons, so watch for the dialog disappearing —
+        // otherwise the promise would hang and the caller would await forever.
+        var mr = document.getElementById('modal-root');
+        if (mr && typeof MutationObserver === 'function') {
+          observer = new MutationObserver(function () {
+            if (!document.getElementById('uiConfirmOk')) no();
+          });
+          try { observer.observe(mr, { childList: true, subtree: true }); } catch (e) { observer = null; }
+        }
+        return promise;
       }
-      if (root.confirm(o.title + (o.body ? '\n' + o.body : ''))) safe(function () { o.onConfirm && o.onConfirm(); });
+
+      if (typeof root.confirm === 'function') {
+        var v = false;
+        try { v = !!root.confirm((o.title || 'تأكيد') + (bodyText ? '\n' + bodyText : '')); } catch (e) { v = false; }
+        if (v) yes(); else no();
+        return promise;
+      }
+
+      var host = document.createElement('div');
+      host.className = 'farm-confirm-fallback';
+      host.setAttribute('role', 'alertdialog');
+      host.innerHTML =
+        '<div class="farm-confirm-fallback__box">' +
+        '<strong>' + esc(o.title || 'تأكيد') + '</strong>' +
+        (bodyText ? '<p>' + esc(bodyText) + '</p>' : '') +
+        (typeTo ? '<p>اكتب <b>' + esc(typeTo) + '</b> للتأكيد</p>' : '') +
+        (typeTo ? '<input type="text" id="uiConfirmType" dir="rtl" autocomplete="off">' : '') +
+        '<div class="farm-confirm-fallback__foot">' +
+        '<button type="button" class="btn btn--secondary" id="uiConfirmCancel">' + esc(o.cancelLabel || 'إلغاء') + '</button>' +
+        '<button type="button" class="btn ' + (o.danger ? 'btn--danger' : 'btn--primary') + '" id="uiConfirmOk">' + esc(o.confirmLabel || 'تأكيد') + '</button>' +
+        '</div></div>';
+      document.body.appendChild(host);
+      var drop = function () { if (host.parentNode) host.parentNode.removeChild(host); };
+      var okF = host.querySelector('#uiConfirmOk'), cancelF = host.querySelector('#uiConfirmCancel');
+      if (okF) okF.addEventListener('click', function () { drop(); yes(); });
+      if (cancelF) cancelF.addEventListener('click', function () { drop(); no(); });
+      if (typeTo) {
+        var inpF = host.querySelector('#uiConfirmType');
+        if (inpF) inpF.addEventListener('input', function () { if (okF) okF.disabled = (inpF.value.trim() !== String(typeTo)); });
+        if (inpF && okF) okF.disabled = true;
+      }
+      return promise;
     }
   };
+
+  /* The app-wide entry point: farmConfirm('رسالة') or farmConfirm({…}).
+     Always a Promise<boolean>, whatever the environment supports. */
+  function farmConfirm(a, b) {
+    var o = (typeof a === 'string') ? Object.assign({ message: a }, b || {}) : Object.assign({}, a || {});
+    if (!o.title) o.title = o.danger ? 'تأكيد إجراء' : 'تأكيد';
+    try { return Confirm.open(o); }
+    catch (e) {
+      // A confirm that throws would strand the caller mid-action; answer
+      // "no" instead, so the safe branch is always the one taken.
+      return Promise.resolve(false);
+    }
+  }
+  root.farmConfirm = farmConfirm;
+
+  /* The app-wide text prompt: Promise<string | null>.
+     window.prompt() is not bridged in the Capacitor WebView — it returns
+     null — which made "سبب إعادة الفتح" impossible to fill in on a phone and
+     silently cancelled the full wipe in animals.html. Same three tiers as
+     farmConfirm, and `required` keeps the OK button honest about an empty
+     answer instead of resolving with a blank string. */
+  var Prompt = {
+    open: function (o) {
+      o = o || {};
+      var label = o.label || o.message || '';
+      var resolvePromise, settled = false, observer = null;
+      var promise = new Promise(function (res) { resolvePromise = res; });
+      function finish(v) {
+        if (settled) return;
+        settled = true;
+        if (observer) { try { observer.disconnect(); } catch (e) {} observer = null; }
+        resolvePromise(v);
+      }
+      function readValue() { var i = document.getElementById('uiPromptInput'); return i ? i.value.trim() : ''; }
+      // The value is captured BEFORE the dialog closes: closeModal() empties
+      // #modal-root, so reading it afterwards resolved every prompt with null.
+      function yes(captured) {
+        var v = (captured === undefined) ? readValue() : captured;
+        if (o.required && !v) {
+          var inp = document.getElementById('uiPromptInput');
+          if (inp) { try { inp.focus(); } catch (e) {} }
+          return;                                    // an empty required answer is not an answer
+        }
+        finish(v || null);
+        safe(function () { o.onConfirm && o.onConfirm(v); });
+      }
+      function no() { finish(null); safe(function () { o.onCancel && o.onCancel(); }); }
+
+      if (root.showModal) {
+        root.showModal(
+          '<div class="dialog dialog--sm" role="dialog" aria-modal="true" aria-labelledby="uiPromptTitle">' +
+          '<div class="dialog__head">' +
+          '<span class="dialog__icon"><i class="bi ' + esc(o.icon || 'bi-input-cursor-text') + '"></i></span>' +
+          '<div><h2 class="dialog__title" id="uiPromptTitle">' + esc(o.title || 'إدخال') + '</h2>' +
+          (label ? '<div class="dialog__subtitle">' + esc(label) + '</div>' : '') + '</div>' +
+          '<button type="button" class="dialog__close" id="uiPromptX" aria-label="إغلاق"><i class="bi bi-x-lg"></i></button>' +
+          '</div>' +
+          '<div class="dialog__body"><input type="text" class="input" id="uiPromptInput" dir="auto" autocomplete="off"' +
+          (o.placeholder ? ' placeholder="' + esc(o.placeholder) + '"' : '') + '></div>' +
+          '<div class="dialog__foot">' +
+          '<button type="button" class="btn btn--secondary" id="uiPromptCancel">' + esc(o.cancelLabel || 'إلغاء') + '</button>' +
+          '<button type="button" class="btn btn--primary" id="uiPromptOk">' + esc(o.confirmLabel || 'حفظ') + '</button>' +
+          '</div></div>'
+        );
+        var close = function () { root.closeModal && root.closeModal(); };
+        var okBtn = $('#uiPromptOk'), cancelBtn = $('#uiPromptCancel'), xBtn = $('#uiPromptX'), inp = $('#uiPromptInput');
+        if (okBtn) okBtn.addEventListener('click', function () { var v = readValue(); if (o.required && !v) { if (inp) { try { inp.focus(); } catch (e) {} } return; } close(); yes(v); });
+        if (cancelBtn) cancelBtn.addEventListener('click', function () { close(); no(); });
+        if (xBtn) xBtn.addEventListener('click', function () { close(); no(); });
+        if (inp) {
+          inp.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); var v = readValue(); if (o.required && !v) return; close(); yes(v); }
+          });
+          setTimeout(function () { try { inp.focus(); } catch (e) {} }, 40);
+        }
+        var mr = document.getElementById('modal-root');
+        if (mr && typeof MutationObserver === 'function') {
+          observer = new MutationObserver(function () { if (!document.getElementById('uiPromptOk')) no(); });
+          try { observer.observe(mr, { childList: true, subtree: true }); } catch (e) { observer = null; }
+        }
+        return promise;
+      }
+
+      if (typeof root.prompt === 'function') {
+        var v = null;
+        try { v = root.prompt((o.title || 'إدخال') + (label ? '\n' + label : '')); } catch (e) { v = null; }
+        if (v === null) no();
+        else if (o.required && !String(v).trim()) no();
+        else finish(String(v).trim());
+        return promise;
+      }
+
+      var host = document.createElement('div');
+      host.className = 'farm-confirm-fallback';
+      host.setAttribute('role', 'dialog');
+      host.innerHTML =
+        '<div class="farm-confirm-fallback__box">' +
+        '<strong>' + esc(o.title || 'إدخال') + '</strong>' +
+        (label ? '<p>' + esc(label) + '</p>' : '') +
+        '<input type="text" id="uiPromptInput" dir="auto" autocomplete="off">' +
+        '<div class="farm-confirm-fallback__foot">' +
+        '<button type="button" class="btn btn--secondary" id="uiPromptCancel">' + esc(o.cancelLabel || 'إلغاء') + '</button>' +
+        '<button type="button" class="btn btn--primary" id="uiPromptOk">' + esc(o.confirmLabel || 'حفظ') + '</button>' +
+        '</div></div>';
+      document.body.appendChild(host);
+      var drop = function () { if (host.parentNode) host.parentNode.removeChild(host); };
+      var okF = host.querySelector('#uiPromptOk'), cancelF = host.querySelector('#uiPromptCancel'), inpF = host.querySelector('#uiPromptInput');
+      if (okF) okF.addEventListener('click', function () { var v = inpF ? inpF.value.trim() : ''; if (o.required && !v) { if (inpF) inpF.focus(); return; } drop(); finish(v || null); safe(function () { o.onConfirm && o.onConfirm(v); }); });
+      if (cancelF) cancelF.addEventListener('click', function () { drop(); no(); });
+      if (inpF) inpF.addEventListener('keydown', function (e) { if (e.key === 'Enter' && okF) okF.click(); });
+      return promise;
+    }
+  };
+
+  function farmPrompt(a, b) {
+    var o = (typeof a === 'string') ? Object.assign({ label: a }, b || {}) : Object.assign({}, a || {});
+    if (!o.title) o.title = 'إدخال';
+    try { return Prompt.open(o); }
+    catch (e) { return Promise.resolve(null); }
+  }
+  root.farmPrompt = farmPrompt;
 
   /* ══════════════════════════════════════════════════════════════════
      7 · PREFERENCES dialog (density, contrast, motion, theme)
@@ -1297,7 +1517,8 @@
     },
     // public surface
     toast: Toast.push, prefs: Prefs, palette: Palette, notifs: Notifs,
-    tables: Tables, confirm: Confirm.open, shortcuts: Shortcuts.show,
+    tables: Tables, confirm: Confirm.open, farmConfirm: farmConfirm, prompt: Prompt.open, farmPrompt: farmPrompt,
+    shortcuts: Shortcuts.show,
     busy: Shell.busy, shell: Shell, menus: Menus, applyPrefs: function () { Prefs.apply(); },
     // Exposed for tests and for any page that wants the SAME matching and
     // number-folding the shell uses (a page that invents its own sort ends up

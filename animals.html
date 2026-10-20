@@ -33,8 +33,7 @@
   <div id="animals-insights" class="mb-4"></div>
   <div id="animals-timeline" class="mb-4"></div>
   <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
-    <span id="footer-year"></span> &copy; <span id="footer-farm"></span><br>
-    <small style="font-size:.72rem;color:var(--text-muted)">إشراف: لواء أحمد رجب نوح | تطوير: جندي مصطفى محمد إبراهيم</small>
+    <span id="footer-year"></span> &copy; <span id="footer-farm"></span>
   </footer>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -481,7 +480,7 @@ window.selectAll=function(checked){
 };
 
 // ── Bulk Actions ─────────────────────────────────────
-window.doBulk=function(action){
+window.doBulk=async function(action){
   var ids=[..._selected];
   if(!ids.length){toast('حدد حيواناً واحداً على الأقل','error');return;}
   var cnt=ar(ids.length);
@@ -667,7 +666,7 @@ window.doBulk=function(action){
     }));
   }
   else if(action==='delete'){
-    if(!confirm('حذف نهائي '+cnt+' حيوان؟\nلا يمكن التراجع!'))return;
+    if(!await farmConfirm({message:'حذف نهائي '+cnt+' حيوان؟\nلا يمكن التراجع!', danger:true}))return;
     execBulkDo('delete',ids);
   }
 };
@@ -822,7 +821,9 @@ window.execBulk=async function(action,extra){
 
 // ── Bulk delete action (Repository 4, Phase 2D) ─────────────────
 // Extracted verbatim from execBulkDo()'s delete loop + its logActivity
-// call. The native confirm() dialog (in doBulk('delete')) and the
+// call. The confirm dialog (in doBulk('delete'), farmConfirm() since
+// 2026-10-20 — window.confirm() is not bridged in the Capacitor WebView,
+// where it returned false and silently cancelled every bulk delete) and the
 // start/result toasts + refreshAnimalsAfterBulk() stay exactly where
 // they were, in execBulkDo — mirroring the same shape already
 // established for performBulkTransfer/Sell/Death in Phase 2C, so
@@ -1151,7 +1152,7 @@ window.submitDeathSingle=async function(id){
 window.deleteAnimalFull=async function(id,labelEnc){
   if(!can('admin')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return;}
   var lbl=decodeURIComponent(labelEnc);
-  if(!confirm('حذف نهائي: '+lbl+'؟'))return;
+  if(!await farmConfirm({message:'حذف نهائي: '+lbl+'؟', danger:true}))return;
   try{
     await fbDelete('animals',id);
     await logActivity('delete','animals','حذف: '+id);
@@ -1187,9 +1188,14 @@ window.openResetModal=function(){
 window.submitReset=async function(){
   if(!can('admin')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return;}
   if(document.getElementById('reset-all')?.checked){
-    if(!confirm('مسح كل بيانات المزرعة نهائياً؟'))return;
-    var conf=prompt('اكتب "تأكيد" للمتابعة:');
-    if(conf!=='تأكيد'){toast('تم الإلغاء','info');return;}
+    // One dialog, with the typed confirmation inside it. This used to be a
+    // native confirm() followed by window.prompt('اكتب "تأكيد"') — and in the
+    // Capacitor WebView prompt() returns null, so the full wipe always
+    // answered "تم الإلغاء" and deleted nothing (owner report, 2026-10-20).
+    var okWipe=await farmConfirm({title:'مسح كل بيانات المزرعة',
+      message:'سيُحذف نهائيًا: القطيع، الصحة، التكاثر، التحصين، المالية، المخزون (أدوية/أعلاف/معدات) وسجل الأنشطة. لا يشمل المستخدمين ولا الإعدادات. لا يمكن التراجع إطلاقًا.',
+      confirmLabel:'امسح كل البيانات', typeToConfirm:'تأكيد', danger:true});
+    if(!okWipe){toast('تم الإلغاء','info');return;}
     closeModal();toast('جاري المسح...','info');
     var tables=['animals','health','breeding','vaccinations','finance','inventory_meds','inventory_feeds','inventory_equipment','activity_log'];
     // BUG FIX: this used to build the URL with an undefined FB_SECRET
@@ -1201,20 +1207,25 @@ window.submitReset=async function(){
     // Firebase call in the app already goes through (no second
     // networking implementation), and tracks real success/failure per
     // table so the message shown actually reflects what happened.
-    var failedTables=[];
+    // fbDelete() instead of a second hand-rolled fetch: same authenticated
+    // URL, plus the retry policy for an idempotent DELETE, the cache
+    // invalidation and a diagnostics entry. And a rules denial is now named
+    // as such — "فشل المسح" alone sent the owner looking at his network.
+    var failedTables=[],deniedAny=false;
     for(var t of tables){
-      try{
-        var r=await fetch(await fbUrl(t),{method:'DELETE'});
-        fbCacheInvalidate(t);
-        if(!r.ok)failedTables.push(t);
-      }catch(e){failedTables.push(t);}
+      try{ await fbDelete(t); fbCacheInvalidate(t); }
+      catch(e){
+        failedTables.push(t);
+        if(/denied|permission|unauthoriz|401|403/i.test(String((e&&e.message)||e)))deniedAny=true;
+      }
     }
+    var whyDenied=deniedAny?' · رفضتها قواعد الأمان (يلزم جلسة مدير وقواعد منشورة حديثة)':'';
     if(failedTables.length===0){
       toast('تم مسح كل البيانات');
     }else if(failedTables.length<tables.length){
-      toast('تم المسح جزئياً — فشل في: '+failedTables.join('، '),'error');
+      toast('تم المسح جزئياً — فشل في: '+failedTables.join('، ')+whyDenied,'error',9000);
     }else{
-      toast('فشل المسح بالكامل — لم يتم حذف أي بيانات','error');
+      toast('فشل المسح بالكامل — لم يتم حذف أي بيانات'+whyDenied,'error',9000);
     }
     setTimeout(function(){location.reload();},1500);return;
   }
@@ -1353,7 +1364,7 @@ window._beSubmit=async function(){
   var start=parseInt(document.getElementById('be-start').value)||1;
   var count=parseInt(document.getElementById('be-count').value)||0;
   if(!count||count<1){toast('أدخل عدداً صحيحاً','error');return;}
-  if(count>500&&!confirm('إضافة '+ar(count)+' حيوان دفعة واحدة؟ قد يستغرق وقتاً.')){return;}
+  if(count>500&&!await farmConfirm({message:'إضافة '+ar(count)+' حيوان دفعة واحدة؟ قد يستغرق وقتاً.', danger:true})){return;}
 
   var btn=document.getElementById('be-submit-btn');
   if(btn){btn.disabled=true;btn.innerHTML='<div class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;margin-left:6px"></div> جاري الحفظ...';}
@@ -1423,7 +1434,7 @@ window.submitQuarantine = async function(id) {
 };
 
 window.releaseFromQuarantine = async function(id) {
-  if (!confirm('إخراج الحيوان من الحجر الصحي وإعادته للقطيع؟')) return;
+  if (!await farmConfirm({message:'إخراج الحيوان من الحجر الصحي وإعادته للقطيع؟', danger:true})) return;
   const r = await window.releaseAnimalFromQuarantine({animalId:id});
   if (!r.ok) { toast('خطأ: ' + r.error, 'error'); return; }
   toast('✅ تم إخراج الحيوان من الحجر');
@@ -1714,7 +1725,7 @@ window._parseImpFile=function(file){
 window._doImport=async function(){
   var valid=_impRows.filter(function(r){return!r.errors.length;});
   if(!valid.length){toast('لا توجد بيانات صالحة','error');return;}
-  if(!confirm('رفع '+ar(valid.length)+' حيوان لقاعدة البيانات؟'))return;
+  if(!await farmConfirm({message:'رفع '+ar(valid.length)+' حيوان لقاعدة البيانات؟', danger:true}))return;
   var prev=document.getElementById('imp-preview');
   prev.innerHTML='<div class="text-center py-2"><div class="spinner"></div><p class="text-gray mt-1">جاري الرفع...</p></div>';
   var ok=0,failed=0,weightFailed=0;
