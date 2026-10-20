@@ -354,3 +354,8 @@ monochrome laser printer.
   Bootstrap grid class is styled again.
 * `farm-apk/www` must be re-synced after any change here: `node scripts/sync-apk-www.js`
   (`tests/unit/22` fails on drift).
+
+
+## 19 · وضع العرض — ‏`ui.css` §16 (‏2026-10-20)
+
+`.demo-bar` شريط ثابت أسفل الشاشة يعلن أن البيانات تجريبية وأنها لا تُحفظ في القاعدة، ويحمل مبدّل الحجم (صغير/متوسط/كبير) و«توليد جديد» و«إنهاء العرض». ‏`body.demo-mode` يعطي `padding-bottom` حتى لا يغطي الشريط آخر صف في جدول أو أزرار حوار، و`@media print` يخفيه فتخرج نسخة العرض المطبوعة نظيفة. نقطة الدخول في شاشة الدخول `.login-demo__btn` — زر واحد لا يعرض أي اسم (قيد الخصوصية قبل التحقق ثابت). المنطق كله في `demo-data.js` والعقد الكامل في `docs/design/DEMO-MODE.md`.
