@@ -42,10 +42,12 @@ test.describe('Demo mode', () => {
     await expect(page.locator('#farm-demo-bar')).toBeVisible();
     await expect(page.locator('#farm-demo-bar')).toContainText('بيانات تجريبية');
     // the dashboard hero and its KPI tiles are computed from the demo herd
-    await expect(page.locator('.dash-status')).toHaveCount(1);
-    await expect(page.locator('.dash-kpi').first()).toBeVisible();
-    const score = await page.locator('.dash-status').innerText();
-    expect(score).not.toMatch(/^—+$/);
+    // HOME v3: the daybar carries the score pill, the pulse strip the numbers
+    await expect(page.locator('#dash-home .daybar')).toHaveCount(1);
+    await expect(page.locator('#dash-home .statepill')).toBeVisible();
+    await expect(page.locator('#dash-home .pulse__cell').first()).toBeVisible();
+    const score = await page.locator('#dash-home .statepill').innerText();
+    expect(score.replace(/[٠-٩]/g, '0')).toMatch(/\d+\s*\/\s*١٠٠|\d/);
   });
 
   test('every main section renders data instead of an empty state', async ({ page }) => {
