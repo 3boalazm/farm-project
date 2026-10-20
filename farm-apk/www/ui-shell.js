@@ -621,8 +621,15 @@
   });
 
   /* ══════════════════════════════════════════════════════════════════
-     6 · CONFIRM dialog — replaces window.confirm(), which cannot be styled,
-     is blocking, and reads "example.com says" in Arabic UIs.
+     6 · CONFIRM + PROMPT — replaces window.confirm()/window.prompt(), which
+     cannot be styled, are blocking, read "example.com says" in Arabic UIs, and
+     (decisively) are NOT bridged in the Capacitor WebView: confirm() returns
+     false and prompt() returns null there, so every guarded delete, bulk action
+     and data wipe cancelled itself silently on a phone.
+     Since 2026-10-20 both are promise-returning — farmConfirm() → boolean,
+     farmPrompt() → string|null — with three tiers (shell dialog → the native
+     dialog → an appended panel) and the legacy onConfirm callback still
+     honoured. See docs/bugs/DESTRUCTIVE-ACTIONS-2026-10.md.
      ══════════════════════════════════════════════════════════════════ */
   /* One confirmation for the whole app.
      ────────────────────────────────────────────────────────────────────

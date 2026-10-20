@@ -111,3 +111,8 @@ Primary auth is a **custom PIN pad**, not Firebase Auth. On top of it two migrat
 ## Context Loading Instructions
 
 For a focused task, read only: this file, `docs/repository/REPOSITORY_CHARTER.md`, and whichever single certification/decision document matches the subsystem you're touching. Do not read the entire `docs/` tree for a small task — it's organized so you don't have to.
+
+
+## وضع العرض ببيانات تجريبية (demo-data.js · 2026-10-20)
+
+`demo-data.js` يُحمَّل بعد `firebase.js` في كل صفحات التطبيق (٣٤)، ويعترض `fetch` إلى نطاقات Firebase/مصادقة Google حين يكون `localStorage['farm_demo']==='1'` فيخدمها من بيانات مولّدة حتميًّا على الجهاز — **لا بايت واحد يصل إلى القاعدة الحية**. كل ما ليس Firebase (الطقس، ‏`/api/*`، الأصول) يمرّ كما هو. القاعدة مولّدة من بذرة في كل تحميل صفحة، وكتابات المستخدم تُحفظ كطبقة عمليات صغيرة في `localStorage['farm_demo_ops']` وتُعاد فوقها (التطبيق متعدد الصفحات). الدخول من زر «تصفح ببيانات تجريبية» في `login.html`، والشريط السفلي `#farm-demo-bar` يعلن الوضع ويبدّل الحجم وينهيه. **قبل أي تعديل:** الأشكال منقولة من مواضع الكتابة الحقيقية، والتواريخ بأرقام لاتينية (لا `pad2()`)، ولا أسماء أشخاص في أي مولّد. التفاصيل والحدود: `docs/design/DEMO-MODE.md` · الاختبارات: `tests/unit/29-demo-mode.suite.js` + `tests/demo-mode/demo-mode.spec.js`.

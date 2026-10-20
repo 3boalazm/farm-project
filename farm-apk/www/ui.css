@@ -2565,3 +2565,65 @@ html[data-motion="off"] .dash-hero,html[data-motion="off"] .dash-kpi{transition:
 }
 [role="alertdialog"] .dialog__body .input:focus-visible{outline:2px solid var(--focus-ring); outline-offset:2px}
 #uiConfirmOk:disabled{opacity:.5; cursor:not-allowed}
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   §16 · DEMO MODE — the always-visible "this is not your data" bar
+   ──────────────────────────────────────────────────────────────────────
+   Demo mode (demo-data.js, docs/design/DEMO-MODE.md) serves every Firebase
+   request from generated data on the device. Because the screens are then
+   indistinguishable from the real thing, the state has to be impossible to
+   miss: a persistent bar with the data size and the way out, hidden in print
+   so a demo report still prints clean.
+   ══════════════════════════════════════════════════════════════════════ */
+.demo-bar{
+  position:fixed; inset-inline:0; bottom:0; z-index:var(--z-modal, 1050);
+  display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp-2) var(--sp-3);
+  padding:var(--sp-2) var(--sp-4);
+  background:var(--surface-raised); color:var(--text-primary);
+  border-top:2px solid var(--warning);
+  box-shadow:var(--elev-3);
+  font-size:var(--fs-xs);
+}
+.demo-bar__dot{
+  inline-size:10px; block-size:10px; border-radius:50%;
+  background:var(--warning); box-shadow:0 0 0 3px rgba(180,83,9,.18);
+  flex:0 0 auto;
+}
+.demo-bar__text{flex:1 1 240px; line-height:1.7; color:var(--text-secondary)}
+.demo-bar__label{color:var(--text-secondary); font-weight:var(--fw-bold)}
+.demo-bar__select{
+  padding:var(--sp-1-5) var(--sp-2); font-family:var(--font-ui); font-size:var(--fs-xs);
+  color:var(--text-primary); background:var(--surface-base);
+  border:1px solid var(--border-default); border-radius:var(--r-md);
+}
+.demo-bar__btn{
+  padding:var(--sp-1-5) var(--sp-3); font-family:var(--font-ui); font-size:var(--fs-xs);
+  font-weight:var(--fw-bold); cursor:pointer;
+  color:var(--text-primary); background:var(--surface-base);
+  border:1px solid var(--border-default); border-radius:var(--r-md);
+}
+.demo-bar__btn:hover{border-color:var(--warning)}
+.demo-bar__btn:focus-visible{outline:2px solid var(--focus-ring); outline-offset:2px}
+.demo-bar__btn--exit{background:var(--warning); color:#fff; border-color:var(--warning)}
+/* the fixed bar must never cover the last row of a table or a dialog action */
+body.demo-mode{padding-bottom:56px}
+@media print{ .demo-bar{display:none !important} body.demo-mode{padding-bottom:0} }
+
+/* the login-screen entry point — a button, never a list of people (the
+   pre-auth privacy rule from suite 27 applies to demo mode too) */
+.login-demo{margin-top:var(--sp-4); text-align:center}
+.login-demo__btn{
+  display:inline-flex; align-items:center; gap:var(--sp-2);
+  padding:var(--sp-2-5) var(--sp-4); cursor:pointer;
+  font-family:var(--font-ui); font-size:var(--fs-sm); font-weight:var(--fw-bold);
+  color:var(--text-primary); background:var(--surface-raised);
+  border:1px dashed var(--border-default); border-radius:var(--r-xl);
+}
+.login-demo__btn:hover{border-color:var(--warning); border-style:solid}
+.login-demo__btn:focus-visible{outline:2px solid var(--focus-ring); outline-offset:2px}
+.login-demo__btn:disabled{opacity:.6; cursor:progress}
+.login-demo__note{
+  margin:var(--sp-2) 0 0; font-size:var(--fs-xs); line-height:1.8;
+  color:var(--text-secondary);
+}

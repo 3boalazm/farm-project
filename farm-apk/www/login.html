@@ -97,6 +97,18 @@
     <div class="setup-notice" id="setup-notice" role="status" hidden></div>
 
     <p class="login-trust"><i class="bi bi-shield-lock me-1" aria-hidden="true"></i>لا تُعرض أسماء أو أدوار قبل التحقق من الرمز</p>
+
+    <!-- وضع العرض (2026-10-20): زر واحد يدخل بمدير تجريبي وبيانات مولّدة
+         على الجهاز — لا حساب حقيقي، لا رمز، ولا أي طلب إلى قاعدة البيانات.
+         المنطق كله في demo-data.js، وهنا الزر والتوضيح فقط. ولا يُعرض أي
+         اسم مستخدم حقيقي قبل الدخول (قيد الخصوصية نفسه). -->
+    <div class="login-demo" id="login-demo">
+      <button type="button" class="login-demo__btn" id="demo-entry">
+        <i class="bi bi-flask" aria-hidden="true"></i>
+        تصفح ببيانات تجريبية
+      </button>
+      <p class="login-demo__note" id="demo-note" hidden></p>
+    </div>
   </main>
 
   <p class="login-hint">
@@ -107,6 +119,8 @@
 <div id="toast-wrap"></div>
 <script src="config.js"></script>
 <script src="firebase.js"></script>
+<!-- وضع العرض: يخدم كل طلبات Firebase من بيانات مولّدة حين يُفعّل — docs/design/DEMO-MODE.md. يجب أن يُحمَّل بعد firebase.js مباشرة. -->
+<script src="demo-data.js"></script>
 <script src="ui-shell.js"></script>
 <!-- O-09: the offline/PWA registrar. Loaded on every page; registration
      itself is gated on FARM_CONFIG.enableServiceWorker in config.js. -->
@@ -142,6 +156,24 @@
 
   function showNotice(html){ const n=$('setup-notice'); n.innerHTML=html; n.hidden=false; }
   function hideNotice(){ const n=$('setup-notice'); n.hidden=true; n.innerHTML=''; }
+
+  // ── وضع العرض ────────────────────────────────────────────────────────
+  // كل السلوك في demo-data.js (اعتراض النقل، التوليد الحتمي، طبقة
+  // العمليات، شريط الوضع). هنا: تفعيل الدخول التجريبي، وتوضيح إن كان
+  // الوضع مفعّلًا بالفعل من جلسة سابقة.
+  (function wireDemoEntry(){
+    const btn=$('demo-entry');
+    if(!btn) return;
+    btn.addEventListener('click',function(){
+      if(!window.FarmDemo){ showNotice('تعذّر تحميل وضع العرض — أعد تحميل الصفحة'); return; }
+      btn.disabled=true;
+      FarmDemo.enter('demo-admin');           // no PIN, no pin_vault, no network
+    });
+    if(window.FarmDemo&&FarmDemo.isEnabled()){
+      const note=$('demo-note');
+      if(note){ note.hidden=false; note.textContent='وضع العرض مفعّل — البيانات المعروضة تجريبية وعلى هذا الجهاز فقط.'; }
+    }
+  })();
 
   // ── identifier matching (Arabic-normalised, never displayed) ───────
   function normalizeId(v){
