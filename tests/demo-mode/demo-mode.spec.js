@@ -15,7 +15,8 @@
 const { test, expect } = require('../fixtures/farm-test');
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080';
-const BACKEND_HOSTS = /(firebasedatabase\.app|firebaseio\.com|googleapis\.com)/;
+// fonts.googleapis.com is a stylesheet, not the backend — name the hosts.
+const BACKEND_HOSTS = /(firebasedatabase\.app|firebaseio\.com|identitytoolkit\.googleapis\.com|securetoken\.googleapis\.com)/;
 
 /** Enter demo mode through the login screen, the way an operator would. */
 async function enterDemo(page) {
@@ -49,29 +50,33 @@ test.describe('Demo mode', () => {
 
   test('every main section renders data instead of an empty state', async ({ page }) => {
     await enterDemo(page);
-    const sections = [
-      ['animals.html', 'tbody tr'],
-      ['health.html', 'tbody tr'],
-      ['vaccine.html', 'tbody tr'],
-      ['production.html', 'tbody tr'],
-      ['inventory.html', 'tbody tr'],
-      ['tasks.html', '.task-card, tbody tr, .list-group-item'],
-      ['finance.html', 'tbody tr'],
-      ['reports.html', 'tbody tr, .metric, .dash-kpi'],
-      ['notifications.html', 'tbody tr, .notif-item, .list-group-item'],
-      ['users.html', 'tbody tr'],
-    ];
-    for (const [href, selector] of sections) {
+    // The redesigned pages do not share one markup shape (animals.html renders
+    // cards, others tables or lists), so this asserts what every section must
+    // have in common: it read through the demo layer, it is past its spinner,
+    // and it put real content on the screen.
+    const pages = ['animals.html', 'health.html', 'vaccine.html', 'breeding.html', 'production.html',
+      'inventory.html', 'tasks.html', 'diary.html', 'finance.html', 'finance-periods.html',
+      'finance-ar-ap.html', 'reports.html', 'analytics.html', 'notifications.html',
+      'users.html', 'dead.html', 'births.html', 'barns.html'];
+    for (const href of pages) {
       await page.goto(`${BASE_URL}/${href}`);
       await page.waitForLoadState('networkidle').catch(() => {});
-      const count = await page.locator(selector).count();
-      expect(count, `${href} rendered no rows for "${selector}"`).toBeGreaterThan(0);
+      const info = await page.evaluate(() => {
+        const c = document.getElementById('content') || document.body;
+        return {
+          text: (c.innerText || '').trim(),
+          reads: window.FarmDemo ? FarmDemo.stats().reads : -1,
+        };
+      });
+      expect(info.reads, `${href} never read through the demo layer`).toBeGreaterThan(0);
+      expect(info.text.length, `${href} rendered nothing: "${info.text.slice(0, 60)}"`).toBeGreaterThan(120);
+      expect(info.text, `${href} is still showing its spinner`).not.toContain('جاري التحميل');
     }
-    // the herd page shows real tags from the generator, not placeholders
+    // …and one page asserted on its actual markup, so "content" cannot mean noise
     await page.goto(`${BASE_URL}/animals.html`);
     await page.waitForLoadState('networkidle').catch(() => {});
-    const body = await page.locator('body').innerText();
-    expect(body).toMatch(/(GT-|SH-)\d/);
+    expect(await page.locator('.animal-card-v2').count()).toBeGreaterThan(10);
+    await expect(page.locator('body')).toContainText(/(GT-|SH-)\d/);
   });
 
   test('once demo mode is on, not one request reaches the backend', async ({ page }) => {
@@ -136,7 +141,9 @@ test.describe('Demo mode', () => {
   test('the size switch regenerates the farm', async ({ page }) => {
     await enterDemo(page);
     const before = await page.evaluate(async () => (await fbGet('animals')).length);
+    // setSize() reloads the page, so wait for the new document before reading it
     await page.locator('#farm-demo-size').selectOption('small');
+    await page.waitForFunction(() => document.readyState === 'complete' && !!window.FarmDemo, null, { timeout: 15000 });
     await page.waitForLoadState('networkidle').catch(() => {});
     const after = await page.evaluate(async () => (await fbGet('animals')).length);
     expect(after).toBe(20);

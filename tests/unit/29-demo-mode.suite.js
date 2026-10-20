@@ -23,7 +23,7 @@ const path = require('path');
 const { suite, assert, bootApp, ROOT, J } = require('./harness');
 
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
-const FILES = ['config.js', 'firebase.js', 'demo-data.js'];
+const FILES = ['config.js', 'demo-data.js', 'firebase.js'];   // production order
 const ADMIN = { id: 'admin1', name: 'T', role: 'admin', active: true };
 
 // Every section the nav exposes, mapped to the collection that feeds it.
@@ -299,12 +299,15 @@ module.exports = suite('29 · Demo mode: every section populated, zero bytes to 
       if (hasFb && !hasDemo) missing.push(f);
       // compare the TAG positions: login.html mentions demo-data.js in prose
       // above its script block, which is not a load-order problem.
+      // demo-data.js must come FIRST: firebase.js fires auth traffic while it
+      // boots, and an interceptor installed afterwards leaks that one request
+      // to the real project (caught in CI on the first run of this feature).
       const fbTag = src.search(/<script src=["']firebase\.js["']/);
       const demoTag = src.search(/<script src=["']demo-data\.js["']/);
-      if (hasFb && hasDemo && demoTag < fbTag) misplaced.push(f);
+      if (hasFb && hasDemo && demoTag > fbTag) misplaced.push(f);
     });
     assert.deepStrictEqual(missing, [], 'these pages would run against the live database in demo mode: ' + missing.join(', '));
-    assert.deepStrictEqual(misplaced, [], 'demo-data.js must come after firebase.js: ' + misplaced.join(', '));
+    assert.deepStrictEqual(misplaced, [], 'demo-data.js must load BEFORE firebase.js: ' + misplaced.join(', '));
     assert.ok(!read('bayan.html').includes('demo-data.js'), 'bayan.html loads no data layer at all — leave it alone');
     const css = read('ui.css');
     assert.ok(css.includes('§16 · DEMO MODE'), 'ui.css §16 documents the bar');

@@ -118,9 +118,9 @@
 </div>
 <div id="toast-wrap"></div>
 <script src="config.js"></script>
-<script src="firebase.js"></script>
-<!-- وضع العرض: يخدم كل طلبات Firebase من بيانات مولّدة حين يُفعّل — docs/design/DEMO-MODE.md. يجب أن يُحمَّل بعد firebase.js مباشرة. -->
+<!-- وضع العرض: يخدم كل طلبات Firebase من بيانات مولّدة حين يُفعّل — docs/design/DEMO-MODE.md. يجب أن يُحمَّل قبل firebase.js حتى يُثبَّت اعتراض النقل قبل أي طلب إقلاع. -->
 <script src="demo-data.js"></script>
+<script src="firebase.js"></script>
 <script src="ui-shell.js"></script>
 <!-- O-09: the offline/PWA registrar. Loaded on every page; registration
      itself is gated on FARM_CONFIG.enableServiceWorker in config.js. -->
