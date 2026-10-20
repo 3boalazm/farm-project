@@ -114,13 +114,68 @@ function renderAnimalsKPIs(){
   var alive=animals.filter(function(a){return a.status==='alive';});
   var goats=alive.filter(function(a){return a.species==='goat';}).length;
   var sheep=alive.filter(function(a){return a.species==='sheep';}).length;
+  var births=alive.filter(function(a){return a.purpose==='birth';}).length;
+  var tarbiya=alive.filter(function(a){return a.purpose==='tarbiya';}).length;
+  var quarantine=animals.filter(function(a){return a.status==='quarantine';}).length;
   var underTreatment=(window._healthRecs||[]).filter(function(h){return h.status==='active';}).length;
-  kpiEl.innerHTML='<div class="row g-3">'+
-    '<div class="col-6 col-md-3">'+renderKPICard({ label:'إجمالي القطيع', value: ar(alive.length), status:'normal' })+'</div>'+
-    '<div class="col-6 col-md-3">'+renderKPICard({ label:'الماعز', value: ar(goats), status:'normal' })+'</div>'+
-    '<div class="col-6 col-md-3">'+renderKPICard({ label:'الأغنام', value: ar(sheep), status:'normal' })+'</div>'+
-    '<div class="col-6 col-md-3">'+renderKPICard({ label:'تحت العلاج', value: ar(underTreatment), status: underTreatment>0?'watch':'normal' })+'</div>'+
-  '</div>';
+  // Build a stream-like summary: the herd's identity bar + its numbers
+  // as an instrument strip — the same language the home introduced.
+  // No data duplicated: every number here is already computed above.
+  var aliveTags=new Set(alive.map(function(a){return a.tag;}));
+  var needsAttention=underTreatment+quarantine;
+  var herdState=needsAttention>3?'act':(needsAttention>0?'watch':'ok');
+  var daybarHtml=streamDaybar({
+    state: herdState,
+    day: 'القطيع الحي — '+(typeof todayAr==='function'?todayAr():todayStr()),
+    pill: { value: ar(alive.length), max: '/'+ar(animals.length), label: alive.length===1?'حي':'حيّ', title: 'حالة القطيع' },
+    chips: [
+      { icon:'bi-heart-pulse', text: ar(alive.length)+' حيّ' },
+      { icon:'bi-activity', text: ar(animals.length)+' إجمالي' },
+      needsAttention?{ icon:'bi-exclamation-triangle', text: ar(needsAttention)+' يحتاج انتباه', alert:true }:null,
+      { icon:'bi-house', text: ar([...new Set(alive.map(function(a){return a.barn;}).filter(Boolean))].length)+' عنبر' }
+    ].filter(Boolean)
+  });
+  // One decision for this page, like the home's focus card
+  var focusHtml='';
+  if(underTreatment>0){
+    focusHtml=streamFocus({ state:'watch', eyebrow:'قرار القطيع', title: ar(underTreatment)+(underTreatment===1?' حالة تحت العلاج':' حالات تحت العلاج'), why:'من السجل الصحي النشط — راجعها قبل أي نقل أو بيع.', cta:{ href:'health.html', label:'افتح السجل الصحي', icon:'bi-heart-pulse' } });
+  } else if(quarantine>0){
+    focusHtml=streamFocus({ state:'act', eyebrow:'قرار القطيع', title: ar(quarantine)+(quarantine===1?' في الحجر الصحي':' في الحجر'), why:'معزول عن القطيع — راجع السبب والمدة.', cta:{ href:'health.html', label:'راجع الحجر', icon:'bi-shield-exclamation' } });
+  } else if(births>0){
+    focusHtml=streamFocus({ state:'ok', eyebrow:'القطيع مستقر', title:'لا حالات حرجة اليوم', why: ar(births)+(births===1?' مولود':' مواليد')+' بحاجة متابعة وزن وتحصين.', cta:{ href:'births.html', label:'اعرض المواليد', icon:'bi-stars' } });
+  }
+  // Instrument strip: the six numbers that answer "what is this herd?"
+  var pulseHtml=streamPulse([
+    { label:'الماعز', value: ar(goats), foot: ar(goats?Math.round(goats/alive.length*100):0)+'% من الحي', state: goats>0?'good':'flat', icon:'bi-tropical-storm' },
+    { label:'الأغنام', value: ar(sheep), foot: ar(sheep?Math.round(sheep/alive.length*100):0)+'% من الحي', state: sheep>0?'good':'flat', icon:'bi-cloud-fill' },
+    { label:'تربية', value: ar(tarbiya), foot: 'أصل القطيع', state: tarbiya>0?'good':'flat', icon:'bi-diagram-2' },
+    { label:'مواليد', value: ar(births), foot: births>0?'يحتاج متابعة':'لا مواليد', state: births>0?'watch':'flat', icon:'bi-stars' },
+    { label:'تحت العلاج', value: ar(underTreatment), foot: underTreatment?'قيد المتابعة':'لا حالات', state: underTreatment>0?'bad':'flat', icon:'bi-heart-pulse' },
+    { label:'حجر صحي', value: ar(quarantine), foot: quarantine?'معزول':'مستقر', state: quarantine>0?'bad':'flat', icon:'bi-shield-exclamation' }
+  ], { aria: 'نبض القطيع' });
+  // Quick actions for this page — the same 9 the home has, filtered to what
+  // makes sense when you are already IN the herd
+  var quickHtml=streamQuick([
+    { label:'إضافة حيوان', icon:'bi-plus-lg', onclick:'openAddAnimal()', gate:'animals' },
+    { label:'إضافة بالجملة', icon:'bi-stack', onclick:'openBatchEntry()', gate:'animals' },
+    { label:'مولود جديد', icon:'bi-balloon-heart', onclick:"openUnifiedBirthModal('goat')", gate:'animals' },
+    { label:'تسجيل نفوق', icon:'bi-x-octagon', onclick:'openMarkDeath()', gate:'animals' },
+    { label:'تسجيل وزن', icon:'bi-speedometer2', href:'animals.html#f-weight' },
+    { label:'حالة صحية', icon:'bi-heart-pulse', href:'health.html' },
+    { label:'تحصين', icon:'bi-shield-plus', href:'vaccine.html' },
+    { label:'استيراد', icon:'bi-cloud-arrow-up', href:'import.html' }
+  ]);
+  // Animals that actually need a human — scroll strip
+  var attItems=[];
+  try{
+    var _tags=new Set((window._healthRecs||[]).filter(function(h){return h.status==='active';}).map(function(h){return h.animal_tag;}));
+    attItems=alive.filter(function(a){return _tags.has(a.tag)||a.status==='quarantine';}).slice(0,14).map(function(a){
+      var isQ=a.status==='quarantine';
+      return { href:'animal-detail.html?id='+encodeURIComponent(a._id), kind: isQ?'weight':'health', av: a.species==='goat'?'🐐':'🐑', tag: a.tag||a.breed||'—', why: isQ?'حجر صحي':'حالة صحية نشطة' };
+    });
+  }catch(e){}
+  var attHtml=attItems.length?streamAttention({ title:'يحتاج انتباه', count: attItems.length, items: attItems }):'';
+  kpiEl.innerHTML='<div class="home">'+daybarHtml+focusHtml+pulseHtml+quickHtml+attHtml+'</div>';
 }
 
 // ── Render Filters ───────────────────────────────────

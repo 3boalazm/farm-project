@@ -521,12 +521,14 @@ module.exports = suite('27 · Login privacy, keypad geometry & the Bootstrap-gri
   test('the sparkline keys its days with ISO dates, not the Arabic-Indic display helper', () => {
     // pad2() renders ٠١٢٣ for the screen; production rows store 2026-10-20.
     // Using pad2 to build the day keys silently produced an empty trend band.
-    // HOME v3 moved the sparkline from panel 0's status layer into the pulse
-    // strip above the tabs; the rule travels with it.
+    // HOME v3 moved the sparkline into the pulse strip, and PAGE STREAM V3
+    // moved the drawing into shared.js's sparkSVG(); what the page still owns
+    // is the day KEYS, so the rule is asserted on the keys it builds.
     const band = DASH.slice(DASH.indexOf('HOME v3'), DASH.indexOf('<nav class="dash-nav"'));
     assert.ok(band.length > 500, 'the home stream block must be found in dashboard.html');
-    assert.ok(/isoH\s*=/.test(band), 'the home stream formats its own ISO day keys');
-    assert.ok(!/daysH\.push\([^)]*pad2/.test(band), 'and never builds a storage key with pad2()');
-    assert.ok(/seriesH\s*=/.test(band) && /sparkH\s*=/.test(band), 'the series and the SVG are built in the same scope');
+    assert.ok(/isoDays\(7\)/.test(band), 'the home takes its day keys from the shared ISO helper');
+    assert.ok(!/daysH\.push\([^)]*pad2/.test(band) && !/seriesH[\s\S]{0,200}pad2/.test(band),
+      'and never builds a storage key with pad2()');
+    assert.ok(/seriesH\s*=/.test(band) && /series:\s*seriesH/.test(band), 'the series it computes is the series it draws');
   });
 });

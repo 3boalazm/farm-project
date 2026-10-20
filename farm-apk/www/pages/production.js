@@ -42,6 +42,26 @@ async function loadData() {
 function renderMain() {
   const el = document.getElementById('content');
   const stats = computeStats();
+  // STREAM v3 header — production's identity + decision
+  const _prodState = stats.milkToday===0 && _prodData.length ? 'watch' : (_prodData.length? 'ok':'calm');
+  const _prodStreamHead = renderStreamHead({
+    state: _prodState,
+    day: 'الإنتاج — '+(typeof todayAr==='function'?todayAr():todayStr()),
+    pill: { value: ar(_prodData.length), max:'', label:'سجل', title:'إجمالي السجلات' },
+    chips: [
+      { icon:'bi-droplet', text: ar(stats.milkToday.toFixed(1))+' ل اليوم' },
+      { icon:'bi-rulers', text: ar(stats.avgWeight?stats.avgWeight.toFixed(1):'—')+' كجم متوسط' },
+      { icon:'bi-people', text: ar(stats.activeFemales)+' منتجة' },
+    ],
+    focus: _prodData.length===0 ? { state:'calm', eyebrow:'الإنتاج', title:'لا سجلات بعد', why:'سجّل أول إنتاج لبن أو صوف أو وزن ليبدأ الرسم البياني.', cta:{ onclick:'openProdEntry()', label:'سجل إنتاج', icon:'bi-plus-lg' } } : (stats.milkToday===0 ? { state:'watch', eyebrow:'قرار الإنتاج', title:'لا إنتاج حليب اليوم', why:'مقارنة بالشهر: '+ar(stats.milkMonth.toFixed(1))+' ل — راجع الإناث المنتجة.', cta:{ href:'animals.html?purpose=tarbiya', label:'اعرض الإناث', icon:'bi-list-ul' } } : null),
+    quick: [
+      { label:'تسجيل إنتاج', icon:'bi-plus-lg', onclick:'openProdEntry()', gate:'animals' },
+      { label:'تصدير', icon:'bi-file-earmark-excel', onclick:'exportProduction()' },
+      { label:'الأوزان', icon:'bi-rulers', href:'animals.html' },
+      { label:'القطيع', icon:'bi-list-ul', href:'animals.html' },
+    ],
+  });
+
 
   // ── Analytics Row (Overview level) — NEW, was missing. ──
   // The existing "Summary" tab already has monthly milk/wool trend and a
@@ -95,7 +115,7 @@ function renderMain() {
     <div class="col-md-6">${renderChartContainer({ title:'مقارنة الإنتاج', subtitle:'الحليب مقابل الصوف — آخر 6 أشهر', chartHtml: prodCompareSvg||'', state: prodCompareSvg?'ready':'empty' })}</div>
   </div>`;
 
-  el.innerHTML = `
+  el.innerHTML = _prodStreamHead + `
   <!-- KPI Row (Analytics Template) -->
   <div class="row g-3 mb-4">
     <div class="col-6 col-md-4 col-lg-2">${renderKPICard({ label:'إنتاج الحليب اليوم', value: ar(stats.milkToday.toFixed(1)), unit:'ل', status:'normal' })}</div>

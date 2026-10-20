@@ -164,13 +164,19 @@ function renderDetail(s){
   // directly into #content — same component, same breadcrumb pattern
   // already used by animals.html and dashboard.html, just with this
   // page's own species-specific middle crumb.
+  // detail header — now a page-mast with the animal's identity as the
+  // page's own daybar, so the detail reads as a continuation of the herd
+  // list, not as a disconnected form.
   renderPageHeaderV2({
     title: `${escapeHtml(animal.breed||'—')} ${animal.tag?'<span class="type-badge badge-gray" style="font-size:.8rem">#'+escapeHtml(animal.tag)+'</span>':''}`,
+    description: `${animal.species==='goat'?'ماعز':'أغنام'} • ${animal.gender==='male'?'ذكر':'أنثى'} • ${escapeHtml(animal.barn||'بدون عنبر')} • ${escapeHtml(animal.purpose||'')}`,
     breadcrumb: [
       {label:'القطيع', href:'animals.html'},
       {label:backSectionLabel, href:backSectionHref},
       {label:escapeHtml(animal.breed||'—')+(animal.tag?' #'+escapeHtml(animal.tag):'')}
-    ]
+    ],
+    secondaryActions: `<a href="animals.html" class="action-btn"><i class="bi bi-arrow-right"></i> رجوع للقطيع</a>`,
+    primaryAction: can('animals')?`<button class="action-btn primary" onclick="openEditAnimal()"><i class="bi bi-pencil"></i> تعديل</button>`:''
   });
 
   el.innerHTML=`

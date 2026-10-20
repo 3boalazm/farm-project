@@ -351,9 +351,8 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
          self-contained IIFE scopes.
          ══════════════════════════════════════════════════════════════ */
       const nowH = new Date();
-      const clockH = pad2(nowH.getHours()) + ':' + pad2(nowH.getMinutes());
+      const dayH = pageNow(nowH);
       const stateH = healthScore >= 75 ? 'ok' : (healthScore >= 60 ? 'watch' : 'act');
-      const iconH = stateH === 'ok' ? 'bi-shield-check' : (stateH === 'watch' ? 'bi-exclamation-triangle' : 'bi-exclamation-octagon');
 
       // who needs a human right now (active health record OR active weight alert)
       const _tagsH = new Set((health || []).filter(r => r.status === 'active').map(r => r.animal_tag));
@@ -362,150 +361,100 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
       const openTasksH = (dailyTasks || []).filter(t => t.status !== 'done');
       const overdueH = openTasksH.filter(t => t.date && t.date < today);
 
-      // 7 daily milk totals → inline SVG. ISO day keys, never pad2(): a
-      // production row's date is stored as 2026-10-20 and pad2 renders
-      // Arabic-Indic digits, which silently produced an empty trend band.
-      const isoH = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-      const daysH = []; for (let i = 6; i >= 0; i--) { const d = new Date(nowH); d.setDate(d.getDate() - i); daysH.push(isoH(d)); }
+      // 7 daily milk totals → the shared sparkline. Day keys come from
+      // pageNow().isoDays() — ISO storage keys, never pad2(), which renders
+      // Arabic-Indic digits for the SCREEN and silently produced an empty
+      // trend band when it was used to match a production row's date.
+      const daysH = dayH.isoDays(7);
       const seriesH = daysH.map(ds => (production || []).filter(x => x.type === 'milk' && x.date === ds).reduce((t, x) => t + (+x.quantity || 0), 0));
       const hasMilkH = seriesH.some(v => v > 0);
       const milkTodayH = seriesH[seriesH.length - 1] || 0;
-      const last3H = seriesH.slice(-3).reduce((t, v) => t + v, 0), prev3H = seriesH.slice(0, 3).reduce((t, v) => t + v, 0);
-      const deltaH = (hasMilkH && prev3H > 0) ? Math.round(((last3H - prev3H) / prev3H) * 100) : null;
-      const sparkH = (() => {
-        if (!hasMilkH) return '';
-        const w = 260, h = 40, max = Math.max.apply(null, seriesH), min = Math.min.apply(null, seriesH), span = (max - min) || 1;
-        const pts = seriesH.map((v, i) => [((i / (seriesH.length - 1)) * w).toFixed(1), (h - 5 - ((v - min) / span) * (h - 12)).toFixed(1)]);
-        const line = pts.map(pt => pt[0] + ',' + pt[1]).join(' ');
-        const last = pts[pts.length - 1];
-        return `<svg class="dash-spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="إنتاج اللبن خلال آخر سبعة أيام">
-          <polygon class="dash-spark__area" points="0,${h} ${line} ${w},${h}"></polygon>
-          <polyline class="dash-spark__line" points="${line}"></polyline>
-          <circle class="dash-spark__dot" cx="${last[0]}" cy="${last[1]}" r="3"></circle>
-        </svg>`;
-      })();
 
       // ── the ONE decision ────────────────────────────────────────────
       const A = priorityAlerts || [];
-      let fState = 'calm', fTitle = '', fWhy = '', fCta = '', fNext = '';
+      let fState = 'calm', fTitle = '', fWhy = '', fCta = null, fNext = [];
       if (A.length) {
         const first = A[0];
         fState = first.severity === 'critical' ? 'act' : (first.severity === 'watch' ? 'watch' : 'ok');
         fTitle = ar(A.length) + (A.length === 1 ? ' أولوية تحتاج قرارًا اليوم'
           : A.length === 2 ? ' أولويتان تحتاجان قرارًا اليوم' : ' أولويات تحتاج قرارًا اليوم');
-        fWhy = escapeHtml(first.message || first.title || '');
-        fCta = `<a class="focus__cta" href="${first.actionHref || '#dash-alerts'}"><i class="bi ${first.icon || 'bi-arrow-left-circle'} me-1"></i>${escapeHtml(first.actionLabel || 'اعرض التفاصيل')}</a>`;
-        fNext = A.slice(1, 3).map(a =>
-          `<li><a href="${a.actionHref || '#dash-alerts'}"><i class="bi ${a.icon || 'bi-circle'} me-1"></i>${escapeHtml(a.title || '')}</a></li>`).join('');
+        fWhy = first.message || first.title || '';
+        fCta = { href: first.actionHref || '#dash-alerts', label: first.actionLabel || 'اعرض التفاصيل', icon: first.icon || 'bi-arrow-left-circle' };
+        fNext = A.slice(1, 3).map(a => ({ href: a.actionHref || '#dash-alerts', label: a.title || '', icon: a.icon || 'bi-circle' }));
       } else if (attH.length) {
         fState = 'watch';
         fTitle = ar(attH.length) + (attH.length === 1 ? ' حيوان يحتاج انتباهًا اليوم'
           : attH.length === 2 ? ' حيوانان يحتاجان انتباهًا اليوم' : ' حيوانات تحتاج انتباهًا اليوم');
         fWhy = 'حالة صحية نشطة أو فقدان وزن — الشريط تحت يعرضهم واحدًا واحدًا.';
-        fCta = `<a class="focus__cta" href="health.html"><i class="bi bi-heart-pulse me-1"></i>افتح السجل الصحي</a>`;
+        fCta = { href: 'health.html', label: 'افتح السجل الصحي', icon: 'bi-heart-pulse' };
       } else if (overdueH.length) {
         fState = 'watch';
         fTitle = ar(overdueH.length) + (overdueH.length === 1 ? ' مهمة متأخرة عن موعدها'
           : overdueH.length === 2 ? ' مهمتان متأخرتان عن موعدهما' : ' مهام متأخرة عن موعدها');
-        fWhy = escapeHtml(overdueH[0].title || 'أول مهمة متأخرة') + (overdueH.length > 1 ? ' — و' + ar(overdueH.length - 1) + ' غيرها' : '');
-        fCta = `<a class="focus__cta" href="tasks.html"><i class="bi bi-check2-square me-1"></i>اعرض المهام</a>`;
+        fWhy = (overdueH[0].title || 'أول مهمة متأخرة') + (overdueH.length > 1 ? ' — و' + ar(overdueH.length - 1) + ' غيرها' : '');
+        fCta = { href: 'tasks.html', label: 'اعرض المهام', icon: 'bi-check2-square' };
       } else {
         fState = 'calm';
         fTitle = 'لا شيء يحتاج قرارًا اليوم';
         fWhy = 'لا أولويات مفتوحة ولا حيوان تحت العلاج ولا مهام متأخرة — سجّل اليوم العادي من الإجراءات السريعة.';
-        fCta = `<a class="focus__cta focus__cta--calm" href="diary.html"><i class="bi bi-journal-text me-1"></i>افتح يومية المزرعة</a>`;
+        fCta = { href: 'diary.html', label: 'افتح يومية المزرعة', icon: 'bi-journal-text' };
       }
 
-      // ── the instrument strip ────────────────────────────────────────
-      const cellH = (label, value, foot, state, icon) => `
-        <div class="pulse__cell" data-state="${state}">
-          <span class="pulse__label"><i class="bi ${icon}"></i>${label}</span>
-          <span class="pulse__value">${value}</span>
-          <span class="pulse__foot">${foot}</span>
-        </div>`;
-      const pulseH = [
-        cellH('مواليد', ar(todaySummary.births), 'اليوم', todaySummary.births > 0 ? 'good' : 'flat', 'bi-stars'),
-        cellH('نفوق', ar(todaySummary.deaths), 'اليوم', todaySummary.deaths > 0 ? 'bad' : 'flat', 'bi-droplet'),
-        cellH('لبن', hasMilkH ? ar(Math.round(milkTodayH)) : '—', 'لتر اليوم', milkTodayH > 0 ? 'good' : 'flat', 'bi-egg-fried'),
-        cellH('إيرادات', todaySummary.income.toLocaleString('ar-EG'), s.currency + ' اليوم', todaySummary.income > 0 ? 'good' : 'flat', 'bi-arrow-down-circle'),
-        cellH('مصروفات', todaySummary.expense.toLocaleString('ar-EG'), s.currency + ' اليوم', todaySummary.expense > 0 ? 'watch' : 'flat', 'bi-arrow-up-circle'),
-        cellH('مهام مفتوحة', ar(openTasksH.length), overdueH.length ? ar(overdueH.length) + ' متأخرة' : 'لا متأخرات', overdueH.length ? 'bad' : 'flat', 'bi-check2-square'),
-      ].join('');
-
-      // ── glove-sized actions (permission-gated like the page header) ──
-      const qH = (href, icon, label, onclick) => `
-        <${onclick ? 'button type="button" onclick="' + onclick + '"' : 'a href="' + href + '"'} class="quick__btn"><i class="bi ${icon}"></i><span>${label}</span></${onclick ? 'button' : 'a'}>`;
-      const quickH = [
-        can('animals') ? qH(null, 'bi-plus-lg', 'إضافة حيوان', 'openAddAnimalDash()') : '',
-        can('animals') ? qH(null, 'bi-balloon-heart', 'مولود جديد', "openUnifiedBirthModal('goat')") : '',
-        can('animals') ? qH(null, 'bi-x-octagon', 'تسجيل نفوق', 'openMarkDeathDash()') : '',
-        qH('production.html', 'bi-egg-fried', 'تسجيل إنتاج'),
-        qH('animals.html', 'bi-speedometer2', 'تسجيل وزن'),
-        qH('health.html', 'bi-heart-pulse', 'حالة صحية'),
-        qH('vaccine.html', 'bi-shield-plus', 'تحصين'),
-        can('finance') ? qH('finance-entry.html', 'bi-cash-coin', 'إيراد / مصروف') : '',
-        qH('tasks.html', 'bi-check2-square', 'المهام'),
-      ].join('');
-
-      // ── the animals that need a human, as a scroll strip ────────────
-      const attH_html = attH.length ? `
-      <section class="att" aria-label="حيوانات تحتاج انتباه">
-        <h2 class="home__title"><i class="bi bi-exclamation-circle"></i> يحتاج انتباه <span class="home__count">${ar(attH.length)}</span></h2>
-        <div class="att__strip">
-          ${attH.slice(0, 14).map(a => {
+      // The markup itself is built by the shared PAGE STREAM builders
+      // (shared.js · PAGE STREAM V3): this block computes the numbers, the
+      // builder owns the language, so all 37 pages speak it identically.
+      return renderStream({
+        id: 'dash-home',
+        state: stateH,
+        day: todayAr(),
+        pill: { value: ar(healthScore), max: '/١٠٠', label: healthLabel, title: 'حالة المزرعة' },
+        chips: [
+          { icon: 'bi-heart-pulse', text: ar(alive.length) + ' حيّ' },
+          { icon: 'bi-activity', text: ar((animals || []).length) + ' إجمالي' },
+          attH.length ? { icon: 'bi-exclamation-triangle', text: ar(attH.length) + ' يحتاج انتباه', alert: true } : null,
+        ].filter(Boolean),
+        focus: { state: fState, eyebrow: 'قرار اليوم', aria: 'قرار اليوم', title: fTitle, why: fWhy, cta: fCta, next: fNext },
+        pulse: [
+          { label: 'مواليد', value: ar(todaySummary.births), foot: 'اليوم', state: todaySummary.births > 0 ? 'good' : 'flat', icon: 'bi-stars' },
+          { label: 'نفوق', value: ar(todaySummary.deaths), foot: 'اليوم', state: todaySummary.deaths > 0 ? 'bad' : 'flat', icon: 'bi-droplet' },
+          { label: 'لبن', value: hasMilkH ? ar(Math.round(milkTodayH)) : '—', foot: 'لتر اليوم', state: milkTodayH > 0 ? 'good' : 'flat', icon: 'bi-egg-fried' },
+          { label: 'إيرادات', value: todaySummary.income.toLocaleString('ar-EG'), foot: s.currency + ' اليوم', state: todaySummary.income > 0 ? 'good' : 'flat', icon: 'bi-arrow-down-circle' },
+          { label: 'مصروفات', value: todaySummary.expense.toLocaleString('ar-EG'), foot: s.currency + ' اليوم', state: todaySummary.expense > 0 ? 'watch' : 'flat', icon: 'bi-arrow-up-circle' },
+          { label: 'مهام مفتوحة', value: ar(openTasksH.length), foot: overdueH.length ? ar(overdueH.length) + ' متأخرة' : 'لا متأخرات', state: overdueH.length ? 'bad' : 'flat', icon: 'bi-check2-square' },
+        ],
+        pulseAria: 'نبض اليوم',
+        trend: {
+          label: 'لبن — ٧ أيام', ariaLabel: 'إنتاج اللبن خلال آخر سبعة أيام', series: seriesH,
+          emptyText: 'لا يوجد إنتاج لبن مسجّل هذا الأسبوع', emptyHref: 'production.html', emptyLabel: 'سجّل الإنتاج',
+        },
+        // glove-sized actions — the single place for "do something now";
+        // gated with firebase.js can() so a worker never sees a dead button
+        quick: [
+          { label: 'إضافة حيوان', icon: 'bi-plus-lg', onclick: 'openAddAnimalDash()', gate: 'animals' },
+          { label: 'مولود جديد', icon: 'bi-balloon-heart', onclick: "openUnifiedBirthModal('goat')", gate: 'animals' },
+          { label: 'تسجيل نفوق', icon: 'bi-x-octagon', onclick: 'openMarkDeathDash()', gate: 'animals' },
+          { label: 'تسجيل إنتاج', icon: 'bi-egg-fried', href: 'production.html' },
+          { label: 'تسجيل وزن', icon: 'bi-speedometer2', href: 'animals.html' },
+          { label: 'حالة صحية', icon: 'bi-heart-pulse', href: 'health.html' },
+          { label: 'تحصين', icon: 'bi-shield-plus', href: 'vaccine.html' },
+          { label: 'إيراد / مصروف', icon: 'bi-cash-coin', href: 'finance-entry.html', gate: 'finance' },
+          { label: 'المهام', icon: 'bi-check2-square', href: 'tasks.html' },
+        ],
+        // the animals that need a human, as a strip that scrolls on a phone
+        att: {
+          title: 'يحتاج انتباه', aria: 'حيوانات تحتاج انتباه',
+          items: attH.slice(0, 14).map(a => {
             const sick = _tagsH.has(a.tag), lost = _widsH.has(a._id);
-            const why = sick && lost ? 'حالة صحية + فقدان وزن' : (sick ? 'حالة صحية نشطة' : 'فقدان وزن');
-            return `<a class="attchip" href="animal-detail.html?id=${encodeURIComponent(a._id)}" data-kind="${sick ? 'health' : 'weight'}">
-              <span class="attchip__av" aria-hidden="true">${a.species === 'goat' ? '🐐' : '🐑'}</span>
-              <span class="attchip__body"><b>${escapeHtml(a.tag || '—')}</b><small>${escapeHtml(why)}</small></span>
-            </a>`;
-          }).join('')}
-        </div>
-      </section>` : '';
-
-      return `
-    <div id="dash-home" class="home">
-      <div class="daybar" data-state="${stateH}">
-        <div class="daybar__when">
-          <span class="daybar__day">${todayAr()}</span>
-          <span class="daybar__clock"><i class="bi bi-clock-history"></i> آخر تحديث ${clockH}</span>
-        </div>
-        <span class="statepill" data-state="${stateH}" title="حالة المزرعة">
-          <i class="bi ${iconH}" aria-hidden="true"></i>
-          <b>${ar(healthScore)}</b><span class="statepill__max">/١٠٠</span>
-          <em>${healthLabel}</em>
-        </span>
-        <div class="daybar__herd">
-          <span class="herdchip"><i class="bi bi-heart-pulse"></i>${ar(alive.length)} حيّ</span>
-          <span class="herdchip"><i class="bi bi-activity"></i>${ar((animals || []).length)} إجمالي</span>
-          ${attH.length ? `<span class="herdchip herdchip--alert"><i class="bi bi-exclamation-triangle"></i>${ar(attH.length)} يحتاج انتباه</span>` : ''}
-        </div>
-      </div>
-
-      <section class="focus" data-state="${fState}" aria-label="قرار اليوم">
-        <div class="focus__main">
-          <span class="focus__eyebrow">قرار اليوم</span>
-          <h2 class="focus__title">${fTitle}</h2>
-          ${fWhy ? `<p class="focus__why">${fWhy}</p>` : ''}
-          ${fCta}
-        </div>
-        ${fNext ? `<ol class="focus__next" aria-label="التالي في القائمة">${fNext}</ol>` : ''}
-      </section>
-
-      <section class="pulse" role="group" aria-label="نبض اليوم">
-        <div class="pulse__grid">${pulseH}</div>
-        <div class="pulse__trend" dir="ltr">
-          <div class="pulse__trendhead" dir="rtl">
-            <span><i class="bi bi-graph-up"></i> لبن — ٧ أيام</span>
-            ${deltaH === null ? '<span class="pulse__delta" data-dir="flat">—</span>' : `<span class="pulse__delta" data-dir="${deltaH >= 0 ? 'up' : 'down'}">${deltaH >= 0 ? '▲' : '▼'} ${ar(Math.abs(deltaH))}٪</span>`}
-          </div>
-          ${hasMilkH ? sparkH : `<div class="pulse__empty" dir="rtl">لا يوجد إنتاج لبن مسجّل هذا الأسبوع — <a href="production.html">سجّل الإنتاج</a> ليظهر الاتجاه.</div>`}
-        </div>
-      </section>
-
-      <section class="quick" role="group" aria-label="إجراءات سريعة">${quickH}</section>
-      ${attH_html}
-    </div>
+            return {
+              href: 'animal-detail.html?id=' + encodeURIComponent(a._id),
+              kind: sick ? 'health' : 'weight',
+              av: a.species === 'goat' ? '🐐' : '🐑',
+              tag: a.tag || '—',
+              why: sick && lost ? 'حالة صحية + فقدان وزن' : (sick ? 'حالة صحية نشطة' : 'فقدان وزن'),
+            };
+          }),
+        },
+      }) + `
 
     <nav class="dash-nav" aria-label="أقسام تفصيلية">
       <h2 class="dash-nav__title"><i class="bi bi-sliders"></i> التفاصيل والمؤشرات</h2>
@@ -528,7 +477,10 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
          a real timeline of activity_log, not a fourth restatement of the
          same counters. Same rule as everywhere else in this file: nothing
          renders unless a computed number says so. Suffix T for scope. */
-      const rowsT = (recentActivity || []).slice(0, 8);
+      /* The markup is the shared streamTimeline() builder (shared.js · PAGE
+         STREAM V3); this block only maps activity_log rows onto it. Same
+         rule as everywhere else in this file: nothing renders unless a
+         computed number says so. Suffix T for scope. */
       const iconT = (a) => a === 'add' ? 'bi-plus-circle' : a === 'edit' ? 'bi-pencil-square'
         : a === 'delete' ? 'bi-trash3' : a === 'login' ? 'bi-box-arrow-in-right' : 'bi-dot';
       const kindT = (a) => a === 'delete' ? 'bad' : a === 'add' ? 'good' : a === 'login' ? 'info' : 'flat';
@@ -537,27 +489,20 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
         const d = new Date(ts);
         return isNaN(d.getTime()) ? '' : pad2(d.getHours()) + ':' + pad2(d.getMinutes());
       };
-      if (!rowsT.length) return `
-      <div class="tl tl--empty mb-4">
-        <i class="bi bi-clock-history"></i>
-        <div><b>لا حركة مسجّلة بعد اليوم</b>
-        <small>أي إضافة أو تعديل في التطبيق يظهر هنا تلقائيًا — <a href="reports.html">التقارير</a> للتاريخ الكامل.</small></div>
-      </div>`;
-      return `
-      <section class="tl mb-4" aria-label="حركة اليوم">
-        <h2 class="home__title"><i class="bi bi-clock-history"></i> الحركة <span class="home__count">${ar(rowsT.length)}</span></h2>
-        <ol class="tl__list">
-          ${rowsT.map(r => `
-          <li class="tl__item" data-kind="${kindT(r.action)}">
-            <span class="tl__time">${hhmmT(r.timestamp)}</span>
-            <span class="tl__dot" aria-hidden="true"><i class="bi ${iconT(r.action)}"></i></span>
-            <span class="tl__body">
-              <b>${escapeHtml(r.description || r.action || '—')}</b>
-              <small>${escapeHtml(r.userName || '')}${r.resource ? ' · ' + escapeHtml(r.resource) : ''}</small>
-            </span>
-          </li>`).join('')}
-        </ol>
-      </section>`;
+      return streamTimeline({
+        className: 'mb-4',
+        title: 'الحركة', aria: 'حركة اليوم',
+        items: (recentActivity || []).slice(0, 8).map(r => ({
+          kind: kindT(r.action), time: hhmmT(r.timestamp), icon: iconT(r.action),
+          text: r.description || r.action || '—',
+          meta: (r.userName || '') + (r.resource ? ' · ' + r.resource : ''),
+        })),
+        empty: {
+          className: 'mb-4', text: 'لا حركة مسجّلة بعد اليوم',
+          small: 'أي إضافة أو تعديل في التطبيق يظهر هنا تلقائيًا',
+          href: 'reports.html', label: 'التقارير',
+        },
+      });
     })()}
     ${(() => {
       /* ── LAYER 2 · CONTEXT — why the number moved ─────────────────────

@@ -461,14 +461,18 @@ function closeSidebar(){
 function renderPageHeader(title, subtitle='', actions=''){
   const el=document.getElementById('page-header');
   if(!el)return;
+  // Legacy entry point — now emits the same page-mast as V2, so every one
+  // of the 37 pages gets the new language even before it migrates its
+  // call site. Contract preserved: all three slots are trusted markup
+  // (the old test asserts subtitle and actions pass through unescaped).
   el.innerHTML=`
-  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
-    <div>
-      <h4 class="fw-bold mb-0">${title}</h4>
-      ${subtitle?`<small class="text-gray">${subtitle}</small>`:''}
-    </div>
-    <div class="d-flex gap-2 flex-wrap">${actions}</div>
-  </div>`;
+    <header class="page-mast">
+      <div class="page-mast__main">
+        <h1 class="page-mast__title">${title}</h1>
+        ${subtitle?`<p class="page-mast__desc">${subtitle}</p>`:''}
+      </div>
+      ${actions?`<div class="page-mast__actions">${actions}</div>`:''}
+    </header>`;
 }
 
 // ── LOADING / EMPTY ───────────────────────────────────────
@@ -519,24 +523,29 @@ function renderErrorState(el, msg='حدث خطأ أثناء التحميل'){
 function renderPageHeaderV2({ title, description='', breadcrumb=[], primaryAction='', secondaryActions='' }){
   const el=document.getElementById('page-header');
   if(!el)return;
-  const crumbHtml = breadcrumb.length ? `<nav class="page-breadcrumb">${
-    breadcrumb.map((b,i)=> i<breadcrumb.length-1
-      ? `<a href="${b.href||'#'}">${escapeHtml(b.label)}</a><span class="mx-1">/</span>`
-      : `<span>${escapeHtml(b.label)}</span>`
-    ).join('')
+  // PAGE MAST v3 — every page's first glance is now the same language the
+  // home introduced: a page identity bar, not a loose h4 + breadcrumb.
+  // The contract is unchanged: title is trusted markup (icons), description
+  // and breadcrumb labels are escaped, actions are trusted html slots.
+  const crumbHtml = breadcrumb.length ? `<nav class="page-breadcrumb" aria-label="مسار التنقل">${
+    breadcrumb.map((b,i)=> {
+      const label=escapeHtml(b.label);
+      if (i < breadcrumb.length-1) return `<a href="${escapeHtml(b.href||'#')}">${label}</a>`;
+      return `<span aria-current="page">${label}</span>`;
+    }).join('<span class="page-breadcrumb__sep" aria-hidden="true">›</span>')
   }</nav>` : '';
+  const hasActions = Boolean((secondaryActions||'').trim() || (primaryAction||'').trim());
+  const actionsHtml = hasActions ? `<div class="page-mast__actions">${secondaryActions||''}${primaryAction||''}</div>` : '';
+  const descHtml = description ? `<p class="page-mast__desc">${escapeHtml(description)}</p>` : '';
   el.innerHTML = `
     ${crumbHtml}
-    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
-      <div>
-        <h4 class="fw-bold mb-0">${title}</h4>
-        ${description?`<small class="text-gray">${escapeHtml(description)}</small>`:''}
+    <header class="page-mast">
+      <div class="page-mast__main">
+        <h1 class="page-mast__title">${title}</h1>
+        ${descHtml}
       </div>
-      <div class="d-flex gap-2 flex-wrap align-items-center">
-        ${secondaryActions}
-        ${primaryAction}
-      </div>
-    </div>`;
+      ${actionsHtml}
+    </header>`;
 }
 
 // ── 2. Section Container ──
@@ -619,6 +628,280 @@ function renderAlertCard({ severity='info', icon='bi-info-circle', title, messag
 }
 
 // ── 5. Chart Container (state: ready/loading/empty/error) ──
+// ══════════════════════════════════════════════════════════════════════
+// PAGE STREAM v3 (2026-10-20) — docs/design/UI-SYSTEM.md §21
+//
+// The home page stopped being "five tabs of cards" and became one decision
+// stream. These builders ARE that language, shared by every page, so the
+// app reads as one product instead of 37 layouts:
+//
+//   daybar     what day is it / what is this page / should I worry?
+//   focus      the ONE decision here, with a reason and a verb
+//   pulse      this page's numbers as an instrument strip (+ real trend)
+//   quick      glove-sized actions, permission-gated
+//   attention  the rows that need a human, as a scroll strip
+//   timeline   what already happened
+//
+// Class names are styled by ui.css §17. State is always an attribute
+// (`data-state`, `data-kind`, `data-dir`) plus a word plus an icon — never
+// colour alone, because the app runs in sunlight, in greyscale print and
+// for colour-blind operators.
+//
+// Every free-text field is escaped HERE. Callers pass data, not markup;
+// the `*Html` fields are the only trusted escape hatch, and they exist so
+// a page can put a link inside a foot note without re-implementing this.
+// ══════════════════════════════════════════════════════════════════════
+
+// Storage keys vs screen digits. `pageNow().isoDay` builds the date key a
+// record is stored under (2026-10-20); `pad2()` renders Arabic-Indic
+// digits for the SCREEN. Using pad2 for a key once produced a silently
+// empty trend band — suite 30 pins the difference.
+function pageNow(date){
+  const d = date || new Date();
+  return {
+    date: d,
+    isoDay: d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'),
+    clock: (typeof pad2==='function'?pad2(d.getHours()):String(d.getHours()).padStart(2,'0'))+':'+(typeof pad2==='function'?pad2(d.getMinutes()):String(d.getMinutes()).padStart(2,'0')),
+    isoDays: (n)=>{ const out=[]; for(let i=(n||7)-1;i>=0;i--){ const x=new Date(d); x.setDate(x.getDate()-i); out.push(x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0')); } return out; },
+  };
+}
+
+// Arabic-Indic digits when firebase.js loaded them, latin otherwise.
+function streamDigits(v){ return (typeof ar==='function') ? ar(v) : String(v); }
+
+// An icon name is a class token, not free text — refuse anything else.
+function streamIcon(name){ return /^[A-Za-z0-9_-]+$/.test(name||'') ? name : 'bi-circle'; }
+
+// The real 7-point (or n-point) inline SVG sparkline. Returns '' when every
+// value is zero: a flat fake line on a page whose whole job is trend is a
+// lie, and the caller renders its empty state instead.
+function sparkSVG(series, opts){
+  const o = opts || {};
+  const vals = (series||[]).map(v=>+v||0);
+  const w = 260, h = 40;
+  if (vals.length < 2 || !vals.some(v=>v!==0)) return '';
+  const max = Math.max.apply(null, vals), min = Math.min.apply(null, vals), span = (max-min)||1;
+  const pts = vals.map((v,i)=>[ ((i/(vals.length-1))*w).toFixed(1), (h-5-((v-min)/span)*(h-12)).toFixed(1) ]);
+  const line = pts.map(p=>p[0]+','+p[1]).join(' ');
+  const last = pts[pts.length-1];
+  return `<svg class="dash-spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="${escapeHtml(o.label||'الاتجاه خلال الفترة')}">
+          <polygon class="dash-spark__area" points="0,${h} ${line} ${w},${h}"></polygon>
+          <polyline class="dash-spark__line" points="${line}"></polyline>
+          <circle class="dash-spark__dot" cx="${last[0]}" cy="${last[1]}" r="3"></circle>
+        </svg>`;
+}
+
+// Change of the last third vs the first third, as {value,dir,raw} or null
+// (null = "no basis to compare", which renders as an em dash, not as 0%).
+function sparkDelta(series){
+  const vals = (series||[]).map(v=>+v||0);
+  if (vals.length < 2 || !vals.some(v=>v>0)) return null;
+  const half = Math.max(2, Math.floor(vals.length/2));
+  const last = vals.slice(-half).reduce((t,v)=>t+v,0), prev = vals.slice(0,half).reduce((t,v)=>t+v,0);
+  if (prev <= 0) return null;
+  const pct = Math.round(((last-prev)/prev)*100);
+  return { value: Math.abs(pct), dir: pct>=0?'up':'down', raw: pct };
+}
+
+// An onclick handler, built two ways and both safe:
+//   onclick: "openModal()"   — trusted code the caller wrote; HTML-escaped
+//                              only, so its own quotes survive intact.
+//   fn + arg                 — a DATABASE value handed to a named function.
+//                              The value is escaped for the JS-string
+//                              context first (escapeJsAttr: backslash, then
+//                              quote) and then for the HTML attribute, so a
+//                              tag or a quote in a record cannot become code
+//                              when the operator clicks the button.
+function streamHandler(a){
+  if (a.fn) return escapeHtml(String(a.fn)) + '(' + (a.arg === undefined ? '' : "'" + escapeJsAttr(a.arg) + "'") + ')';
+  return escapeHtml(String(a.onclick || ''));
+}
+
+// 1 · daybar — the page's identity line, its state pill and its context chips.
+function streamDaybar(cfg){
+  const c = cfg || {};
+  const now = pageNow(c.date);
+  const state = ['ok','watch','act'].indexOf(c.state)>=0 ? c.state : 'ok';
+  const stateIcon = { ok:'bi-shield-check', watch:'bi-exclamation-triangle', act:'bi-exclamation-octagon' }[state];
+  const pill = !c.pill ? '' : `
+        <span class="statepill" data-state="${state}"${c.pill.title?` title="${escapeHtml(c.pill.title)}"`:''}>
+          <i class="bi ${streamIcon(c.pill.icon||stateIcon)}" aria-hidden="true"></i>
+          <b>${escapeHtml(String(c.pill.value))}</b>${c.pill.max?`<span class="statepill__max">${escapeHtml(c.pill.max)}</span>`:''}
+          <em>${escapeHtml(c.pill.label||'')}</em>
+        </span>`;
+  const chips = (c.chips||[]).map(ch=>
+    `<span class="herdchip${ch.alert?' herdchip--alert':''}">${ch.icon?`<i class="bi ${streamIcon(ch.icon)}"></i>`:''}${escapeHtml(String(ch.text))}</span>`).join('\n          ');
+  return `
+      <div class="daybar" data-state="${state}">
+        <div class="daybar__when">
+          <span class="daybar__day">${escapeHtml(c.day || (typeof todayAr==='function'?todayAr():now.isoDay))}</span>
+          <span class="daybar__clock"><i class="bi bi-clock-history"></i> ${escapeHtml(c.clockText || ('آخر تحديث '+now.clock))}</span>
+        </div>${pill}${chips?`
+        <div class="daybar__herd">
+          ${chips}
+        </div>`:''}
+      </div>`;
+}
+
+// 2 · focus — one decision, why it matters, and a verb. `next` is capped at
+// two so the card stays a decision and doesn't become a queue.
+function streamFocus(f){
+  const c = f || {};
+  if (!c.title && !c.cta) return '';
+  const state = ['act','watch','ok','calm'].indexOf(c.state)>=0 ? c.state : 'ok';
+  const calm = state==='calm' ? ' focus__cta--calm' : '';
+  let cta = '';
+  if (c.cta) {
+    cta = c.cta.html ? c.cta.html : (c.cta.onclick || c.cta.fn
+      ? `<button type="button" class="focus__cta${calm}" onclick="${streamHandler(c.cta)}"><i class="bi ${streamIcon(c.cta.icon||'bi-lightning-charge')} me-1"></i>${escapeHtml(c.cta.label||'')}</button>`
+      : `<a class="focus__cta${calm}" href="${escapeHtml(c.cta.href||'#')}"><i class="bi ${streamIcon(c.cta.icon||'bi-arrow-left-circle')} me-1"></i>${escapeHtml(c.cta.label||'اعرض التفاصيل')}</a>`);
+  }
+  const next = (c.next||[]).slice(0,2).map(n=>
+    `<li><a href="${escapeHtml(n.href||'#')}"><i class="bi ${streamIcon(n.icon||'bi-circle')} me-1"></i>${escapeHtml(n.label||'')}</a></li>`).join('');
+  return `
+      <section class="focus" data-state="${state}" aria-label="${escapeHtml(c.aria||'قرار الصفحة')}">
+        <div class="focus__main">
+          <span class="focus__eyebrow">${escapeHtml(c.eyebrow||'قرار اليوم')}</span>
+          <h2 class="focus__title">${escapeHtml(c.title||'')}</h2>
+          ${c.why?`<p class="focus__why">${escapeHtml(c.why)}</p>`:''}
+          ${cta}
+        </div>
+        ${next?`<ol class="focus__next" aria-label="التالي في القائمة">${next}</ol>`:''}
+      </section>`;
+}
+
+// 3 · pulse — this page's numbers as one instrument strip. `trend` is
+// optional and takes a numeric series + the empty state's next step.
+function streamPulse(cells, opts){
+  const list = cells || [];
+  const o = opts || {};
+  if (!list.length && !o.trend) return '';
+  const grid = list.map(c=>{
+    const st = ['good','bad','watch','flat'].indexOf(c.state)>=0 ? c.state : 'flat';
+    return `
+        <div class="pulse__cell" data-state="${st}">
+          <span class="pulse__label">${c.icon?`<i class="bi ${streamIcon(c.icon)}"></i>`:''}${escapeHtml(String(c.label||''))}</span>
+          <span class="pulse__value">${c.valueHtml!=null?c.valueHtml:escapeHtml(String(c.value==null?'—':c.value))}</span>
+          <span class="pulse__foot">${c.footHtml!=null?c.footHtml:escapeHtml(String(c.foot==null?'':c.foot))}</span>
+        </div>`;
+  }).join('');
+  let trend = '';
+  const t = o.trend;
+  if (t) {
+    const svg = sparkSVG(t.series, { label: t.ariaLabel || t.label });
+    const d = sparkDelta(t.series);
+    trend = `
+        <div class="pulse__trend" dir="ltr">
+          <div class="pulse__trendhead" dir="rtl">
+            <span><i class="bi ${streamIcon(t.icon||'bi-graph-up')}"></i> ${escapeHtml(String(t.label||''))}</span>
+            ${d?`<span class="pulse__delta" data-dir="${d.dir}">${d.dir==='up'?'▲':'▼'} ${streamDigits(d.value)}٪</span>`:'<span class="pulse__delta" data-dir="flat">—</span>'}
+          </div>
+          ${svg||`<div class="pulse__empty" dir="rtl">${escapeHtml(String(t.emptyText||'لا بيانات بعد'))}${t.emptyHref?` — <a href="${escapeHtml(t.emptyHref)}">${escapeHtml(t.emptyLabel||'افتح السجل')}</a> ليظهر الاتجاه.`:''}</div>`}
+        </div>`;
+  }
+  return `
+      <section class="pulse" role="group" aria-label="${escapeHtml(o.aria||'نبض الصفحة')}">
+        <div class="pulse__grid">${grid}</div>${trend}
+      </section>`;
+}
+
+// 4 · quick — glove-sized actions. `gate` is a firebase.js can() page key,
+// so a worker never sees a button that would only fail on click.
+function streamQuick(actions, opts){
+  const o = opts || {};
+  const list = (actions||[]).filter(a=>a && (!a.gate || (typeof can==='function' ? can(a.gate) : true)));
+  if (!list.length) return '';
+  const btns = list.map(a=>{
+    if (a.html) return a.html;
+    const icon = `<i class="bi ${streamIcon(a.icon||'bi-lightning-charge')}"></i>`;
+    const label = `<span>${escapeHtml(String(a.label||''))}</span>`;
+    return (a.onclick || a.fn)
+      ? `<button type="button" onclick="${streamHandler(a)}" class="quick__btn">${icon}${label}</button>`
+      : `<a href="${escapeHtml(a.href||'#')}" class="quick__btn">${icon}${label}</a>`;
+  }).join('\n        ');
+  return `
+      <section class="quick" role="group" aria-label="${escapeHtml(o.aria||'إجراءات سريعة')}">${btns}</section>`;
+}
+
+// 5 · attention — the rows that need a human, as chips that scroll sideways
+// on a phone. Empty = the section is absent, not an empty box.
+function streamAttention(cfg){
+  const c = cfg || {};
+  const items = (c.items||[]).slice(0, c.max||14);
+  if (!items.length) return '';
+  const chips = items.map(it=>`
+            <a class="attchip" href="${escapeHtml(it.href||'#')}" data-kind="${escapeHtml(it.kind||'info')}">
+              <span class="attchip__av" aria-hidden="true">${escapeHtml(it.av||'•')}</span>
+              <span class="attchip__body"><b>${escapeHtml(String(it.tag||'—'))}</b><small>${escapeHtml(String(it.why||''))}</small></span>
+            </a>`).join('');
+  return `
+      <section class="att" aria-label="${escapeHtml(c.aria||'يحتاج انتباه')}">
+        <h2 class="home__title"><i class="bi ${streamIcon(c.icon||'bi-exclamation-circle')}"></i> ${escapeHtml(c.title||'يحتاج انتباه')} <span class="home__count">${streamDigits(c.count==null?items.length:c.count)}</span></h2>
+        <div class="att__strip">${chips}
+        </div>
+      </section>`;
+}
+
+// 6 · timeline — what already happened. `items[].kind` is good|bad|info|flat
+// so an add and a delete read differently in greyscale.
+function streamTimeline(cfg){
+  const c = cfg || {};
+  const items = (c.items||[]).slice(0, c.max||8);
+  if (!items.length) {
+    if (c.empty === false) return '';
+    const e = c.empty || {};
+    return `
+      <div class="tl tl--empty${e.className?(' '+e.className):''}">
+        <i class="bi bi-clock-history"></i>
+        <div><b>${escapeHtml(e.text||'لا حركة مسجّلة بعد')}</b>
+        <small>${escapeHtml(e.small||'')}${e.href?` — <a href="${escapeHtml(e.href)}">${escapeHtml(e.label||'التقارير')}</a> للتاريخ الكامل.`:''}</small></div>
+      </div>`;
+  }
+  const rows = items.map(it=>`
+          <li class="tl__item" data-kind="${['good','bad','info','flat'].indexOf(it.kind)>=0?it.kind:'flat'}">
+            <span class="tl__time">${escapeHtml(String(it.time||''))}</span>
+            <span class="tl__dot" aria-hidden="true"><i class="bi ${streamIcon(it.icon||'bi-dot')}"></i></span>
+            <span class="tl__body">
+              <b>${escapeHtml(String(it.text||'—'))}</b>
+              <small>${escapeHtml(String(it.meta||''))}</small>
+            </span>
+          </li>`).join('');
+  return `
+      <section class="tl${c.className?(' '+c.className):''}" aria-label="${escapeHtml(c.aria||'الحركة')}">
+        <h2 class="home__title"><i class="bi ${streamIcon(c.icon||'bi-clock-history')}"></i> ${escapeHtml(c.title||'الحركة')} <span class="home__count">${streamDigits(c.count==null?items.length:c.count)}</span></h2>
+        <ol class="tl__list">${rows}
+        </ol>
+      </section>`;
+}
+
+// The whole stream, in reading order. Any part may be omitted — a page with
+// nothing to decide renders no focus card, and a page with no numbers
+// renders no strip. Nothing renders as an empty box.
+function renderStream(cfg){
+  const c = cfg || {};
+  const parts = [
+    streamDaybar(c),
+    streamFocus(c.focus),
+    (c.pulse && c.pulse.length) || c.trend ? streamPulse(c.pulse, { trend: c.trend, aria: c.pulseAria }) : '',
+    streamQuick(c.quick, { aria: c.quickAria }),
+    streamAttention(c.att),
+    c.tl ? streamTimeline(c.tl) : '',
+  ].filter(Boolean);
+  return `<div${c.id?` id="${escapeHtml(c.id)}"`:''} class="home${c.className?(' '+escapeHtml(c.className)):''}">${parts.join('\n')}
+    </div>`;
+}
+
+// One-liner for pages that only need the top bar + a decision (the rest of
+// the page keeps its own tables and forms): keeps every page's first glance
+// consistent without forcing a strip on pages that have no numbers.
+function renderStreamHead(cfg){
+  const c = cfg || {};
+  const parts = [streamDaybar(c), streamFocus(c.focus), streamQuick(c.quick, { aria: c.quickAria })].filter(Boolean);
+  return `<div${c.id?` id="${escapeHtml(c.id)}"`:''} class="home home--head${c.className?(' '+escapeHtml(c.className)):''}">${parts.join('\n')}
+    </div>`;
+}
+
+
 function renderChartContainer({ title, subtitle='', filterHtml='', chartHtml='', state='ready', emptyMsg='لا توجد بيانات كافية', errorMsg='تعذر تحميل الرسم البياني' }){
   let body;
   if(state==='loading') body=`<div class="text-center py-4"><div class="spinner"></div></div>`;
