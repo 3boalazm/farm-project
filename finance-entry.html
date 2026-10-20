@@ -46,6 +46,9 @@
 <script src="nav.js"></script>
 <script src="shared.js"></script>
 <script src="ui-shell.js"></script>
+<!-- O-09: the offline/PWA registrar. Loaded on every page; registration
+     itself is gated on FARM_CONFIG.enableServiceWorker in config.js. -->
+<script src="sw-register.js" defer></script>
 <script src="offline-sync.js" defer></script>
 <script src="pages/datepicker.js" defer></script>
 <script>
@@ -433,14 +436,20 @@ window.feSubmitSourceDocument=async function(){
   if(!total || total<=0){ toast('يرجى إدخال إجمالي صحيح','error'); return; }
 
   const btn=document.getElementById('doc-submit-btn');
+  // O-04 CLOSED: the idempotency key is minted ONCE per logical operation and
+  // reused by every retry of it, so a double-click, a timeout-then-retry or a
+  // reload-and-resubmit all hit the engine's create-or-return-existing dedupe
+  // instead of writing a second record. Cleared the moment the write confirms.
+  const opScope='source-document:'+type+':'+total+':'+(date||'')+':'+counterpartyName;
   btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> جارٍ الإنشاء...';
   const r = await createSourceDocument({
-    type, total, date: date||undefined, operationId: genId(),
+    type, total, date: date||undefined, operationId: idempotencyKey(opScope),
     counterpartyName: counterpartyName||null, notes: notes||null,
   });
   btn.disabled=false; btn.innerHTML='<i class="bi bi-plus-lg me-1"></i> إنشاء المستند (مسودة)';
 
   if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
+  clearIdempotencyKey(opScope);
   toast('تم إنشاء المستند كمسودة — يمكنك ترحيله من القائمة أدناه','success');
   renderDocTab();
 };

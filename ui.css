@@ -2322,3 +2322,42 @@ html[data-motion="off"] .pin-display.is-error{animation:none}
   background:var(--surface-sunken); border:1px solid var(--border-default); color:var(--text-primary);
 }
 .setup-notice .small{color:var(--text-tertiary)}
+
+/* ══════════════════════════════════════════════════════════════════════
+   §13 · ARCHIVED VIEWS (O-02)
+   ──────────────────────────────────────────────────────────────────────
+   A static snapshot must never look like live data. Two pieces: a pill the
+   shell stamps onto any nav link flagged `archive:true` in nav.js, and a
+   banner the page itself carries.
+   ══════════════════════════════════════════════════════════════════════ */
+.nav-archive-pill{
+  display:inline-flex; align-items:center;
+  margin-inline-start:auto; padding:0 var(--sp-1-5);
+  font-family:var(--font-ui); font-size:.6rem; font-weight:var(--fw-bold);
+  letter-spacing:.02em; line-height:1.7;
+  color:var(--warning-ink, #7c4a03);
+  background:var(--warning-surface, rgba(245,158,11,.16));
+  border:1px solid var(--warning-border, rgba(245,158,11,.34));
+  border-radius:var(--r-full);
+  white-space:nowrap; flex-shrink:0;
+}
+.rail-v2__item .nav-archive-pill, .bottomnav .nav-archive-pill{
+  position:absolute; inset-block-start:4px; inset-inline-end:4px;
+  padding:0 3px; font-size:.52rem; line-height:1.5;
+}
+.archive-banner{
+  display:flex; align-items:flex-start; gap:var(--sp-3);
+  margin:0 0 var(--sp-4); padding:var(--sp-3) var(--sp-4);
+  font-size:var(--fs-sm); line-height:1.8; text-align:start;
+  color:var(--warning-ink, #7c4a03);
+  background:var(--warning-surface, rgba(245,158,11,.12));
+  border:1px solid var(--warning-border, rgba(245,158,11,.32));
+  border-inline-start:4px solid var(--warning);
+  border-radius:var(--r-md);
+}
+.archive-banner i{font-size:1.15rem; line-height:1.4; flex-shrink:0}
+.archive-banner strong{display:block; margin-bottom:2px; font-size:var(--fs-base)}
+.archive-banner a{color:inherit; text-decoration:underline; font-weight:var(--fw-semibold)}
+html.light-mode .archive-banner, body.light-mode .archive-banner{
+  color:#7c4a03; background:#fff7e6; border-color:#f3d19a;
+}

@@ -604,6 +604,19 @@
 
     // ── Settings: farm-wide configuration, admin-managed page in the
     //    app (settings.html isn't in any non-admin role's page list). ──
+    // ── app_logs ─────────────────────────────────────────────────────
+    // Client diagnostics (O-17): errors, unhandled rejections and write
+    // retries, appended by firebase.js's own ring buffer. Any active staff
+    // member's browser may write its own reports; only an admin reads them.
+    "app_logs": {
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker')",
+      "$id": {
+        ".validate": "newData.hasChild('kind') && newData.hasChild('at')",
+        "message": { ".validate": "newData.isString() && newData.val().length <= 400" }
+      }
+    },
+
     "settings": {
       ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'visitor')",
       ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'"

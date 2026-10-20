@@ -44,6 +44,9 @@
 <script src="nav.js"></script>
 <script src="shared.js"></script>
 <script src="ui-shell.js"></script>
+<!-- O-09: the offline/PWA registrar. Loaded on every page; registration
+     itself is gated on FARM_CONFIG.enableServiceWorker in config.js. -->
+<script src="sw-register.js" defer></script>
 <script src="offline-sync.js" defer></script>
 <script src="pages/datepicker.js" defer></script>
 <script>
@@ -283,14 +286,20 @@ window.fpSubmitReconciliation=async function(){
   if(statementBalance===''){ toast('يرجى إدخال رصيد كشف الحساب','error'); return; }
 
   const btn=document.getElementById('rc-submit-btn');
+  // O-04 CLOSED: the idempotency key is minted ONCE per logical operation and
+  // reused by every retry of it, so a double-click, a timeout-then-retry or a
+  // reload-and-resubmit all hit the engine's create-or-return-existing dedupe
+  // instead of writing a second record. Cleared the moment the write confirms.
+  const opScope='bank-reconciliation:'+cashBankAccountId+':'+statementDate+':'+statementBalance;
   btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> جارٍ التسوية...';
   const r = await reconcileBankAccount({
     cashBankAccountId, statementDate, statementBalance:+statementBalance,
-    clearedJournalEntryIds, operationId:genId(),
+    clearedJournalEntryIds, operationId:idempotencyKey(opScope),
   });
   btn.disabled=false; btn.innerHTML='<i class="bi bi-check2-square me-1"></i> تنفيذ التسوية';
 
   if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
+  clearIdempotencyKey(opScope);
   toast(r.matched ? 'تمت التسوية بنجاح — مطابقة تمامًا' : `تمت التسوية — يوجد فرق قدره ${ar(r.difference)} ${getSettings().currency}`, r.matched?'success':'error');
   await fpRefreshReconHistory(cashBankAccountId);
 };

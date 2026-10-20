@@ -98,18 +98,22 @@ module.exports = suite('17 · Notifications', ({ test }) => {
     assert.ok(true, 'both paths are silent and safe in a DOM with no AudioContext');
   });
 
-  test('NS.checkWeather() uses the LIVE thresholds (≥38 heat, ≤8 cold) and dedupes by date+temperature', async () => {
-    // Regression cover for the duplicate-key bug fixed in this pass: the
-    // object literal defined checkWeather twice, so the richer 40/35/5/12
-    // band implementation was dead code. These assertions pin the behaviour
-    // of the implementation that ACTUALLY runs.
+  test('NS.checkWeather() walks the documented severity ladder, warns on humidity, and throttles once per day', async () => {
+    // Regression cover for TWO bugs. (1) The duplicate-key bug fixed in the
+    //     previous pass: the object literal defined checkWeather twice, so the
+    //     richer implementation was dead code. (2) O-16, closed in this pass:
+    //     the behaviours that died with that dead twin — the 40/35/5/12 °C
+    //     ladder, the humidity>85 respiratory warning, the once-per-day
+    //     throttle and the daily all-clear — are restored and pinned here, so
+    //     they cannot silently go missing a second time.
     reset();
-    app.eval(`localStorage.removeItem('_sentNotifIds');NS._sentIds=new Set();NS._lastWeatherTemp=null`);
+    app.eval(`localStorage.removeItem('_sentNotifIds');localStorage.removeItem('_lastWeatherAlert');NS._sentIds=new Set();NS._lastWeatherTemp=null`);
     const at = async (temp, humidity = 40) => {
       db.data.notifications = {};
-      // Reset the sudden-change memory too, so each band is measured on its
-      // own instead of also triggering the ≥8° swing detector.
-      app.eval(`NS._sentIds=new Set();NS._lastWeatherTemp=null`);
+      // Reset the sudden-change memory AND the daily throttle, so each band is
+      // measured on its own instead of also triggering the ≥8° swing detector
+      // or being suppressed by an earlier call on the same day.
+      app.eval(`NS._sentIds=new Set();NS._lastWeatherTemp=null;localStorage.removeItem('_lastWeatherAlert')`);
       app.eval(`window.getWeather=async()=>({main:{temp:${temp},humidity:${humidity}},weather:[{description:'x'}]})`);
       await app.eval(`(async()=>await NS.checkWeather())()`);
       // NS.save() is deliberately not awaited inside checkWeather() (a
@@ -121,22 +125,38 @@ module.exports = suite('17 · Notifications', ({ test }) => {
     let notes = await at(42);
     assert.strictEqual(notes.length, 1, 'extreme heat notifies');
     assert.strictEqual(notes[0].type, 'danger');
-    assert.match(notes[0].title, /إجهاد حراري/);
+    assert.match(notes[0].title, /إجهاد حراري شديد/);
     assert.match(notes[0].title, /[٠-٩]/, 'the temperature is Arabic-Indic in the title');
 
-    app.eval(`NS._lastWeatherTemp=null`); // no previous reading → no "sudden change" alert
+    notes = await at(36);
+    assert.strictEqual(notes.length, 1, 'a 36 °C afternoon is a warning, not silence (O-16)');
+    assert.strictEqual(notes[0].type, 'warning');
+    assert.match(notes[0].title, /إجهاد حراري/);
+
     notes = await at(30);
-    assert.deepStrictEqual(notes, [], 'mild weather notifies nothing');
+    assert.strictEqual(notes.length, 1, 'mild weather now says so, instead of looking like the check never ran');
+    assert.strictEqual(notes[0].type, 'info');
+    assert.match(notes[0].title, /الطقس مناسب/);
 
     notes = await at(4);
     assert.strictEqual(notes.length, 1);
-    assert.strictEqual(notes[0].type, 'warning');
+    assert.strictEqual(notes[0].type, 'danger', '≤5 °C is the danger band, ≤12 °C the warning band');
     assert.match(notes[0].title, /برد شديد/);
+
+    notes = await at(10);
+    assert.strictEqual(notes.length, 1);
+    assert.strictEqual(notes[0].type, 'warning');
+    assert.match(notes[0].title, /برودة/);
+
+    notes = await at(22, 92);
+    assert.strictEqual(notes.length, 1, 'humidity above 85% is its own respiratory warning');
+    assert.match(notes[0].title, /رطوبة عالية/);
+    assert.strictEqual(notes[0].href, 'health.html', 'and it links to the health register');
 
     // The same temperature twice on one day → one notification (id is
     // date+temp scoped), which is what keeps this from spamming every 15 min.
     db.data.notifications = {};
-    app.eval(`NS._sentIds=new Set();NS._lastWeatherTemp=null`);
+    app.eval(`NS._sentIds=new Set();NS._lastWeatherTemp=null;localStorage.removeItem('_lastWeatherAlert')`);
     app.eval(`window.getWeather=async()=>({main:{temp:42,humidity:40}})`);
     await app.eval(`(async()=>await NS.checkWeather())()`);
     await new Promise((r) => setTimeout(r, 40));
@@ -144,10 +164,11 @@ module.exports = suite('17 · Notifications', ({ test }) => {
     // timer from re-notifying, so it must not be cleared here.
     await app.eval(`(async()=>await NS.checkWeather())()`);
     await new Promise((r) => setTimeout(r, 40));
-    assert.strictEqual(J(db.collection('notifications')).length, 1, 'no duplicate for the same day and temperature');
+    assert.strictEqual(J(db.collection('notifications')).length, 1,
+      'the once-per-day throttle stops the 15-minute poller re-notifying the same heat');
 
     // A sudden swing of ≥8 °C is its own, deliberately separate alert.
-    app.eval(`NS._lastWeatherTemp=30`);
+    app.eval(`NS._lastWeatherTemp=30;localStorage.removeItem('_lastWeatherAlert')`);
     app.eval(`window.getWeather=async()=>({main:{temp:20,humidity:40}})`);
     db.data.notifications = {};
     app.eval(`NS._sentIds=new Set()`);

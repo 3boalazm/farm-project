@@ -16,13 +16,33 @@
 // ── Registration ──────────────────────────────────────────────
 // Feature-detected and deferred to 'load' so it never delays first
 // paint. Safe to include on every page.
+// O-09: this file is now actually loaded by every page (it never was), and
+// registration is gated on FARM_CONFIG.enableServiceWorker so activating the
+// offline layer is a one-line config decision by whoever owns the deployment
+// rather than a side effect of a refactor. The recovery tools below are
+// registered either way — they are what makes flipping the flag safe.
+function farmSwEnabled() {
+  try {
+    // config.js declares `const FARM_CONFIG = {...}`, and a top-level const in
+    // a classic script does NOT become a window property — reading
+    // window.FARM_CONFIG here would silently return undefined forever and the
+    // flag could never be turned on. typeof-guard the bare identifier instead.
+    var cfg = (typeof FARM_CONFIG !== 'undefined' && FARM_CONFIG) ? FARM_CONFIG
+            : (window.FARM_CONFIG || {});
+    return cfg.enableServiceWorker === true || String(cfg.enableServiceWorker) === 'true';
+  } catch (e) { return false; }
+}
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function () {
+    if (!farmSwEnabled()) return;                 // dormant by default, on purpose
     navigator.serviceWorker.register('/sw.js').catch(function (err) {
       console.error('SW registration failed:', err);
+      try { if (window.diagPush) window.diagPush('error', 'service worker registration failed: ' + err.message); } catch (e) {}
     });
   });
 }
+if (typeof window !== 'undefined') window.farmSwEnabled = farmSwEnabled;
 
 // ── requestClearDataCache(timeoutMs) ────────────────────────────
 // Asks the active service worker to clear just the Firebase-data

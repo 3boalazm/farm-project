@@ -64,6 +64,30 @@ function renderMain() {
     const woolTotal=_prodData.filter(p=>p.type==='wool'&&(p.date||'').startsWith(mStr)).reduce((t,p)=>t+(+p.quantity||0),0);
     compareMonths.push({ label: arMonthsP[d.getMonth()].slice(0,3), values:[milkTotal,woolTotal] });
   }
+  // O-10 CLOSED: renderProductionWidget() shipped in the documented Phase-2
+  // component set (COMPONENTS.md) and was hardened and unit-tested — with
+  // ZERO callers anywhere in the app, so no farmer ever saw it. Production is
+  // its natural home: the KPI row states today's numbers, this strip states
+  // whether each one is MOVING, which is the question the page gets asked.
+  // Deltas come from the same 6-month series the charts below already use, so
+  // the three can never disagree.
+  const _lastM=compareMonths[compareMonths.length-1]||{values:[0,0]};
+  const _prevM=compareMonths[compareMonths.length-2]||{values:[0,0]};
+  const _pct=(now,prev)=>prev>0?Math.round(((now-prev)/prev)*100):(now>0?100:0);
+  const _milkDelta=_pct(_lastM.values[0],_prevM.values[0]);
+  const _woolDelta=_pct(_lastM.values[1],_prevM.values[1]);
+  const _totalDelta=_pct(trendMonths[trendMonths.length-1].value, trendMonths[trendMonths.length-2].value);
+  const _dir=(d)=>d>0?'up':(d<0?'down':'flat');
+  const _status=(d)=>d<=-15?'danger':(d<0?'watch':'normal');
+  const productionWidgetsHtml = `<div class="row g-3 mb-4">
+    <div class="col-12 col-md-4">${renderProductionWidget({ type:'الحليب (شهر)', value:ar(_lastM.values[0].toFixed(1)), unit:'ل',
+      trend:ar(Math.abs(_milkDelta))+'٪', trendDir:_dir(_milkDelta), period:'مقارنة بالشهر السابق', status:_status(_milkDelta) })}</div>
+    <div class="col-12 col-md-4">${renderProductionWidget({ type:'الصوف (شهر)', value:ar(_lastM.values[1].toFixed(1)), unit:'كجم',
+      trend:ar(Math.abs(_woolDelta))+'٪', trendDir:_dir(_woolDelta), period:'مقارنة بالشهر السابق', status:_status(_woolDelta) })}</div>
+    <div class="col-12 col-md-4">${renderProductionWidget({ type:'إجمالي الإنتاج', value:ar(trendMonths[trendMonths.length-1].value.toFixed(1)), unit:'',
+      trend:ar(Math.abs(_totalDelta))+'٪', trendDir:_dir(_totalDelta), period:'هذا الشهر', status:_status(_totalDelta) })}</div>
+  </div>`;
+
   const prodTrendSvg=renderLineChartSVG(trendMonths,{color:'#3b82f6'});
   const prodCompareSvg=renderGroupedBarSVG(compareMonths,{colors:['#3b82f6','#f59e0b']});
   const analyticsRowHtml = `<div class="row g-3 mb-4">
@@ -81,6 +105,8 @@ function renderMain() {
     <div class="col-6 col-md-4 col-lg-2">${renderKPICard({ label:'الإناث المنتجة', value: ar(stats.activeFemales), status:'normal' })}</div>
     <div class="col-6 col-md-4 col-lg-2">${renderKPICard({ label:'سجلات الإنتاج', value: ar(_prodData.length), status: _prodData.length===0?'watch':'normal' })}</div>
   </div>
+
+  ${productionWidgetsHtml}
 
   ${analyticsRowHtml}
 

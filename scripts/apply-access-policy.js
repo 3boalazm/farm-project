@@ -71,6 +71,13 @@ set(['animals', 'weight_log', 'weight_alerts', 'workflow_history',
 // only an admin changes them.
 set(['settings'], STAFF_READ, ADMIN_ONLY);
 
+// Client diagnostics (O-17). Any active staff member's browser may append its
+// own error/retry reports — that is the whole point, since the person who hit
+// the bug is rarely an admin — but only an admin may read them back, and the
+// `.read` below is deliberately NOT staff-wide: one worker's console output is
+// nobody else's business.
+POLICY['app_logs'] = { read: [], write: STAFF_WRITE, readExpr: 'auth != null && ' + ACTIVE + ' === true' };
+
 // The audit trail is readable by staff so supervisors can review what
 // happened, and writable only by an admin (the app appends to it with an
 // admin/bridge identity; a worker's client never needs to).
@@ -221,7 +228,7 @@ function apply(src) {
       done[current] = done[current] || [];
       if (mr && !done[current].includes('read')) {
         done[current].push('read');
-        out.push(`      ".read":  "${staff(policy.read)}"${mr[1]}`);
+        out.push(`      ".read":  "${policy.readExpr || staff(policy.read)}"${mr[1]}`);
         continue;
       }
       if (mw && !done[current].includes('write')) {

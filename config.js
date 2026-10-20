@@ -50,4 +50,17 @@ const FARM_CONFIG = {
   // مفتاح API للطقس (weatherapi.com / openweathermap.org)
   // نقطة الحقن الوحيدة لهذا المفتاح — عدّل هنا فقط عند التدوير في الإنتاج
   weatherApiKey: '2b08987a3d184056b13210204261205',
+
+  // O-09 CLOSED (as a switch, not a silent flip). sw.js has always been
+  // complete and correct, and sw-register.js has always existed — but no page
+  // loaded the registrar, so the entire offline/PWA layer was dormant in
+  // production. Every page now loads sw-register.js, and registration is
+  // gated on this flag: flipping it to true activates the service worker on
+  // the next page load, with no code change and no deploy of anything else.
+  //   Default false, deliberately: turning on a cache layer for a live farm
+  //   app is an operational decision (a stale app shell needs the recovery
+  //   tools in settings.html → "التطبيق والعمل دون اتصال"), and it should be
+  //   flipped by the person who owns the deployment, not by a refactor.
+  //   The stale-cache recovery tools are wired and tested either way.
+  enableServiceWorker: false,
 };

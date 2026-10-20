@@ -1033,6 +1033,153 @@ const JSON_HEADERS={
   'Content-Type':'application/json'
 };
 
+// ── Write retry with exponential backoff + jitter (O-14) ─────
+// A failed write used to fail exactly once, behind a generic toast: one
+// dropped packet on a farm's mobile connection and the record was simply
+// gone, with the user none the wiser until the numbers stopped adding up.
+// Writes are now retried with backoff — but the retry policy differs by
+// verb, because that is what correctness demands:
+//   PUT / PATCH / DELETE  idempotent by definition: replaying them cannot
+//                         duplicate anything, so both network failures and
+//                         retryable statuses are retried.
+//   POST                  creates a new key, so a replay CAN duplicate. It is
+//                         therefore retried only when the server actually
+//                         answered with a retryable status (429/5xx — the
+//                         write was not applied), never when the request never
+//                         got a response and its fate is unknown.
+// The finance engine additionally dedupes on operationId, so its POSTs are
+// safe either way (see idempotencyKey() in shared.js).
+const WRITE_RETRY_ATTEMPTS = 3;
+const WRITE_RETRY_BASE_MS = 350;
+
+function _retryableStatus(st){
+  return st===408 || st===409 || st===425 || st===429 || (st>=500 && st<=504);
+}
+function _backoffDelay(attempt, retryAfterSec){
+  if(retryAfterSec) return Math.min(8000, retryAfterSec*1000);
+  const base = WRITE_RETRY_BASE_MS * Math.pow(2.2, attempt-1);
+  return Math.round(base * (0.75 + Math.random()*0.5));      // jitter: never a thundering herd
+}
+const _sleep=(ms)=>new Promise((r)=>setTimeout(r, ms));
+
+async function _writeFetch(url, opts, meta){
+  meta = meta || {};
+  const idempotent = meta.idempotent !== false;
+  // When the browser already knows there is no network, retrying just delays
+  // the message the user needs to see ("you are offline"). Fail fast instead;
+  // offline-sync.js is what queues writes for later.
+  const attempts = (typeof navigator!=='undefined' && navigator.onLine===false) ? 1 : WRITE_RETRY_ATTEMPTS;
+  let lastRes=null;
+  for(let attempt=1; attempt<=attempts; attempt++){
+    try{
+      const r = await _fbFetch(url, opts);
+      if(r.ok || !_retryableStatus(r.status)) return r;
+      lastRes = r;
+      if(attempt===attempts) return r;
+      const ra = parseFloat(r.headers && r.headers.get ? (r.headers.get('Retry-After')||'') : '') || 0;
+      diagPush('retry', meta.label+' got HTTP '+r.status+' — retrying ('+attempt+'/'+(attempts-1)+')', {path:meta.path, status:r.status});
+      await _sleep(_backoffDelay(attempt, ra));
+      continue;
+    }catch(e){
+      // No response at all. Replaying an idempotent verb is safe; replaying a
+      // POST is not, so a POST gives up and reports instead of guessing.
+      if(!idempotent || attempt===attempts){
+        diagPush('write-failed', meta.label+' failed: '+e.message, {path:meta.path, attempts:attempt});
+        throw e;
+      }
+      diagPush('retry', meta.label+' network failure — retrying ('+attempt+'/'+(attempts-1)+')', {path:meta.path, error:e.message});
+      await _sleep(_backoffDelay(attempt, 0));
+    }
+  }
+  return lastRes;
+}
+
+// ── Client diagnostics (O-17) ─────────────────────────────
+// Observability scored 4/10 in PRODUCTION-READINESS-SCORE.md for one reason:
+// when something broke on a farm, the only evidence was a developer console
+// nobody was looking at. This is a deliberately small ring buffer plus an
+// opt-in uploader — no dependency, no PII beyond what the app already stores,
+// and nothing that can block or slow a user action.
+const DIAG_RING_MAX = 40;
+// One flush drains the whole ring: a partial batch would leave the caller
+// thinking the errors were shipped when a second flush was still owed.
+const DIAG_UPLOAD_MAX = DIAG_RING_MAX;
+const _diag = [];
+let _diagUnsent = 0;
+
+function diagPush(kind, message, meta){
+  try{
+    _diag.push({ t:new Date().toISOString(), kind:String(kind), message:String(message||'').slice(0,400),
+                 meta:meta||null, sent:false });
+    if(_diag.length > DIAG_RING_MAX) _diag.splice(0, _diag.length-DIAG_RING_MAX);
+    if(_diagWorthSending(kind)) _diagUnsent++;
+  }catch(e){ /* diagnostics must never be the thing that breaks */ }
+  return true;
+}
+function _diagWorthSending(kind){
+  return kind==='error' || kind==='write-failed' || kind==='retry';
+}
+function diagnostics(){
+  const u = (typeof getUser==='function' && getUser()) || null;
+  return {
+    entries: _diag.map((d)=>({ t:d.t, kind:d.kind, message:d.message, meta:d.meta, sent:!!d.sent })),
+    unsent: _diagUnsent,
+    lastStatus: _lastFbStatus,
+    lastPath: _lastFbPath,
+    permissionDenied: _lastFbStatus===401 || _lastFbStatus===403,
+    session: u ? { id:u.id, role:u.role, verifiedBy:u.verifiedBy||null } : null,
+    authProvider: (typeof _authProviderState==='function') ? _authProviderState() : 'unknown',
+    userAgent: (typeof navigator!=='undefined') ? navigator.userAgent : '',
+  };
+}
+// Ships the interesting entries to app_logs. Rules let any active staff member
+// write their own entries and only an admin read them back, so a worker's
+// browser cannot read anyone else's diagnostics.
+async function flushDiagnostics(reason){
+  if(!_diagUnsent) return 0;
+  if(typeof initFirebase==='function' && !initFirebase()) return 0;
+  const u = (typeof getUser==='function' && getUser()) || null;
+  // Each entry is marked as it ships, so a second flush is a no-op instead of
+  // re-uploading the same ring forever (the ring is capped, the database is
+  // not — an uploader that repeats itself is how a diagnostics feature becomes
+  // the thing that fills the quota).
+  const batch = _diag.filter((d)=>!d.sent && _diagWorthSending(d.kind)).slice(0, DIAG_UPLOAD_MAX);
+  let sent = 0;
+  for(const d of batch){
+    try{
+      await fbPost('app_logs', {
+        kind:d.kind, message:d.message, meta:d.meta, at:d.t,
+        userId:u?u.id:null, userRole:u?u.role:null,
+        page:(typeof location!=='undefined')?location.pathname.split('/').pop():null,
+        reason:reason||'auto',
+      });
+      d.sent = true; sent++;
+    }catch(e){ break; }        // offline: keep them in the ring for the next flush
+  }
+  if(sent) _diagUnsent = Math.max(0, _diagUnsent - sent);
+  return sent;
+}
+// Capture the two failure channels a browser actually offers, throttled so a
+// render loop cannot flood the database.
+let _diagLastErrorAt = 0, _diagErrorCount = 0;
+function _installDiagnostics(){
+  if(typeof window==='undefined' || window.__farmDiagInstalled) return;
+  window.__farmDiagInstalled = true;
+  window.addEventListener('error', (e)=>{
+    _diagErrorCount++;
+    const now = Date.now();
+    diagPush('error', (e.message||'script error') + (e.filename?' @ '+String(e.filename).split('/').pop()+':'+e.lineno:''), null);
+    if(now - _diagLastErrorAt > 60000){ _diagLastErrorAt = now; try{ flushDiagnostics('error'); }catch(x){} }
+  });
+  window.addEventListener('unhandledrejection', (e)=>{
+    const r = e.reason;
+    diagPush('error', 'unhandled rejection: ' + ((r && r.message) || String(r)).slice(0,300), null);
+  });
+  // Flush on the way out: the last thing a user does before a crash matters most.
+  window.addEventListener('pagehide', ()=>{ try{ flushDiagnostics('pagehide'); }catch(x){} });
+}
+_installDiagnostics();
+
 async function fbPost(path,data){
   // Will capture the new ID after creation for undo
 
@@ -1041,11 +1188,14 @@ async function fbPost(path,data){
     created_at:new Date().toISOString()
   });
 
-  const r=await _fbFetch(await fbUrl(path),{
+  // POST is NOT replayed on a network failure: without a response there is no
+  // way to know whether the row was created, and a duplicate is worse than an
+  // error the user can see. Retryable STATUSES (429/5xx) are safe to retry.
+  const r=await _writeFetch(await fbUrl(path),{
     method:'POST',
     headers:JSON_HEADERS,
     body
-  });
+  }, {label:'fbPost', path, idempotent:false});
 
   // BUG FIX: cache invalidation used to happen ONLY inside the failure
   // branch below. On a successful POST, the 45-second cache still held
@@ -1080,11 +1230,13 @@ async function fbPut(path,id,data){
     updated_at:new Date().toISOString()
   });
 
-  const r=await _fbFetch(await fbUrl(path,id),{
+  // PUT is idempotent: replaying it after a dropped packet or a 503 cannot
+  // duplicate anything, so O-14's retry policy applies in full.
+  const r=await _writeFetch(await fbUrl(path,id),{
     method:'PUT',
     headers:JSON_HEADERS,
     body
-  });
+  }, {label:'fbPut', path:path+'/'+id, idempotent:true});
 
   // Same fix as fbPost above — invalidate unconditionally, not just on failure.
   fbCacheInvalidate(path);
@@ -1121,11 +1273,14 @@ async function fbPatch(path,id,patch){
     updated_at:new Date().toISOString()
   });
 
-  const r=await _fbFetch(await fbUrl(path,id),{
+  // PATCH of the same keys with the same values is idempotent too (the undo
+  // pre-read above is a GET and is deliberately left unretried: a failed
+  // pre-read only costs the undo entry, never the write).
+  const r=await _writeFetch(await fbUrl(path,id),{
     method:'PATCH',
     headers:JSON_HEADERS,
     body
-  });
+  }, {label:'fbPatch', path:path+'/'+id, idempotent:true});
 
   if(r.ok && _prev) _pushUndo({type:'patch', table:path, id:id, prev:_prev, when:Date.now()});
 
@@ -1146,9 +1301,9 @@ async function fbDelete(path,id){fbCacheInvalidate(path);
     var _dr=await _fbFetch(await fbUrl(path,id));
     if(_dr.ok)_delData=await _dr.json();
   }catch(e){}
-  const r=await _fbFetch(await fbUrl(path,id),{
+  const r=await _writeFetch(await fbUrl(path,id),{
     method:'DELETE'
-  });
+  }, {label:'fbDelete', path:path+'/'+id, idempotent:true});
 
   if(!r.ok){
     if(r.status===401)_reportAuthFailure();
