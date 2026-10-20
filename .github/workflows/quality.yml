@@ -55,6 +55,16 @@ jobs:
         env:
           BASE_URL: http://localhost:8080
 
+      # Failures are published as ANNOTATIONS on purpose: GitHub's log and
+      # artifact endpoints are unreachable from some debugging environments
+      # (both fail with EOF), while `gh run view` / the check-runs API always
+      # show annotations. Without this step a red browser suite is a 400-test
+      # mystery; with it, every failing test is named with file:line and the
+      # first lines of its error.
+      - name: Publish browser failures as annotations
+        if: always()
+        run: node scripts/report-playwright-failures.js test-results/results.json
+
       - name: Upload test report on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -102,8 +112,11 @@ jobs:
       # no network path to a real project. firebase.json (added 2026-10) points
       # the emulator at the real database.rules.json.
       - name: Run the rules suite against the RTDB emulator
+        # `npm install --no-save firebase-tools` puts the CLI in
+        # node_modules/.bin, not on PATH — calling `firebase` bare exits 127
+        # (which is exactly what the first run of this job did).
         run: >-
-          firebase emulators:exec --only database
+          npx --no-install firebase emulators:exec --only database
           --project demo-bayan-farm-rules-test
           "node tests/rules/accounting-rules.test.js"
         env:
