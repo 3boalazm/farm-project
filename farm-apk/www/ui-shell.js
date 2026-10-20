@@ -83,6 +83,32 @@
     return out;
   }
 
+
+  /* ── O-02 · archived pages are labelled wherever the shell renders nav ──
+     bayan.html is a static snapshot dated ٢٠٢٦/٠٤/٢٤ that the main navigation
+     used to present as a live view. FARM_NAV now carries `archive:true` for
+     it, and this stamps every link to that page — rail, bottom nav, legacy
+     sidebar, breadcrumbs — with a pill and a tooltip. One place, no markup
+     edits in 34 pages. */
+  function markArchivedNav() {
+    var notes = {};
+    navFlat().forEach(function (x) {
+      if (x.item && x.item.archive) notes[x.item.href] = x.item.archiveNote || 'أرشيف — بيانات ثابتة';
+    });
+    Object.keys(notes).forEach(function (href) {
+      var links = doc().querySelectorAll('a[href="' + href + '"]');
+      Array.prototype.forEach.call(links, function (a) {
+        a.setAttribute('title', notes[href]);
+        if (a.querySelector('.nav-archive-pill')) return;
+        var pill = doc().createElement('span');
+        pill.className = 'nav-archive-pill';
+        pill.textContent = 'أرشيف';
+        pill.setAttribute('aria-label', notes[href]);
+        a.appendChild(pill);
+      });
+    });
+  }
+
   /* ══════════════════════════════════════════════════════════════════
      1 · PREFERENCES — theme, density, contrast, motion
      Written to <html> as attributes so CSS (§3/§4 of ui.css) does the rest.
@@ -517,7 +543,10 @@
     items: function () {
       return navFlat().map(function (x) {
         return {
-          id: 'page:' + x.item.href, title: x.item.label, sub: x.section,
+          // O-02: an archived page says so in the palette too, not just in
+          // the rail — the ⌘K result is often the only text a user reads.
+          id: 'page:' + x.item.href, title: x.item.label,
+          sub: x.item.archive ? (x.section + ' · أرشيف (بيان ثابت)') : x.section,
           icon: x.item.icon || 'bi-file-earmark', href: x.item.href,
           keywords: [x.section, x.item.href.replace('.html', ''), 'صفحة', 'page'],
           perm: x.item.perm
@@ -1219,6 +1248,7 @@
         doc().addEventListener('keydown', onKeydown);
         root.addEventListener('scroll', onScroll, { passive: true });
         hookFetch();
+        markArchivedNav();
         Shell.mounted = true;
 
         // Mac users see ⌘ instead of Ctrl in the hint.
@@ -1273,6 +1303,7 @@
     // number-folding the shell uses (a page that invents its own sort ends up
     // ordering ٤٥ alphabetically after ١٢٠).
     fuzzy: fuzzy, fold: fold, foldNumber: num, highlight: highlight,
+    markArchivedNav: markArchivedNav,
   };
 
   root.UIShell = Shell2;

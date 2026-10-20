@@ -50,6 +50,9 @@
 <script src="nav.js"></script>
 <script src="shared.js"></script>
 <script src="ui-shell.js"></script>
+<!-- O-09: the offline/PWA registrar. Loaded on every page; registration
+     itself is gated on FARM_CONFIG.enableServiceWorker in config.js. -->
+<script src="sw-register.js" defer></script>
 <script src="offline-sync.js" defer></script>
 <script src="pages/datepicker.js" defer></script>
 <script>
@@ -241,14 +244,20 @@ window.apSubmitSalesInvoice=async function(){
   if(!total||total<=0){ toast('يرجى إدخال إجمالي صحيح','error'); return; }
 
   const btn=document.getElementById('si-submit-btn');
+  // O-04 CLOSED: the idempotency key is minted ONCE per logical operation and
+  // reused by every retry of it, so a double-click, a timeout-then-retry or a
+  // reload-and-resubmit all hit the engine's create-or-return-existing dedupe
+  // instead of writing a second record. Cleared the moment the write confirms.
+  const opScope='sales-invoice:'+customer._id+':'+total+':'+(dueDate||'')+':'+(date||'');
   btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> جارٍ الترحيل...';
   const r = await createSalesInvoice({
     customerId:customer._id, customerName:customer.name, revenueAccountId,
-    total, date:date||undefined, dueDate:dueDate||undefined, operationId:genId(),
+    total, date:date||undefined, dueDate:dueDate||undefined, operationId:idempotencyKey(opScope),
   });
   btn.disabled=false; btn.innerHTML='<i class="bi bi-plus-lg me-1"></i> إنشاء وترحيل الفاتورة';
 
   if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
+  clearIdempotencyKey(opScope);
   toast('تم إنشاء وترحيل فاتورة المبيعات بنجاح','success');
   document.getElementById('si-total').value=''; document.getElementById('si-due').value='';
   apRefreshCustomerList();
@@ -289,10 +298,15 @@ window.apSubmitPurchaseInvoice=async function(){
   if(!total||total<=0){ toast('يرجى إدخال إجمالي صحيح','error'); return; }
 
   const btn=document.getElementById('pi-submit-btn');
+  // O-04 CLOSED: the idempotency key is minted ONCE per logical operation and
+  // reused by every retry of it, so a double-click, a timeout-then-retry or a
+  // reload-and-resubmit all hit the engine's create-or-return-existing dedupe
+  // instead of writing a second record. Cleared the moment the write confirms.
+  const opScope='purchase-invoice:'+supplier._id+':'+total+':'+(dueDate||'')+':'+(date||'');
   btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> جارٍ الترحيل...';
   const created = await createSourceDocument({
     type:'purchase_invoice', total, date:date||undefined, dueDate:dueDate||undefined,
-    operationId:genId(), counterpartyId:supplier._id, counterpartyName:supplier.name,
+    operationId:idempotencyKey(opScope), counterpartyId:supplier._id, counterpartyName:supplier.name,
   });
   if(!created.ok){ btn.disabled=false; btn.innerHTML='<i class="bi bi-plus-lg me-1"></i> إنشاء وترحيل الفاتورة'; toast('خطأ: '+created.error,'error'); return; }
   // AP_ACCOUNT_ID is shared.js's own global (a top-level `var`, which
@@ -391,8 +405,14 @@ window.apConfirmPayment=async function(documentId, kind){
   if(!amount||amount<=0){ toast('يرجى إدخال مبلغ صحيح','error'); return; }
 
   const fn = kind==='receivable' ? recordCustomerPayment : recordSupplierPayment;
-  const r = await fn(documentId, {cashAccountId, amount, date, operationId:genId()});
+  // O-04 CLOSED: the idempotency key is minted ONCE per logical operation and
+  // reused by every retry of it, so a double-click, a timeout-then-retry or a
+  // reload-and-resubmit all hit the engine's create-or-return-existing dedupe
+  // instead of writing a second record. Cleared the moment the write confirms.
+  const opScope='payment:'+kind+':'+documentId+':'+amount+':'+date;
+  const r = await fn(documentId, {cashAccountId, amount, date, operationId:idempotencyKey(opScope)});
   if(!r.ok){ toast('خطأ: '+r.error,'error'); return; }
+  clearIdempotencyKey(opScope);
   toast('تم تسجيل السداد بنجاح','success');
   await Promise.all([renderAgingTab(), apRefreshCustomerList(), apRefreshSupplierList()]);
 };
