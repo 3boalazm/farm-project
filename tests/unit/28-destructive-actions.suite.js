@@ -171,7 +171,9 @@ module.exports = suite('28 · Destructive actions actually work (confirm contrac
     const offenders = [];
     for (const rel of APP_SOURCES()) {
       if (!/\.(html|js)$/.test(rel)) continue;
-      const lines = read(rel).split('\n');
+      // Comments explain the old broken call by name (that is the point of a
+      // bug doc), so strip them first and scan only code.
+      const lines = read(rel).replace(/\/\*[\s\S]*?\*\//g, '').split('\n');
       lines.forEach((l, i) => {
         const t = l.trim();
         if (t.startsWith('//') || t.startsWith('*')) return;
