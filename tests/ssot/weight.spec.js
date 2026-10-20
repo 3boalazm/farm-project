@@ -35,6 +35,7 @@ test.describe('Weight SSOT regression', () => {
         return 'id';
       };
       window.fbGet = async (c) => (c.endsWith('/weights') ? window._weightsDB.slice() : []);
+      window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
       // recordAnimalWeight()'s step 3 (animal-existence check) calls this --
       // must resolve to a real, alive-status animal or every write is
       // correctly refused before reaching fbPost at all.

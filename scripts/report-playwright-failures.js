@@ -21,7 +21,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const RESULTS = process.argv[2] || 'test-results/results.json';
+const ARGS = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+const MD_FLAG = process.argv.indexOf('--markdown');
+const RESULTS = ARGS[0] || 'test-results/results.json';
+const MD_OUT = MD_FLAG !== -1 ? process.argv[MD_FLAG + 1] : null;
 const MAX_ANNOTATIONS = 30;          // GitHub truncates beyond ~a few dozen anyway
 
 function read(p) {
@@ -94,6 +97,27 @@ function main() {
   }
 
   writeSummary(head, failed, flaky);
+  writeMarkdown(head, failed, flaky);
+}
+
+/** Full digest for the PR comment — no annotation length caps here. */
+function writeMarkdown(head, failed, flaky) {
+  if (!MD_OUT) return;
+  const lines = ['### Browser suite — failure digest', '', '`' + head + '`', ''];
+  if (!failed.length) { lines.push('No failures.'); }
+  for (const f of failed) {
+    lines.push(`#### \`${f.file}:${f.line}\` — ${f.title}`, '', '```');
+    const msg = (f.errors.find((e) => e && e.trim()) || 'no error message captured')
+      .replace(/\u001b\[[0-9;]*m/g, '').split('\n').filter(Boolean).slice(0, 24).join('\n');
+    lines.push(msg.slice(0, 2400), '```', '');
+  }
+  if (flaky.length) {
+    lines.push('<details><summary>Flaky (passed on retry)</summary>', '');
+    for (const f of flaky) lines.push(`- \`${f.file}:${f.line}\` — ${f.title}`);
+    lines.push('', '</details>');
+  }
+  lines.push('', '_Posted by `scripts/report-playwright-failures.js` because Actions log and artifact downloads are not reachable from every debugging environment._');
+  try { fs.writeFileSync(MD_OUT, lines.join('\n') + '\n'); } catch (e) { console.log('::warning::could not write ' + MD_OUT); }
 }
 
 function writeSummary(head, failed, flaky) {

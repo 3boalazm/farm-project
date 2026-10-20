@@ -81,6 +81,52 @@ function makeFarm(options = {}) {
  * Serve every backend request from `farm`. Attached to the browser *context*,
  * so pages opened later (window.open, <a target=_blank>) are covered too.
  */
+/**
+ * Specs mock the data layer by assigning `window.fbGet` after navigation. The
+ * 2026-10 audit moved several *reads* onto `fbGetSafe()` — the variant that
+ * returns null on failure instead of [] — and a mock that only patches fbGet
+ * leaves fbGetSafe reading the fake database, which does not have the
+ * collection the test seeded. The code under test then sees an empty list and
+ * quietly does nothing, which looks exactly like an app bug.
+ *
+ * Rather than editing 28 differently-shaped mock blocks (and every future one),
+ * this installs an accessor pair after load: assigning window.fbGet also
+ * re-points window.fbGetSafe at the same mock, until a spec sets fbGetSafe
+ * explicitly. Installed on 'load' because firebase.js declares both as
+ * top-level functions, which would overwrite an accessor installed earlier.
+ */
+function installMockTrap(context) {
+  context.on('page', (p) => p.on('load', () => {
+    p.evaluate(() => {
+      if (window.__fbMockTrap) return;
+      window.__fbMockTrap = true;
+      let _get = window.fbGet, _safe = window.fbGetSafe, _explicit = false;
+      Object.defineProperty(window, 'fbGetSafe', {
+        configurable: true,
+        get() { return _explicit ? _safe : (_get || _safe); },
+        set(v) { _explicit = true; _safe = v; },
+      });
+      Object.defineProperty(window, 'fbGet', {
+        configurable: true,
+        get() { return _get; },
+        set(v) { _get = v; _explicit = false; },   // a new mock owns both again
+      });
+    }).catch(() => { /* navigation won the race — the next load retries */ });
+  }));
+}
+
+/**
+ * The v2 dashboard is tabbed (five ARIA panels, only the first visible), so
+ * `document.body.innerText` — which skips hidden content — does not contain
+ * sections that live in another panel. Tests that assert on rendered text must
+ * open the panel first; this also proves the tab wiring itself works.
+ *   0 نظرة عامة · 1 الأولويات والتنبؤ · 2 المؤشرات التنفيذية · 3 التحليلات · 4 السجلات والنشاط
+ */
+async function showDashPanel(page, index) {
+  await page.click('#dash-tab-' + index);
+  await page.waitForTimeout(120);
+}
+
 async function interceptBackend(context, farm) {
   await context.route(BACKEND, async (route) => {
     const req = route.request();
@@ -105,7 +151,11 @@ const test = base.extend({
   // Overriding `context` (not `page`) is what makes this automatic: Playwright
   // builds its `page` fixture from `context`, so every spec that asks for
   // `page` — which is all of them — gets an intercepted backend.
-  context: async ({ context, farm }, use) => { await interceptBackend(context, farm); await use(context); },
+  context: async ({ context, farm }, use) => {
+    await interceptBackend(context, farm);
+    installMockTrap(context);
+    await use(context);
+  },
 
   /** A page with a session already in localStorage. Usage:
    *    const page = await farmPage({ role: 'vet' });  */
@@ -122,4 +172,4 @@ const test = base.extend({
   },
 });
 
-module.exports = { test, expect, makeFarm, interceptBackend, defaultSeed, BACKEND };
+module.exports = { test, expect, makeFarm, interceptBackend, installMockTrap, showDashPanel, defaultSeed, BACKEND };

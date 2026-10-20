@@ -325,6 +325,22 @@ module.exports = suite('26 · Product correctness (audit O-items)', ({ test }) =
     assert.ok(/diagnostics\(\)/.test(settings), 'and read the real diagnostics, not a copy of them');
   });
 
+  test('logout() clears the session AND the Firebase refresh token', async () => {
+    // The browser spec can only assert what survives the navigation to
+    // login.html (which legitimately re-bootstraps an anonymous session so it
+    // can read the public user_directory). This pins the app side: logout()
+    // itself must drop both keys, or a logged-out browser keeps a token that
+    // can still read whatever the rules allow an authenticated caller to read.
+    const app = await bootApp({ user: { id: 'admin1', name: 'مدير', role: 'admin', active: true }, db: { seed: {} } });
+    await app.eval(`localStorage.setItem('_farm_auth_refresh', JSON.stringify({refreshToken:'ref-1',uid:'uid-1'}))`);
+    await app.eval(`(()=>{ try { logout(); } catch(e) { /* jsdom cannot navigate */ } })()`);
+    assert.strictEqual(J(await app.eval(`localStorage.getItem('farm_user')`)), null, 'farm_user is gone');
+    assert.strictEqual(J(await app.eval(`localStorage.getItem('_farm_auth_refresh')`)), null,
+      'the Firebase refresh token must not outlive the session it belongs to');
+    assert.strictEqual(J(await app.eval(`_authIdToken`)), null, 'and the in-memory token with it');
+    app.close();
+  });
+
   /* ── navigation must not offer a page its own code will refuse ───────── */
 
   test('every FARM_NAV target either carries a permission or guards itself', () => {

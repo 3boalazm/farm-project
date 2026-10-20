@@ -19,6 +19,7 @@ async function setupFinanceMocks(page, overrides = {}) {
   await page.evaluate((ov) => {
     window._writeLog = [];
     window.fbGet = async (c) => (ov[c] !== undefined ? ov[c] : []);
+    window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
     window.fbPost = async (c, d) => { window._writeLog.push({ op: 'post', c }); return 'id'; };
     window.fbPatch = async (c) => { window._writeLog.push({ op: 'patch', c }); };
   }, overrides);
@@ -32,6 +33,7 @@ test.describe('Farm Finance (v1.6)', () => {
     await page.evaluate(() => {
       window._calls = [];
       window.fbGet = async (c) => { window._calls.push(c); return []; };
+      window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
     });
     await page.evaluate(() => window.computeFinanceKPIs(null, null));
     const finCalls = await page.evaluate(() => window._calls);
@@ -148,6 +150,7 @@ test.describe('Farm Finance (v1.6)', () => {
     await page.waitForTimeout(700);
     await page.evaluate(() => {
       window.fbGet = async (c) => (c === 'finance' ? [{ type: 'income', amount: 500, date: new Date().toISOString().slice(0, 10) }] : []);
+      window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
       window._data = { animals: [], health: [], weightAlerts: [], production: [], productionAlerts: [], dailyTasks: [], breeding: [], finance: [{ type: 'income', amount: 500, date: new Date().toISOString().slice(0, 10), category: 'بيع حيوانات' }], vaccines: [], meds: [], feeds: [], notifications: [], workflowHistory: [], s: { currency: 'ج.م' } };
       window.switchTab('finance');
     });

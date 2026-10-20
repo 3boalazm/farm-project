@@ -20,6 +20,7 @@ async function setupInsightMocks(page, overrides = {}) {
   await page.evaluate((ov) => {
     window._writeLog = [];
     window.fbGet = async (c) => (ov[c] !== undefined ? ov[c] : []);
+    window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
     window.fbPost = async (c, d) => { window._writeLog.push({ op: 'post', c }); return 'id'; };
     window.fbPatch = async (c) => { window._writeLog.push({ op: 'patch', c }); };
     window.fbDelete = async (c) => { window._writeLog.push({ op: 'delete', c }); };
@@ -153,6 +154,7 @@ test.describe('Predictive Intelligence / Farm Insights (v1.5)', () => {
     const notifs = await page.evaluate(async (vacc) => {
       window._notifs = [];
       window.fbGet = async (c) => { if (c === 'vaccinations') return vacc; if (c === 'notifications') return window._notifs.slice(); return []; };
+      window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
       window.fbPost = async (c, d) => { if (c === 'notifications') { const id = 'n' + window._notifs.length; window._notifs.push({ ...d, _id: id }); return id; } return 'id'; };
       window.fbPatch = async () => {};
       window.getUser = () => ({ name: 'T', role: 'admin' });

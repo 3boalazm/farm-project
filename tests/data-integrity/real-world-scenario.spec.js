@@ -20,6 +20,7 @@ test('a full realistic farm accounting month, end-to-end, stays internally consi
   await page.evaluate(() => {
     window._store = {};
     window.fbGet = async (c) => (window._store[c] !== undefined ? window._store[c] : []);
+    window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
     window.fbPost = async (c, d) => {
       const id = c + '_' + Math.floor(Math.random() * 1e9);
       window._store[c] = window._store[c] || [];

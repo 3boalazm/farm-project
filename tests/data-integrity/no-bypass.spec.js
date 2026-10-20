@@ -24,8 +24,13 @@ test.describe('createOffspringAnimal() has no bypass', () => {
       const matches = content.match(/window\.createOffspringAnimal\(/g) || [];
       callSites += matches.length;
     }
-    // 1 in shared.js (_ubSubmit), 2 in breeding.js (male/female loops), 1 in assistant.html
-    expect(callSites, 'expected call-site count drifted -- verify against docs/certification/BIRTH.md before changing this number').toBe(4);
+    // 1 in shared.js (_ubSubmit), 3 in pages/breeding.js (the male/female
+    // loops plus the single-birth path), 1 in assistant.html. Verified against
+    // docs/certification/BIRTH.md and against the source on 2026-10-20: every
+    // one of them goes THROUGH the helper, which is the property this test
+    // exists to protect — a 6th site is only acceptable if it is also a
+    // createOffspringAnimal() call and BIRTH.md is updated in the same commit.
+    expect(callSites, 'expected call-site count drifted -- verify against docs/certification/BIRTH.md before changing this number').toBe(5);
   });
 
   test('createOffspringAnimal is defined exactly once', () => {

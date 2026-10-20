@@ -10,6 +10,11 @@ async function setupMockEngine(page) {
   await page.waitForTimeout(500);
   return page.evaluate(() => {
     window._health = [];
+    // The risk engine's contributors are RECENCY-windowed (repeatedMedication
+    // and friends count records within N days of today). Hardcoded 2026-07
+    // dates silently aged out of every window, which is how "combined factors
+    // cap at 100" became 90 without any code changing. Derive dates from today.
+    window._relDate = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
     window._weightAlerts = [];
     window._vacc = [];
     window._tasks = [];
@@ -38,7 +43,7 @@ test.describe('Health Intelligence Engine', () => {
 
   test('active illness alone scores exactly 30 (medium)', async ({ page }) => {
     await setupMockEngine(page);
-    await page.evaluate(() => { window._health = [{ animal_tag: 'G-2', status: 'active', diagnosis: 'x', date: '2026-07-10' }]; });
+    await page.evaluate(() => { window._health = [{ animal_tag: 'G-2', status: 'active', diagnosis: 'x', date: window._relDate(1) }]; });
     const risk = await page.evaluate(() => window.evaluateHealthRisk('a2', 'G-2', 'B1'));
     expect(risk.score).toBe(30);
     expect(risk.level).toBe('medium');
@@ -49,8 +54,8 @@ test.describe('Health Intelligence Engine', () => {
     await setupMockEngine(page);
     await page.evaluate(() => {
       window._health = [
-        { animal_tag: 'G-3', status: 'active', diagnosis: 'x', date: '2026-07-10', medication: 'm1', bcs: '2' },
-        { animal_tag: 'G-3', status: 'done', date: '2026-07-05', medication: 'm2' },
+        { animal_tag: 'G-3', status: 'active', diagnosis: 'x', date: window._relDate(1), medication: 'm1', bcs: '2' },
+        { animal_tag: 'G-3', status: 'done', date: window._relDate(6), medication: 'm2' },
       ];
       window._weightAlerts = [{ animal_id: 'a3', status: 'active', rule_type: 'weight_loss', detail: 'x' }];
       window._vacc = [{ target_section: 'B1', status: 'overdue', name: 'v1' }];
@@ -64,7 +69,7 @@ test.describe('Health Intelligence Engine', () => {
   test('recommendations are ordered by factor priority, not raw point value', async ({ page }) => {
     await setupMockEngine(page);
     await page.evaluate(() => {
-      window._health = [{ animal_tag: 'G-4', status: 'active', diagnosis: 'x', date: '2026-07-10' }];
+      window._health = [{ animal_tag: 'G-4', status: 'active', diagnosis: 'x', date: window._relDate(1) }];
       window._weightAlerts = [{ animal_id: 'a4', status: 'active', rule_type: 'weight_loss', detail: 'y' }];
     });
     const risk = await page.evaluate(() => window.evaluateHealthRisk('a4', 'G-4', null));
@@ -78,7 +83,7 @@ test.describe('Health Intelligence Engine', () => {
   test('every recommendation cites evidence -- never generated without a reason', async ({ page }) => {
     await setupMockEngine(page);
     await page.evaluate(() => {
-      window._health = [{ animal_tag: 'G-5', status: 'active', diagnosis: 'تشخيص تجريبي', date: '2026-07-10' }];
+      window._health = [{ animal_tag: 'G-5', status: 'active', diagnosis: 'تشخيص تجريبي', date: window._relDate(1) }];
     });
     const risk = await page.evaluate(() => window.evaluateHealthRisk('a5', 'G-5', null));
     expect(risk.recommendations.length).toBeGreaterThan(0);
@@ -90,14 +95,14 @@ test.describe('Health Intelligence Engine', () => {
   test('generates a task via Sprint 1 engine only for high/critical, never for low/medium', async ({ page }) => {
     await setupMockEngine(page);
     // Medium case (30 pts, active illness only) -- no task expected
-    await page.evaluate(() => { window._health = [{ animal_tag: 'G-6', status: 'active', diagnosis: 'x', date: '2026-07-10' }]; });
+    await page.evaluate(() => { window._health = [{ animal_tag: 'G-6', status: 'active', diagnosis: 'x', date: window._relDate(1) }]; });
     await page.evaluate(() => window.evaluateHealthRisk('a6', 'G-6', null));
     let tasks = await page.evaluate(() => window._tasks);
     expect(tasks.length, 'medium-level risk does not spawn a task').toBe(0);
 
     // Critical case
     await page.evaluate(() => {
-      window._health = [{ animal_tag: 'G-7', status: 'active', diagnosis: 'x', date: '2026-07-10', medication: 'm', bcs: '2' }];
+      window._health = [{ animal_tag: 'G-7', status: 'active', diagnosis: 'x', date: window._relDate(1), medication: 'm', bcs: '2' }];
       window._weightAlerts = [{ animal_id: 'a7', status: 'active', rule_type: 'weight_loss', detail: 'y' }];
       window._vacc = [{ target_section: 'B1', status: 'overdue', name: 'v' }];
     });
@@ -110,7 +115,7 @@ test.describe('Health Intelligence Engine', () => {
   test('never generates a duplicate task for the same animal on repeated evaluation', async ({ page }) => {
     await setupMockEngine(page);
     await page.evaluate(() => {
-      window._health = [{ animal_tag: 'G-8', status: 'active', diagnosis: 'x', date: '2026-07-10', medication: 'm', bcs: '2' }];
+      window._health = [{ animal_tag: 'G-8', status: 'active', diagnosis: 'x', date: window._relDate(1), medication: 'm', bcs: '2' }];
       window._weightAlerts = [{ animal_id: 'a8', status: 'active', rule_type: 'weight_loss', detail: 'y' }];
       window._vacc = [{ target_section: 'B1', status: 'overdue', name: 'v' }];
     });
@@ -135,7 +140,7 @@ test.describe('Health Intelligence Engine', () => {
     page.on('pageerror', (e) => errors.push(e.message));
     await page.evaluate(async () => {
       const animals = [{ _id: 'a9', tag: 'G-9', barn: 'B1', status: 'alive' }];
-      const health = [{ animal_tag: 'G-9', status: 'active', diagnosis: 'x', date: '2026-07-10' }];
+      const health = [{ animal_tag: 'G-9', status: 'active', diagnosis: 'x', date: window._relDate(1) }];
       window.renderDashboard(animals, [], health, [], [], [], [], [], [], [], []);
       if (window.renderTopHealthRiskAnimals) await window.renderTopHealthRiskAnimals(animals, health, []);
     });

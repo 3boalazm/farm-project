@@ -14,6 +14,7 @@ async function setupMockEngine(page) {
     window._createdTasks = [];
     window._patches = [];
     window.fbGet = async (c) => (c === 'daily_tasks' ? window._createdTasks.slice() : []);
+    window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
     window.fbPost = async (c, d) => { const id = 'id' + window._createdTasks.length; window._createdTasks.push({ ...d, _id: id }); return id; };
     window.fbPatch = async (c, id, d) => { window._patches.push({ id, d }); const t = window._createdTasks.find((x) => x._id === id); if (t) Object.assign(t, d); };
     window.logActivity = async () => {};

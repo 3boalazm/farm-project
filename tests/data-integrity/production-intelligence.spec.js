@@ -102,6 +102,7 @@ test.describe('Production Intelligence Engine', () => {
     await page.addInitScript(() => {
       localStorage.setItem('farm_user', JSON.stringify({ name: 'T', role: 'admin' }));
       window.fbGet = async (path) => (path === 'production_log' || path === 'daily_tasks' || path === 'production_alerts' ? [] : []);
+      window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
       window.fbPost = async () => 'id';
       window.fbPatch = async () => {};
       window.logActivity = async () => {};

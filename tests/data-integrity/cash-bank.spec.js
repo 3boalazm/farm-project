@@ -18,6 +18,7 @@ async function setupCashMocks(page, overrides = {}) {
     window._store = JSON.parse(JSON.stringify(ov));
     window._writeLog = [];
     window.fbGet = async (c) => (window._store[c] !== undefined ? window._store[c] : []);
+    window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
     window.fbPost = async (c, d) => {
       const id = 'id_' + (window._writeLog.length + 1);
       window._writeLog.push({ op: 'post', c, id, d });
@@ -163,6 +164,7 @@ test.describe('Cash & Bank (Phase 3)', () => {
       window._store = JSON.parse(JSON.stringify(ov));
       window._writeLog = [];
       window.fbGet = async (c) => (window._store[c] !== undefined ? window._store[c] : []);
+      window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
       window.fbPost = async (c, d) => { window._writeLog.push({ op: 'post', c, d }); return 'id'; };
       window.fbPut = async (c, id, d) => { window._writeLog.push({ op: 'put', c, id, d }); };
       window.fbPatch = async (c, id, d) => { window._writeLog.push({ op: 'patch', c, id, d }); };
@@ -181,6 +183,7 @@ test.describe('Cash & Bank (Phase 3)', () => {
     await page.waitForTimeout(600);
     await page.evaluate((ov) => {
       window.fbGet = async (c) => (ov[c] !== undefined ? ov[c] : []);
+      window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
     }, { accounts: ACCOUNTS, cash_bank_accounts: [{ _id: 'cb1', name: 'نقدية المزرعة', linkedAccountId: '1110' }], journal_entries: [] });
     const balance = await page.evaluate(() => window.getCashBankBalance('cb1'));
     const history = await page.evaluate(() => window.getCashBankTransactionHistory('cb1'));

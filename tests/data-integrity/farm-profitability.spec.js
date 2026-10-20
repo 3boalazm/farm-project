@@ -12,6 +12,7 @@ async function setupProfitMocks(page, overrides = {}) {
   await page.waitForTimeout(600);
   await page.evaluate((ov) => {
     window.fbGet = async (c) => (ov[c] !== undefined ? ov[c] : []);
+    window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
     window.getUser = () => ({ name: 'T', role: 'admin' });
   }, overrides);
 }

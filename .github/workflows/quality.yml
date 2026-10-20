@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  pull-requests: write     # for the failure-digest comment below
+
 jobs:
   quality:
     runs-on: ubuntu-latest
@@ -64,6 +68,21 @@ jobs:
       - name: Publish browser failures as annotations
         if: always()
         run: node scripts/report-playwright-failures.js test-results/results.json
+
+      # Annotations are capped (~900 chars each, 30 of them) and truncate long
+      # expectation diffs. The full digest goes to the PR as a comment, which
+      # IS readable from the API in environments where log and artifact
+      # downloads are blocked. Same-repo branch => GITHUB_TOKEN can comment.
+      - name: Comment the full failure digest on the PR
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          node scripts/report-playwright-failures.js test-results/results.json --markdown /tmp/digest.md
+          if [ -s /tmp/digest.md ]; then
+            gh pr comment "$PR_NUMBER" --body-file /tmp/digest.md || echo "::warning::could not comment on the PR"
+          fi
 
       - name: Upload test report on failure
         if: failure()

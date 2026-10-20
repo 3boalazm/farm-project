@@ -14,6 +14,7 @@ async function setupForecastMocks(page, overrides = {}) {
     window._store = JSON.parse(JSON.stringify(ov));
     window._writeLog = [];
     window.fbGet = async (c) => (window._store[c] !== undefined ? window._store[c] : []);
+    window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
     window.fbPost = async (c, d) => {
       const id = 'id_' + (window._writeLog.length + 1);
       window._writeLog.push({ op: 'post', c, id, d });
@@ -101,6 +102,7 @@ test.describe('Forecasting (Phase 21)', () => {
     await page.evaluate((ov) => {
       window._writeLog = [];
       window.fbGet = async (c) => (ov[c] !== undefined ? ov[c] : []);
+      window.fbGetSafe = window.fbGet;   // O-19: reads moved onto fbGetSafe() in the 2026-10 audit; a mock that patches only fbGet leaves it reading the fake database
       window.fbPost = async (c, d) => { window._writeLog.push({ op: 'post', c, d }); return 'id'; };
     }, { journal_entries: [] });
     const r = await page.evaluate(() => window.createForecast({
