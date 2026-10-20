@@ -106,7 +106,23 @@ function monthLabel(k){const[,mo]=k.split('-');return['يناير','فبراير
 // ── Main render ───────────────────────────────────────────
 function renderReports(el, s) {
   const m = computeMetrics(_data);
-  el.innerHTML = `
+  const _repState = m.activeHealth.length||m.vacOver? 'act' : (m.deathRate>5?'watch':'ok');
+  const _repStreamHead = renderStreamHead({
+    state: _repState,
+    day: 'التقارير — '+(typeof todayAr==='function'?todayAr():todayStr()),
+    pill: { value: ar(m.alive.length), label:'حيّ', title:'إجمالي القطيع' },
+    chips: [
+      { icon:'bi-exclamation-triangle', text: ar(m.activeHealth.length)+' قيد العلاج', alert: m.activeHealth.length>0 },
+      { icon:'bi-cash-stack', text: (m.income-m.expense>=0?'+':'')+(m.income-m.expense).toLocaleString('ar-EG')+' '+m.curr+' صافي' },
+      m.vacOver?{ icon:'bi-bandaid', text: ar(m.vacOver)+' تحصين متأخر', alert:true }:null,
+    ].filter(Boolean),
+    quick: [
+      { label:'تصدير Excel', icon:'bi-file-earmark-excel', onclick:'exportAllExcel()' },
+      { label:'واتساب', icon:'bi-whatsapp', onclick:'shareWhatsApp()' },
+      { label:'التحليلات', icon:'bi-bar-chart-line', href:'analytics.html' },
+    ],
+  });
+  el.innerHTML = _repStreamHead+`
   <div class="row g-3 mb-4">
     ${[
       {l:'إجمالي القطيع',v:ar(m.alive.length),status:'normal',h:'animals.html'},
