@@ -35,6 +35,7 @@
 <!-- وضع العرض: يخدم كل طلبات Firebase من بيانات مولّدة حين يُفعّل — docs/design/DEMO-MODE.md. يجب أن يُحمَّل قبل firebase.js حتى يُثبَّت اعتراض النقل قبل أي طلب إقلاع. -->
 <script src="demo-data.js"></script>
 <script src="firebase.js"></script>
+<script src="data-store.js"></script>
 <script src="nav.js"></script>
 <script src="shared.js"></script>
 <script src="ui-shell.js"></script>
@@ -67,16 +68,34 @@ document.addEventListener('DOMContentLoaded', async function(){
   renderLoading(el);
 
   try {
-    const [animals, breeding, health, finance, meds, feeds, equipment, production, activity, weightAlerts, vaccinations, productionAlerts, dailyTasks, workflowHistory] = await Promise.all([
+    // 2026-10 DATA AUDIT: one batch, permission-gated, deduped. Previously
+    // meds/feeds were re-fetched inside renderInventoryExecCard (2 wasted
+    // requests within 500ms). Now the whole dashboard is a single batch and
+    // the card reuses the already-fetched arrays (see window._dashCache).
+    var _dashBatch = typeof fbGetBatch==='function'
+      ? await fbGetBatch(['animals','breeding','health','finance','inventory_meds','inventory_feeds','inventory_equipment','production_log','activity_log','weight_alerts','vaccinations','production_alerts','daily_tasks','workflow_history','feed_consumption'])
+      : null;
+    var animals, breeding, health, finance, meds, feeds, equipment, production, activity, weightAlerts, vaccinations, productionAlerts, dailyTasks, workflowHistory, feedConsumption;
+    if (_dashBatch) {
+      animals=_dashBatch['animals']||[]; breeding=_dashBatch['breeding']||[]; health=_dashBatch['health']||[]; finance=_dashBatch['finance']||[];
+      meds=_dashBatch['inventory_meds']||[]; feeds=_dashBatch['inventory_feeds']||[]; equipment=_dashBatch['inventory_equipment']||[];
+      production=_dashBatch['production_log']||[]; activity=_dashBatch['activity_log']||[]; weightAlerts=_dashBatch['weight_alerts']||[]; vaccinations=_dashBatch['vaccinations']||[];
+      productionAlerts=_dashBatch['production_alerts']||[]; dailyTasks=_dashBatch['daily_tasks']||[]; workflowHistory=_dashBatch['workflow_history']||[]; feedConsumption=_dashBatch['feed_consumption']||[];
+    } else {
+      var _r = await Promise.all([
       fbGet('animals'), fbGet('breeding'), fbGet('health'), fbGet('finance'),
       fbGet('inventory_meds'), fbGet('inventory_feeds'), fbGet('inventory_equipment'),
       fbGet('production_log').catch(()=>[]), fbGet('activity_log').catch(()=>[]),
-      fbGet('weight_alerts').catch(()=>[]), // Sprint 2, Epic 2
-      fbGet('vaccinations').catch(()=>[]),  // Sprint 3, Epic 3
-      fbGet('production_alerts').catch(()=>[]), // Sprint 4, Epic 4
-      fbGet('daily_tasks').catch(()=>[]), // Sprint 6, Epic 6
-      fbGet('workflow_history').catch(()=>[]) // Sprint 11 (v1.4) -- new, additive read
-    ]);
+      fbGet('weight_alerts').catch(()=>[]),
+      fbGet('vaccinations').catch(()=>[]),
+      fbGet('production_alerts').catch(()=>[]),
+      fbGet('daily_tasks').catch(()=>[]),
+      fbGet('workflow_history').catch(()=>[]),
+      fbGet('feed_consumption').catch(()=>[])
+    ]); animals=_r[0]; breeding=_r[1]; health=_r[2]; finance=_r[3]; meds=_r[4]; feeds=_r[5]; equipment=_r[6]; production=_r[7]; activity=_r[8]; weightAlerts=_r[9]; vaccinations=_r[10]; productionAlerts=_r[11]; dailyTasks=_r[12]; workflowHistory=_r[13]; feedConsumption=_r[14]||[];
+    }
+    // Expose for the inventory card to reuse — no second fetch for meds/feeds
+    window._dashCache = { meds: meds, feeds: feeds, consumption: feedConsumption };
     // Sprint 2, Epic 2: read-time staleness check for animals with no
     // recent weight -- fire-and-forget, never blocks dashboard rendering.
     if (window.evaluateMissingWeightAlerts) { window.evaluateMissingWeightAlerts(animals, 30).catch(function(){}); }
@@ -863,7 +882,18 @@ window.renderInventoryExecCard = async function() {
   var container = document.getElementById('inventory-exec-card');
   if (!container) return;
   try {
-    var results = await Promise.all([fbGet('inventory_meds'), fbGet('inventory_feeds'), fbGet('feed_consumption')]);
+    // 2026-10 AUDIT: reuse the dashboard's own batch (meds/feeds already
+    // fetched 50ms ago). Only fetch consumption if the batch didn't include it
+    // (e.g. older cached page without the new batch path).
+    var _dc = window._dashCache;
+    var results;
+    if (_dc && _dc.meds && _dc.feeds) {
+      var cons = _dc.consumption;
+      if (!cons || !cons.length) cons = await fbGet('feed_consumption').catch(function(){return[];});
+      results = [_dc.meds, _dc.feeds, cons];
+    } else {
+      results = await Promise.all([fbGet('inventory_meds'), fbGet('inventory_feeds'), fbGet('feed_consumption')]);
+    }
     var meds = results[0]||[], feeds = results[1]||[], consumption = results[2]||[];
     var lowStock = meds.filter(function(m){return +m.quantity<=+m.min_quantity && +m.min_quantity>0;}).length
                  + feeds.filter(function(f){return +f.quantity<=+f.min_quantity && +f.min_quantity>0;}).length;

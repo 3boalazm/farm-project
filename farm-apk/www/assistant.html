@@ -109,6 +109,7 @@
 <!-- وضع العرض: يخدم كل طلبات Firebase من بيانات مولّدة حين يُفعّل — docs/design/DEMO-MODE.md. يجب أن يُحمَّل قبل firebase.js حتى يُثبَّت اعتراض النقل قبل أي طلب إقلاع. -->
 <script src="demo-data.js"></script>
 <script src="firebase.js"></script>
+<script src="data-store.js"></script>
 <script src="nav.js"></script>
 <script src="shared.js"></script>
 <script src="ui-shell.js"></script>
@@ -153,9 +154,18 @@ document.addEventListener('DOMContentLoaded', async function() {
   renderPageHeader('<i class="bi bi-robot accent-text"></i> مساعد المزرعة الذكي', 'يقرأ بيانات مزرعتك ويساعدك في إدارتها', '');
 
   // Load farm data
+  // 2026-10 DATA AUDIT: was 10 raw fbGet() in parallel; now single
+  // deduped batch via fbGetBatch (one HTTP per unique path across the
+  // whole app within 500ms). Same data, one burst.
   try {
     var _ok = function(p){ return p.catch(function(){ return []; }); };
-    var [animals, breeding, health, vaccines, meds, feeds, equipment, finance, tasks, production] = await Promise.all([
+    var _batch = typeof fbGetBatch==='function' ? await fbGetBatch(['animals','breeding','health','vaccinations','inventory_meds','inventory_feeds','inventory_equipment','finance','daily_tasks','production_log']) : null;
+    var animals, breeding, health, vaccines, meds, feeds, equipment, finance, tasks, production;
+    if (_batch) {
+      animals=_batch['animals']||[]; breeding=_batch['breeding']||[]; health=_batch['health']||[]; vaccines=_batch['vaccinations']||[];
+      meds=_batch['inventory_meds']||[]; feeds=_batch['inventory_feeds']||[]; equipment=_batch['inventory_equipment']||[]; finance=_batch['finance']||[]; tasks=_batch['daily_tasks']||[]; production=_batch['production_log']||[];
+    } else {
+    var _r = await Promise.all([
       fbGet('animals'), fbGet('breeding'), fbGet('health'),
       fbGet('vaccinations'), _ok(fbGet('inventory_meds')),
       _ok(fbGet('inventory_feeds')),
@@ -165,6 +175,8 @@ document.addEventListener('DOMContentLoaded', async function() {
       _ok(fbGet('inventory_equipment')), _ok(fbGet('finance')),
       _ok(fbGet('daily_tasks')), _ok(fbGet('production_log'))
     ]);
+    animals=_r[0]; breeding=_r[1]; health=_r[2]; vaccines=_r[3]; meds=_r[4]; feeds=_r[5]; equipment=_r[6]; finance=_r[7]; tasks=_r[8]; production=_r[9];
+    }
     _farmData = { animals:animals||[], breeding:breeding||[], health:health||[], vaccines:vaccines||[],
                   meds:meds||[], feeds:feeds||[], equipment:equipment||[], finance:finance||[],
                   tasks:tasks||[], production:production||[] };
@@ -373,14 +385,26 @@ window.refreshFarmData = async function() {
   document.getElementById('farm-ctx-bar').innerHTML = '<span class="text-gray"><div class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block"></div> جاري التحديث...</span>';
   var s = getSettings();
   try {
+    // 2026-10 AUDIT: refresh used skipCache=true (bypass 45s cache) for 10
+    // collections at once — on a farm's mobile link that's 10 cold fetches.
+    // Now: invalidate only what's needed, then reuse cache/dedup normally.
+    ['animals','breeding','health','vaccinations','inventory_meds','inventory_feeds','inventory_equipment','finance','daily_tasks','production_log'].forEach(function(c){ try{ fbCacheInvalidate(c); }catch(e){} });
     var _ok2 = function(p){ return p.catch(function(){ return []; }); };
-    var [animals, breeding, health, vaccines, meds, feeds, equipment, finance, tasks, production] = await Promise.all([
+    var _batch2 = typeof fbGetBatch==='function' ? await fbGetBatch(['animals','breeding','health','vaccinations','inventory_meds','inventory_feeds','inventory_equipment','finance','daily_tasks','production_log']) : null;
+    var animals, breeding, health, vaccines, meds, feeds, equipment, finance, tasks, production;
+    if (_batch2) {
+      animals=_batch2['animals']||[]; breeding=_batch2['breeding']||[]; health=_batch2['health']||[]; vaccines=_batch2['vaccinations']||[];
+      meds=_batch2['inventory_meds']||[]; feeds=_batch2['inventory_feeds']||[]; equipment=_batch2['inventory_equipment']||[]; finance=_batch2['finance']||[]; tasks=_batch2['daily_tasks']||[]; production=_batch2['production_log']||[];
+    } else {
+    var _r2 = await Promise.all([
       fbGet('animals',true), fbGet('breeding',true), fbGet('health',true),
       fbGet('vaccinations',true), _ok2(fbGet('inventory_meds',true)),
       _ok2(fbGet('inventory_feeds',true)),
       _ok2(fbGet('inventory_equipment',true)), _ok2(fbGet('finance',true)),
       _ok2(fbGet('daily_tasks',true)), _ok2(fbGet('production_log',true))
     ]);
+    animals=_r2[0]; breeding=_r2[1]; health=_r2[2]; vaccines=_r2[3]; meds=_r2[4]; feeds=_r2[5]; equipment=_r2[6]; finance=_r2[7]; tasks=_r2[8]; production=_r2[9];
+    }
     _farmData = { animals:animals||[], breeding:breeding||[], health:health||[], vaccines:vaccines||[],
                   meds:meds||[], feeds:feeds||[], equipment:equipment||[], finance:finance||[],
                   tasks:tasks||[], production:production||[] };

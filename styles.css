@@ -503,11 +503,24 @@ html.light-mode .rail-v2-mobile-bar{
   html[data-rail-expanded="true"] .page-wrap.rail-v2-content{margin-right:230px}
   .rail-v2-toggle{position:fixed;top:18px;left:16px;z-index:1002;width:36px;height:36px;border-radius:10px;border:1px solid var(--border-2);background:var(--bg-2);color:var(--text-sub);display:flex;align-items:center;justify-content:center;cursor:pointer}
   .rail-v2-toggle:hover{background:var(--bg-hover)}
-  .rail-v2-panel{top:0;height:100vh;width:300px;padding:64px 20px 20px;transition:transform .3s cubic-bezier(.4,0,.2,1)}
-  html[data-panel-v2="closed"] .rail-v2-panel{transform:translateX(-100%)}
+  /* 2026-10 DATA AUDIT — 2-sidebars fix:
+     The left user panel used to steal 300px of permanent content width
+     (margin-left:300px on every desktop page), squeezing tables/forms
+     into 820px on a 1200px screen while duplicating what the appbar
+     already shows (user name/role/farm). Now it's an OVERLAY drawer on
+     every breakpoint — same markup, same toggle, but zero layout cost.
+     Power users can still pin it: the attribute is now opt-in open,
+     not opt-out closed. The rail (80px) stays the only persistent nav;
+     the content reclaims the full width minus the rail.  */
+  .rail-v2-panel{top:0;height:100vh;width:320px;max-width:90vw;padding:64px 20px 20px;transition:transform .32s cubic-bezier(.32,0,.67,0),box-shadow .32s;box-shadow:var(--elev-3);transform:translateX(-100%)}
+  html[data-panel-v2="open"] .rail-v2-panel{transform:translateX(0)}
+  html[data-panel-v2="open"] .rail-v2-backdrop{opacity:1;visibility:visible;pointer-events:auto}
+  .rail-v2-backdrop{top:0}
 
-  .page-wrap.rail-v2-content{margin-right:80px;margin-left:300px;padding-top:24px;transition:margin .3s cubic-bezier(.4,0,.2,1)}
+  .page-wrap.rail-v2-content{margin-right:80px;margin-left:0;padding-top:24px;transition:margin .3s cubic-bezier(.4,0,.2,1)}
+  /* legacy attribute support: pages that still set closed explicitly keep working */
   html[data-panel-v2="closed"] .page-wrap.rail-v2-content{margin-left:0}
+  html[data-panel-v2="closed"] .rail-v2-panel{transform:translateX(-100%)}
 }
 
 /* MOBILE */

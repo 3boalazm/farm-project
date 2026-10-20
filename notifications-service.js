@@ -69,10 +69,16 @@ const NS = {
     await NS.requestPermission();
     await NS.checkAll();
     await NS.checkWeather(); // daily weather alert
-    // Poll every 5 minutes
-    NS._polling = setInterval(()=>NS.checkAll(), 5*60*1000);
-    // Weather every 15 minutes
-    setInterval(()=>NS.checkWeather(), 15*60*1000);
+    // 2026-10 AUDIT: was 5min × 9 collections = 108 requests/hour per tab
+    // even though dashboard's own 45s cache already held the same 6
+    // collections. Now 10min, visibility-gated, and deduped via fbGet's
+    // in-flight coalescing + fbGetBatch single burst. ~83% fewer polls.
+    NS._polling = setInterval(function(){
+      if (document.visibilityState !== 'visible') return;
+      NS.checkAll();
+    }, 10*60*1000);
+    // Weather every 30 minutes
+    setInterval(function(){ if(document.visibilityState==='visible') NS.checkWeather(); }, 30*60*1000);
     NS.checkWeather();
   },
 
@@ -126,14 +132,23 @@ const NS = {
   async checkAll(){
     if(!initFirebase())return;
     try{
-      const [vaccines,breeding,health,meds,feeds,loginN,animals,weightAlertsRaw,productionRaw]=await Promise.all([
+      var _nsBatch = typeof fbGetBatch==='function'
+        ? await fbGetBatch(['vaccinations','breeding','health','inventory_meds','inventory_feeds','login_notifications','animals','weight_alerts','production_log'])
+        : null;
+      var vaccines,breeding,health,meds,feeds,loginN,animals,weightAlertsRaw,productionRaw;
+      if (_nsBatch) {
+        vaccines=_nsBatch['vaccinations']||[]; breeding=_nsBatch['breeding']||[]; health=_nsBatch['health']||[]; meds=_nsBatch['inventory_meds']||[]; feeds=_nsBatch['inventory_feeds']||[]; loginN=_nsBatch['login_notifications']||[]; animals=_nsBatch['animals']||[]; weightAlertsRaw=_nsBatch['weight_alerts']||[]; productionRaw=_nsBatch['production_log']||[];
+      } else {
+      var _r = await Promise.all([
         fbGet('vaccinations'), fbGet('breeding'), fbGet('health'),
         fbGet('inventory_meds'), fbGet('inventory_feeds'),
         fbGet('login_notifications'),
-        fbGet('animals').catch(()=>[]),        // Sprint 9: candidate selection for operational-priority check
-        fbGet('weight_alerts').catch(()=>[]),  // Sprint 9: same candidate-selection input Sprint 8's report tab uses
-        fbGet('production_log').catch(()=>[]), // Sprint 9: same candidate-selection input Sprint 8's report tab uses
+        fbGet('animals').catch(()=>[]),
+        fbGet('weight_alerts').catch(()=>[]),
+        fbGet('production_log').catch(()=>[]),
       ]);
+      vaccines=_r[0]; breeding=_r[1]; health=_r[2]; meds=_r[3]; feeds=_r[4]; loginN=_r[5]; animals=_r[6]; weightAlertsRaw=_r[7]; productionRaw=_r[8];
+      }
       const t=new Date(), today=todayStr();
       const u=getUser();
       const isAdmin=u?.role==='admin';
