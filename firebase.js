@@ -1406,11 +1406,31 @@ const Users={
     return res;
   },
 
+  // Deletes all three places a user lives: the public projection (what every
+  // list on screen reads), the record itself, and the write-only PIN vault.
+  // The projection goes FIRST and no failure aborts the rest — the old version
+  // threw out of fbDelete('users', id), which left the projection behind and
+  // told the caller nothing, so the row stayed on screen and "the delete
+  // button does nothing" (owner report, 2026-10-20). Callers get a structured
+  // result and are expected to report it honestly.
   async del(id){
-    const res=await fbDelete('users', id);
-    try{ await fbDelete('user_directory', id); }catch(e){}
-    try{ await fbDelete('pin_vault', id); }catch(e){}
-    return res;
+    const out={ok:false, partial:false, deleted:[], failed:[]};
+    const attempt=async(collection)=>{
+      try{ await fbDelete(collection, id); out.deleted.push(collection); }
+      catch(e){ out.failed.push({collection, reason:(e&&e.message)||String(e)}); }
+    };
+    await attempt('user_directory');
+    await attempt('users');
+    await attempt('pin_vault');
+    out.ok=out.failed.length===0 && out.deleted.length>0;
+    out.partial=!out.ok && out.deleted.length>0;
+    if(out.failed.length){
+      // The difference between "the button is broken" and "the deployed rules
+      // reject this session" is only visible in the reason string, so keep it.
+      try{ if(typeof diagPush==='function') diagPush('Users.del failed', JSON.stringify(out.failed).slice(0,300)); }catch(e){}
+      console.warn('Users.del partial:', JSON.stringify(out.failed));
+    }
+    return out;
   },
 
   async init(){

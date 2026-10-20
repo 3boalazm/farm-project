@@ -28,8 +28,7 @@
   <div id="page-header"></div>
   <div id="content"></div>
   <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
-    © <span id="footer-year"></span> <span id="footer-farm"></span><br>
-    <small style="font-size:.72rem;color:#555">إشراف: لواء أحمد رجب نوح &nbsp;|&nbsp; تطوير: جندي مصطفى محمد إبراهيم</small>
+    © <span id="footer-year"></span> <span id="footer-farm"></span>
   </footer>
 </div>
 <script src="config.js"></script>
@@ -185,18 +184,35 @@ window.submitUser=async function(existingId){
   await renderUsers();
 };
 window.delUser=async function(id){
-  const u=await Users.get(id);
   if(id==='admin1'){toast('لا يمكن حذف المدير الرئيسي','error');return;}
-  // The v2 shell's confirm is a real <dialog> with focus trapping and an
-  // explicit destructive action; the native confirm() is not stylable and
-  // blocks the thread. Falls back to window.confirm when the shell is absent.
-  const ok = (window.UIShell && UIShell.confirm)
-    ? await UIShell.confirm({title:'حذف مستخدم', message:'حذف '+((u&&u.name)||id)+'؟ لا يمكن التراجع عن هذا الإجراء.', confirmLabel:'حذف', danger:true})
-    : window.confirm('حذف هذا المستخدم؟');
+  let u=null; try{ u=await Users.get(id); }catch(e){ u=null; }
+  const name=(u&&u.name)||id;
+  // BUG FIX (2026-10-20, owner report "لما احتاج احذف يوزر مش بيتحذف"):
+  // UIShell.confirm used to be callback-only and returned undefined, so
+  // `await UIShell.confirm({...})` resolved to undefined, `if(!ok) return`
+  // fired every single time, and the trash button did nothing at all — with
+  // no error, because nothing had thrown. farmConfirm() is the promise-based
+  // app-wide confirm (shell dialog → window.confirm → inline panel), so this
+  // now works in a browser AND in the Capacitor WebView.
+  const ok=await farmConfirm({
+    title:'حذف مستخدم',
+    message:'حذف '+name+'؟ سيُحذف من قائمة المستخدمين ومن سجل المستخدمين ومن خزنة الرموز. لا يمكن التراجع عن هذا الإجراء.',
+    confirmLabel:'حذف', danger:true
+  });
   if(!ok)return;
-  await Users.del(id);
-  logActivity('delete','users',`حذف المستخدم: ${u?.name||id}`);
-  toast('تم الحذف');
+  let res=null;
+  try{ res=await Users.del(id); }
+  catch(e){ toast('فشل الحذف: '+((e&&e.message)||e),'error'); await renderUsers(); return; }
+  if(res&&res.ok){
+    try{ logActivity('delete','users','حذف المستخدم: '+name); }catch(e){}
+    toast('تم حذف '+name,'success');
+  }else{
+    const failed=(res&&res.failed)||[];
+    const where=failed.map(f=>f.collection).join('، ')||'غير معروف';
+    const denied=failed.some(f=>/denied|permission|401|403/i.test(String(f.reason)));
+    toast((res&&res.partial?'حذف ناقص — لم يُحذف من: ':'فشل الحذف — ')+where+
+      (denied?' · رفضتها قواعد الأمان: يلزم جلسة مدير وأن تكون القواعد منشورة':' · تحقق من الاتصال'),'error',6000);
+  }
   await renderUsers();
 };
 </script>

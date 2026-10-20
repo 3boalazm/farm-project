@@ -130,7 +130,7 @@ window.markDone=async function(id){
 
 window.delVacc=async function(id){
   if(!can('admin')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return;}
-  if(!confirm('حذف هذا التحصين؟'))return;
+  if(!await farmConfirm({message:'حذف هذا التحصين؟', danger:true}))return;
   try{
     await fbDelete('vaccinations',id);
     await logActivity('delete','vaccine','حذف تحصين');
@@ -368,7 +368,7 @@ window.saveNewTpl = async function() {
 window.deleteTpl = async function(btn) {
   if(!can('health')){toast('ليس لديك صلاحية لتنفيذ هذا الإجراء','error');return;}
   var id = btn && btn.dataset ? btn.dataset.id : btn;
-  if (!id || !confirm('حذف هذا القالب؟')) return;
+  if (!id || !await farmConfirm({message:'حذف هذا القالب؟', danger:true})) return;
   try { await fbDelete('vaccination_templates',id); toast('تم الحذف'); openTemplates(); }
   catch(e) { toast('خطأ','error'); }
 };

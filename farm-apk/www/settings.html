@@ -349,101 +349,135 @@ function _requireAdminForReset(){
   return true;
 }
 
+// One delete, done properly. fbDelete() attaches the auth token through
+// fbUrl()→_getValidAuthToken() (which refreshes an expired one), retries an
+// idempotent DELETE through a 503, invalidates the 45s read cache and leaves
+// a diagnostics entry. The old version used a raw fetch and returned a bare
+// boolean, so a permission denial and a dropped packet produced the same
+// "تحقق من الاتصال" toast — the owner went and checked his network while the
+// deployed rules were what refused him. Reason is now part of the result.
 async function _deleteTable(table){
+  if(!FB_URL) return {ok:false, table:table, reason:'no-firebase', detail:'FB_URL غير معرّف'};
   try{
-    if(!FB_URL){toast('Firebase غير متصل','error');return false;}
-    // BUG FIX: this used to build the URL manually (FB_URL+'/'+table+
-    // '.json'), bypassing fbUrl() entirely — meaning it never attached
-    // an auth token (would always fail once rules require auth != null)
-    // and, separately, always returned true without ever checking
-    // r.ok, so every caller (resetAnimals, resetFinance, resetHealth,
-    // resetActivity, resetNotifications, and the full-reset success
-    // counter) could report success even when the delete failed.
-    const r=await fetch(await fbUrl(table),{method:'DELETE'});
+    await fbDelete(table);
     fbCacheInvalidate(table);
-    console.log('Deleted:',table,'status:',r.status);
-    return r.ok;
+    return {ok:true, table:table};
   }catch(e){
-    console.error('Delete failed:',table,e.message);
-    return false;
+    const msg=(e&&e.message)||String(e);
+    const denied=/denied|permission|unauthoriz|401|403/i.test(msg);
+    console.error('Delete failed:',table,msg);
+    try{ if(typeof diagPush==='function') diagPush('error','reset: فشل مسح '+table, msg.slice(0,300)); }catch(_){}
+    return {ok:false, table:table, reason:denied?'denied':'error', detail:msg};
   }
+}
+
+// One honest report for every wipe: what went, what did not, and which of the
+// three reasons it was. Never "تحقق من الاتصال" for a rules denial again.
+function _reportWipe(label, results){
+  const failed=results.filter(function(r){return !r.ok;});
+  if(!failed.length){ toast('✅ '+label+' — تم المسح بالكامل','success'); return true; }
+  const denied=failed.some(function(f){return f.reason==='denied';});
+  const noFb=failed.some(function(f){return f.reason==='no-firebase';});
+  const names=failed.map(function(f){return f.table;}).join('، ');
+  const why=noFb?'Firebase غير متصل على هذا الجهاز'
+    :denied?'رفضتها قواعد الأمان — يلزم جلسة مدير، وأن تكون القواعد المنشورة هي المحدثة (firebase deploy --only database)'
+    :'تحقق من الاتصال ثم أعد المحاولة';
+  toast('⚠️ '+label+' — فشل مسح '+failed.length+' من '+results.length+' ('+names+') · '+why,'error',9000);
+  return false;
 }
 
 window.resetAnimals=async function(){
   if(!_requireAdminForReset())return;
-  if(!confirm('مسح كل بيانات القطيع؟\nحيوانات + أوزان + سجلات النافق'))return;
+  const ok=await farmConfirm({title:'مسح بيانات القطيع',
+    message:'سيُحذف سجل الحيوانات (animals) نهائيًا، ومعه الأوزان المسجّلة داخل كل حيوان. مجموعة weights القديمة المهجورة لا تُمسّ (انتهت صلاحيتها منذ الإصلاح O-15). لا يمكن التراجع عن هذا الإجراء.',
+    confirmLabel:'امسح بيانات القطيع', danger:true});
+  if(!ok)return;
   toast('جاري المسح...','info');
-  var r1=await _deleteTable('animals');
-  // O-15 CLOSED: `weights` was the pre-SSOT top-level collection, superseded
-  // by the certified animals/{id}/weights nesting, and database.rules.json now
-  // freezes it (admin-read, nobody writes). Deleting it from a reset-all was
-  // both a no-op on real farms and a guaranteed permission error for anyone
-  // who is not an admin -- so it is no longer part of the reset. The rows, if
-  // any exist, are a migration question, not a reset question.
-  var r2={ok:true, skipped:'weights (deprecated collection — see O-15)'};
-  await logActivity('delete','system','مسح بيانات القطيع');
-  toast(r1?'✅ تم مسح القطيع':'⚠️ المسح جزئي — تحقق من الاتصال');
+  const results=[await _deleteTable('animals')];
+  try{ await logActivity('delete','system','مسح بيانات القطيع'); }catch(e){}
+  _reportWipe('مسح القطيع',results);
 };
 
 window.resetFinance=async function(){
   if(!_requireAdminForReset())return;
-  if(!confirm('مسح كل البيانات المالية؟'))return;
+  const ok=await farmConfirm({title:'مسح البيانات المالية',
+    message:'سيُحذف سجل العمليات المالية (finance) نهائيًا. شجرة الحسابات والفترات المالية والقيود المحاسبية تبقى كما هي — هذه الأزرار تمسح مجموعة واحدة محددة، لا كل المحاسبة. لا يمكن التراجع.',
+    confirmLabel:'امسح المالية', danger:true});
+  if(!ok)return;
   toast('جاري المسح...','info');
-  const ok=await _deleteTable('finance');
-  await logActivity('delete','system','مسح بيانات المالية');
-  toast(ok?'✅ تم مسح المالية':'⚠️ فشل المسح — تحقق من الاتصال', ok?'success':'error');
+  const results=[await _deleteTable('finance')];
+  try{ await logActivity('delete','system','مسح بيانات المالية'); }catch(e){}
+  _reportWipe('مسح المالية',results);
 };
 
 window.resetHealth=async function(){
   if(!_requireAdminForReset())return;
-  if(!confirm('مسح سجلات الصحة والتحصين والتكاثر؟'))return;
+  const ok=await farmConfirm({title:'مسح الصحة والتحصين والتكاثر',
+    message:'سيُحذف نهائيًا: سجلات الصحة (health)، التحصينات (vaccinations)، التكاثر (breeding). لا يمكن التراجع.',
+    confirmLabel:'امسح الصحة والتكاثر', danger:true});
+  if(!ok)return;
   toast('جاري المسح...','info');
-  const results=await Promise.all([_deleteTable('health'),_deleteTable('vaccinations'),_deleteTable('breeding')]);
-  await logActivity('delete','system','مسح الصحة والتحصين والتكاثر');
-  const allOk=results.every(Boolean);
-  toast(allOk?'✅ تم مسح الصحة والتحصين':'⚠️ المسح جزئي — تحقق من الاتصال', allOk?'success':'error');
+  const results=[];
+  for(const t of ['health','vaccinations','breeding']) results.push(await _deleteTable(t));
+  try{ await logActivity('delete','system','مسح الصحة والتحصين والتكاثر'); }catch(e){}
+  _reportWipe('مسح الصحة والتحصين',results);
 };
 
 window.resetActivity=async function(){
   if(!_requireAdminForReset())return;
-  if(!confirm('مسح كل سجل الأنشطة والإشعارات؟'))return;
+  const ok=await farmConfirm({title:'مسح سجل الأنشطة',
+    message:'سيُحذف نهائيًا: سجل الأنشطة (activity_log) وإشعارات الدخول (login_notifications). لا يمكن التراجع.',
+    confirmLabel:'امسح السجل', danger:true});
+  if(!ok)return;
   toast('جاري المسح...','info');
-  const results=await Promise.all([_deleteTable('activity_log'),_deleteTable('login_notifications')]);
-  const allOk=results.every(Boolean);
-  toast(allOk?'✅ تم مسح سجل الأنشطة':'⚠️ المسح جزئي — تحقق من الاتصال', allOk?'success':'error');
+  const results=[];
+  for(const t of ['activity_log','login_notifications']) results.push(await _deleteTable(t));
+  _reportWipe('مسح سجل الأنشطة',results);
 };
 
 window.resetNotifications=async function(){
   if(!_requireAdminForReset())return;
-  if(!confirm('مسح كل الإشعارات؟'))return;
-  const results=await Promise.all([_deleteTable('notifications'),_deleteTable('login_notifications')]);
-  const allOk=results.every(Boolean);
-  toast(allOk?'✅ تم مسح الإشعارات':'⚠️ المسح جزئي — تحقق من الاتصال', allOk?'success':'error');
+  const ok=await farmConfirm({title:'مسح الإشعارات',
+    message:'سيُحذف نهائيًا: الإشعارات (notifications) وإشعارات الدخول (login_notifications). لا يمكن التراجع.',
+    confirmLabel:'امسح الإشعارات', danger:true});
+  if(!ok)return;
+  toast('جاري المسح...','info');
+  const results=[];
+  for(const t of ['notifications','login_notifications']) results.push(await _deleteTable(t));
+  _reportWipe('مسح الإشعارات',results);
 };
 
 window.resetEverything=async function(){
   if(!_requireAdminForReset())return;
-  if(!confirm('⚠️ مسح كل بيانات المزرعة بالكامل؟\nلا يمكن التراجع!'))return;
-  const conf=prompt('اكتب "تأكيد" للمتابعة:');
-  if(conf!=='تأكيد'){toast('تم الإلغاء','info');return;}
+  // The typed confirmation lives INSIDE the dialog now. It used to be
+  // window.prompt(), which an Android WebView does not bridge: prompt()
+  // returns null there, `conf!=='تأكيد'` was always true, and "مسح كل
+  // البيانات" answered "تم الإلغاء" without ever deleting a single row.
+  const ok=await farmConfirm({title:'مسح كل بيانات المزرعة',
+    message:'سيُحذف نهائيًا: القطيع والأوزان، الإنتاج والاستهلاك، المخزون (أدوية/أعلاف/معدات) وحركاته، الصحة والتحصين والتكاثر وقوالب التحصين، المالية، المهام اليومية، اليوميات، التنبؤات، التنبيهات، سجل الأنشطة والإشعارات، وسير العمل. لا يشمل المستخدمين ولا الإعدادات ولا شجرة الحسابات. لا يمكن التراجع إطلاقًا.',
+    confirmLabel:'امسح كل البيانات', typeToConfirm:'تأكيد', danger:true});
+  if(!ok){ toast('تم الإلغاء','info'); return; }
   toast('جاري مسح كل البيانات...','info');
-  const tables=['animals','health','breeding','vaccinations','finance',
-                'inventory_meds','inventory_feeds','inventory_equipment',
+  const tables=['animals','weight_log','production_log','feed_consumption',
+                'inventory_meds','inventory_feeds','inventory_equipment','inventory_transactions',
+                'health','vaccinations','vaccination_templates','breeding',
+                'finance','daily_tasks','diary_snapshots','diary_snapshot','forecasts',
+                'weight_alerts','production_alerts','workflow_history','activity',
                 'activity_log','login_notifications','notifications'];
-  let deleted=0;
-  for(const t of tables){const ok=await _deleteTable(t);if(ok)deleted++;}
+  const results=[];
+  for(const t of tables) results.push(await _deleteTable(t));
+  const deleted=results.filter(function(r){return r.ok;}).length;
   console.log('Deleted', deleted, 'of', tables.length, 'tables');
-  // Also reset localStorage settings
+  try{ await logActivity('delete','system','مسح كل بيانات المزرعة ('+deleted+'/'+tables.length+')'); }catch(e){}
+  // Local storage: farm data goes, per-device display preferences stay (a data
+  // reset must not silently re-theme the app — 2026-10 UI pass).
   const keysToKeep=['farm_theme','farm_notif_sound','breed_colors','_loginNotifPushed',
-                    // UI preferences are per-device display settings, not farm
-                    // data: a data reset must not silently re-theme the app
-                    // (2026-10 UI pass, ui-shell.js Prefs).
                     'farm_density','farm_contrast','farm_motion','farm_ui_recent'];
   Object.keys(localStorage).forEach(function(k){
     if(keysToKeep.indexOf(k)<0)localStorage.removeItem(k);
   });
-  toast(deleted===tables.length?'✅ تم مسح كل البيانات — يمكنك إعادة استيراد البيانات من صفحة الاستيراد':'⚠️ تم مسح '+deleted+' من '+tables.length+' — بعض البيانات لم يتم مسحها، تحقق من الاتصال', deleted===tables.length?'success':'error');
-  setTimeout(function(){location.href='dashboard.html';},2000);
+  const allOk=_reportWipe('مسح كل البيانات ('+deleted+' من '+tables.length+' مجموعة)',results);
+  if(allOk) setTimeout(function(){ location.href='dashboard.html'; },2000);
 };
 </script>
 <script>

@@ -388,7 +388,7 @@ window.setTaskStatus = async function(id, status) {
 
 window.delTask = async function(id) {
   if (!can('admin')) { toast('ليس لديك صلاحية لتنفيذ هذا الإجراء', 'error'); return; }
-  if (!id || !confirm('حذف هذه المهمة نهائياً؟')) return;
+  if (!id || !await farmConfirm({message:'حذف هذه المهمة نهائياً؟', danger:true})) return;
   try {
     await fbDelete('daily_tasks', id);
     _tasks = _tasks.filter(t => t._id !== id);

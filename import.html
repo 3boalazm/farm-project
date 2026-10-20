@@ -43,8 +43,7 @@
   <div id="page-header"></div>
   <div id="content"><div class="text-center py-5"><div class="spinner"></div></div></div>
   <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
-    <span id="footer-year"></span> &copy; <span id="footer-farm"></span><br>
-    <small style="font-size:.72rem;color:var(--text-muted)">إشراف: لواء أحمد رجب نوح | تطوير: جندي مصطفى محمد إبراهيم</small>
+    <span id="footer-year"></span> &copy; <span id="footer-farm"></span>
   </footer>
 </div>
 <script src="config.js"></script>
@@ -404,7 +403,7 @@ function renderValidationResults(res) {
 
 // ── Excel Import to Firebase ──────────────────────────────
 window.startExcelImport = async function() {
-  if (!confirm('رفع ' + ar(_validated.filter(function(r){return r.ok;}).length) + ' سجل لقاعدة البيانات؟')) return;
+  if (!await farmConfirm({message:'رفع ' + ar(_validated.filter(function(r){return r.ok;}).length) + ' سجل لقاعدة البيانات؟', danger:true})) return;
 
   var validRows = _validated.filter(function(r){ return r.ok; });
   var res       = document.getElementById('import-results');
@@ -491,7 +490,7 @@ function renderExportTab(el) {
       id: 'health', icon: 'bi-heart-pulse-fill', color: 'var(--red)',
       title: 'قالب السجل الصحي', desc: 'رفع سجلات علاج وأدوية بالجملة',
       cols: ['رقم الحيوان','السلالة','النوع','التاريخ','التشخيص','الدواء','الجرعة','أيام التأثير','نهاية العلاج','الطبيب','الجمالون','ملاحظات'],
-      sample: [['SH-001','شامي','goat','2026-05-01','التهاب رئوي','أوكسيتتراسيكلين','5مل','14','2026-05-15','د. أحمد','ج١ع١','']],
+      sample: [['SH-001','شامي','goat','2026-05-01','التهاب رئوي','أوكسيتتراسيكلين','5مل','14','2026-05-15','د. بيطري','ج١ع١','']],
     },
     {
       id: 'breeding', icon: 'bi-diagram-2-fill', color: 'var(--purple)',
@@ -647,7 +646,7 @@ function renderInitialTab(el) {
 }
 
 window.startInitialImport = async function() {
-  if (!confirm('هل أنت متأكد من استيراد ٤٤٠ حيوان؟\n\nتأكد أن قاعدة البيانات فارغة أو جديدة.')) return;
+  if (!await farmConfirm({message:'هل أنت متأكد من استيراد ٤٤٠ حيوان؟\n\nتأكد أن قاعدة البيانات فارغة أو جديدة.', danger:true})) return;
   var btn    = document.getElementById('init-btn');
   var prog   = document.getElementById('init-progress');
   var result = document.getElementById('init-result');

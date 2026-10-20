@@ -34,8 +34,7 @@
   </div>
   <div id="content"><div class="text-center py-5"><div class="spinner"></div></div></div>
   <footer class="text-center text-gray mt-5 pt-4 pb-3" style="border-top:1px solid var(--border)">
-    © <span id="footer-year"></span> <span id="footer-farm"></span><br>
-    <small style="font-size:.72rem;color:var(--text-muted)">إشراف: لواء أحمد رجب نوح &nbsp;|&nbsp; تطوير: جندي مصطفى محمد إبراهيم</small>
+    © <span id="footer-year"></span> <span id="footer-farm"></span>
   </footer>
 </div>
 <script src="config.js"></script>
@@ -178,7 +177,7 @@ window.deleteNotif=async function(id){
   catch(e){toast('فشل','error');}
 };
 window.clearAllNotifs=async function(){
-  if(!confirm('مسح كل الإشعارات؟'))return;
+  if(!await farmConfirm({message:'مسح كل الإشعارات؟', danger:true}))return;
   try{
     const url=FB_URL+'/notifications.json'+(FB_SECRET?'?auth='+FB_SECRET:'');
     await fetch(url,{method:'DELETE'});
