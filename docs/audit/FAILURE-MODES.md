@@ -16,3 +16,19 @@ Duplicate weight/birth records: proven safe by construction — Firebase POST se
 
 ## Newly Documented This Session
 **`activity.html` is a broken navigation target** — `nav.js` links to it (`perm:'admin'`) but the file is a confirmed, genuine 0-byte empty file, present in this state since before this engagement's visible history. An admin clicking "سجل الأنشطة" currently sees a blank page. Not fixed this session (rebuilding content is feature work, out of scope) — documented here as the concrete failure mode this produces.
+
+---
+
+## Correction (2026-10 audit, item O-03)
+
+This document is a historical record and is kept as written, but one factual
+claim in it is wrong and must not be acted on:
+
+> `activity.html` is a genuine 0-byte empty file / the audit trail has no working viewer.
+
+`activity.html` is a complete admin page that reads `activity_log`, filters by
+action and role, and escapes its output. The repudiation gap described here does
+not exist. See `docs/audit/FULL-AUDIT-2026-10.md` §4 (O-03) and the closure log
+at the end of that report. Since 2026-10 the audit trail is also reachable from
+`diagnostics()` / `app_logs` (audit O-17) and `activity` is admin-only in the
+generated rules (`scripts/apply-access-policy.js`).

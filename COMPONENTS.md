@@ -288,3 +288,29 @@ Verified with two runs of the same harness pattern — one as an admin (section 
 ## Overall status after this session
 Phase 1: 100%. Phase 2: 100%. Phase 3: 100%. Phase 4: ~85% (Animals partial). Phase 5: ~60%. Phase 6: ~55% (settings.html's real bug fixed; users/barns/farm-profile headers only; activity.html and import.html untouched).
 
+
+---
+
+## 2026-10 addendum — components that moved into the shell
+
+The helpers listed above still exist and are still the canonical way to render
+a KPI card, a section header or a status badge. Three things changed (audit
+2026-10):
+
+* `renderNavbarV2()` is the entry point: it calls `UIShell.mount({activePage})`
+  (guarded, idempotent) which builds the app bar, bottom nav, ⌘K palette,
+  notification inbox and toast host. Pages do not build chrome themselves any
+  more. `window.toast` keeps its `(msg, type)` signature and additionally
+  accepts `{id, title, duration, action}`.
+* `computeInboxNotifications()` (`shared.js`) is the **single** definition of the
+  inbox; the bell badge counts DANGER items only. Any new notification source
+  must extend it rather than render its own list.
+* Tables opt into shell behaviour with attributes, not JS:
+  `data-ui-table`, `data-ui-filter="#id"`, `<th data-sort>`, `<td data-sort-value>`.
+* `renderProductionWidget()` finally has a caller: `pages/production.js` renders
+  three of them (milk, wool, total) with month-over-month deltas
+  (`productionWidgetsHtml`) — it was documented, exported and dead (audit O-10).
+* KPI/section/title/header slots are **trusted markup by contract**: callers pass
+  HTML. Anything that renders user-entered text must escape it (`esc()`), which is
+  what the O-13 pass fixed for the three `detail:` strings that were interpolated
+  raw.

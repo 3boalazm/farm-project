@@ -3,7 +3,7 @@
 Added by the 2026-10 comprehensive audit (`docs/audit/FULL-AUDIT-2026-10.md`). This is the layer **underneath** the Playwright browser suites: it boots the *real* application scripts and exercises each domain module directly, in Node, with no browser binary and no network.
 
 ```bash
-npm run test:unit                 # all 22 modules (~5s)
+npm run test:unit                 # all 26 modules (~12s)
 node tests/unit/run.js 12         # one module (substring match on the suite name)
 FARM_TZ=UTC npm run test:unit     # the same suite from the other side of the timezone bug
 npm run test:all                  # unit layer, then the Playwright browser suites
@@ -11,7 +11,7 @@ npm run test:all                  # unit layer, then the Playwright browser suit
 
 ## Why it exists
 
-The browser suites in `tests/smoke`, `tests/ssot`, `tests/permissions`, `tests/data-integrity` and `tests/regression` are the integration layer, and they are the right layer for "does the page work". They cannot run at all without a downloaded Chromium, and they cannot reach the ~120 service functions in `shared.js` that no page exercises directly (the accounting engine, the forecasting engines, the inventory costing layer). Every one of the 27 findings in the 2026-10 audit was found or proven by this layer.
+The browser suites in `tests/smoke`, `tests/ssot`, `tests/permissions`, `tests/data-integrity`, `tests/regression`, `tests/auth` and `tests/security` are the integration layer, and they are the right layer for "does the page work". They cannot run at all without a downloaded Chromium, and they cannot reach the ~120 service functions in `shared.js` that no page exercises directly (the accounting engine, the forecasting engines, the inventory costing layer). Every one of the 27 findings in the 2026-10 audit was found or proven by this layer.
 
 ## How it works
 
@@ -61,6 +61,10 @@ Every suite gets a fresh app; `db.reset(seed)` reseeds and `app.eval('fbCacheInv
 | 20 | genealogy & herd integrity tools, diary snapshots |
 | 21 | costing, fixed assets, loans, owner equity, profitability |
 | 22 | repository invariants — nav targets exist and are gated, every collection is declared in `database.rules.json`, no UTC date keys, script-chain order, HTML balance, no duplicate object keys, no `eval`, no committed secrets, APK copy in sync, CI wiring, safety scan green |
+| 23 | design system — `ui.css` token layer, theme-leak detector (css-tree walk), light-theme contrast, shell literals matching `styles.css`, preference keys read pre-paint on all 34 pages and preserved by reset |
+| 24 | `ui-shell.js` — app bar / bottom nav, ⌘K palette scoring (Arabic fuzzy match, group priorities), notification inbox from `computeInboxNotifications()`, toast v2 signature, confirm dialog, table opt-ins, nav gating per role |
+| 25 | security & auth — PIN v2 (PBKDF2) hashing, the Firebase Auth bridge contract, auth slots and repair, `verifySession()` outcomes, `server/api-guard.js` relay refusal + rate limit, and `apply-access-policy.js --check` (rules drift fails the build) |
+| 26 | product correctness — the audit's O-items: write retry policy by verb (O-14), idempotency keys (O-04), inventory/breeding write guards (O-07/O-08), PWA wiring + gate (O-09), production widgets (O-10), archive stamping (O-02), reset scope (O-15), diagnostics ring and `app_logs` (O-17), and an invariant that every ungated `FARM_NAV` target guards itself in-page |
 
 ## Adding a test
 
@@ -73,3 +77,24 @@ Two conventions this layer holds itself to, because both were needed to find rea
 
 * A test that asserts on a *filtered* read must say so — `db.log` records every request, which is how "analytics never writes" and "no `PUT users/admin1` while offline" are proven.
 * Fire-and-forget writes (`_recordFinancialAudit`, `NS.save`, `autoGenerateTask` from an alert evaluation) need a tick (`await new Promise(r=>setTimeout(r,60))`) before asserting; they are deliberately not awaited by the app.
+
+---
+
+## 2026-10 addendum — the two layers now share one fake backend
+
+`tests/unit/harness.js` exports `createFakeDb` and `createFakeAuth`. Since the
+O-19 fix, `tests/fixtures/farm-test.js` (the Playwright fixture every browser
+spec imports) requires those same two functions and serves every
+`*.firebasedatabase.app` / `*googleapis.com` request from them, so:
+
+* a unit test and a browser test cannot disagree about what the backend does —
+  including the REST query semantics the app relies on (`orderBy`, `equalTo`,
+  `startAt`/`endAt`, `limitToLast`/`limitToFirst`);
+* no test, at either layer, can reach the production `farm-mz99` project;
+* `createFakeAuth` also answers `securetoken.googleapis.com/v1/token`, so a
+  long-running browser test does not watch its session expire.
+
+Counts after the hardening pass: **26 suites / 427 unit tests**, and
+**56 browser files / 428 tests**. Suite 22's APK-drift invariant means
+`node scripts/sync-apk-www.js` must run after any page, script or style change —
+it is the last step of every batch, not an afterthought.

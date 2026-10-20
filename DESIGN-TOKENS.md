@@ -100,3 +100,27 @@ Three-tier system already in place in `styles.css`, unchanged in structure:
 
 - Spacing scale is defined but not retrofitted onto every existing `padding`/`margin` (would touch ~460 lines for cosmetic-only gain — deferred as low value for the risk).
 - No component-level work (Page Header, Alert Card, KPI Card as reusable pieces) — that's Phase 2.
+
+---
+
+## 2026-10 addendum — the v2 token layer (`ui.css`)
+
+`styles.css` remains the token *source of truth* described above. `ui.css`
+loads after it on all 34 pages and adds the v2 design system (audit O-items
+closed 2026-10; contracts in `docs/design/UI-SYSTEM.md`, asserted by unit
+suites 23/24):
+
+* New semantic tokens: `--brand-700` (light-theme contrast), `--field-placeholder:
+  #6b7a95`, density (`farm_density`) and contrast (`farm_contrast`) variants, and
+  a motion scale that `farm_motion: reduce` collapses.
+* Preference keys `farm_theme|farm_density|farm_contrast|farm_motion|farm_ui_recent`
+  are read **pre-paint** on every page and are preserved by `settings.html`'s
+  reset-all (`keysToKeep`).
+* Shell literals (app bar 56 px, bottom nav 80 px, sidebar 230/300 px) must stay
+  identical in `ui.css`, `ui-shell.js` and `styles.css` — suite 23 fails on drift.
+* §13 of `ui.css` holds the archive affordances: `.nav-archive-pill` and
+  `.archive-banner`, used because `bayan.html` is a static snapshot (audit O-02).
+* A css-tree walk in suite 23 flags any selector group that mixes a bare
+  theme-root selector with a theme descendant **and** declares a paint property
+  (the U-02 class of bug). Do not "fix" a theme leak by adding a selector to an
+  existing group.
