@@ -63,6 +63,58 @@ jobs:
           path: playwright-report/
           retention-days: 14
 
+  # ── O-12: the emulator rules suite had NEVER been executed ────────────────
+  # tests/rules/accounting-rules.test.js is a real @firebase/rules-unit-testing
+  # suite. Its own header records that no environment ever had Java, so it was
+  # written, committed and never run — untested code pretending to be evidence.
+  # GitHub's ubuntu runners do have Java, so this job finally executes it.
+  #
+  # It is ADVISORY (continue-on-error) on purpose: those expectations were
+  # written against the pre-hardening rules, and the 2026-10 access policy in
+  # scripts/apply-access-policy.js deliberately reverses them (26 collections
+  # used to be readable by any anonymous caller). Promoting this job to
+  # blocking means updating its expectations to the policy table in
+  # docs/deployment/RULES-AND-DEPLOY.md §2 — never weakening a rule to match
+  # an old test. Read its log; do not gate on it yet.
+  rules-emulator:
+    name: Firebase rules (emulator, advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Java (the RTDB emulator is a JVM process)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install the CLI and the rules tester
+        run: npm install --no-save firebase-tools@13 @firebase/rules-unit-testing@4
+
+      # `demo-*` project ids put the CLI in offline demo mode: no credentials,
+      # no network path to a real project. firebase.json (added 2026-10) points
+      # the emulator at the real database.rules.json.
+      - name: Run the rules suite against the RTDB emulator
+        run: >-
+          firebase emulators:exec --only database
+          --project demo-bayan-farm-rules-test
+          "node tests/rules/accounting-rules.test.js"
+        env:
+          FIREBASE_DATABASE_EMULATOR_HOST: 127.0.0.1:9000
+
+      - name: Summarise
+        if: always()
+        run: >-
+          echo "Advisory job: see docs/deployment/RULES-AND-DEPLOY.md §4 for why
+          this is not (yet) a blocking gate."
+
 # Failure conditions (any step failing red-lines the whole gate):
 #   - permission regression (safety-scan.js exits 1)
 #   - SSOT regression (safety-scan.js exits 1, or a tests/ssot/* spec fails)
