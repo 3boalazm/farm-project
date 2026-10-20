@@ -1941,10 +1941,23 @@ kbd,.kbd{
    §9  UTILITIES — RTL-safe (inline/block, never left/right)
    ══════════════════════════════════════════════════════════════════════ */
 /* Layout */
-.row{display:flex;gap:var(--sp-3);align-items:center}
+/* ⚠ NEVER style a bare `.row` here.
+   435 Bootstrap grid rows in this app are written `class="row"` with
+   `.col-*` children, and Bootstrap owns that class: it supplies
+   `display:flex; flex-wrap:wrap`, negative margins, and per-column gutter
+   padding. The v2 utility used to add `gap:var(--sp-3)` on top, so a
+   `.col-4` triple (3 × 33.33% + 2 × 12px) no longer fitted its line and
+   wrapped to TWO columns — and every `.col-6` pair collapsed to one. That
+   is the defect behind the 2026-10 report "the PIN pad renders two columns
+   wide", and it was silently mis-laying-out stat rows, form rows and KPI
+   strips on every page. The v2 row is therefore modifier-only, and each
+   modifier carries its own flex context so it never needs the bare class. */
+.row--wrap,.row--top,.row--between,.row--end,.row--col{display:flex;gap:var(--sp-3);align-items:center}
 .row--wrap{flex-wrap:wrap} .row--top{align-items:flex-start} .row--between{justify-content:space-between}
 .row--end{justify-content:flex-end} .row--col{flex-direction:column;align-items:stretch}
-.col{display:flex;flex-direction:column;gap:var(--sp-3)}
+/* same reasoning for `.col` — Bootstrap uses it for equal-width columns.
+   Zero pages use the v2 form today; it is kept under its own class. */
+.u-col{display:flex;flex-direction:column;gap:var(--sp-3)}
 .grid{display:grid;gap:var(--sp-4)}
 .grid-2{grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
 .grid-3{grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))}
@@ -2191,11 +2204,21 @@ html{scroll-padding-block-start:calc(var(--shell-top) + var(--sp-4));scroll-beha
 /* ══════════════════════════════════════════════════════════════════════
    §12 · LOGIN — the one screen everybody sees first
    ──────────────────────────────────────────────────────────────────────
-   Redesigned around a *person*, not a role: the picker lists the actual
-   users (from the public user_directory projection), the role row is only a
-   filter over it, and the PIN pad stays exactly where muscle memory expects
-   it. Everything here is additive — login.html keeps its existing
-   .login-screen / .login-card / .pin-display / .pin-btn structure.
+   Rebuilt 2026-10 around two rules that came out of the login-UX research:
+
+   1. NOTHING identifies a person before the credential is verified. No user
+      grid, no role chips, no photos, no "مرحبًا يا فلان". A pre-auth screen
+      is the most exposed surface in the product — a tablet bolted to a barn
+      wall — so listing the staff there is both a privacy leak and a
+      username-enumeration oracle. One column, identifier-first, one generic
+      error for every failure (Carbon Design System login pattern; the same
+      reasoning behind "Interactive logon: Don't display username at
+      sign-in" and "hide user lists to prevent user enumeration").
+   2. THE PAD IS A PHONE KEYPAD: a strict 3-column grid, 1-9 then [C][0][⌫],
+      dir="ltr" even inside this RTL page, square keys no smaller than 56px
+      (kiosk guidance asks for >=44px; gloves ask for more), real <button>s
+      so they are tabbable and announce their function, masked dots above,
+      and a shake + generic message on failure.
    ══════════════════════════════════════════════════════════════════════ */
 .login-screen{
   min-height:100dvh;
@@ -2207,15 +2230,22 @@ html{scroll-padding-block-start:calc(var(--shell-top) + var(--sp-4));scroll-beha
     var(--canvas-base);
 }
 .login-card{
-  width:min(430px, 100%);
+  position:relative; overflow:hidden;
+  width:min(420px, 100%);
   background:var(--surface-raised);
   border:1px solid var(--border-default);
   border-radius:var(--r-2xl);
   box-shadow:var(--elev-3);
-  padding:var(--sp-7) var(--sp-6) var(--sp-6);
+  padding:var(--sp-7) var(--sp-6) var(--sp-5);
   text-align:center;
   animation:login-rise .34s cubic-bezier(.2,.9,.3,1) both;
 }
+/* a quiet brand wash behind the header — hierarchy from colour, not chrome */
+.login-card::before{
+  content:""; position:absolute; inset:0 0 auto 0; height:132px; pointer-events:none;
+  background:linear-gradient(180deg, var(--brand-surface), transparent);
+}
+.login-card > *{position:relative}
 @keyframes login-rise{ from{opacity:0; transform:translateY(10px) scale(.985)} to{opacity:1; transform:none} }
 html[data-motion="off"] .login-card{animation:none}
 .login-logo{
@@ -2227,93 +2257,101 @@ html[data-motion="off"] .login-card{animation:none}
   max-width:430px; line-height:1.7;
 }
 
-/* ── role filter ─────────────────────────────────────────────────── */
-.role-filter{display:flex; flex-wrap:wrap; gap:var(--sp-2); justify-content:center; margin-bottom:var(--sp-4)}
-.role-chip{
-  display:inline-flex; align-items:center; gap:var(--sp-1-5);
-  padding:var(--sp-1-5) var(--sp-3);
-  font-family:var(--font-ui); font-size:var(--fs-xs); font-weight:var(--fw-semibold);
-  color:var(--text-secondary); background:var(--surface-sunken);
-  border:1px solid var(--border-default); border-radius:var(--r-full);
-  cursor:pointer; transition:background .16s, color .16s, border-color .16s, transform .12s;
-}
-.role-chip:hover{color:var(--text-primary); border-color:var(--border-strong)}
-.role-chip.is-on{
-  color:var(--brand-ink); background:var(--btn-primary-bg); border-color:transparent;
+/* ── identifier field ────────────────────────────────────────────── */
+.login-brand{position:relative; margin-bottom:var(--sp-5)}
+.login-logo{
+  display:grid; place-items:center; width:64px; height:64px; margin:0 auto var(--sp-2);
+  font-size:1.9rem; border-radius:var(--r-xl);
+  background:var(--surface-sunken); border:1px solid var(--border-default);
   box-shadow:var(--elev-1);
 }
-.role-chip.is-on i{color:inherit !important}
-.role-chip__n{
-  font-family:var(--font-num); font-size:.68rem; font-weight:var(--fw-bold);
-  padding:0 var(--sp-1-5); border-radius:var(--r-full);
-  background:var(--surface-overlay); color:var(--text-secondary);
+.login-title{margin:0; font-size:var(--fs-2xl); font-weight:var(--fw-extrabold); color:var(--text-primary)}
+.login-sub{margin:var(--sp-1) 0 0; font-size:var(--fs-xs); color:var(--text-tertiary); line-height:1.7}
+.login-field{text-align:start; margin-bottom:var(--sp-4)}
+.login-label{
+  display:block; margin-bottom:var(--sp-1-5);
+  font-size:var(--fs-xs); font-weight:var(--fw-semibold); color:var(--text-secondary);
 }
-.role-chip.is-on .role-chip__n{background:rgba(255,255,255,.22); color:#fff}
-
-/* ── user picker ─────────────────────────────────────────────────── */
-.user-picker{
-  display:grid; grid-template-columns:1fr; gap:var(--sp-2);
-  max-height:34dvh; overflow-y:auto; overscroll-behavior:contain;
-  padding:var(--sp-1); margin:0 calc(-1 * var(--sp-1)) var(--sp-4);
-  scrollbar-width:thin;
+.login-input-wrap{position:relative}
+.login-input-icon{
+  position:absolute; inset-inline-start:13px; top:50%; transform:translateY(-50%);
+  font-size:1rem; color:var(--text-tertiary); pointer-events:none;
 }
-.user-chip{
-  display:flex; align-items:center; gap:var(--sp-3); width:100%;
-  padding:var(--sp-2-5) var(--sp-3); text-align:start;
+.login-input{
+  width:100%; padding:var(--sp-3); padding-inline-start:40px;
+  font-family:var(--font-ui); font-size:var(--fs-md); color:var(--text-primary);
   background:var(--surface-base); border:1px solid var(--border-default);
-  border-radius:var(--r-lg); cursor:pointer;
-  transition:border-color .16s, background .16s, box-shadow .16s, transform .12s;
+  border-radius:var(--r-lg); transition:border-color .15s, box-shadow .15s;
 }
-.user-chip:hover{border-color:var(--border-strong); background:var(--surface-sunken)}
-.user-chip:active{transform:scale(.995)}
-.user-chip.is-on{
-  border-color:var(--brand); background:var(--brand-surface);
-  box-shadow:inset 3px 0 0 0 var(--brand);   /* RTL: the marker sits on the inline-start edge */
+.login-input::placeholder{color:var(--text-tertiary); font-size:var(--fs-sm)}
+.login-input:hover{border-color:var(--border-strong)}
+.login-input:focus{outline:none; border-color:var(--brand); box-shadow:0 0 0 3px var(--brand-surface)}
+.login-input:focus-visible{outline:2px solid var(--focus-ring); outline-offset:2px}
+.login-help{margin:var(--sp-1-5) 0 0; font-size:.7rem; line-height:1.7; color:var(--text-tertiary)}
+
+/* ── masked PIN dots ─────────────────────────────────────────────── */
+.pin-block{margin-bottom:var(--sp-3)}
+.pin-label{
+  display:block; margin-bottom:var(--sp-2);
+  font-size:var(--fs-xs); font-weight:var(--fw-semibold); color:var(--text-secondary);
 }
-.user-chip:focus-visible{outline:2px solid var(--focus-ring); outline-offset:2px}
-.user-chip__avatar{
-  flex:0 0 auto; width:38px; height:38px; display:grid; place-items:center;
-  border-radius:var(--r-full); font-size:.95rem; font-weight:var(--fw-bold);
-  font-family:var(--font-ui);
-  color:var(--brand-ink); background:var(--btn-primary-bg);
-  border:1px solid var(--border-subtle);
+.pin-dots{display:flex; justify-content:center; gap:14px; margin-bottom:var(--sp-2)}
+.pin-dot{
+  width:14px; height:14px; border-radius:50%;
+  border:2px solid var(--border-strong); background:transparent;
+  transition:background .14s, border-color .14s, transform .14s;
 }
-.user-chip__body{display:flex; flex-direction:column; gap:2px; min-width:0}
-.user-chip__body strong{
-  font-size:var(--fs-sm); font-weight:var(--fw-bold); color:var(--text-primary);
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-}
-.user-chip__body small{
-  display:flex; align-items:center; gap:var(--sp-1);
-  font-size:var(--fs-xs); color:var(--text-tertiary);
-}
-.user-picker:empty::after{
-  content:"لا يوجد مستخدمون نشطون"; display:block; padding:var(--sp-4);
-  font-size:var(--fs-sm); color:var(--text-tertiary);
+.pin-dot.is-on{background:var(--brand); border-color:var(--brand); transform:scale(1.08)}
+.pin-message{
+  min-height:1.5em; margin:0; font-size:var(--fs-xs);
+  font-weight:var(--fw-semibold); color:var(--danger);
 }
 
-/* ── PIN pad ─────────────────────────────────────────────────────── */
-.pin-display{
-  font-family:var(--font-num); font-size:1.6rem; letter-spacing:.42em;
-  color:var(--text-primary); padding:var(--sp-2) 0;
-  transition:color .16s, transform .16s;
+/* ── the pad: 3 columns, phone order, square keys ────────────────── */
+.pin-pad{
+  display:grid;
+  grid-template-columns:repeat(3, minmax(0, 1fr));  /* 3, always — never Bootstrap's row/col */
+  gap:var(--sp-2);
+  width:min(304px, 100%); margin:0 auto var(--sp-4);
 }
-.pin-display.is-error{color:var(--danger); font-size:1.05rem; letter-spacing:normal; animation:pin-shake .34s}
-@keyframes pin-shake{
-  0%,100%{transform:translateX(0)} 22%{transform:translateX(-6px)}
-  48%{transform:translateX(6px)} 74%{transform:translateX(-3px)}
-}
-html[data-motion="off"] .pin-display.is-error{animation:none}
-.pin-btn{
-  width:100%; aspect-ratio:1/.78;
-  font-family:var(--font-num); font-size:1.35rem; font-weight:var(--fw-semibold);
+.pin-key{
+  aspect-ratio:1; min-height:56px; min-width:56px;
+  display:grid; place-items:center; padding:0;
+  font-family:var(--font-num); font-size:1.3rem; font-weight:var(--fw-semibold);
   color:var(--text-primary); background:var(--surface-sunken);
-  border:1px solid var(--border-default); border-radius:var(--r-lg);
-  cursor:pointer; transition:background .14s, transform .1s, border-color .14s;
+  border:1px solid var(--border-default); border-radius:50%;
+  cursor:pointer; transition:background .14s, border-color .14s, transform .1s;
 }
-.pin-btn:hover{background:var(--surface-overlay); border-color:var(--border-strong)}
-.pin-btn:active{transform:scale(.96); background:var(--brand-surface)}
-.pin-btn:focus-visible{outline:2px solid var(--focus-ring); outline-offset:2px}
+.pin-key:hover{background:var(--surface-overlay); border-color:var(--border-strong)}
+.pin-key:active{transform:scale(.94); background:var(--brand-surface)}
+.pin-key:focus-visible{outline:2px solid var(--focus-ring); outline-offset:2px}
+.pin-key--fn{font-size:1.05rem; color:var(--text-secondary); background:transparent}
+.pin-key--fn:hover{color:var(--text-primary)}
+
+/* ── submit + trust cue + failure feedback ───────────────────────── */
+.login-submit{
+  width:100%; padding:var(--sp-3) var(--sp-4);
+  font-family:var(--font-ui); font-size:var(--fs-md); font-weight:var(--fw-bold);
+  color:var(--brand-ink); background:var(--btn-primary-bg);
+  border:1px solid transparent; border-radius:var(--r-lg);
+  cursor:pointer; box-shadow:var(--elev-1);
+  transition:filter .15s, transform .1s, box-shadow .15s;
+}
+.login-submit:hover{filter:brightness(1.06)}
+.login-submit:active{transform:translateY(1px)}
+.login-submit:focus-visible{outline:2px solid var(--focus-ring); outline-offset:2px}
+.login-submit:disabled{opacity:.55; cursor:progress; transform:none}
+.login-trust{
+  margin:var(--sp-4) 0 0; font-size:.7rem; line-height:1.7;
+  color:var(--text-tertiary);
+}
+.login-card.is-shaking{animation:login-shake .4s cubic-bezier(.36,.07,.19,.97)}
+@keyframes login-shake{
+  0%,100%{transform:translateX(0)} 20%{transform:translateX(-7px)}
+  40%{transform:translateX(7px)} 60%{transform:translateX(-4px)} 80%{transform:translateX(4px)}
+}
+html[data-motion="off"] .login-card.is-shaking{animation:none}
+html[data-motion="off"] .pin-dot{transition:none}
 
 /* ── the actionable setup notice ─────────────────────────────────── */
 .setup-notice{
@@ -2371,4 +2409,114 @@ html[data-motion="off"] .pin-display.is-error{animation:none}
 .archive-banner a{color:inherit; text-decoration:underline; font-weight:var(--fw-semibold)}
 html.light-mode .archive-banner, body.light-mode .archive-banner{
   color:#7c4a03; background:#fff7e6; border-color:#f3d19a;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   §14 · DASHBOARD OVERVIEW — status, then context, then the work list
+   ──────────────────────────────────────────────────────────────────────
+   Rebuilt 2026-10 from the dashboard-UX research (livestock KPI playbooks
+   + the 2026 SaaS shell benchmark). Three reading layers, in this order:
+
+     LAYER 1 · STATUS   "should I worry?" — one north-star number, big,
+                        state-coloured, in the quadrant an Arabic reader
+                        hits first. In RTL the FIRST grid column is the
+                        TOP-RIGHT, so the hero is the first column.
+     LAYER 2 · CONTEXT  a 7-day trend, because a red number on its own
+                        cannot tell a blip from a slide.
+     LAYER 3 · DETAIL   the work list: what to open, in what order.
+
+   State is never colour alone: every state carries a word, an icon and a
+   `data-state` attribute that drives a border, so it survives greyscale,
+   colour-blindness and a printed sheet. Chrome stays quiet — hierarchy
+   comes from type weight and spacing, and colour is reserved for state.
+   ══════════════════════════════════════════════════════════════════════ */
+.dash-status{margin-bottom:var(--sp-4)}
+
+/* ── layer 1 · the hero ────────────────────────────────────────────── */
+.dash-hero{
+  display:flex; flex-direction:column; gap:var(--sp-1);
+  text-align:start; padding:var(--sp-5);
+  border-inline-start:4px solid var(--border-strong);
+}
+.dash-hero[data-state="ok"]{border-inline-start-color:var(--success)}
+.dash-hero[data-state="watch"]{border-inline-start-color:var(--warning)}
+.dash-hero[data-state="act"]{border-inline-start-color:var(--danger)}
+.dash-hero__label{
+  font-size:var(--fs-xs); font-weight:var(--fw-semibold);
+  color:var(--text-tertiary); letter-spacing:.02em;
+}
+.dash-hero__value{
+  font-family:var(--font-num); font-size:3rem; line-height:1;
+  font-weight:var(--fw-extrabold); margin:var(--sp-1) 0;
+}
+.dash-hero__unit{
+  font-size:var(--fs-sm); font-weight:var(--fw-semibold);
+  color:var(--text-tertiary); margin-inline-start:var(--sp-1);
+}
+.dash-hero__state{font-size:var(--fs-base); font-weight:var(--fw-bold)}
+.dash-hero__next{margin-top:var(--sp-2); font-size:var(--fs-sm); line-height:1.75}
+.dash-hero__link{
+  color:var(--text-secondary); font-weight:var(--fw-semibold);
+  text-decoration:underline; text-underline-offset:3px;
+}
+.dash-hero__link:hover{color:var(--text-primary)}
+.dash-hero__link.is-calm{text-decoration:none}
+.dash-hero__meta{
+  margin-top:auto; padding-top:var(--sp-3);
+  font-size:var(--fs-2xs); color:var(--text-tertiary);
+}
+
+/* ── layer 1 · the KPI strip beside it ─────────────────────────────── */
+.dash-kpis-card{display:flex; flex-direction:column; gap:var(--sp-3)}
+.dash-kpis__head{font-size:var(--fs-xs); font-weight:var(--fw-semibold); color:var(--text-tertiary)}
+.dash-kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,118px),1fr)); gap:var(--sp-2)}
+.dash-kpi{
+  display:flex; flex-direction:column; gap:2px; padding:var(--sp-3);
+  background:var(--surface-sunken);
+  border:1px solid var(--border-subtle); border-block-start:3px solid transparent;
+  border-radius:var(--r-lg);
+}
+.dash-kpi[data-state="good"]{border-block-start-color:var(--success)}
+.dash-kpi[data-state="watch"]{border-block-start-color:var(--warning)}
+.dash-kpi[data-state="bad"]{border-block-start-color:var(--danger)}
+.dash-kpi__label{font-size:var(--fs-2xs); font-weight:var(--fw-semibold); color:var(--text-tertiary)}
+.dash-kpi__value{font-family:var(--font-num); font-size:1.55rem; font-weight:var(--fw-bold); line-height:1.15}
+.dash-kpi__foot{font-size:var(--fs-2xs); color:var(--text-tertiary)}
+
+/* ── layer 2 · the trend band (inline SVG, no chart library) ───────── */
+.dash-trend{border-block-start:1px solid var(--border-subtle); padding-top:var(--sp-3)}
+.dash-trend__head{
+  display:flex; align-items:center; justify-content:space-between; gap:var(--sp-2);
+  margin-bottom:var(--sp-2);
+  font-size:var(--fs-xs); font-weight:var(--fw-semibold); color:var(--text-secondary);
+}
+.dash-trend__delta{
+  font-family:var(--font-num); font-size:var(--fs-2xs); font-weight:var(--fw-bold);
+  padding:2px var(--sp-2); border-radius:var(--r-full);
+  background:var(--surface-overlay); color:var(--text-secondary);
+}
+.dash-trend__delta[data-dir="up"]{color:var(--success)}
+.dash-trend__delta[data-dir="down"]{color:var(--danger)}
+.dash-spark{display:block; width:100%; height:46px}
+.dash-spark__area{fill:var(--brand); opacity:.16}
+.dash-spark__line{
+  fill:none; stroke:var(--brand); stroke-width:2;
+  stroke-linecap:round; stroke-linejoin:round; vector-effect:non-scaling-stroke;
+}
+.dash-spark__dot{fill:var(--brand)}
+.dash-trend__axis{
+  display:flex; justify-content:space-between; margin-top:var(--sp-1);
+  font-size:var(--fs-2xs); color:var(--text-tertiary);
+}
+.dash-trend__empty{padding:var(--sp-3) 0; font-size:var(--fs-xs); line-height:1.8; color:var(--text-tertiary)}
+.dash-trend__empty a{color:var(--brand); font-weight:var(--fw-semibold)}
+
+/* reduced motion + print: the trend is information, not decoration, so it
+   prints as-is rather than being hidden. */
+html[data-motion="off"] .dash-hero,html[data-motion="off"] .dash-kpi{transition:none}
+@media (max-width:575.98px){
+  .dash-hero{padding:var(--sp-4)}
+  .dash-hero__value{font-size:2.4rem}
+  .dash-kpi__value{font-size:1.35rem}
 }

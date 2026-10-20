@@ -5,6 +5,14 @@ behaves. `ui.css` is the implementation of §1–§10 of this document; `ui-shel
 implementation of §11–§16. Everything here is **additive**: no page was rewritten to adopt
 it, the shell mounts on top of the markup that already exists.
 
+> **2026-10-20 addendum — read [`UX-RESEARCH-2026-10.md`](UX-RESEARCH-2026-10.md) first.**
+> A research pass (livestock dashboard playbooks, PIN-pad/kiosk accessibility, the 2026-27
+> SaaS shell benchmark, and login-privacy guidance) rebuilt three things this document did
+> not cover: the login screen (identifier-first, nobody named before the PIN is verified),
+> the keypad (a strict 3-column grid), and the dashboard's reading order
+> (status → context → work list). It also found and fixed the defect that had been
+> cancelling most of this system's visual effect — see the Bootstrap bullet below.
+
 > **Load order (all 34 app pages):**
 > `styles.css` → **`ui.css`** … `config.js` → `firebase.js` → `nav.js` → `shared.js` → **`ui-shell.js`**
 > `ui.css` must come *after* `styles.css` (it wins the cascade), and `ui-shell.js` must come
@@ -307,7 +315,8 @@ monochrome laser printer.
 
 ## 18. Known limits (deliberate, not forgotten)
 
-* `ui.css` is ~2 150 lines in one file. The app has **no build step** by design (it must run
+* `ui.css` is ~2 520 lines in one file (§12 login and §14 dashboard overview were added by
+  the 2026-10-20 research pass). The app has **no build step** by design (it must run
   from a `file://` copy on a farm laptop and inside the Capacitor APK), so splitting it would
   mean either a bundler or 34 more `<link>` tags. Sections are banner-commented and ordered so
   the file can be read top to bottom; gzipped it is ~16 KB.
@@ -318,5 +327,15 @@ monochrome laser printer.
 * Bootstrap 5.3 is still loaded from a CDN and still provides the grid some pages use. §9.1 of
   `ui.css` carries a handful of parity rules (`mb-3`, `fw-bold`, `d-flex`…) so a blocked or
   slow CDN degrades the spacing instead of collapsing the layout.
+* **Never style `.row`, `.col` or `.container` from `ui.css`.** Bootstrap owns those class
+  names, and 435 elements in this app are written `class="row"` with `.col-*` children. The
+  v2 utility layer used to declare `.row{display:flex;gap:var(--sp-3);align-items:center}`,
+  which added 12px of gap on top of Bootstrap's own gutters: a `.col-4` triple became
+  100% + 24px and wrapped to **two** columns, and a `.col-6` pair collapsed to one. That is
+  why the first UI pass looked like it changed nothing — every stat row, form row and card
+  grid in the product was being re-flowed against its own design. Since 2026-10-20 the v2
+  row is modifier-only (`.row--wrap`, `.row--between`, …) and `.col` became `.u-col`;
+  `tests/unit/27` walks every selector in `ui.css` with css-tree and fails if a bare
+  Bootstrap grid class is styled again.
 * `farm-apk/www` must be re-synced after any change here: `node scripts/sync-apk-www.js`
   (`tests/unit/22` fails on drift).

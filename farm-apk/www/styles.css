@@ -327,10 +327,10 @@ html.light-mode .farm-toast,body.light-mode .farm-toast{box-shadow:0 6px 28px rg
 /* LOGIN */
 .login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:var(--bg)}
 .login-card{background:var(--card-bg)!important;border:1px solid var(--border);border-radius:24px;padding:32px;width:100%;max-width:400px;text-align:center;box-shadow:var(--card-shadow)}
-.pin-display{font-family:'Lexend',sans-serif;font-size:var(--text-2xl);letter-spacing:.5em;min-height:2.2rem;color:var(--green)}
-.pin-btn{background:var(--bg-3);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:'Lexend',sans-serif;font-size:var(--text-lg);font-weight:600;cursor:pointer;padding:14px;transition:.15s;width:100%}
-.pin-btn:hover{background:var(--bg-4);border-color:var(--border-2)}
-.pin-btn:active{transform:scale(.96)}
+/* 2026-10-20: .pin-display / .pin-btn are gone — the login screen was rebuilt
+   (identifier-first, masked dots, a 3-column CSS-grid keypad) and its styles
+   now live in ui.css §12 as .pin-dots / .pin-dot / .pin-pad / .pin-key.
+   Keeping the v1 rules here would leave two competing keypads in the cascade. */
 /* SPINNER & EMPTY */
 .spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--orange);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto}
 .empty-state{text-align:center;padding:40px 20px;color:var(--text-gray)}

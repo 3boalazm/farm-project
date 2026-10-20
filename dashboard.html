@@ -337,7 +337,117 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
     </div>
     <div class="dash-tab-panel" id="dash-panel-0" role="tabpanel" aria-labelledby="dash-tab-0">
     ${(() => {
-      // Sprint 6, Epic 6: Daily Briefing. Every sentence below is
+      /* ── LAYER 1 · STATUS — "should I worry?" ─────────────────────────
+         First thing above the fold, and in an RTL page the FIRST column is
+         the TOP-RIGHT quadrant, which is where an Arabic reader's eye lands
+         (the F-pattern mirrors). So the single north-star number — the herd
+         health score — sits there, 3rem tall, coloured by state and never by
+         colour alone (icon + word + data-state attribute for the border).
+         Next to it: today's four counters and a real 7-day trend, because a
+         red box on its own cannot tell a blip from a slide.
+         Self-contained variable names (suffix S) per this file's convention. */
+      const _tagsS = new Set((health||[]).filter(r=>r.status==='active').map(r=>r.animal_tag));
+      const _widsS = new Set((weightAlerts||[]).filter(a=>a.status==='active').map(a=>a.animal_id));
+      const needS = (animals||[]).filter(a=>a.status==='alive'&&(_tagsS.has(a.tag)||_widsS.has(a._id))).length;
+      const overdueS = (dailyTasks||[]).filter(t=>t.status!=='done'&&t.date&&t.date<today).length;
+      const stateS = healthScore>=75?'ok':(healthScore>=60?'watch':'act');
+      const iconS  = stateS==='ok'?'bi-shield-check':(stateS==='watch'?'bi-exclamation-triangle':'bi-exclamation-octagon');
+      const nowS = new Date();
+      const clockS = pad2(nowS.getHours())+':'+pad2(nowS.getMinutes());
+      // The hero must not promise a list that is not there: `priorityAlerts`
+      // (the unified operational ranking) and `needS` (animals with an active
+      // health/weight record) are computed from different sources, so when the
+      // ranking came back empty the link goes to the health register instead
+      // of scrolling to "لا توجد تنبيهات".
+      const targetS = (priorityAlerts && priorityAlerts.length) ? '#dash-alerts' : 'health.html';
+      const goS     = (priorityAlerts && priorityAlerts.length) ? 'اعرض القائمة' : 'اعرض السجل الصحي';
+      const actionS = needS>0
+        ? `<a class="dash-hero__link" href="${targetS}">${ar(needS)} حيوان يحتاج انتباهًا اليوم — ${goS}</a>`
+        : (overdueS>0
+            ? `<a class="dash-hero__link" href="tasks.html">${ar(overdueS)} مهمة متأخرة عن موعدها</a>`
+            : `<span class="dash-hero__link is-calm"><i class="bi bi-check2-circle me-1"></i>لا شيء يحتاج قرارًا اليوم</span>`);
+
+      // 7 daily milk totals → an inline SVG sparkline. No chart library, no
+      // canvas: it has to survive print, dark mode and a 320px phone.
+      // ISO day keys, NOT pad2(): pad2 renders Arabic-Indic digits for the
+      // screen, and a production row's `date` is stored as 2026-10-20. Using
+      // the display helper here would silently produce an empty trend band.
+      const isoS=(d)=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+      const daysS=[]; for(let i=6;i>=0;i--){const d=new Date(nowS); d.setDate(d.getDate()-i); daysS.push(isoS(d));}
+      const seriesS=daysS.map(ds=>(production||[]).filter(x=>x.type==='milk'&&x.date===ds).reduce((t,x)=>t+(+x.quantity||0),0));
+      const hasMilkS=seriesS.some(v=>v>0);
+      const last3S=seriesS.slice(-3).reduce((t,v)=>t+v,0), prev3S=seriesS.slice(0,3).reduce((t,v)=>t+v,0);
+      const deltaS=(hasMilkS&&prev3S>0)?Math.round(((last3S-prev3S)/prev3S)*100):null;
+      const sparkS=(()=>{
+        if(!hasMilkS) return '';
+        const w=252,h=46,max=Math.max.apply(null,seriesS),min=Math.min.apply(null,seriesS),span=(max-min)||1;
+        const pts=seriesS.map((v,i)=>[((i/(seriesS.length-1))*w).toFixed(1),(h-6-((v-min)/span)*(h-14)).toFixed(1)]);
+        const line=pts.map(pt=>pt[0]+','+pt[1]).join(' ');
+        const last=pts[pts.length-1];
+        return `<svg class="dash-spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="إنتاج اللبن خلال آخر سبعة أيام">
+          <polygon class="dash-spark__area" points="0,${h} ${line} ${w},${h}"></polygon>
+          <polyline class="dash-spark__line" points="${line}"></polyline>
+          <circle class="dash-spark__dot" cx="${last[0]}" cy="${last[1]}" r="3.2"></circle>
+        </svg>`;
+      })();
+
+      return `
+      <div class="dash-status mb-4">
+        <div class="row g-3">
+          <div class="col-12 col-lg-4">
+            <div class="wonder-card dash-hero h-100" data-state="${stateS}">
+              <div class="dash-hero__label">حالة المزرعة</div>
+              <div class="dash-hero__value" style="color:${healthColor}">${ar(healthScore)}<span class="dash-hero__unit">/١٠٠</span></div>
+              <div class="dash-hero__state" style="color:${healthColor}"><i class="bi ${iconS} me-1"></i>${healthLabel}</div>
+              <div class="dash-hero__next">${actionS}</div>
+              <div class="dash-hero__meta"><i class="bi bi-clock-history me-1"></i>آخر تحديث ${clockS}</div>
+            </div>
+          </div>
+          <div class="col-12 col-lg-8">
+            <div class="wonder-card dash-kpis-card h-100">
+              <div class="dash-kpis__head">
+                <span>ملخص اليوم — ${todayAr()}</span>
+              </div>
+              <div class="dash-kpis">
+                <div class="dash-kpi" data-state="${todaySummary.births>0?'good':'flat'}">
+                  <span class="dash-kpi__label"><i class="bi bi-stars me-1"></i>مواليد</span>
+                  <span class="dash-kpi__value" style="color:var(--yellow)">${ar(todaySummary.births)}</span>
+                  <span class="dash-kpi__foot">اليوم</span>
+                </div>
+                <div class="dash-kpi" data-state="${todaySummary.deaths>0?'bad':'flat'}">
+                  <span class="dash-kpi__label"><i class="bi bi-droplet me-1"></i>نفوق</span>
+                  <span class="dash-kpi__value" style="color:${todaySummary.deaths>0?'var(--red)':'var(--text)'}">${ar(todaySummary.deaths)}</span>
+                  <span class="dash-kpi__foot">اليوم</span>
+                </div>
+                <div class="dash-kpi" data-state="${todaySummary.income>0?'good':'flat'}">
+                  <span class="dash-kpi__label"><i class="bi bi-arrow-down-circle me-1"></i>إيرادات</span>
+                  <span class="dash-kpi__value" style="color:var(--green)">${todaySummary.income.toLocaleString('ar-EG')}</span>
+                  <span class="dash-kpi__foot">${s.currency} اليوم</span>
+                </div>
+                <div class="dash-kpi" data-state="${todaySummary.expense>0?'watch':'flat'}">
+                  <span class="dash-kpi__label"><i class="bi bi-arrow-up-circle me-1"></i>مصروفات</span>
+                  <span class="dash-kpi__value" style="color:var(--orange)">${todaySummary.expense.toLocaleString('ar-EG')}</span>
+                  <span class="dash-kpi__foot">${s.currency} اليوم</span>
+                </div>
+              </div>
+              <div class="dash-trend" dir="ltr">
+                <div class="dash-trend__head" dir="rtl">
+                  <span><i class="bi bi-graph-up me-1"></i>إنتاج اللبن — آخر ٧ أيام</span>
+                  ${deltaS===null?'':`<span class="dash-trend__delta" data-dir="${deltaS>=0?'up':'down'}">${deltaS>=0?'▲':'▼'} ${ar(Math.abs(deltaS))}٪</span>`}
+                </div>
+                ${hasMilkS?sparkS:`<div class="dash-trend__empty" dir="rtl">لا يوجد إنتاج لبن مسجّل هذا الأسبوع — <a href="production.html">سجّل الإنتاج</a> ليظهر الاتجاه هنا.</div>`}
+                ${hasMilkS?`<div class="dash-trend__axis"><span>قبل ٧ أيام</span><span>اليوم</span></div>`:''}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    })()}
+    ${(() => {
+      /* ── LAYER 2 · CONTEXT — why the number moved ─────────────────────
+         Unchanged logic, new position: the trend sentences belong BETWEEN
+         the status strip and the work list, not above them. */
+      // Sprint 6, Epic 6: Daily Briefing
       // conditional on a real, computed number -- nothing is a
       // template that always renders regardless of data. Self-contained
       // (own variable names) for the same scoping-safety reason as the
@@ -375,32 +485,12 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
       </div>`;
     })()}
     ${priorityAlerts.length ? `
-    <div class="mb-4">
+    <div class="mb-4" id="dash-alerts">
       <div class="fw-bold mb-2" style="color:${priorityAlerts.some(a=>a.severity==='critical')?'var(--red)':'var(--yellow)'}"><i class="bi bi-bell-fill me-2"></i>تنبيهات ذات أولوية</div>
       ${priorityAlerts.map(renderAlertCard).join('')}
     </div>` : `
-    <div class="type-badge badge-tarbiya mb-4" style="padding:8px 16px;font-size:var(--text-sm)"><i class="bi bi-check-circle-fill me-1"></i>لا توجد تنبيهات ذات أولوية اليوم</div>
+    <div class="type-badge badge-tarbiya mb-4" id="dash-alerts" style="padding:8px 16px;font-size:var(--text-sm)"><i class="bi bi-check-circle-fill me-1"></i>لا توجد تنبيهات ذات أولوية اليوم</div>
     `}
-    <div class="row g-3 mb-4">
-      <div class="col-md-4">
-        <div class="wonder-card text-center h-100 d-flex flex-column justify-content-center">
-          <div class="text-gray mb-2" style="font-size:.8rem">حالة المزرعة</div>
-          <div style="font-family:'Lexend',sans-serif;font-size:2.6rem;font-weight:700;line-height:1;color:${healthColor}">${ar(healthScore)}</div>
-          <div class="fw-bold mt-1" style="color:${healthColor}">${healthLabel}</div>
-        </div>
-      </div>
-      <div class="col-md-8">
-        <div class="wonder-card h-100">
-          <div class="text-gray mb-3" style="font-size:.8rem">ملخص اليوم — ${todayAr()}</div>
-          <div class="row g-3 text-center">
-            <div class="col-6 col-md-3"><div style="font-size:1.4rem;font-weight:700;color:var(--yellow)">${ar(todaySummary.births)}</div><small class="text-gray">مواليد</small></div>
-            <div class="col-6 col-md-3"><div style="font-size:1.4rem;font-weight:700;color:${todaySummary.deaths>0?'var(--red)':'var(--text)'}">${ar(todaySummary.deaths)}</div><small class="text-gray">نفوق</small></div>
-            <div class="col-6 col-md-3"><div style="font-size:1.4rem;font-weight:700;color:var(--green)">${todaySummary.income.toLocaleString('ar-EG')}</div><small class="text-gray">إيرادات ${s.currency}</small></div>
-            <div class="col-6 col-md-3"><div style="font-size:1.4rem;font-weight:700;color:var(--orange)">${todaySummary.expense.toLocaleString('ar-EG')}</div><small class="text-gray">مصروفات ${s.currency}</small></div>
-          </div>
-        </div>
-      </div>
-    </div>
     ${can('finance') ? (() => {
       // Sprint 13 (v1.6): Executive Finance Card. Reuses todaySummary.income/
       // .expense verbatim (computed above, same numbers the card right
@@ -421,8 +511,7 @@ function renderDashboard(animals, breeding, health, finance, meds, feeds, equipm
         </div>
       </div>`;
     })() : ''}
-    </div>
-    <div class="dash-tab-panel" id="dash-panel-1" role="tabpanel" aria-labelledby="dash-tab-1" hidden>
+    </div>    <div class="dash-tab-panel" id="dash-panel-1" role="tabpanel" aria-labelledby="dash-tab-1" hidden>
     <div id="inventory-exec-card" class="mb-4"></div>
     ${(() => {
       // Sprint 5, Epic 5: ONE unified "Operational Priorities" panel,
