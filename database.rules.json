@@ -34,8 +34,8 @@
     // ══════════════════════════════════════════════════════════
 
     "animals": {
-      ".read": "auth != null",
-      ".write": "auth != null",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'visitor')",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker')",
       // PERFORMANCE FIX (2026-10 audit): the app runs a real server-side
       // query against this collection on EVERY animal creation and every
       // tag-uniqueness check -- shared.js's _tagExistsInFirebase() fetches
@@ -58,34 +58,34 @@
     },
 
     "health": {
-      ".read":  "auth != null",
-      ".write": "auth != null",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'visitor')",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker')",
       "$id": {
         ".validate": "newData.hasChild('animal_tag') && newData.hasChild('diagnosis') && newData.hasChild('date')"
       }
     },
 
     "vaccinations": {
-      ".read":  "auth != null",
-      ".write": "auth != null"
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'visitor')",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker')"
     },
 
     "vaccination_templates": {
-      ".read":  "auth != null",
-      ".write": "auth != null"
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'visitor')",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker')"
     },
 
     "breeding": {
-      ".read":  "auth != null",
-      ".write": "auth != null",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'visitor')",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker')",
       "$id": {
         ".validate": "newData.hasChild('female_breed')"
       }
     },
 
     "production_log": {
-      ".read":  "auth != null",
-      ".write": "auth != null",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'visitor')",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker')",
       "$id": {
         ".validate": "newData.hasChild('type') && newData.hasChild('date') && newData.hasChild('quantity')",
         "type":     { ".validate": "newData.val() === 'milk' || newData.val() === 'wool' || newData.val() === 'weight'" },
@@ -94,8 +94,8 @@
     },
 
     "daily_tasks": {
-      ".read":  "auth != null",
-      ".write": "auth != null",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'visitor')",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker')",
       "$id": {
         ".validate": "newData.hasChild('title') && newData.hasChild('date')",
         "status": { ".validate": "!newData.exists() || newData.val() === 'pending' || newData.val() === 'in_progress' || newData.val() === 'done'" }
@@ -103,13 +103,13 @@
     },
 
     "inventory_meds": {
-      ".read":  "auth != null",
-      ".write": "auth != null"
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'visitor')",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker')"
     },
 
     "inventory_feeds": {
-      ".read":  "auth != null",
-      ".write": "auth != null"
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'visitor')",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker')"
     },
 
     // ── Added: referenced by pages/inventory.js (fbTable mapping for
@@ -117,8 +117,8 @@
     //    missing entirely -> every read/write fell through to $other
     //    -> 401, which is the exact error reported. ──────────────────
     "inventory_equipment": {
-      ".read":  "auth != null",
-      ".write": "auth != null"
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'visitor')",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker')"
     },
 
     // ── Added: write-once transaction log created by shared.js's
@@ -126,18 +126,18 @@
     //    v1.7). Purely additive per its own header comment; was never
     //    added to rules when that feature shipped. ──────────────────
     "inventory_transactions": {
-      ".read":  "auth != null",
-      ".write": "auth != null"
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'visitor')",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker')"
     },
 
     "feed_consumption": {
-      ".read":  "auth != null",
-      ".write": "auth != null"
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'visitor')",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker')"
     },
 
     "weight_log": {
-      ".read":  "auth != null",
-      ".write": "auth != null"
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'visitor')",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker')"
     },
 
     // ── Added: settings.html's _deleteTable('weights') targets this
@@ -150,8 +150,8 @@
     //    a separate look -- not something this rules-only change
     //    attempts to fix. ────────────────────────────────────────────
     "weights": {
-      ".read":  "auth != null",
-      ".write": "auth != null"
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'"
     },
 
     // ── Added: the dashboard's Predictive Intelligence Engine reads
@@ -159,36 +159,36 @@
     //    absent from rules -> $other -> 401, matching the reported
     //    console errors exactly. ───────────────────────────────────
     "weight_alerts": {
-      ".read":  "auth != null",
-      ".write": "auth != null"
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'visitor')",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker')"
     },
 
     "production_alerts": {
-      ".read":  "auth != null",
-      ".write": "auth != null"
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'visitor')",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker')"
     },
 
     "workflow_history": {
-      ".read":  "auth != null",
-      ".write": "auth != null"
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'visitor')",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker')"
     },
 
     "notifications": {
-      ".read":  "auth != null",
-      ".write": "auth != null"
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'visitor')",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker')"
     },
 
     "activity": {
-      ".read":  "auth != null",
-      ".write": "auth != null",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'visitor')",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".validate": "newData.hasChild('action') && newData.hasChild('collection')"
       }
     },
 
     "activity_log": {
-      ".read":  "auth != null",
-      ".write": "auth != null",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'visitor')",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".validate": "!data.exists()"
       }
@@ -199,8 +199,8 @@
     //    write restricted to admin only, matching ROLE_PERMS exactly
     //    (supervisor/vet/worker/visitor are never granted 'finance'). ──
     "finance": {
-      ".read":  "auth != null",
-      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".validate": "newData.hasChild('type') && newData.hasChild('amount') && newData.hasChild('date')",
         "type":   { ".validate": "newData.val() === 'income' || newData.val() === 'expense'" },
@@ -221,8 +221,8 @@
     //    them here is intentionally deferred, not silently ignored -- see
     //    docs/certification/ACCOUNTING-ENGINE.md). ─────────────────────
     "accounts": {
-      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
-      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".validate": "newData.hasChild('code') && newData.hasChild('name_ar') && newData.hasChild('type')",
         "type": { ".validate": "newData.val() === 'ASSET' || newData.val() === 'LIABILITY' || newData.val() === 'EQUITY' || newData.val() === 'REVENUE' || newData.val() === 'EXPENSE'" },
@@ -253,7 +253,7 @@
     //    data/newData correctly scope to the one entry actually being
     //    written. ─────────────────────────────────────────────────────
     "journal_entries": {
-      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' && (!data.exists() || data.child('status').val() !== 'POSTED')",
         // Phase 31 (Security Hardening): the balanced-debit-credit
@@ -311,7 +311,7 @@
     //    site directly -- so this closes a real gap without touching any
     //    legitimate workflow. ─────────────────────────────────────────
     "source_documents": {
-      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' && (!data.exists() || data.child('status').val() === 'DRAFT' || (newData.child('status').val() !== 'DRAFT' && newData.child('type').val() === data.child('type').val() && newData.child('date').val() === data.child('date').val() && newData.child('total').val() === data.child('total').val()))",
         ".validate": "newData.hasChild('type') && newData.hasChild('date') && newData.hasChild('total') && newData.hasChild('operationId') && newData.hasChild('status')",
@@ -327,8 +327,8 @@
     //    here, so there's nothing balance-shaped for this rule to have to
     //    protect beyond normal admin-only write. ────────────────────────
     "cash_bank_accounts": {
-      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
-      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".validate": "newData.hasChild('name') && newData.hasChild('type') && newData.hasChild('linkedAccountId')",
         "type": { ".validate": "newData.val() === 'cash' || newData.val() === 'bank'" }
@@ -339,8 +339,8 @@
     //    Receivable). Sales invoices themselves live in source_documents
     //    (type 'sales_invoice') -- this is only the customer master. ────
     "customers": {
-      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
-      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".validate": "newData.hasChild('name')"
       }
@@ -350,8 +350,8 @@
     //    Payable). Purchase bills themselves live in source_documents
     //    (type 'purchase_invoice') -- this is only the supplier master.
     "suppliers": {
-      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
-      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".validate": "newData.hasChild('name')"
       }
@@ -376,7 +376,7 @@
     //    (newData doesn't exist), unaffected for edits (.validate still
     //    blocks those via !data.exists()). ─────────────────────────────
     "animal_cost_ledger": {
-      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' && (data.exists() ? newData.exists() : true)",
         ".validate": "newData.hasChild('animalId') && newData.hasChild('costType') && newData.hasChild('amount') && (!data.exists())",
@@ -391,8 +391,8 @@
     //    under the same operationId should return the existing record,
     //    never silently overwrite a prior attribution. ──────────────────
     "cost_centers": {
-      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
-      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".validate": "newData.hasChild('name') && newData.hasChild('type')"
       }
@@ -400,7 +400,7 @@
     // 2026-08-24 fix: same delete-guard as animal_cost_ledger above --
     // see docs/repository/FIREBASE-RULES-EXECUTION-2026-08-24.md.
     "cost_allocations": {
-      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' && (data.exists() ? newData.exists() : true)",
         ".validate": "newData.hasChild('sourceJournalEntryId') && newData.hasChild('totalAmount') && newData.hasChild('allocations') && (!data.exists())"
@@ -411,8 +411,8 @@
     //    Accruals/payments themselves live in source_documents (type
     //    'labor_payment') -- this is only the employee master. ─────────
     "employees": {
-      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
-      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".validate": "newData.hasChild('name')"
       }
@@ -425,8 +425,8 @@
     //    period's straight-line amount. Accumulated depreciation is never
     //    stored here -- always derived from journal_entries. ────────────
     "fixed_assets": {
-      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
-      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".validate": "newData.hasChild('name') && newData.hasChild('acquisitionCost') && newData.hasChild('usefulLifeMonths')"
       }
@@ -440,8 +440,8 @@
     //    principal, computed from journal_entries, reaches zero) -- unlike
     //    animal_cost_ledger/cost_allocations, so no write-once guard here.
     "loans": {
-      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
-      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".validate": "newData.hasChild('lenderName') && newData.hasChild('principalAmount')"
       }
@@ -452,8 +452,8 @@
     //    every single posting) -- see shared.js's own header comment on
     //    why a matching rules-level lock isn't attempted this pass. ────
     "fiscal_periods": {
-      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
-      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".validate": "newData.hasChild('periodKey') && newData.hasChild('startDate') && newData.hasChild('endDate') && newData.hasChild('status')",
         "status": { ".validate": "newData.val() === 'OPEN' || newData.val() === 'CLOSED' || newData.val() === 'LOCKED'" }
@@ -472,7 +472,7 @@
     //    Same delete-guard as animal_cost_ledger above; see
     //    docs/repository/FIREBASE-RULES-EXECUTION-2026-08-24.md. ────────
     "financial_audit_log": {
-      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' && (data.exists() ? newData.exists() : true)",
         ".validate": "newData.hasChild('action') && newData.hasChild('entity') && (!data.exists())"
@@ -484,8 +484,8 @@
     //    getBudgetVsActual in shared.js) -- normal admin write, not
     //    write-once, since the status transitions patch this record. ────
     "budgets": {
-      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
-      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         ".validate": "newData.hasChild('periodKey') && newData.hasChild('accountId') && newData.hasChild('amount') && newData.hasChild('status')",
         "status": { ".validate": "newData.val() === 'DRAFT' || newData.val() === 'APPROVED' || newData.val() === 'LOCKED'" },
@@ -499,7 +499,7 @@
     //    would defeat comparing it honestly against the real actual
     //    once the target period elapses). ───────────────────────────
     "forecasts": {
-      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         // 2026-08-24 fix: same delete-guard as animal_cost_ledger above --
         // ".validate" alone never blocked a DELETE, only an edit; see
@@ -524,7 +524,7 @@
     //    was performed; editing it after the fact would defeat its
     //    purpose as an audit record. ─────────────────────────────────
     "bank_reconciliations": {
-      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$id": {
         // 2026-08-24 fix: same delete-guard as animal_cost_ledger above --
         // ".validate" alone never blocked a DELETE, only an edit; see
@@ -537,19 +537,55 @@
         ".validate": "newData.hasChild('cashBankAccountId') && newData.hasChild('statementDate') && newData.hasChild('statementBalance') && newData.hasChild('operationId') && (!data.exists())"
       }
     },
-
-    // ── Users: read needed for the PIN-login screen (matches by pin_hash
-    //    client-side); write restricted to admin only -- prevents any
-    //    signed-in session from granting itself 'role':'admin' or
-    //    overwriting another user's pin_hash. The `!data.exists()`
-    //    fallback keeps Users.init()'s one-time bootstrap (creates the
-    //    very first admin account on a brand-new, empty database) working
-    //    even before any admin identity exists yet. ────────────────────
+    // ── users ────────────────────────────────────────────────────────
+    // SECURITY (2026-10 audit, O-18): this collection used to be readable by
+    // ANY authenticated session — and firebase.js mints an Anonymous Auth
+    // session for every visitor — so the whole user table, pin_hash included,
+    // was one GET away from anyone on the internet. This repo is public, so
+    // the hash salt is public too, and a 4-digit PIN space cracks offline in
+    // milliseconds. Now the collection is not listable at all and each record
+    // is readable only by its own owner or an admin.
+    //
+    // Login no longer needs to read this collection: it verifies through the
+    // Firebase Auth bridge (signInBestSlot) and reads the secret-free
+    // projection in user_directory for the picker and for name lookups.
     "users": {
-      ".read":  "auth != null",
-      ".write": "(auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin') || !data.exists()",
+      ".read":  false,
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
       "$uid": {
+        ".read":  "auth != null && (root.child('uid_lookup').child(auth.uid).child('appUserId').val() === $uid || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin')",
+        ".write": "auth != null && (root.child('uid_lookup').child(auth.uid).child('appUserId').val() === $uid || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin')",
         ".validate": "newData.hasChild('role') && newData.hasChild('name')"
+      }
+    },
+
+    // ── user_directory ───────────────────────────────────────────────
+    // The PUBLIC (authenticated-readable), secret-free projection of users:
+    // name, role, active, initials, custom_perms. This is what the login
+    // picker, the task-assignee dropdown and every "who did this" label read,
+    // so no page needs the real users collection. Mirrored by Users.add /
+    // update / del in firebase.js; writable only by an admin.
+    "user_directory": {
+      ".read":  "auth != null",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'",
+      "$uid": {
+        ".validate": "newData.hasChild('name') && newData.hasChild('role')"
+      }
+    },
+
+    // ── pin_vault ────────────────────────────────────────────────────
+    // Write-only from a client's point of view: nobody can ever read a stored
+    // hash back, which is the whole point (O-18). A user may write their OWN
+    // entry — that is the lazy PBKDF2 upgrade login.html performs after a
+    // verified legacy login — and an admin may write anyone's. Verifying these
+    // hashes belongs on a server holding an admin credential; see
+    // docs/audit/FULL-AUDIT-2026-10.md.
+    "pin_vault": {
+      ".read":  false,
+      ".write": false,
+      "$uid": {
+        ".write": "auth != null && (root.child('uid_lookup').child(auth.uid).child('appUserId').val() === $uid || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin')",
+        "pin_hash_v2": { ".validate": "newData.isString() && newData.val().length === 64" }
       }
     },
 
@@ -569,13 +605,13 @@
     // ── Settings: farm-wide configuration, admin-managed page in the
     //    app (settings.html isn't in any non-admin role's page list). ──
     "settings": {
-      ".read":  "auth != null",
-      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'"
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'visitor')",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin'"
     },
 
     "diary_snapshot": {
-      ".read":  "auth != null",
-      ".write": "auth != null"
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'visitor')",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker')"
     },
 
     // ── Added: the Farm Diary history redesign (this session) moved
@@ -588,13 +624,13 @@
     //    data may still be there) -- only this new plural collection
     //    was actually missing. ──────────────────────────────────────
     "diary_snapshots": {
-      ".read":  "auth != null",
-      ".write": "auth != null"
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'visitor')",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker')"
     },
 
     "login_notifications": {
-      ".read":  "auth != null",
-      ".write": "auth != null"
+      ".read":  "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'visitor')",
+      ".write": "auth != null && root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('active').val() === true && (root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'admin' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'supervisor' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'vet' || root.child('users').child(root.child('uid_lookup').child(auth.uid).child('appUserId').val()).child('role').val() === 'worker')"
     },
 
     // ── Block everything else not listed ─────────────────────

@@ -23,7 +23,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 //   PUT  /{path}/{id}.json     -> replaces
 //   PATCH /{path}/{id}.json    -> shallow-merges
 //   DELETE /{path}/{id}.json   -> null
-function createFakeDb({ failMode = null, seed = {} } = {}) {
+function createFakeDb({ failMode = null, seed = {}, authApi = null } = {}) {
   let data = JSON.parse(JSON.stringify(seed));
   const log = [];
   let counter = 0;
@@ -58,6 +58,13 @@ function createFakeDb({ failMode = null, seed = {} } = {}) {
     // app's auth bootstrap and pollute the fake database with a bogus
     // "v1/accounts:signUp" node.
     if (/googleapis\.com/.test(url)) {
+      // A test may script the auth endpoints (see createFakeAuth below); the
+      // default answer stays "everything succeeds" so older suites that only
+      // care about the data plane are unaffected.
+      if (typeof authApi === 'function') {
+        const scripted = await authApi(url, opts);
+        if (scripted) return scripted;
+      }
       return new Response(JSON.stringify({
         idToken: 'fake-id-token', refreshToken: 'fake-refresh-token', localId: 'uid-test',
         expiresIn: '3600', access_token: 'fake-id-token', user: { localId: 'uid-test' },
@@ -153,9 +160,70 @@ function createFakeDb({ failMode = null, seed = {} } = {}) {
   };
 }
 
+// ── In-memory Firebase Auth (Identity Toolkit REST) ────────────
+// firebase.js talks to accounts:signInWithPassword / accounts:signUp and to
+// securetoken. The auth surface is now security-critical (the bridge is what
+// proves who a session is), so tests need to script it: a disabled provider,
+// an unknown account, a wrong password, an existing account. This is a small
+// but faithful fake — same endpoint names, same error strings Firebase uses.
+function createFakeAuth(options = {}) {
+  const state = {
+    providerEnabled: options.providerEnabled !== false,
+    accounts: Object.assign({}, options.accounts || {}),   // email -> { password, localId }
+    calls: [],
+    anon: 0,
+  };
+  const json = (v, status = 200) =>
+    new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } });
+  const fail = (message, status = 400) =>
+    json({ error: { code: status, message, status: 'INVALID_ARGUMENT' } }, status);
+  const uidFor = (email) => 'uid-' + String(email).replace(/[^a-z0-9]+/gi, '-');
+
+  async function handler(url, opts = {}) {
+    let body = {};
+    try { body = opts.body ? JSON.parse(opts.body) : {}; } catch (e) { body = {}; }
+    const m = /accounts:(\w+)/.exec(url);
+    const name = m ? m[1] : (/securetoken/.test(url) ? 'refresh' : 'unknown');
+    state.calls.push({ name, email: body.email || null, password: body.password || null, url });
+
+    if (name === 'refresh') {
+      const rt = String(body.refresh_token || '');
+      const localId = rt.replace(/^ref-/, '') || 'uid-test';
+      return json({ id_token: 'tok-' + localId, refresh_token: rt, user_id: localId, expires_in: '3600' });
+    }
+    if (!state.providerEnabled) {
+      return fail('OPERATION_NOT_ALLOWED : Password sign-in is disabled for this project.');
+    }
+    if (name === 'signUp') {
+      if (!body.email) {                                     // anonymous sign-in
+        const localId = 'anon-' + (++state.anon);
+        return json({ idToken: 'tok-' + localId, refreshToken: 'ref-' + localId, localId, expiresIn: '3600' });
+      }
+      if (state.accounts[body.email]) return fail('EMAIL_EXISTS : The email address is already in use.');
+      const localId = uidFor(body.email);
+      state.accounts[body.email] = { password: body.password, localId };
+      return json({ idToken: 'tok-' + localId, refreshToken: 'ref-' + localId, localId, email: body.email, expiresIn: '3600' });
+    }
+    if (name === 'signInWithPassword') {
+      const acc = body.email && state.accounts[body.email];
+      if (!acc) return fail('EMAIL_NOT_FOUND : There is no user record corresponding to this identifier.');
+      if (acc.password !== body.password) {
+        return fail('INVALID_LOGIN_CREDENTIALS : The supplied credential is incorrect.');
+      }
+      return json({ idToken: 'tok-' + acc.localId, refreshToken: 'ref-' + acc.localId, localId: acc.localId, email: body.email, expiresIn: '3600' });
+    }
+    return json({ idToken: 'fake-id-token', refreshToken: 'fake-refresh-token', localId: 'uid-test', expiresIn: '3600' });
+  }
+
+  return { handler, state, uidFor };
+}
+
 // ── Boot the real app scripts into a jsdom window ──────────────
 async function bootApp(options = {}) {
-  const db = createFakeDb(options.db || {});
+  const db = createFakeDb(Object.assign({}, options.db || {}, {
+    failMode: options.failMode !== undefined ? options.failMode : (options.db || {}).failMode,
+    authApi: options.auth ? options.auth.handler : (options.db || {}).authApi,
+  }));
   if (options.seedUsers !== false) {
     db.data.users = db.data.users || {
       admin1: { id: 'admin1', name: 'مدير المزرعة', role: 'admin', pin_hash: 'x', active: true, created: '2026-01-01' },
@@ -280,4 +348,4 @@ async function runSuites(suites, { filter = '' } = {}) {
 // contents are identical. Round-tripping through JSON compares pure data.
 const J = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v === null ? null : v)));
 
-module.exports = { bootApp, createFakeDb, suite, runSuites, assert, ROOT, J };
+module.exports = { bootApp, createFakeDb, createFakeAuth, suite, runSuites, assert, ROOT, J };
