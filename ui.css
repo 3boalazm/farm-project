@@ -763,8 +763,9 @@ html[data-theme="light"] .avatar-chip,html.light-mode .avatar-chip{color:#fff}
   html[data-rail-expanded="true"]{--shell-start:230px}
 }
 @media (min-width:1200px){
-  :root{--shell-end:300px}
-  html[data-panel-v2="closed"]{--shell-end:0px}
+  :root{--shell-end:0px}
+  /* 2026-10 DATA AUDIT — panel is now overlay on every breakpoint (see
+     styles.css); this file must not re-introduce the 300px margin. */
 }
 .appbar{inset-inline-start:var(--shell-start);inset-inline-end:var(--shell-end)}
 .page-wrap.rail-v2-content{

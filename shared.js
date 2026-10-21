@@ -307,15 +307,25 @@ function toggleRailPanel(){
     if(!openM) document.documentElement.setAttribute('data-panel-v2-mobile','open');
     return;
   }
-  var open=document.documentElement.getAttribute('data-panel-v2')!=='closed';
+  var open=document.documentElement.getAttribute('data-panel-v2')==='open';
   document.documentElement.setAttribute('data-panel-v2', open?'closed':'open');
 }
+function closeRailPanelDesktop(){
+  document.documentElement.setAttribute('data-panel-v2','closed');
+  // desktop backdrop shares the same element; hide it too
+  var bd=document.getElementById('railV2Backdrop');
+  if(bd) { bd.style.opacity='0'; }
+}
 document.addEventListener('click',function(e){
-  if(e.target && e.target.id==='railV2Backdrop') closeRailDrawersMobileV2();
+  if(e.target && e.target.id==='railV2Backdrop'){
+    closeRailDrawersMobileV2();
+    closeRailPanelDesktop();
+  }
   // Every nav link (collapsed icon, expanded label, or flyout-free mobile
   // list) closes any open mobile drawer immediately on click, rather than
   // relying solely on the page navigation that follows to make it "go away".
   if(e.target.closest && e.target.closest('.rail-v2__icon-link, .rail-v2__child')) closeRailDrawersMobileV2();
+  if(e.target.closest && e.target.closest('.rail-v2-panel__link, .rail-v2-panel__logout')) closeRailPanelDesktop();
 });
 window.addEventListener('resize',function(){
   if(!_isMobileNavV2()) closeRailDrawersMobileV2();
@@ -323,6 +333,7 @@ window.addEventListener('resize',function(){
 document.addEventListener('keydown',function(e){
   if(e.key==='Escape'){
     closeRailDrawersMobileV2();
+    closeRailPanelDesktop();
   }
 });
 

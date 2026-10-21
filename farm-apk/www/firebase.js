@@ -723,6 +723,15 @@ async function fbUrl(path,id=''){
   return token ? `${base}?auth=${token}` : base;
 }
 
+// ── Request coalescing (2026-10 DATA AUDIT) ──────────────────
+// Without this, two concurrent fbGet('animals') calls (e.g. dashboard
+// initial load + notifications-service poll starting 200ms later) each
+// opened their own HTTP request for the same path. This map makes the
+// SECOND caller share the FIRST caller's in-flight Promise — one
+// network fetch, two consumers. 500ms window + auto-cleanup.
+var _fbInFlight={};
+var _fbCoalesceMs=500;
+
 // SessionStorage cache for fbGet (TTL: 45s, persists across page navigations)
 const _fbCacheTTL=45000;
 function _fbCacheKey(p){return '_fbc_'+p;}
@@ -741,8 +750,20 @@ function _fbCacheSet(p,data){
 }
 function fbCacheInvalidate(p){
   try{
-    if(p){sessionStorage.removeItem(_fbCacheKey(p));}
-    else{Object.keys(sessionStorage).filter(k=>k.startsWith('_fbc_')).forEach(k=>sessionStorage.removeItem(k));}
+    if(p){
+      sessionStorage.removeItem(_fbCacheKey(p));
+      // 2026-10 DATA AUDIT: in-flight dedup held a Promise for the old
+      // value — if invalidate() ran while it was still in flight the
+      // next fbGet() would share that stale Promise instead of fetching
+      // fresh. Dropping the in-flight entry here fixes the unit suite
+      // (03-data-layer: fbCacheInvalidate must actually drop) without
+      // changing the normal 500ms coalescing window.
+      if (_fbInFlight[p]) delete _fbInFlight[p];
+    } else {
+      Object.keys(sessionStorage).filter(k=>k.startsWith('_fbc_')).forEach(k=>sessionStorage.removeItem(k));
+      // Clear all in-flight promises on full invalidate
+      try { Object.keys(_fbInFlight).forEach(function(k){ delete _fbInFlight[k]; }); } catch(e2) {}
+    }
   }catch(e){}
 }
 
@@ -900,6 +921,9 @@ function isPermissionDenied(){ return _lastFbStatus===401 || _lastFbStatus===403
 
 async function fbGet(path, skipCache){
   if(!skipCache){const cached=_fbCacheGet(path);if(cached)return cached;}
+  // In-flight dedup: concurrent callers for the same path share one HTTP request
+  if(!skipCache && _fbInFlight[path] && (Date.now()-_fbInFlight[path].at)<_fbCoalesceMs) return _fbInFlight[path].p;
+  var _fbGetPromise=(async function(){
   try{
     const r=await _fbFetch(await fbUrl(path));
 
@@ -931,6 +955,24 @@ async function fbGet(path, skipCache){
     console.error('fbGet Error:',e);
     return [];
   }
+  })();
+  if(!skipCache){ _fbInFlight[path]={p:_fbGetPromise,at:Date.now()}; _fbGetPromise.then(function(){setTimeout(function(){delete _fbInFlight[path];},_fbCoalesceMs);},function(){setTimeout(function(){delete _fbInFlight[path];},_fbCoalesceMs);}); }
+  return _fbGetPromise;
+}
+
+// Fetch N collections in parallel with per-collection permission gating
+// and in-flight dedup inherited from fbGet. Returns Map-like object.
+// Additive only — no existing call site is changed.
+async function fbGetBatch(paths){
+  if(!Array.isArray(paths)||!paths.length) return {};
+  var uniq={}; paths.forEach(function(p){ if(p&&typeof p==='string') uniq[p]=1; });
+  var list=Object.keys(uniq);
+  var out={};
+  var pairs=await Promise.all(list.map(function(p){
+    return fbGet(p).then(function(v){ return [p,v]; }).catch(function(){ return [p,[]]; });
+  }));
+  pairs.forEach(function(pr){ out[pr[0]]=pr[1]; });
+  return out;
 }
 
 // ── fbGetSafe(path) ───────────────────────────────────────
